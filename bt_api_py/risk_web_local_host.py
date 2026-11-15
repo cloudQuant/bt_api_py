@@ -18,6 +18,7 @@ import argparse
 import hashlib
 import hmac
 import json
+import math
 import os
 import re
 import secrets
@@ -37,11 +38,12 @@ from bt_api_py.service_config import parse_client_config
 from bt_api_py.service_runtime import (
     ClientCurveKeys,
     ServiceClientRuntime,
-    ServiceRuntimeError,
-    ServiceRuntimeRequestNotSentError,
     ZmqTransportFactory,
 )
-from bt_api_py.service_runtime_thread import ThreadedRuntimeError, ThreadedServiceClientRuntime
+from bt_api_py.service_runtime_thread import (
+    BoundCallObservation, BoundCallResult, BoundCallRoute,
+    ThreadedRuntimeError, ThreadedServiceClientRuntime,
+)
 
 RISK_ADMIN_MOUNT = "application.risk_admin"
 SESSION_HEADER = "x-risk-session"
@@ -78,22 +80,9 @@ _NOT_STARTED_ERRORS = frozenset(
         "WRONG_PROCESS",
         "OWNER_THREAD_REENTRY",
         "INVALID_ARGUMENTS",
+        "BOUND_ROUTE_UNAVAILABLE",
     }
 )
-# Registry refusals of a call, returned before the operation's handler runs.
-_SERVICE_REFUSAL_CODES = frozenset(
-    {
-        "CAPABILITY_UNAVAILABLE",
-        "CLOSED",
-        "DENIED",
-        "NOT_REGISTERED",
-        "POLICY_REQUIREMENT_UNMET",
-        "SCOPE_DENIED",
-        "STALE_EPOCH",
-    }
-)
-
-
 def _ref(value: object) -> bool:
     if type(value) is not str or not value or value != value.strip() or not value.isprintable():
         return False
@@ -105,6 +94,27 @@ def _ref(value: object) -> bool:
 
 def _timeout(value: object) -> bool:
     return type(value) in (int, float) and 0 < value <= 30
+
+
+def _scope_key(value: object) -> tuple:
+    """Copy and revalidate every scope field; the values are claims, not authority."""
+    if type(value) is not WireScope or type(value.account_refs) is not tuple:
+        raise ValueError("ROUTE_UNAVAILABLE")
+    copied = WireScope(
+        value.execution_domain_ref, value.account_ref, value.account_refs,
+        value.strategy_ref, value.run_id, value.manual_book_ref,
+        value.portfolio_ref, value.group_id, value.leg_id,
+    )
+    return (copied.execution_domain_ref, copied.account_ref, copied.account_refs,
+            copied.strategy_ref, copied.run_id, copied.manual_book_ref,
+            copied.portfolio_ref, copied.group_id, copied.leg_id)
+
+
+def _identity_key(value: object) -> tuple:
+    if type(value) is not WireIdentity:
+        raise ValueError("ROUTE_UNAVAILABLE")
+    copied = WireIdentity(value.role, value.principal_ref, value.actor_ref, value.delegate_ref)
+    return copied.role, copied.principal_ref, copied.actor_ref, copied.delegate_ref
 
 
 def loopback_origin(origin: object) -> tuple[str, int]:
@@ -162,48 +172,21 @@ def build_admin_caller(
         or scope.account_ref is None
         or scope.strategy_ref is not None
         or not all(_ref(value) for value in (scope_ref, service_id, instance_id))
-        or not callable(getattr(runtime, "status", None))
-        or not callable(getattr(runtime, "call", None))
+        or not callable(getattr(runtime, "call_bound", None))
     ):
         raise ValueError("INVALID_RISK_ADMIN_ROUTE")
+    try:
+        expected_scope = _scope_key(scope)
+        # This host's configuration grants exactly one account, with no
+        # strategy, group, portfolio or manual-book scope.
+        if expected_scope != _scope_key(WireScope(scope.execution_domain_ref, account_ref=scope.account_ref)):
+            raise ValueError
+        expected_identity = _identity_key(identity)
+        expected_peer = _identity_key(peer)
+        route = BoundCallRoute(identity, scope, scope_ref, service_id, instance_id, peer)
+    except Exception:
+        raise ValueError("INVALID_RISK_ADMIN_ROUTE") from None
     pid = os.getpid()
-
-    def registration(operation: str) -> tuple:
-        if os.getpid() != pid:
-            raise ValueError("WRONG_PROCESS")
-        snapshot = runtime.status()
-        matches = [
-            b
-            for b in snapshot.bindings
-            if b.active is True
-            and b.mount == RISK_ADMIN_MOUNT
-            and b.service_id == service_id
-            and b.instance_id == instance_id
-            and b.scope_ref == scope_ref
-            and type(b.scope) is WireScope
-            and b.scope.account_ref == scope.account_ref
-            and b.scope.strategy_ref is None
-            and type(b.operations) is frozenset
-            and operation in b.operations
-        ]
-        if (
-            snapshot.state != "running"
-            or not snapshot.thread_alive
-            or not snapshot.healthy
-            or snapshot.identity != identity
-            or len(matches) != 1
-        ):
-            raise ValueError("ROUTE_UNAVAILABLE")
-        binding = matches[0]
-        if (
-            binding.authenticated_peer != peer
-            or type(binding.server_key_fingerprint) is not str
-            or _FINGERPRINT.fullmatch(binding.server_key_fingerprint) is None
-            or not _ref(binding.registration_id)
-            or not _ref(binding.service_epoch)
-        ):
-            raise ValueError("ROUTE_UNAVAILABLE")
-        return binding.registration_id, binding.service_epoch, binding.server_key_fingerprint
 
     def call(operation: str, arguments: dict, timeout_seconds: float) -> Mapping:
         # Order operations (risk.order.*, risk.parent.*) are never sent from here.
@@ -214,46 +197,46 @@ def build_admin_caller(
             or not _timeout(timeout_seconds)
         ):
             raise RiskAdminCallError("NOT_SENT", "INVALID_ARGUMENTS")
+        if os.getpid() != pid:
+            raise RiskAdminCallError("NOT_SENT", "WRONG_PROCESS")
         try:
-            before = registration(operation)
-        except Exception:
-            raise RiskAdminCallError("NOT_SENT", "ROUTE_UNAVAILABLE") from None
-        try:
-            reply = runtime.call(
+            bound = runtime.call_bound(
                 RISK_ADMIN_MOUNT,
                 operation,
                 arguments,
-                account_ref=scope.account_ref,
-                scope_ref=scope_ref,
+                route=route,
                 timeout_seconds=timeout_seconds,
             )
-        except ServiceRuntimeRequestNotSentError:
-            raise RiskAdminCallError("NOT_SENT", "REQUEST_NOT_SENT") from None
         except ThreadedRuntimeError as error:
-            if error.code in _NOT_STARTED_ERRORS:
-                raise RiskAdminCallError("NOT_SENT", error.code) from None
-            if error.code == "TIMEOUT_AFTER_START":
-                raise RiskAdminCallError("TIMEOUT") from None
-            raise RiskAdminCallError("UNKNOWN") from None
-        except ServiceRuntimeError as error:
-            code = error.service_reply_code
-            if type(code) is str and code == error.code and code in _SERVICE_REFUSAL_CODES:
-                try:
-                    unchanged = registration(operation) == before
-                except Exception:
-                    unchanged = False
-                if unchanged:
-                    raise RiskAdminCallError("REFUSED", code) from None
+            code = error.code
+            if type(code) is not str:
+                raise RiskAdminCallError("UNKNOWN") from None
+            if code in _NOT_STARTED_ERRORS:
+                raise RiskAdminCallError("NOT_SENT", "ROUTE_UNAVAILABLE" if code == "BOUND_ROUTE_UNAVAILABLE" else code) from None
             raise RiskAdminCallError("UNKNOWN") from None
         except Exception:
             raise RiskAdminCallError("UNKNOWN") from None
         try:
-            # A reply that crossed a re-registration cannot be tied to this call.
-            if registration(operation) != before:
+            if (type(bound) is not BoundCallResult or type(bound.before) is not BoundCallObservation
+                    or type(bound.after) is not BoundCallObservation or bound.before != bound.after
+                    or _identity_key(bound.before.identity) != expected_identity
+                    or _identity_key(bound.before.peer) != expected_peer
+                    or _scope_key(bound.before.scope) != expected_scope
+                    or bound.before.mount != RISK_ADMIN_MOUNT or bound.before.service_id != service_id
+                    or bound.before.instance_id != instance_id or bound.before.scope_ref != scope_ref
+                    or bound.before.active is not True or bound.before.required is not True
+                    or bound.before.operation != operation
+                    or type(bound.before.operations) is not frozenset or operation not in bound.before.operations
+                    or not _ref(bound.before.run_id) or not _ref(bound.before.registration_id)
+                    or not _ref(bound.before.service_epoch) or type(bound.before.fingerprint) is not str
+                    or _FINGERPRINT.fullmatch(bound.before.fingerprint) is None
+                    or type(bound.before.lease_deadline) not in (int, float)
+                    or not math.isfinite(bound.before.lease_deadline) or bound.before.lease_deadline <= 0
+                    or not isinstance(bound.result, Mapping)):
                 raise ValueError
         except Exception:
             raise RiskAdminCallError("UNKNOWN") from None
-        return reply
+        return bound.result
 
     return call
 

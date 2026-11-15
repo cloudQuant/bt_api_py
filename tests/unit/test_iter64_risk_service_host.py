@@ -211,7 +211,7 @@ def test_delegate_failed_start_with_unresolved_cleanup_retains_original_runtime(
     host._delegate_cleanup_unresolved[:] = [runtime] * 16
     with pytest.raises(RiskServiceStartError) as raised:
         host._connect_delegate(route)
-    assert raised.value.code == "RISK_SERVICE_GATEWAY_DELEGATE_CLEANUP_UNRESOLVED"
+    assert raised.value.code == "RISK_SERVICE_HOST_CLEANUP_FINALIZED"
 
 
 @pytest.mark.parametrize("problem", ["unregister", "registration"])
@@ -237,14 +237,15 @@ def test_delegate_unknown_remote_unregister_blocks_next_session(tmp_path, monkey
         host._connect_delegate(route)
     with pytest.raises(RiskServiceStartError) as raised:
         host._connect_delegate(route)
-    assert raised.value.code == "RISK_SERVICE_GATEWAY_DELEGATE_CLEANUP_UNRESOLVED"
+    assert raised.value.code == "RISK_SERVICE_HOST_CLEANUP_FINALIZED"
     assert attempts == [1] and host._delegate_cleanup_unresolved == [old]
 
 
 @pytest.mark.parametrize("problem", ["unregister", "registration_unknown", "factory", "alive", "owner", "exception"])
-def test_incomplete_host_close_retains_fence_and_allows_retry(tmp_path, problem):
+def test_incomplete_host_close_retains_fence_without_retry(tmp_path, problem):
     import gc
     import weakref
+
     from bt_api_py.risk_service_host import _RETAINED_HOSTS
 
     config = load_risk_service_config(setup(tmp_path))
@@ -276,12 +277,11 @@ def test_incomplete_host_close_retains_fence_and_allows_retry(tmp_path, problem)
         host = ref()
         assert host is not None and host in _RETAINED_HOSTS
         resource.resolved = True
-        assert host.close() is True and host not in _RETAINED_HOSTS
-        contender.open_storage()
+        assert host.close() is False and host in _RETAINED_HOSTS
+        with pytest.raises(RiskServiceStartError) as raised:
+            contender.open_storage()
+        assert raised.value.code == "RISK_SERVICE_FENCE_HELD"
     finally:
-        resource.resolved = True
-        if ref() is not None:
-            ref().close()
         contender.close()
 
 
@@ -302,15 +302,15 @@ def test_incomplete_delegate_port_close_retains_fence(tmp_path):
             contender.open_storage()
         assert raised.value.code == "RISK_SERVICE_FENCE_HELD"
         port.resolved = True
-        assert host.close() is True
-        contender.open_storage()
+        assert host.close() is False
+        with pytest.raises(RiskServiceStartError) as raised:
+            contender.open_storage()
+        assert raised.value.code == "RISK_SERVICE_FENCE_HELD"
     finally:
-        port.resolved = True
-        host.close()
         contender.close()
 
 
-def test_run_entry_retries_incomplete_cleanup_before_return(monkeypatch):
+def test_run_entry_waits_without_retrying_incomplete_cleanup(monkeypatch):
     from bt_api_py import risk_service_host as module
 
     events = []
@@ -326,9 +326,18 @@ def test_run_entry_retries_incomplete_cleanup_before_return(monkeypatch):
             return events.count("close") == 2
     monkeypatch.setattr(module, "load_risk_service_config", lambda _path: object())
     monkeypatch.setattr(module, "RiskServiceHost", Host)
-    monkeypatch.setattr(module.time, "sleep", lambda _delay: events.append("wait"))
-    assert module.main(["run", "--config", "synthetic"]) == 0
-    assert events == ["start", "run", "close", "wait", "close"]
+    class StopWait(BaseException):
+        pass
+
+    original_wait = module._wait_for_cleanup
+    def stop_wait():
+        events.append("wait")
+        raise StopWait
+    monkeypatch.setattr(module, "_wait_for_cleanup", lambda host: original_wait(host, _wait=stop_wait))
+    monkeypatch.setattr(module.signal, "signal", lambda *_args: None)
+    with pytest.raises(StopWait):
+        module.main(["run", "--config", "synthetic"])
+    assert events == ["start", "run", "close", "wait"]
 
 
 def test_cli_run_refuses_with_a_finite_code(tmp_path, capsys):

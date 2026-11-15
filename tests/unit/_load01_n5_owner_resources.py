@@ -56,7 +56,7 @@ from bt_api_py.service_registry import (
     TrustedGroupWritePolicy,
 )
 from bt_api_py.service_risk_order_entry import RiskBtApiProviderContract, RiskOrderTarget
-from bt_api_py.service_risk_order_journal import RiskOrderJournal
+from bt_api_risk.risk_order_journal import RiskOrderJournal
 from tests.unit._load01_group_topology import (
     N5OwnerGroupResources,
     build_n5_owner_group_resources,

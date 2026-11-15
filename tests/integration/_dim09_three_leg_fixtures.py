@@ -116,7 +116,7 @@ from bt_api_py.service_registry import (
     TrustedGroupWritePolicy,
 )
 from bt_api_py.service_risk_order_entry import RiskBtApiProviderContract, RiskOrderTarget
-from bt_api_py.service_risk_order_journal import RiskOrderJournal
+from bt_api_risk.risk_order_journal import RiskOrderJournal
 from tests.unit._service_group_provider_fixtures import (
     _V2_FILL_SCHEMA,
     _V2_INSTRUMENT,

@@ -19,6 +19,7 @@ import threading
 import time
 from collections import deque
 from collections.abc import Callable
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
@@ -248,6 +249,12 @@ class GatewayDirectOwner:
         self._service_queue_size = service_queue_size
         self._pid = os.getpid()
         self._condition = threading.Condition()
+        # Lock order: lifecycle lock, fence leaf lock (released), condition.
+        self._lifecycle_lock = threading.Lock()
+        self._lifecycle_writer = None
+        self._lifecycle_coordinator = None
+        self._lifecycle_terminal_change = None
+        self._lifecycle_shutdown_requested = False
         self._lifecycle_epoch = 0
         self._startup = threading.Event()
         self._done = threading.Event()
@@ -274,11 +281,117 @@ class GatewayDirectOwner:
         if os.getpid() != self._pid:
             raise GatewayDirectOwnerError("PROCESS_BOUNDARY")
 
+    def _bind_dispatch_lifecycle(self, coordinator, *, account_scope, generation) -> None:
+        """Attach the owner lifecycle writer before the composition seals coverage."""
+        from bt_api_py.gateway_dispatch_claim import GatewayDispatchClaimCoordinator
+
+        self._check_pid()
+        if (type(coordinator) is not GatewayDispatchClaimCoordinator
+                or not coordinator.matches_owner(account_scope, generation)):
+            raise GatewayDirectOwnerError("INVALID_LIFECYCLE_COORDINATOR")
+        with self._lifecycle_lock:
+            with self._condition:
+                if (self._lifecycle_writer is not None or self._lifecycle_shutdown_requested
+                        or self._closing or self._done.is_set()
+                        or self._closed_without_thread):
+                    raise GatewayDirectOwnerError("OWNER_LIFECYCLE_INVALID")
+            writer, token = coordinator.attach_writer_handle(
+                "session_source", account=account_scope, owner_generation=generation)
+            try:
+                self._lifecycle_coordinator = coordinator
+                self._lifecycle_writer = writer
+                writer.finish_unavailable(token)
+            except BaseException:
+                try:
+                    writer.poison(token)
+                except BaseException:
+                    coordinator._core.mark_failed()
+                raise
+
+    @contextmanager
+    def _lifecycle_change(self, *, failed=False):
+        """Fence terminal lifecycle mutations, without holding the condition at begin.
+
+        A retained active token keeps this shared domain unavailable even if a
+        different writer later publishes READY. It lives until core teardown.
+        """
+        with self._lifecycle_lock:
+            writer = self._lifecycle_writer
+            token = None
+            interrupt = None
+            if writer is not None:
+                try:
+                    token = writer.begin_change()
+                except BaseException as error:
+                    # Closing must still proceed; first make the shared fence
+                    # permanently unavailable if it was not already closed.
+                    try:
+                        self._lifecycle_coordinator.poison_domain("session_source")
+                    except BaseException:
+                        try:
+                            self._lifecycle_coordinator._core.mark_failed()
+                        except BaseException:
+                            pass
+                    if not isinstance(error, Exception):
+                        interrupt = error
+            try:
+                yield
+            except BaseException:
+                if token is not None:
+                    try:
+                        writer.poison(token)
+                    except BaseException:
+                        self._lifecycle_coordinator._core.mark_failed()
+                raise
+            else:
+                if token is not None:
+                    if failed:
+                        try:
+                            writer.poison(token)
+                        except BaseException:
+                            self._lifecycle_coordinator._core.mark_failed()
+                    elif self._lifecycle_terminal_change is None:
+                        self._lifecycle_terminal_change = token
+                    else:
+                        try:
+                            writer.finish_unavailable(token)
+                        except BaseException as error:
+                            try:
+                                self._lifecycle_coordinator.poison_domain("session_source")
+                            except BaseException:
+                                self._lifecycle_coordinator._core.mark_failed()
+                            if not isinstance(error, Exception):
+                                raise
+                if interrupt is not None:
+                    raise interrupt
+
+    def _fence_dispatch_shutdown(self) -> None:
+        """Invalidate claims before outer cleanup, without starting owner cleanup."""
+        self._check_pid()
+        dropped = ()
+        try:
+            with self._lifecycle_change():
+                with self._condition:
+                    if not self._lifecycle_shutdown_requested:
+                        self._lifecycle_shutdown_requested = True
+                        self._lifecycle_epoch += 1
+                        dropped = tuple(self._queue) + tuple(self._cancel_queue)
+                        self._queue.clear()
+                        self._cancel_queue.clear()
+                        self._drop_services_locked("SERVICE_CALL_CLOSED")
+                        for task in dropped:
+                            self._pending.pop(_command_key(task.command), None)
+                        self._condition.notify_all()
+        finally:
+            for task in dropped:
+                self._finalize(task.finalize)
+
     def _lifecycle_snapshot(self) -> tuple[object, ...]:
         """Capture local liveness for Host startup; this is not dispatch authority."""
         self._check_pid()
         with self._condition:
-            if (self._closing or self._done.is_set() or self._binding is None
+            if (self._lifecycle_shutdown_requested or self._closing
+                    or self._done.is_set() or self._binding is None
                     or self._thread is None or not self._thread.is_alive()):
                 raise GatewayDirectOwnerError("OWNER_LIFECYCLE_INVALID")
             return (self._pid, self, self._binding, self._binding.generation,
@@ -293,6 +406,7 @@ class GatewayDirectOwner:
                 and snapshot[2] is self._binding and self._binding is not None
                 and snapshot[3] == self._binding.generation
                 and snapshot[4] == self._lifecycle_epoch
+                and not self._lifecycle_shutdown_requested
                 and not self._closing and not self._done.is_set()
                 and self._thread is not None and self._thread.is_alive()
             )
@@ -322,7 +436,7 @@ class GatewayDirectOwner:
             raise GatewayOwnerServiceCallError("SERVICE_CALL_INVALID_CALLBACK")
         with self._condition:
             if (
-                self._closing
+                self._lifecycle_shutdown_requested or self._closing
                 or self._binding is None
                 or self._done.is_set()
                 or self._thread is None
@@ -346,7 +460,7 @@ class GatewayDirectOwner:
         ):
             raise GatewayOwnerServiceCallError("SERVICE_PORT_INVALID")
         with self._condition:
-            if self._closing or self._done.is_set():
+            if self._lifecycle_shutdown_requested or self._closing or self._done.is_set():
                 raise GatewayOwnerServiceCallError("SERVICE_CALL_NOT_READY")
             if name in self._service_ports:
                 if self._service_ports[name] is claimant:
@@ -360,19 +474,21 @@ class GatewayDirectOwner:
         self._check_service_caller()
         timeout = _duration(timeout_seconds, maximum=3600)
         with self._condition:
-            if self._closing:
+            if self._lifecycle_shutdown_requested or self._closing:
                 return False
             if self._thread is None:
                 self._thread = threading.Thread(target=self._run, name="gateway-direct-owner")
                 self._thread.start()
         if not self._startup.wait(timeout):
-            with self._condition:
-                self._closing = True
-                self._lifecycle_epoch += 1
-                self._condition.notify_all()
+            with self._lifecycle_change():
+                with self._condition:
+                    self._closing = True
+                    self._lifecycle_epoch += 1
+                    self._condition.notify_all()
             return False
         with self._condition:
-            return self._binding is not None and not self._closing and not self._done.is_set()
+            return (self._binding is not None and not self._lifecycle_shutdown_requested
+                    and not self._closing and not self._done.is_set())
 
     def enqueue(
         self,
@@ -456,7 +572,8 @@ class GatewayDirectOwner:
         is_cancel = command_type is GatewayCancelCommand
         now = time.monotonic()
         with self._condition:
-            if self._closing or self._binding is None or self._done.is_set():
+            if (self._lifecycle_shutdown_requested or self._closing
+                    or self._binding is None or self._done.is_set()):
                 result = "CLOSING"
             elif is_cancel and self._cancel_dispatcher is None:
                 result = "UNSUPPORTED"
@@ -492,7 +609,7 @@ class GatewayDirectOwner:
                 len(self._queue) + len(self._cancel_queue),
                 self._active_since is not None,
                 self._binding is not None
-                and not self._closing
+                and not self._lifecycle_shutdown_requested and not self._closing
                 and alive
                 and not busy
                 and len(self._queue) < self._queue_size,
@@ -511,13 +628,14 @@ class GatewayDirectOwner:
     def binding(self) -> GatewayDirectOwnerBinding | None:
         self._check_pid()
         with self._condition:
-            return self._binding if not self._closing and not self._done.is_set() else None
+            return (self._binding if not self._lifecycle_shutdown_requested
+                    and not self._closing and not self._done.is_set() else None)
 
     def is_bound_to(self, journal: object) -> bool:
         self._check_pid()
         with self._condition:
             return (
-                not self._closing
+                not self._lifecycle_shutdown_requested and not self._closing
                 and self._binding is not None
                 and self._journal is journal
                 and self._dispatcher is not None
@@ -530,7 +648,7 @@ class GatewayDirectOwner:
         self._check_pid()
         with self._condition:
             return bool(
-                not self._closing
+                not self._lifecycle_shutdown_requested and not self._closing
                 and not self._done.is_set()
                 and self._binding is not None
                 and self._journal is not None
@@ -548,7 +666,8 @@ class GatewayDirectOwner:
         """
         self._check_pid()
         with self._condition:
-            if self._closing or self._done.is_set() or self._binding is None:
+            if (self._lifecycle_shutdown_requested or self._closing
+                    or self._done.is_set() or self._binding is None):
                 return "DISPATCH_QUEUE_CLOSING"
         return None if self.supports_dispatch_claims() else "DISPATCH_CLAIM_UNAVAILABLE"
 
@@ -561,7 +680,8 @@ class GatewayDirectOwner:
         self._check_pid()
         with self._condition:
             dispatcher = self._dispatcher
-            if (self._closing or self._done.is_set() or self._binding is None
+            if (self._lifecycle_shutdown_requested or self._closing
+                    or self._done.is_set() or self._binding is None
                     or self._journal is None or dispatcher is None
                     or dispatcher.journal is not self._journal):
                 return False
@@ -584,22 +704,26 @@ class GatewayDirectOwner:
     def close(self, timeout_seconds: float) -> bool:
         self._check_service_caller()
         timeout = _duration(timeout_seconds, maximum=3600)
-        with self._condition:
-            self._closing = True
-            self._lifecycle_epoch += 1
-            dropped = tuple(self._queue) + tuple(self._cancel_queue)
-            self._queue.clear()
-            self._cancel_queue.clear()
-            self._drop_services_locked("SERVICE_CALL_CLOSED")
+        dropped = ()
+        try:
+            with self._lifecycle_change():
+                with self._condition:
+                    self._closing = True
+                    self._lifecycle_epoch += 1
+                    dropped = tuple(self._queue) + tuple(self._cancel_queue)
+                    self._queue.clear()
+                    self._cancel_queue.clear()
+                    self._drop_services_locked("SERVICE_CALL_CLOSED")
+                    for task in dropped:
+                        self._pending.pop(_command_key(task.command), None)
+                    self._cleanup_retry += 1
+                    thread = self._thread
+                    if thread is None:
+                        self._closed_without_thread = True
+                    self._condition.notify_all()
+        finally:
             for task in dropped:
-                self._pending.pop(_command_key(task.command), None)
-            self._cleanup_retry += 1
-            thread = self._thread
-            if thread is None:
-                self._closed_without_thread = True
-            self._condition.notify_all()
-        for task in dropped:
-            self._finalize(task.finalize)
+                self._finalize(task.finalize)
         if thread is None:
             return True
         return self._done.wait(timeout)
@@ -612,12 +736,17 @@ class GatewayDirectOwner:
                 self._failure = "finalizer_failed"
 
     def _run(self) -> None:
+        failed = False
         try:
             self._run_owned()
+        except BaseException:
+            failed = True
+            raise
         finally:
             # Includes unexpected thread exits, even when cleanup could not run.
-            with self._condition:
-                self._lifecycle_epoch += 1
+            with self._lifecycle_change(failed=failed):
+                with self._condition:
+                    self._lifecycle_epoch += 1
 
     def _run_owned(self) -> None:
         resources: GatewayDirectOwnerResources | None = None
@@ -668,11 +797,12 @@ class GatewayDirectOwner:
                 self._cancel_dispatcher = resources.cancel_dispatcher
                 self._startup.set()
         except BaseException as exc:
-            with self._condition:
-                self._failure = "factory_failed"
-                self._closing = True
-                self._lifecycle_epoch += 1
-                self._startup.set()
+            with self._lifecycle_change(failed=True):
+                with self._condition:
+                    self._failure = "factory_failed"
+                    self._closing = True
+                    self._lifecycle_epoch += 1
+                    self._startup.set()
             if isinstance(exc, GatewayOwnerStartupCleanupError):
                 self._cleanup(exc.cleanup)
             elif type(resources) is GatewayDirectOwnerResources and callable(resources.close):
@@ -696,6 +826,9 @@ class GatewayDirectOwner:
                 while True:
                     if self._closing:
                         break
+                    if self._lifecycle_shutdown_requested:
+                        self._condition.wait()
+                        continue
                     now = time.monotonic()
                     maintenance_due = (
                         resources.maintain is not None
@@ -747,16 +880,17 @@ class GatewayDirectOwner:
                     _LOG.error("Gateway owner maintenance failed and the owner stops: %s",
                                code if type(code) is str and code.isupper() and len(code) <= 64
                                else type(error).__name__)
-                    with self._condition:
-                        self._failure = "maintenance_failed"
-                        self._closing = True
-                        self._lifecycle_epoch += 1
-                        dropped = tuple(self._queue) + tuple(self._cancel_queue)
-                        self._queue.clear()
-                        self._cancel_queue.clear()
-                        self._drop_services_locked("SERVICE_CALL_CLOSED")
-                        for item in dropped:
-                            self._pending.pop(_command_key(item.command), None)
+                    with self._lifecycle_change(failed=True):
+                        with self._condition:
+                            self._failure = "maintenance_failed"
+                            self._closing = True
+                            self._lifecycle_epoch += 1
+                            dropped = tuple(self._queue) + tuple(self._cancel_queue)
+                            self._queue.clear()
+                            self._cancel_queue.clear()
+                            self._drop_services_locked("SERVICE_CALL_CLOSED")
+                            for item in dropped:
+                                self._pending.pop(_command_key(item.command), None)
                     for item in dropped:
                         self._finalize(item.finalize)
                 finally:
@@ -836,7 +970,7 @@ class GatewayDirectOwner:
                                 or time.monotonic() >= task.deadline):
                             raise
                         with self._condition:
-                            if not self._closing:
+                            if not self._lifecycle_shutdown_requested and not self._closing:
                                 self._queue.append(task)
                                 requeued = True
                                 self._condition.notify()

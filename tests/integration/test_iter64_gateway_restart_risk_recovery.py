@@ -17,8 +17,10 @@ def _cursor(root):
         return db.execute("SELECT continuity, gap_reason FROM risk_pretrade_cursor").fetchone()
 
 
-def test_gateway_restart_recovers_original_risk_process_without_replaying_writes(tmp_path):
-    state = _Loopback(tmp_path)
+def test_gateway_restart_recovers_original_risk_process_without_replaying_writes(tmp_path_factory):
+    root = support.retained_loopback_root(tmp_path_factory.getbasetemp())
+    print(f"Retained synthetic Risk loopback root: {root}")
+    state = _Loopback(root)
     try:
         state.start_risk()
         state.prime_trading_day()
@@ -38,8 +40,7 @@ def test_gateway_restart_recovers_original_risk_process_without_replaying_writes
         assert sent and sent[0][0] == "SENT", sent
         state.strategy.close(timeout_seconds=5)
         state.strategy = None
-        state.controls.put("stop")
-        state.gateway.join(20)
+        state.gateway_stop.close()
         assert state.gateway.exitcode == 0
         gap = support.until(lambda: _cursor(state.risk_root),
                             lambda row: row is not None and row[0] == "UNVERIFIED", seconds=20)
@@ -50,9 +51,12 @@ def test_gateway_restart_recovers_original_risk_process_without_replaying_writes
             args=(str(state.gateway_root), state.gateway_endpoint, state.keys["gateway_server"],
                   support.gateway_publics(state.keys, 1), 1, state.messages, state.controls),
         )
+        state.gateway_stop = support.SyntheticGatewayStop(
+            state.gateway, state.controls, state.messages)
         state.gateway.start()
         ready = support.next_message(state.messages, "ready", 40)
         assert ready[2] == state.journal_id
+        state.gateway_stop.bind_ready(ready)
         state.strategy = support.strategy_session(state.gateway_endpoint, state.keys, state.journal_id)
         assert state.strategy.start(timeout_seconds=20).healthy
         recovered = support.until(lambda: _cursor(state.risk_root),

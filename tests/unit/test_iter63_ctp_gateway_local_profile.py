@@ -389,23 +389,23 @@ def test_simnow_account_comparison_is_optional_explicit_and_bounded(tmp_path, mo
             load_simnow_trading_resources(config)
 
 
-def test_strategy_origin_source_names_only_the_operators_declared_instruments():
-    from types import SimpleNamespace
+def test_strategy_origin_source_names_only_the_operators_declared_instruments(monkeypatch):
+    from dataclasses import replace
 
-    from bt_api_base.market_protocol import MarketInstrumentKey
     from bt_api_py.ctp_gateway_local_profile import _strategy_origin_source_factory
-    from bt_api_py.gateway_strategy_origin_source import GatewayStrategyOriginSource
+    from bt_api_py.gateway_strategy_origin_source import GatewayStrategyOriginSourceError
+    from tests.unit.test_iter64_origin_immutable_owner_fake import _bound, _inputs
 
-    rb = MarketInstrumentKey("ctp", "SHFE", "simnow", "future", "rb2612", "rb2612")
+    context, order, rb = _inputs()
     source = _strategy_origin_source_factory((rb,))(object(), object(), object())
-    assert type(source) is GatewayStrategyOriginSource
-    assert source._resolve(None, SimpleNamespace(exchange_id="SHFE", symbol="rb2612")) is rb
-    for exchange, symbol in (("CZCE", "rb2612"), ("SHFE", "rb2701"), (None, "rb2612")):
-        with pytest.raises(KeyError):
-            source._resolve(None, SimpleNamespace(exchange_id=exchange, symbol=symbol))
+    _bound(monkeypatch, source)
+    assert source.resolve(context, order) == rb
+    for exchange, symbol in (("CZCE", "rb"), ("SHFE", "rb2701"), (None, "rb")):
+        with pytest.raises(GatewayStrategyOriginSourceError):
+            source.resolve(context, replace(order, exchange_id=exchange, symbol=symbol))
     assert source.recheck(rb) is True
-    assert source.recheck(MarketInstrumentKey("ctp", "SHFE", "simnow", "option", "rb2612", "rb2612")) is False
-    assert source.recheck(MarketInstrumentKey("ctp", "SHFE", "simnow", "future", "hc2612", "hc2612")) is False
+    assert source.recheck(replace(rb, product_type="option")) is False
+    assert source.recheck(replace(rb, instrument_id="hc", native_symbol="hc")) is False
 
 
 def _operator(doc):
@@ -457,10 +457,11 @@ def test_simnow_trading_bundle_installs_operator_control_grants(tmp_path, monkey
 
 def test_simnow_drain_section_walks_the_journal_to_v17_with_a_declared_origin_source(tmp_path, monkeypatch):
     """63.12: operator-driven cancels of a DRAIN cause need schema 17 and an origin source."""
-    from types import SimpleNamespace
+    from dataclasses import replace
 
     from bt_api_py.ctp_gateway_local_profile import load_simnow_trading_resources
     from bt_api_py.gateway_strategy_origin_source import GatewayStrategyOriginSource
+    from tests.unit.test_iter64_origin_immutable_owner_fake import _bound, _inputs
 
     doc, file, config = _fixture(tmp_path, monkeypatch)
     doc["settings"]["write_enabled"] = True
@@ -485,8 +486,10 @@ def test_simnow_drain_section_walks_the_journal_to_v17_with_a_declared_origin_so
         source = resources.strategy_origin_source_factory(object(), object(), object())
         assert type(source) is GatewayStrategyOriginSource
         declared = resources.return_settings.instruments[0]
-        order = SimpleNamespace(exchange_id=declared.venue, symbol=declared.native_symbol)
-        assert source._resolve(None, order) is declared and source.recheck(declared) is True
+        context, order, _ = _inputs()
+        _bound(monkeypatch, source)
+        order = replace(order, exchange_id=declared.venue, symbol=declared.native_symbol)
+        assert source.resolve(context, order) == declared and source.recheck(declared) is True
 
     # The comparison's own upgrade request is kept when the drain section does not ask.
     doc["strategy_ledger"] = {"upgrade_from_v10": False,

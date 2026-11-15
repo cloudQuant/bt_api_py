@@ -232,12 +232,11 @@ def test_d64_02_risk_stopped_refuses_place_and_cancel_still_reaches_the_gateway(
     env.wait_gateway_state("a-work", "SENT")
     before = env.gateway_commands()
     assert env.stop_risk() == 0, env.risk_stderr
-    # The strategy's Risk client learns of the outage when its Risk registration lapses
-    # (lease); only then is PLACE provably not sent (see the report: a PLACE inside that
-    # detection window reaches a dead endpoint and is reported UNKNOWN, not refused).
+    # Lease failure proves only that this invocation was not sent; an earlier
+    # host might have used the same key, so the key remains UNKNOWN.
     env.wait_risk_route("a", available=False, seconds=90)
     refused = env.call("a", "place", key="a-out", cid="a-out", price="10")
-    assert _denied(refused, "reserve") == "risk_unavailable", refused
+    assert refused["reserve"]["outcome"] == "UNKNOWN", refused
     assert "dispatch" not in refused
     assert env.gateway_commands() == before  # nothing reached the Gateway
     # The strategy cancels its earlier Risk-placed working order as its delegated command.
@@ -292,7 +291,7 @@ def test_d64_02_unconfirmed_unregister_retains_original_runtime_and_refuses(env)
     status = env.call("a", "risk_status", key="a-work")
     assert status["outcome"] == "NOT_SENT" and status["code"] == "ROUTE_UNAVAILABLE", status
     blocked = env.call("a", "place", key="a-back-blocked", cid="a-back-blocked", price="9")
-    assert _denied(blocked, "reserve") == "risk_unavailable", blocked
+    assert blocked["reserve"]["outcome"] == "UNKNOWN", blocked
     assert "dispatch" not in blocked and env.gateway_commands() == before
     # Neither the read nor the new request replaced the unproven old runtime.
     assert env.call("a", "risk_runtime_status") == snapshot
@@ -660,7 +659,8 @@ def test_d64_11_cancel_rule_cancels_working_targets_once_and_retries_after_an_ou
     # The intent was kept through the outage; after the Gateway returns Risk re-checks that
     # the rule's latch still holds and issues the same cancel operation again.
     def cancel_state():
-        rows = env.admin("risk.audit.read", {"after": 0, "limit": 500})["records"]
+        rows = env.admin("risk.audit.read", {"after": 0, "limit": 500,
+                                            "through": None, "snapshot": None})["records"]
         operations = [r["detail"]["operation_id"] for r in rows if r["kind"] == "cancel_intent"]
         assert len(operations) == 1, rows
         return operations[0], env.admin("risk.cancel.status", {"operation_id": operations[0]})
@@ -686,22 +686,21 @@ def test_d64_11_cancel_rule_cancels_working_targets_once_and_retries_after_an_ou
     assert "a-hc" not in env.gateway_cancels()
 
 
-def test_place_right_after_a_risk_restart_is_refused_or_placed_never_unknown(env):
-    # D4 (fixed): right after a restart the strategy's client still holds its old Risk
-    # registration and the new Risk Registry answers STALE_EPOCH before any handler runs.
+def test_place_right_after_a_risk_restart_keeps_original_key_safe(env):
+    # STALE_EPOCH proves this invocation was not sent, not that no earlier host
+    # used the same key. Keep the original key UNKNOWN unless Risk answers.
     env.restart_risk()  # returns once the new host serves (stream replayed)
     first = env.call("a", "place", key="a-after-restart", cid="a-after-restart")
     reserve = first["reserve"]
-    assert reserve["outcome"] in ("OBSERVED", "REQUEST_DENIED"), first  # never UNKNOWN
-    if reserve["outcome"] == "REQUEST_DENIED":
-        assert reserve["risk_denied"] == "risk_unavailable", first
+    assert reserve["outcome"] in ("OBSERVED", "UNKNOWN"), first
+    if reserve["outcome"] == "UNKNOWN":
         assert "dispatch" not in first
         assert "a-after-restart" not in env.gateway_commands()
     # The client re-registers (lease renewal, then reconnect); the next PLACE is placed.
     env.wait_risk_route("a")
     later = env.call("a", "place", key="a-later", cid="a-later")
     assert _placed(later).get("outcome") == "DISPATCHED", later
-    if reserve["outcome"] == "REQUEST_DENIED":
-        # The refused request changed nothing at Risk either.
+    if reserve["outcome"] == "UNKNOWN":
+        # This synthetic scenario has no earlier host; check its local result.
         status = env.call("a", "risk_status", key="a-after-restart")
         assert status["answer"]["outcome"] == "NOT_FOUND", status

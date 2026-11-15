@@ -29,7 +29,7 @@ from bt_api_py.gateway_direct_service import (
     GatewayDirectServiceBinding,
     GatewayReservationAdmissionDenied,
 )
-from bt_api_py.gateway_strategy_origin_source import GatewayStrategyOriginSource
+from tests._synthetic_strategy_origin_source import SyntheticStrategyOriginSource
 from bt_api_py.service_registry import (
     PrincipalGrant,
     ResourceGrant,
@@ -42,8 +42,10 @@ INSTRUMENT = MarketInstrumentKey("ctp", "SHFE", "simnow", "future", "rb", "rb")
 
 
 @pytest.fixture
-def gateway(tmp_path):
+def gateway(tmp_path, monkeypatch):
     """A real owner, journal (schema 17, strategy origins on) and registry; the trading fence is ours."""
+    import bt_api_py.gateway_strategy_origin_source as source_module
+    monkeypatch.setattr(source_module, "GatewayStrategyOriginSource", SyntheticStrategyOriginSource)
     directory = tmp_path / "guards"
     directory.mkdir()
     holder, state = {}, {"open": True}
@@ -71,7 +73,7 @@ def gateway(tmp_path):
         for step in ("enable_account_extensions", "enable_parent_authority", "enable_account_facts_financial",
                      "enable_actor_stream", "enable_strategy_origin", "enable_control_cancel"):
             getattr(journal, step)(guard)
-        source = GatewayStrategyOriginSource(resolve=lambda *_: INSTRUMENT, recheck=lambda _: True)
+        source = SyntheticStrategyOriginSource(resolve=lambda *_: INSTRUMENT, recheck=lambda _: True)
         holder.update(journal=journal, source=source)
         dispatcher = GatewayDirectDispatcher(journal, "CTP", guard, lambda *_: None, lambda _: ("anchor",),
                                              lambda _: True)

@@ -53,6 +53,7 @@ from bt_api_py.gateway_direct_service import (
     ACCOUNT_COMPARISON_OPERATIONS,
     ACCOUNT_STRATEGY_READ_OPERATIONS,
     ACCOUNT_OBSERVER_OPERATIONS,
+    ACCOUNT_CANCEL_ATTEMPT_OPERATIONS,
     ACCOUNT_FACTS_OPERATIONS,
     STRATEGY_FINANCIAL_OPERATIONS,
     PARENT_OPERATIONS,
@@ -84,7 +85,7 @@ _OPERATIONS = (
     frozenset({"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch"})
     | EVENT_OPERATIONS
 )
-_READ_OPERATIONS = ACCOUNT_READ_OPERATIONS | INSTRUMENT_OPERATIONS | ACCOUNT_COMPARISON_OPERATIONS | ACCOUNT_STRATEGY_READ_OPERATIONS | ACCOUNT_OBSERVER_OPERATIONS | ACCOUNT_FACTS_OPERATIONS
+_READ_OPERATIONS = ACCOUNT_READ_OPERATIONS | INSTRUMENT_OPERATIONS | ACCOUNT_COMPARISON_OPERATIONS | ACCOUNT_STRATEGY_READ_OPERATIONS | ACCOUNT_OBSERVER_OPERATIONS | ACCOUNT_FACTS_OPERATIONS | ACCOUNT_CANCEL_ATTEMPT_OPERATIONS
 _MARKET_OPERATIONS = MARKET_OPERATIONS - {"market.history"}
 
 
@@ -421,6 +422,7 @@ def _validate_config(
         control_cancel_enabled = normalized_options.get('control_cancel_enabled', False)
         account_fact_recovery_enabled = normalized_options.get('account_fact_recovery_enabled', False)
         account_event_recovery_enabled = normalized_options.get('account_event_recovery_enabled', False)
+        cancel_attempt_stream_enabled = normalized_options.get('cancel_attempt_stream_enabled', False)
         expected_options = {
             "role": "trading_owner",
             "dispatch_enabled": True,
@@ -448,6 +450,8 @@ def _validate_config(
             expected_options['account_fact_recovery_enabled'] = account_fact_recovery_enabled
         if 'account_event_recovery_enabled' in normalized_options:
             expected_options['account_event_recovery_enabled'] = account_event_recovery_enabled
+        if 'cancel_attempt_stream_enabled' in normalized_options:
+            expected_options['cancel_attempt_stream_enabled'] = cancel_attempt_stream_enabled
         if market_settings is not None:
             expected_options["bounded_read_after"] = bounded
         market_principals = (
@@ -486,6 +490,7 @@ def _validate_config(
             or type(control_cancel_enabled) is not bool or (control_cancel_enabled and not (control_enabled and cancel_enabled and extensions_enabled and strategy_origin_enabled))
             or type(account_fact_recovery_enabled) is not bool or (account_fact_recovery_enabled and not (control_cancel_enabled and facts_financial_enabled))
             or type(account_event_recovery_enabled) is not bool or (account_event_recovery_enabled and not account_fact_recovery_enabled)
+            or type(cancel_attempt_stream_enabled) is not bool or (cancel_attempt_stream_enabled and not (cancel_enabled and extensions_enabled and read_settings is not None))
             or type(bounded) is not bool
             or normalized_options != expected_options
             or not _ref(instance)
@@ -542,7 +547,7 @@ def _validate_config(
                         or scope.leg_id is not None
                         or (entry.identity.role is WireRole.SERVICE and resource.port != "service.direct_write"
                             and not (resource.port == "service.account_read" and extensions_enabled
-                                     and resource.operations <= (ACCOUNT_OBSERVER_OPERATIONS | ACCOUNT_FACTS_OPERATIONS))
+                                     and resource.operations <= (ACCOUNT_OBSERVER_OPERATIONS | ACCOUNT_FACTS_OPERATIONS | ACCOUNT_CANCEL_ATTEMPT_OPERATIONS))
                             and not (resource.port == 'service.market_source' and principal in delegate_principals
                                      and market_settings is not None))
                     ):
@@ -601,6 +606,7 @@ def _validate_config(
                         or not resource.operations <= _READ_OPERATIONS
                         or (bool(resource.operations & ACCOUNT_OBSERVER_OPERATIONS) and not extensions_enabled)
                         or (bool(resource.operations & ACCOUNT_FACTS_OPERATIONS) and not facts_financial_enabled)
+                        or (bool(resource.operations & ACCOUNT_CANCEL_ATTEMPT_OPERATIONS) and (not cancel_attempt_stream_enabled or entry.identity.role not in {WireRole.SERVICE, WireRole.APPLICATION_CLIENT}))
                         or (bool(resource.operations & ACCOUNT_COMPARISON_OPERATIONS)
                             and (not extensions_enabled or entry.identity.role is not WireRole.APPLICATION_CLIENT))
                         # G64-06: every strategy's funds and book, for an account-wide control principal only.
@@ -770,6 +776,7 @@ def build_ctp_gateway_trading_profile(
     strategy_ledger_comparison_refresh_seconds: float | None = None,
     control_release_audit_enabled: bool = False,
     upgrade_control_release_audit: bool = False,
+    upgrade_cancel_attempt_stream: bool = False,
 ) -> GatewayOperatorProfile:
     """Build a trusted profile; no guard, provider, native session or owner is started.
 
@@ -789,6 +796,7 @@ def build_ctp_gateway_trading_profile(
             or type(upgrade_account_event_recovery_from_v18) is not bool
             or type(control_release_audit_enabled) is not bool
             or type(upgrade_control_release_audit) is not bool
+            or type(upgrade_cancel_attempt_stream) is not bool
             or (control_grants is not None and not isinstance(control_grants, Mapping))):
         raise CtpGatewayTradingError("INVALID_CONTROL_CONFIGURATION")
     if clock_verifier_factory is not None and (
@@ -866,6 +874,13 @@ def build_ctp_gateway_trading_profile(
         )
     ):
         raise CtpGatewayTradingError("INVALID_RETURN_SETTINGS")
+    trusted_origin_snapshot = None
+    if strategy_origin_source_factory is not None:
+        if return_settings is None:
+            raise CtpGatewayTradingError("INVALID_STRATEGY_ORIGIN")
+        from bt_api_py.gateway_strategy_origin_source import snapshot_strategy_origin_instruments
+
+        trusted_origin_snapshot = snapshot_strategy_origin_instruments(return_settings.instruments)
     if (
         type(account_read_principals) is not frozenset
         or any(not _ref(item) for item in account_read_principals)
@@ -951,6 +966,9 @@ def build_ctp_gateway_trading_profile(
     control_cancel_enabled = config.components["gateway"]["settings"]["options"].get('control_cancel_enabled', False)
     account_fact_recovery_enabled = config.components["gateway"]["settings"]["options"].get('account_fact_recovery_enabled', False)
     account_event_recovery_enabled = config.components["gateway"]["settings"]["options"].get('account_event_recovery_enabled', False)
+    cancel_attempt_stream_enabled = config.components["gateway"]["settings"]["options"].get('cancel_attempt_stream_enabled', False)
+    if upgrade_cancel_attempt_stream and not cancel_attempt_stream_enabled:
+        raise CtpGatewayTradingError('INVALID_CANCEL_STREAM_CONFIGURATION')
     if settings.risk_v2_binding_enabled and (
         not extensions_enabled
         or any((
@@ -965,6 +983,7 @@ def build_ctp_gateway_trading_profile(
             upgrade_account_fact_recovery_from_v17,
             upgrade_account_event_recovery_from_v18,
             upgrade_control_release_audit,
+            upgrade_cancel_attempt_stream,
         ))
     ):
         raise CtpGatewayTradingError("INVALID_RISK_V2_BINDING_CONFIGURATION")
@@ -1085,6 +1104,8 @@ def build_ctp_gateway_trading_profile(
             expected_options['account_fact_recovery_enabled'] = account_fact_recovery_enabled
         if 'account_event_recovery_enabled' in normalized_options:
             expected_options['account_event_recovery_enabled'] = account_event_recovery_enabled
+        if 'cancel_attempt_stream_enabled' in normalized_options:
+            expected_options['cancel_attempt_stream_enabled'] = cancel_attempt_stream_enabled
         if market_settings is not None:
             normalized_options.setdefault("bounded_read_after", False)
             expected_options["bounded_read_after"] = config.components["gateway"]["settings"][
@@ -1121,6 +1142,7 @@ def build_ctp_gateway_trading_profile(
 
             def cleanup_steps():
                 nonlocal session_closed, guard_closed, read_closed, issuer_closed, origin_closed, financial_closed
+                owner._fence_dispatch_shutdown()
                 closing.set()
                 holder.pop("owner_guard_binding", None)
                 deadline = time.monotonic() + settings.close_timeout_seconds
@@ -1198,6 +1220,9 @@ def build_ctp_gateway_trading_profile(
                  holder['dispatch_claim_sealer']) = GatewayDispatchClaimCoordinator.with_coverage_sealer(
                     settings.account_scope, generation)
                 holder['dispatch_claim_wired'] = set()
+                owner._bind_dispatch_lifecycle(holder['dispatch_claim_coordinator'],
+                    account_scope=settings.account_scope, generation=generation)
+                holder['dispatch_claim_wired'].add('gateway_direct_owner.lifecycle_change')
                 if account_read_settings is not None:
                     from bt_api_py.order_correlation_issuer import (
                         DurableOrderCorrelationIssuer,
@@ -1236,6 +1261,8 @@ def build_ctp_gateway_trading_profile(
                 )
                 if settings.risk_v2_binding_enabled:
                     journal_options["risk_v2_binding_enabled"] = True
+                if cancel_attempt_stream_enabled and not upgrade_cancel_attempt_stream:
+                    journal_options['cancel_attempt_stream_enabled'] = True
                 target_version = 19 if account_event_recovery_enabled else 18 if account_fact_recovery_enabled else 17 if control_cancel_enabled else 16 if strategy_origin_enabled else 15 if actor_stream_enabled else 14 if facts_financial_enabled else 13 if parent_enabled else 12 if extensions_enabled else 11 if ledger_enabled else 10 if control_enabled else 9
                 candidates = [target_version]
                 if target_version == 19 and upgrade_account_event_recovery_from_v18:
@@ -1317,6 +1344,8 @@ def build_ctp_gateway_trading_profile(
                     journal.enable_account_fact_recovery(guard)
                 if journal._schema_version == 18 and target_version >= 19:
                     journal.enable_account_event_recovery(guard)
+                if upgrade_cancel_attempt_stream:
+                    journal.enable_cancel_attempt_stream(guard)
                 if control_release_audit_enabled and not journal._control_release_audit:
                     # Who releases a control cause is stored from here on. One-way; it leaves
                     # the schema version and the features of later schemas as they are.
@@ -1429,7 +1458,8 @@ def build_ctp_gateway_trading_profile(
                 if strategy_origin_source_factory is not None:
                     from bt_api_py.gateway_strategy_origin_source import GatewayStrategyOriginSource
                     origin_source = strategy_origin_source_factory(journal, guard, session)
-                    if type(origin_source) is not GatewayStrategyOriginSource:
+                    if (type(origin_source) is not GatewayStrategyOriginSource
+                            or not origin_source._matches_snapshot(trusted_origin_snapshot)):
                         raise CtpGatewayTradingError('INVALID_STRATEGY_ORIGIN')
                     holder['strategy_origin_source'] = origin_source
                 if strategy_financial_source_factory is not None:
@@ -1560,6 +1590,10 @@ def build_ctp_gateway_trading_profile(
                     journal_id=settings.expected_journal_id, generation=generation,
                     exchange=ROUTE, closing=closing, instance_id=instance,
                 )
+                if holder.get('strategy_origin_source') is not None:
+                    holder['strategy_origin_source']._bind_owner(
+                        owner, journal, guard, session, claim_coordinator,
+                        holder['owner_guard_binding'])
                 cancel_dispatcher = None
                 if cancel_enabled:
 
@@ -1990,6 +2024,7 @@ def build_ctp_gateway_trading_profile(
         )
 
         def close_owner():
+            owner._fence_dispatch_shutdown()
             closing.set()
             deadline = time.monotonic() + settings.close_timeout_seconds
             returns = holder.get("returns")
@@ -2015,6 +2050,7 @@ def build_ctp_gateway_trading_profile(
 
         def close_resources():
             nonlocal hub_closed, proxy_closed
+            owner._fence_dispatch_shutdown()
             closing.set()
             monitor = holder.get("required_monitor")
             if monitor is not None and not monitor.close(settings.close_timeout_seconds):
@@ -2286,6 +2322,19 @@ def build_ctp_gateway_trading_profile(
                         values['account_facts'] = GatewayAccountFactsObserver(owner, journal, holder['returns']._ledger,
                             account_scope=settings.account_scope, execution_domain_ref=authority.scope.execution_domain_ref,
                             principals=fact_principals, status_source=holder['returns'])
+                    cancel_attempt_principals = frozenset(
+                        principal for principal in account_read_principals
+                        if any(resource.operations & ACCOUNT_CANCEL_ATTEMPT_OPERATIONS
+                               for entry in authority.grants[principal] for resource in entry.resources
+                               if resource.port == 'service.account_read'))
+                    if cancel_attempt_stream_enabled:
+                        if not cancel_attempt_principals:
+                            raise CtpGatewayTradingError('ACCOUNT_CANCEL_ATTEMPTS_UNAVAILABLE')
+                        from bt_api_py.gateway_account_cancel_attempts import GatewayAccountCancelAttempts
+                        values['account_cancel_attempts'] = GatewayAccountCancelAttempts(
+                            owner, journal, account_scope=settings.account_scope,
+                            execution_domain_ref=authority.scope.execution_domain_ref,
+                            principals=cancel_attempt_principals)
                 from bt_api_py.gateway_instrument_service import GatewayInstrumentService
 
                 instrument_service = GatewayInstrumentService(

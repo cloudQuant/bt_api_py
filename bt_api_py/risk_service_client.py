@@ -133,11 +133,14 @@ def _ref(value: object) -> bool:
 
 
 def _timeout(value: object) -> bool:
-    return (
-        type(value) in (int, float)
-        and math.isfinite(value)
-        and 0 < value <= threading.TIMEOUT_MAX
-    )
+    try:
+        return (
+            type(value) in (int, float)
+            and math.isfinite(value)
+            and 0 < value <= threading.TIMEOUT_MAX
+        )
+    except (OverflowError, ValueError):
+        return False
 
 
 @dataclass(frozen=True, slots=True)
@@ -212,24 +215,103 @@ def _strict_runtime(runtime: object) -> bool:
         return False
 
 
-def _candidate_cleanup_confirmed(runtime: object, timeout_seconds: float) -> bool:
-    """Confirm this candidate's close and stopped owner agree, or retain it."""
+def _closed_snapshot(runtime: object, timeout_seconds: float) -> RuntimeSnapshot | None:
+    """Return the agreed stopped snapshot, or retain the uncertain runtime."""
     if not _strict_runtime(runtime):
-        return False
+        return None
+    if not _timeout(timeout_seconds):
+        raise ThreadedRuntimeError("CLEANUP_NOT_STARTED")
+    deadline = time.monotonic() + timeout_seconds
+
+    def remaining() -> float:
+        value = deadline - time.monotonic()
+        if not math.isfinite(value) or value <= 0:
+            raise ThreadedRuntimeError("CLEANUP_NOT_STARTED")
+        return value
+
     try:
-        closed = runtime.close(timeout_seconds=timeout_seconds)
-        current = runtime.status()
-        thread = runtime._thread
-        return (
+        before, had_thread = runtime.cleanup_observation(timeout_seconds=remaining())
+        remaining()
+        never_started = (
+            type(before) is RuntimeSnapshot and before.state in ("new", "closed")
+            and before.thread_alive is False and type(before.bindings) is tuple and before.bindings == ()
+            and before.identity is None and before.run_id is None
+            and type(before.unknown_registration_count) is int and before.unknown_registration_count == 0
+            and type(before.unregister_uncertainties) is int and before.unregister_uncertainties == 0
+            and type(before.owner_cleanup_uncertainties) is int and before.owner_cleanup_uncertainties == 0
+            and type(before.cleanup_failures) is int and before.cleanup_failures == 0
+            and had_thread is False
+        )
+    except Exception:
+        # No close was attempted; the caller may explicitly retry.
+        raise ThreadedRuntimeError("CLEANUP_NOT_STARTED") from None
+    if type(before) is not RuntimeSnapshot or type(had_thread) is not bool:
+        return None
+    if before.state in ("closed", "failed"):
+        # A worker may already have cleaned up after start failed. Calling
+        # close again would advance _cleanup_retry and can repeat an uncertain
+        # owner-side operation. Accept only a consistent stopped observation.
+        try:
+            current, current_had_thread = runtime.cleanup_observation(timeout_seconds=remaining())
+            remaining()
+            confirmed = (
+                type(current) is RuntimeSnapshot and current == before
+                and type(current_had_thread) is bool and current_had_thread is had_thread
+                and current.thread_alive is False
+                and type(before.bindings) is tuple and before.bindings == ()
+                and (before.strict_unregister_ack is True
+                     or (never_started and before.strict_unregister_ack is None))
+                and type(before.cleanup_failures) is int and before.cleanup_failures == 0
+                and runtime_cleanup_confirmed(before)
+            )
+            return before if confirmed else None
+        except ThreadedRuntimeError as error:
+            if error.code in ("CLEANUP_SNAPSHOT_TIMEOUT", "CLEANUP_NOT_STARTED"):
+                raise ThreadedRuntimeError("CLEANUP_NOT_STARTED") from None
+            return None
+        except Exception:
+            return None
+    # A cleanup may already be in progress after an asynchronous start error.
+    # Never prod that owner to retry or release resources.
+    if before.state == "new":
+        if not never_started:
+            return None
+    elif before.state != "running":
+        return None
+    close_timeout = remaining()
+    try:
+        closed = runtime.close_once_if_state(
+            expected_state=before.state, timeout_seconds=close_timeout
+        )
+        remaining()
+    except ThreadedRuntimeError as error:
+        if error.code == "CLOSE_TIMEOUT_BEFORE_START":
+            raise
+        return None
+    except Exception:
+        return None
+    try:
+        current, current_had_thread = runtime.cleanup_observation(timeout_seconds=remaining())
+        remaining()
+        confirmed = (
             type(closed) is RuntimeSnapshot
             and type(current) is RuntimeSnapshot
             and closed == current
-            and (thread is None or not thread.is_alive())
-            and closed.strict_unregister_ack is True
+            and type(current_had_thread) is bool and current_had_thread is had_thread
+            and current.thread_alive is False
+            and type(closed.bindings) is tuple and closed.bindings == ()
+            and (closed.strict_unregister_ack is True
+                 or (never_started and closed.strict_unregister_ack is None))
+            and type(closed.cleanup_failures) is int and closed.cleanup_failures == 0
             and runtime_cleanup_confirmed(closed)
         )
+        return closed if confirmed else None
     except Exception:
-        return False
+        return None
+
+
+def _candidate_cleanup_confirmed(runtime: object, timeout_seconds: float) -> bool:
+    return _closed_snapshot(runtime, timeout_seconds) is not None
 
 
 # Seconds to wait after the n-th attempt to bring a lost Risk route back.
@@ -268,8 +350,36 @@ class RiskServiceClient:
         self._factory, self._clock = None, monotonic_clock
         self._pending_runtime = None
         self._pending_candidate_unknown = False
+        self._pending_cleanup_uncertain = False
+        self._runtime_cleanup_uncertain = False
         self._reconnect_attempt, self._reconnect_next = 0, 0.0
+        # Only short local state changes hold this lock; runtime callbacks may
+        # reenter the client and must never run under it.
+        self._lifecycle_lock = threading.Lock()
+        self._lifecycle_generation = 0
+        self._close_required = False
+        self._closed = False
+        self._closing_active = False
         self._reconnect_lock = threading.Lock()
+
+    def _lifecycle_current(self, generation: int) -> bool:
+        with self._lifecycle_lock:
+            return (self._lifecycle_generation == generation
+                    and not self._close_required and not self._closed)
+
+    def _begin_lifecycle(self) -> int | None:
+        with self._lifecycle_lock:
+            if self._close_required:
+                return None
+            # An explicit later start/reconnect may reopen after a proven close.
+            self._closed = False
+            return self._lifecycle_generation
+
+    def _require_close(self) -> None:
+        with self._lifecycle_lock:
+            self._lifecycle_generation += 1
+            self._close_required = True
+            self._closed = True
 
     def reconnect(self, *, timeout_seconds: float = 5.0) -> bool:
         """Bring the Risk route back if possible now; True when it is available.
@@ -281,15 +391,47 @@ class RiskServiceClient:
         """
         if os.getpid() != self._pid or not _timeout(timeout_seconds):
             return False
+        deadline = time.monotonic() + timeout_seconds
+
+        def remaining() -> float:
+            value = deadline - time.monotonic()
+            if not math.isfinite(value) or value <= 0:
+                raise ThreadedRuntimeError("RECONNECT_TIMEOUT")
+            return value
+
         if not self._reconnect_lock.acquire(blocking=False):
             return False
         try:
-            if self._pending_candidate_unknown:
+            generation = self._begin_lifecycle()
+            if generation is None:
                 return False
-            if self._pending_runtime is None and self.available:
+            if (self._pending_candidate_unknown or self._pending_cleanup_uncertain
+                    or self._runtime_cleanup_uncertain):
+                return False
+            available = False
+            if self._pending_runtime is None:
+                try:
+                    self._registration_binding("risk.order.reserve", timeout_seconds=remaining())
+                    remaining()
+                    available = True
+                except Exception:
+                    if time.monotonic() >= deadline:
+                        return False
+            if available:
+                if not self._lifecycle_current(generation):
+                    return False
                 self._reconnect_attempt, self._reconnect_next = 0, 0.0
                 return True
-            now = self._clock()
+            try:
+                remaining()
+                now = self._clock()
+                remaining()
+                if type(now) not in (int, float) or not math.isfinite(now):
+                    return False
+            except Exception:
+                return False
+            if not self._lifecycle_current(generation):
+                return False
             if now < self._reconnect_next:
                 return False
             attempt = self._reconnect_attempt
@@ -298,26 +440,42 @@ class RiskServiceClient:
             ]
             self._reconnect_attempt = attempt + 1
             if self._pending_runtime is not None:
-                if not _candidate_cleanup_confirmed(self._pending_runtime, timeout_seconds):
+                try:
+                    pending_closed = _candidate_cleanup_confirmed(self._pending_runtime, remaining())
+                except ThreadedRuntimeError:
+                    return False  # this close was proven not to have started
+                if not pending_closed:
+                    self._pending_cleanup_uncertain = True
+                    return False
+                if not self._lifecycle_current(generation):
                     return False
                 self._pending_runtime = None
             try:
-                snapshot = self._runtime.status()
+                snapshot, _ = self._runtime.cleanup_observation(timeout_seconds=remaining())
+                remaining()
             except Exception:
+                return False
+            if not self._lifecycle_current(generation):
                 return False
             if snapshot.state == "new":
                 if not _strict_runtime(self._runtime):
                     return False
                 runtime = self._runtime
             elif snapshot.state in ("failed", "closed", "close_failed", "stopping"):
-                if (self._factory is None or not _strict_runtime(self._runtime)
-                    or getattr(snapshot, "strict_unregister_ack", None) is not True):
+                if self._factory is None or not _strict_runtime(self._runtime):
                     return False
                 try:
-                    closed = self._runtime.close(timeout_seconds=timeout_seconds)
-                except Exception:
-                    return False  # resources not released yet: try again later
-                if getattr(closed, "strict_unregister_ack", None) is not True or not runtime_cleanup_confirmed(closed):
+                    closed = _closed_snapshot(self._runtime, remaining())
+                except ThreadedRuntimeError:
+                    return False  # this close was proven not to have started
+                if closed is None:
+                    self._runtime_cleanup_uncertain = True
+                    return False
+                if not self._lifecycle_current(generation):
+                    return False
+                try:
+                    remaining()
+                except ThreadedRuntimeError:
                     return False
                 # The factory may create an owner before it returns or raises.
                 self._pending_candidate_unknown = True
@@ -334,33 +492,61 @@ class RiskServiceClient:
                 # factory may hand back a live registration, even if non-strict.
                 self._pending_runtime = runtime
                 self._pending_candidate_unknown = False
+                if not self._lifecycle_current(generation):
+                    return False
+                try:
+                    remaining()
+                except ThreadedRuntimeError:
+                    self._require_close()
+                    return False
                 if type(runtime) is not ThreadedServiceClientRuntime:
                     return False
                 if not _strict_runtime(runtime):
-                    try:
-                        runtime.close(timeout_seconds=timeout_seconds)
-                    except Exception:
-                        pass
+                    self._pending_cleanup_uncertain = True
                     return False
             else:
                 return False  # running/starting: it reports health by itself
             try:
-                started = runtime.start(timeout_seconds=timeout_seconds)
+                started = runtime.start_bounded_once(timeout_seconds=remaining())
+                remaining()
             except Exception:
-                if runtime is not self._runtime:
-                    if _candidate_cleanup_confirmed(runtime, timeout_seconds):
+                if runtime is not self._runtime and self._lifecycle_current(generation):
+                    try:
+                        candidate_closed = _candidate_cleanup_confirmed(runtime, remaining())
+                    except ThreadedRuntimeError:
+                        self._require_close()
+                        return False
+                    if candidate_closed:
                         self._pending_runtime = None
+                    else:
+                        self._pending_cleanup_uncertain = True
+                elif runtime is self._runtime:
+                    self._require_close()
+                return False
+            if not self._lifecycle_current(generation):
                 return False
             if getattr(started, "strict_unregister_ack", None) is not True:
                 if runtime is not self._runtime:
                     self._pending_runtime = runtime
+                self._require_close()
                 return False
-            self._runtime = runtime
-            self._pending_runtime = None
-            if self.available:
-                self._reconnect_attempt, self._reconnect_next = 0, 0.0
-                return True
-            return False
+            with self._lifecycle_lock:
+                if (self._lifecycle_generation != generation or self._close_required
+                        or self._closed):
+                    return False
+                self._runtime = runtime
+                self._pending_runtime = None
+            try:
+                self._registration_binding("risk.order.reserve", timeout_seconds=remaining())
+                remaining()
+            except Exception:
+                if time.monotonic() >= deadline:
+                    self._require_close()
+                return False
+            if not self._lifecycle_current(generation):
+                return False
+            self._reconnect_attempt, self._reconnect_next = 0, 0.0
+            return True
         finally:
             self._reconnect_lock.release()
 
@@ -442,21 +628,84 @@ class RiskServiceClient:
         return self._route
 
     def start(self, *, timeout_seconds: float = 5.0) -> RuntimeSnapshot:
-        if not _strict_runtime(self._runtime):
-            raise ThreadedRuntimeError("CLEANUP_POLICY_UNPROVEN")
-        snapshot = self._runtime.start(timeout_seconds=timeout_seconds)
-        if getattr(snapshot, "strict_unregister_ack", None) is not True:
-            raise ThreadedRuntimeError("CLEANUP_POLICY_UNPROVEN")
-        return snapshot
+        if not self._reconnect_lock.acquire(blocking=False):
+            raise ThreadedRuntimeError("CLEANUP_FAILED")
+        try:
+            generation = self._begin_lifecycle()
+            if (generation is None or self._pending_runtime is not None
+                    or self._pending_candidate_unknown or self._pending_cleanup_uncertain
+                    or self._runtime_cleanup_uncertain):
+                raise ThreadedRuntimeError("CLEANUP_FAILED")
+            if not _strict_runtime(self._runtime):
+                raise ThreadedRuntimeError("CLEANUP_POLICY_UNPROVEN")
+            try:
+                snapshot = self._runtime.start(timeout_seconds=timeout_seconds)
+            except BaseException:
+                self._require_close()
+                raise
+            if not self._lifecycle_current(generation):
+                raise ThreadedRuntimeError("CLEANUP_FAILED")
+            if getattr(snapshot, "strict_unregister_ack", None) is not True:
+                self._require_close()
+                raise ThreadedRuntimeError("CLEANUP_POLICY_UNPROVEN")
+            return snapshot
+        finally:
+            self._reconnect_lock.release()
 
     def close(self, *, timeout_seconds: float = 5.0) -> RuntimeSnapshot:
-        if self._pending_candidate_unknown:
-            raise ThreadedRuntimeError("CLEANUP_FAILED")
-        if self._pending_runtime is not None:
-            if not _candidate_cleanup_confirmed(self._pending_runtime, timeout_seconds):
+        """Close proven-owned runtimes without racing a start or reconnect.
+
+        A concurrent operation is invalidated and this call fails immediately;
+        the caller can explicitly close it after the operation returns. A
+        cleanup that started but is unconfirmed is retained and not retried.
+        """
+        # Invalidate in-flight operations before trying the nonblocking mutex.
+        # A failed concurrent close requires another explicit cleanup attempt.
+        with self._lifecycle_lock:
+            # A second close cannot change the work already being carried out
+            # by an active close. It must not poison its confirmed outcome.
+            if self._closing_active:
                 raise ThreadedRuntimeError("CLEANUP_FAILED")
-            self._pending_runtime = None
-        return self._runtime.close(timeout_seconds=timeout_seconds)
+            self._lifecycle_generation += 1
+            generation = self._lifecycle_generation
+            self._close_required = True
+            self._closed = True
+            if not self._reconnect_lock.acquire(blocking=False):
+                raise ThreadedRuntimeError("CLEANUP_FAILED")
+            self._closing_active = True
+        try:
+            if not _timeout(timeout_seconds):
+                raise ThreadedRuntimeError("CLEANUP_NOT_STARTED")
+            deadline = time.monotonic() + timeout_seconds
+
+            def remaining() -> float:
+                value = deadline - time.monotonic()
+                if not math.isfinite(value) or value <= 0:
+                    raise ThreadedRuntimeError("CLEANUP_NOT_STARTED")
+                return value
+
+            if (self._pending_candidate_unknown or self._pending_cleanup_uncertain
+                    or self._runtime_cleanup_uncertain):
+                raise ThreadedRuntimeError("CLEANUP_FAILED")
+            if self._pending_runtime is not None:
+                if not _candidate_cleanup_confirmed(self._pending_runtime, remaining()):
+                    self._pending_cleanup_uncertain = True
+                    raise ThreadedRuntimeError("CLEANUP_FAILED")
+                with self._lifecycle_lock:
+                    if self._lifecycle_generation != generation:
+                        raise ThreadedRuntimeError("CLEANUP_FAILED")
+                    self._pending_runtime = None
+            closed = _closed_snapshot(self._runtime, remaining())
+            with self._lifecycle_lock:
+                if closed is None or self._lifecycle_generation != generation:
+                    self._runtime_cleanup_uncertain = True
+                    raise ThreadedRuntimeError("CLEANUP_FAILED")
+                self._close_required = False
+            return closed
+        finally:
+            with self._lifecycle_lock:
+                self._closing_active = False
+                self._reconnect_lock.release()
 
     def runtime_status(self) -> RuntimeSnapshot:
         return self._runtime.status()
@@ -475,11 +724,23 @@ class RiskServiceClient:
         return True
 
     def _registration(self, operation: str) -> tuple[str, str]:
+        _, _, registration, epoch = self._registration_binding(operation)
+        return registration, epoch
+
+    def _registration_binding(
+        self, operation: str, *, timeout_seconds: float | None = None
+    ) -> tuple[object, int, str, str]:
         if os.getpid() != self._pid:
             raise ValueError("WRONG_PROCESS")
-        if self._pending_runtime is not None or self._pending_candidate_unknown:
+        with self._lifecycle_lock:
+            if self._close_required or self._closed:
+                raise ValueError("ROUTE_UNAVAILABLE")
+            generation, runtime = self._lifecycle_generation, self._runtime
+        if (self._pending_runtime is not None or self._pending_candidate_unknown
+                or self._pending_cleanup_uncertain or self._runtime_cleanup_uncertain):
             raise ValueError("ROUTE_UNAVAILABLE")
-        snapshot = self._runtime.status()
+        snapshot = (runtime.status() if timeout_seconds is None else
+                    runtime.bounded_status(timeout_seconds=timeout_seconds))
         route = self._route
         matches = [
             b
@@ -497,7 +758,7 @@ class RiskServiceClient:
         ]
         if (
             snapshot.state != "running"
-            or not _strict_runtime(self._runtime)
+            or not _strict_runtime(runtime)
             or getattr(snapshot, "strict_unregister_ack", None) is not True
             or not snapshot.thread_alive
             or not snapshot.healthy
@@ -509,18 +770,33 @@ class RiskServiceClient:
             or not _ref(matches[0].service_epoch)
         ):
             raise ValueError("ROUTE_UNAVAILABLE")
-        return matches[0].registration_id, matches[0].service_epoch
+        with self._lifecycle_lock:
+            if (self._lifecycle_generation != generation or self._close_required
+                    or self._closed or self._runtime is not runtime
+                    or self._pending_runtime is not None or self._pending_candidate_unknown
+                    or self._pending_cleanup_uncertain or self._runtime_cleanup_uncertain):
+                raise ValueError("ROUTE_UNAVAILABLE")
+        return runtime, generation, matches[0].registration_id, matches[0].service_epoch
+
+    def _binding_current(self, operation: str, binding: tuple[object, int, str, str]) -> bool:
+        try:
+            current = self._registration_binding(operation)
+            return (current[0] is binding[0] and current[1:] == binding[1:])
+        except Exception:
+            return False
 
     def _call(self, operation: str, arguments: dict[str, Any], timeout_seconds: float):
         """Return ``(raw_reply, None)`` or ``(None, RiskCallResult)``; never resends."""
         if os.getpid() != self._pid:
             return None, _not_sent("WRONG_PROCESS")
         try:
-            registration = self._registration(operation)
+            binding = self._registration_binding(operation)
         except Exception:
             return None, _not_sent("ROUTE_UNAVAILABLE")
+        if not self._binding_current(operation, binding):
+            return None, _unknown("RPC_OUTCOME_UNKNOWN")
         try:
-            raw = self._runtime.call(
+            raw = binding[0].call(
                 self._route.mount,
                 operation,
                 arguments,
@@ -529,9 +805,11 @@ class RiskServiceClient:
                 timeout_seconds=timeout_seconds,
             )
         except ServiceRuntimeRequestNotSentError:
-            return None, _not_sent("REQUEST_NOT_SENT")
+            if self._binding_current(operation, binding):
+                return None, _not_sent("REQUEST_NOT_SENT")
+            return None, _unknown("RPC_OUTCOME_UNKNOWN")
         except ThreadedRuntimeError as error:
-            if error.code in _NOT_STARTED_ERRORS:
+            if error.code in _NOT_STARTED_ERRORS and self._binding_current(operation, binding):
                 return None, _not_sent(error.code)
             return None, _unknown("RPC_OUTCOME_UNKNOWN")
         except ServiceRuntimeError as error:
@@ -540,7 +818,7 @@ class RiskServiceClient:
             code = error.service_reply_code
             if type(code) is str and code == error.code and code in _REGISTRY_REFUSAL_CODES:
                 try:
-                    unchanged = self._registration(operation) == registration
+                    unchanged = self._binding_current(operation, binding)
                 except Exception:
                     unchanged = False
                 if unchanged:
@@ -550,9 +828,12 @@ class RiskServiceClient:
             return None, _unknown("RPC_OUTCOME_UNKNOWN")
         try:
             # A reply that crossed a re-registration cannot be tied to this call.
-            if self._registration(operation) != registration:
+            if not self._binding_current(operation, binding):
                 raise ValueError
-            return _detach_wire(raw), None
+            detached = _detach_wire(raw)
+            if not self._binding_current(operation, binding):
+                raise ValueError
+            return detached, None
         except Exception:
             return None, _unknown("INVALID_REPLY")
 

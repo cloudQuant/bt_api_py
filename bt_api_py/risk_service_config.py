@@ -40,7 +40,10 @@ _MAX_KEY_FILE_BYTES = 4096
 PRINCIPAL_ROLES = frozenset({"strategy", "execution", "operator"})
 _ORDER_ONLY = RISK_ORDER_OPERATIONS
 _PARENT_OPERATIONS = frozenset({"risk.parent.reserve", "risk.parent.release", "risk.parent.status"})
-
+_R04_IMPLEMENTATION = re.compile(
+    r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*:"
+    r"[A-Za-z_][A-Za-z0-9_]*\Z", re.ASCII
+)
 
 
 class RiskServiceConfigError(ValueError):
@@ -465,6 +468,48 @@ class RiskGatewayUpstream:
 
 
 @dataclass(frozen=True)
+class RiskR04Selection:
+    """A v2 selection claim; it does not establish trust or authorization."""
+
+    implementation: str
+    implementation_version: int
+    claim_contract_version: int
+    observation_contract_version: int
+
+    def __post_init__(self) -> None:
+        if (type(self.implementation) is not str or len(self.implementation) > 256
+                or _R04_IMPLEMENTATION.fullmatch(self.implementation) is None
+                or type(self.implementation_version) is not int
+                or not 1 <= self.implementation_version <= 2**31 - 1
+                or type(self.claim_contract_version) is not int or self.claim_contract_version != 2
+                or type(self.observation_contract_version) is not int
+                or self.observation_contract_version != 2):
+            _fail("RISK_SERVICE_CONFIG_RULES_INVALID")
+
+
+def _r04_selection(value: object) -> RiskR04Selection | None:
+    """Parse an explicit selection; the default and explicit v1 are identical."""
+    item = _mapping(value, required=("mode",), optional=(
+        "implementation", "implementation_version", "claim_contract_version",
+        "observation_contract_version",
+    ))
+    mode = item["mode"]
+    if type(mode) is not str:
+        _fail("RISK_SERVICE_CONFIG_RULES_INVALID")
+    if mode == "v1" and set(item) == {"mode"}:
+        return None
+    if mode != "v2" or set(item) != {
+        "mode", "implementation", "implementation_version", "claim_contract_version",
+        "observation_contract_version",
+    }:
+        _fail("RISK_SERVICE_CONFIG_RULES_INVALID")
+    return RiskR04Selection(
+        item["implementation"], item["implementation_version"],
+        item["claim_contract_version"], item["observation_contract_version"],
+    )
+
+
+@dataclass(frozen=True)
 class RiskServiceConfig:
     path: Path
     service_id: str
@@ -499,6 +544,7 @@ class RiskServiceConfig:
     account_snapshot_max_age_seconds: float | None
     strategy_financial_seconds: float | None = None
     strategy_financial_max_age_seconds: float | None = None
+    r04_selection: RiskR04Selection | None = None
     strict_admin_cancel: bool = False
 
     def __repr__(self) -> str:
@@ -513,10 +559,13 @@ class RiskServiceConfig:
         return self.storage_directory / "risk_registry.sqlite"
 
     def instrument_for(self, venue: object, native_symbol: object) -> RiskInstrumentBinding | None:
+        match = None
         for binding in self.instruments.values():
             if binding.key.venue == venue and binding.key.native_symbol == native_symbol:
-                return binding
-        return None
+                if match is not None:
+                    return None
+                match = binding
+        return match
 
 
 # ----------------------------------------------------------------------------- parsing
@@ -526,7 +575,6 @@ def _instruments(raw: object, provider: str, environment: str) -> Mapping[str, R
     if type(raw) is not dict or not raw:
         _fail("RISK_SERVICE_CONFIG_INSTRUMENTS_REQUIRED")
     result: dict[str, RiskInstrumentBinding] = {}
-    natives: set[tuple[str, str]] = set()
     for instrument_id, value in raw.items():
         _text(instrument_id)
         item = _mapping(
@@ -535,9 +583,6 @@ def _instruments(raw: object, provider: str, environment: str) -> Mapping[str, R
             optional=("multiplier", "tick_size"),
         )
         venue, native = _text(item["venue"]), _text(item["native_symbol"])
-        if (venue, native) in natives:
-            _fail("RISK_SERVICE_CONFIG_INSTRUMENT_DUPLICATE")
-        natives.add((venue, native))
         try:
             key = MarketInstrumentKey(
                 provider=provider,
@@ -797,6 +842,14 @@ def _gateway(raw: object, base: Path, instruments: Mapping[str, RiskInstrumentBi
 
 def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceConfig:
     """Validate an already parsed document; ``path`` is the configuration file."""
+    # Refuse v2 before resolving paths or reading key files. The claim and
+    # observation implementations are not yet wired into the service.
+    if type(document) is dict and type(document.get("rules")) is dict:
+        raw_rules = document["rules"]
+        if "r04" in raw_rules:
+            selection = _r04_selection(raw_rules["r04"])
+            if selection is not None:
+                _fail("RISK_SERVICE_R04_V2_UNAVAILABLE")
     base = Path(path).resolve().parent
     top = _mapping(
         document,
@@ -846,7 +899,8 @@ def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceCon
     instruments = _instruments(account["instruments"], provider, environment)
     storage = _mapping(top["storage"], required=("directory",))
     policy = _mapping(top["policy"], required=("file",))
-    rules = _mapping(top.get("rules", {}), required=(), optional=("trusted_implementations",))
+    rules = _mapping(top.get("rules", {}), required=(), optional=("trusted_implementations", "r04"))
+    r04_selection = None if "r04" not in rules else _r04_selection(rules["r04"])
     trusted_raw = rules.get("trusted_implementations", {})
     if type(trusted_raw) is not dict:
         _fail("RISK_SERVICE_CONFIG_RULES_INVALID")
@@ -959,6 +1013,7 @@ def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceCon
         strategy_financial_max_age_seconds=None
         if financial_age is None
         else _nanosecond_seconds(financial_age, maximum=Decimal(86400)),
+        r04_selection=r04_selection,
         strict_admin_cancel=strict_admin_cancel,
     )
 
@@ -987,6 +1042,7 @@ __all__ = [
     "RiskInstrumentBinding",
     "RiskMarketConfig",
     "RiskPrincipal",
+    "RiskR04Selection",
     "RiskServiceConfig",
     "RiskServiceConfigError",
     "ensure_private_directory",

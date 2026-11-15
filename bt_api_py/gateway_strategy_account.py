@@ -207,7 +207,14 @@ class GatewayAccountOwner:
         account_ref: str,
         scope_ref: str,
         mount: str = "store.account",
+        strict_cleanup: bool = False,
+        cleanup_guard=None,
+        cleanup_uncertain_callback=None,
     ) -> None:
+        if (type(strict_cleanup) is not bool
+                or (cleanup_guard is not None and not callable(cleanup_guard))
+                or (cleanup_uncertain_callback is not None and not callable(cleanup_uncertain_callback))):
+            raise ValueError("INVALID_CLEANUP_POLICY")
         if type(settings) is not GatewayAccountClientSettings or not all(
             _ref(x) for x in (account_ref, scope_ref, mount)
         ):
@@ -224,10 +231,21 @@ class GatewayAccountOwner:
         self._thread = None
         self._client = None
         self._closed = False
+        self._strict_cleanup = strict_cleanup
+        self._cleanup_guard = cleanup_guard
+        self._cleanup_uncertain_callback = cleanup_uncertain_callback
+        self._cleanup_lock = threading.Lock()
+        self._cleanup_sticky = False
+        self._cleanup_closing = False
+        self._cleanup_starting = False
+        self._cleanup_inflight = None
 
     @property
     def cleanup_uncertainties(self) -> int:
-        return 0
+        if not self._strict_cleanup:
+            return 0
+        with self._cleanup_lock:
+            return int(self._cleanup_sticky)
 
     def _check(self) -> None:
         if os.getpid() != self._pid:
@@ -237,6 +255,8 @@ class GatewayAccountOwner:
 
     def start(self, raw_runtime: object) -> None:
         self._check()
+        if self._strict_cleanup:
+            return self._start_strict(raw_runtime)
         if self._closed or self._client is not None:
             raise OwnerOperationError("ACCOUNT_CLIENT_NOT_NEW")
         self._thread = threading.current_thread()
@@ -254,6 +274,38 @@ class GatewayAccountOwner:
             )
         except ServiceAccountError as exc:
             raise OwnerOperationError(exc.code) from None
+
+    def _start_strict(self, raw_runtime: object) -> None:
+        with self._cleanup_lock:
+            if (self._closed or self._cleanup_sticky or self._client is not None
+                    or self._cleanup_starting or self._cleanup_closing):
+                raise OwnerOperationError("ACCOUNT_CLIENT_NOT_NEW")
+            self._cleanup_starting = True
+        self._thread = threading.current_thread()
+        try:
+            client = ServiceAccountClient(
+                raw_runtime, self._mount, account_ref=self._account_ref,
+                expected_account=self._settings.expected_account,
+                expected_account_key_id=self._settings.expected_account_key_id,
+                required_coverage=self._settings.required_coverage,
+                require_open_orders=self._settings.require_open_orders,
+                expected_scope_ref=self._scope_ref, snapshot_format="typed",
+            )
+            with self._cleanup_lock:
+                if self._cleanup_sticky or self._closed or self._client is not None:
+                    self._cleanup_inflight = client
+                    failed = True
+                else:
+                    self._client = client
+                    failed = False
+            if failed:
+                self._mark_cleanup_sticky()
+                raise OwnerOperationError("LOCAL_CLOSE_FAILED")
+        except ServiceAccountError as exc:
+            raise OwnerOperationError(exc.code) from None
+        finally:
+            with self._cleanup_lock:
+                self._cleanup_starting = False
 
     def invoke(self, operation: str, arguments: dict[str, Any]) -> dict[str, Any]:
         self._check()
@@ -284,12 +336,82 @@ class GatewayAccountOwner:
 
     def close(self) -> None:
         self._check()
+        if self._strict_cleanup:
+            return self._close_strict()
         if self._closed:
             return
         if self._client is not None:
             self._client.close()
         self._client = None
         self._closed = True
+
+    def _notify_cleanup_sticky(self) -> None:
+        if self._cleanup_uncertain_callback is not None:
+            try:
+                self._cleanup_uncertain_callback()
+            except BaseException:
+                pass
+
+    def _mark_cleanup_sticky(self) -> None:
+        with self._cleanup_lock:
+            first = not self._cleanup_sticky
+            self._cleanup_sticky = True
+        if first:
+            self._notify_cleanup_sticky()
+
+    def _strict_guard_clear(self) -> bool:
+        try:
+            clear = self._cleanup_guard is None or self._cleanup_guard() is False
+        except BaseException:
+            clear = False
+        with self._cleanup_lock:
+            return clear and not self._cleanup_sticky
+
+    def _close_strict(self) -> None:
+        with self._cleanup_lock:
+            sticky = self._cleanup_sticky
+            reentered = (self._cleanup_closing or self._cleanup_starting) and not sticky
+            if reentered:
+                self._cleanup_sticky = True
+            elif not sticky and self._closed:
+                return
+            elif not sticky:
+                self._closed = True
+                self._cleanup_closing = True
+                client = self._client
+                self._cleanup_inflight = client
+        if reentered:
+            self._notify_cleanup_sticky()
+        if sticky or reentered:
+            raise OwnerOperationError("LOCAL_CLOSE_FAILED")
+        try:
+            if not self._strict_guard_clear():
+                self._mark_cleanup_sticky()
+                raise OwnerOperationError("LOCAL_CLOSE_FAILED")
+            with self._cleanup_lock:
+                unchanged = not self._cleanup_sticky and self._client is client
+            if not unchanged:
+                self._mark_cleanup_sticky()
+                raise OwnerOperationError("LOCAL_CLOSE_FAILED")
+            try:
+                result = None if client is None else client.close()
+                success = result is None
+            except BaseException:
+                success = False
+            if not success or not self._strict_guard_clear():
+                self._mark_cleanup_sticky()
+                raise OwnerOperationError("LOCAL_CLOSE_FAILED")
+            with self._cleanup_lock:
+                remove = not self._cleanup_sticky and self._client is client
+                if remove:
+                    self._client = None
+                    self._cleanup_inflight = None
+            if not remove:
+                self._mark_cleanup_sticky()
+                raise OwnerOperationError("LOCAL_CLOSE_FAILED")
+        finally:
+            with self._cleanup_lock:
+                self._cleanup_closing = False
 
 
 class GatewayStrategyAccountClient:

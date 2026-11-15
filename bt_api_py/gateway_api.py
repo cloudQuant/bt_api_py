@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 import threading
 from dataclasses import dataclass
+from types import MethodType
 from typing import TYPE_CHECKING
 
 from bt_api_py.gateway_strategy_client import GatewayStrategyClientSession
@@ -114,6 +115,9 @@ class GatewayBtApi:
         self._risk = risk_client
         self._risk_permits = {}  # request key -> last RESERVED/DISPATCHED Risk answer
         self._risk_keys = set()  # keys this facade sent to Risk (placed through Risk)
+        # Process-local write guard; the durable intent remains the restart
+        # evidence. This set is not a cross-process fencing mechanism.
+        self._risk_uncertain_keys = set()
         self._risk_start_code = None
         self._risk_close_failures = 0
         self._check_binding()
@@ -212,8 +216,8 @@ class GatewayBtApi:
         self._check()
         snapshot = self._session.start(timeout_seconds=timeout_seconds)
         if self._risk is not None:
-            # D64-02: an unreachable Risk service refuses PLACE only; cancels,
-            # status and returns still run through the Gateway session.
+            # Risk failure does not disable the Gateway's independent cancel
+            # and status paths; a key's older history may still be unknown.
             try:
                 self._risk.start(timeout_seconds=timeout_seconds)
             except Exception as error:
@@ -279,15 +283,91 @@ class GatewayBtApi:
                 self._state = "closed"
         return result
 
+    def risk_first_send_reserve_contract(self):
+        """Bind the local first-send-ticket call contract, without I/O.
+
+        This declaration is for the unmodified SDK implementation and the
+        currently selected Risk client and explicitly declared host only. The
+        host is trusted to provide its declaration without I/O; the SDK cannot
+        enforce that for an arbitrary third-party host. This does not establish
+        source authority, a cross-host first send, or permission to trade. A
+        wrapper must explicitly provide its own contract; it is never inferred
+        from a callable's signature. Concurrent arbitrary mutation is not fenced.
+        """
+        if type(self) is not GatewayBtApi:
+            return None
+        state = vars(self)
+        risk = state.get("_risk")
+        host = state.get("_host")
+        if not _ticket_reserve_contract_matches(self, risk, host):
+            return None
+        try:
+            declare = getattr(host, "risk_first_send_host_contract", None)
+            if type(declare) is not MethodType or declare.__self__ is not host:
+                return None
+            host_contract = declare()
+        except Exception:
+            return None
+        if (not _ticket_reserve_contract_matches(self, risk, host)
+                or not _ticket_host_contract_valid(host, host_contract)):
+            return None
+
+        def guard():
+            if (not _ticket_reserve_contract_matches(self, risk, host)
+                    or not _ticket_host_contract_valid(host, host_contract)):
+                raise RuntimeError("RISK_TICKET_CONTRACT_CHANGED")
+
+        def reserve(bound_self, exchange_name, request, *, ttl_seconds=10.0, timeout_seconds=5.0,
+                    first_send_ticket=None):
+            if bound_self is not self:
+                raise RuntimeError("RISK_TICKET_CONTRACT_CHANGED")
+            guard()
+            # _check and the host may execute external code. Re-check after
+            # each boundary and never route this ticket call through the
+            # ordinary reserve_order direct-Gateway branch.
+            self._check(exchange_name)
+            guard()
+            result = _TICKET_RISK_RESERVE_IMPLEMENTATION(
+                self, request, ttl_seconds, timeout_seconds, first_send_ticket,
+                _ticket_host_contract=host_contract, _ticket_guard=guard,
+            )
+            guard()
+            return result
+
+        return ("local-first-send-ticket-v1", MethodType(reserve, self), host_contract)
+
     def reserve_order(
-        self, exchange_name, request: OrderRequest, *, ttl_seconds=10.0, timeout_seconds=5.0
+        self, exchange_name, request: OrderRequest, *, ttl_seconds=10.0, timeout_seconds=5.0,
+        first_send_ticket=None,
     ):
+        """Reserve once through Risk using the configured host's first-send ticket.
+
+        A caller that already persisted an intent can provide its one-use host
+        ticket. Without one, the host must atomically create a new intent and
+        issue a ticket. These process-local tickets are not cross-host fencing.
+        """
+        risk = self._risk
         self._check(exchange_name)
-        if self._risk is None:
+        if self._risk is not risk:
+            if risk is None:
+                raise RuntimeError("RISK_SELECTION_CHANGED")
+            return GatewayRiskRoutedResult("UNKNOWN", code="RISK_OUTCOME_UNKNOWN")
+        if risk is None:
+            if first_send_ticket is not None:
+                raise ValueError("RISK_TICKET_NOT_APPLICABLE")
             return self._command.reserve(
                 request, ttl_seconds=ttl_seconds, timeout_seconds=timeout_seconds
             )
-        return self._risk_reserve(request, ttl_seconds, timeout_seconds)
+        try:
+            contract = _TICKET_FACADE_CONTRACT_IMPLEMENTATION(self)
+        except Exception:
+            contract = None
+        if contract is None:
+            return GatewayRiskRoutedResult("UNKNOWN", code="RISK_OUTCOME_UNKNOWN")
+        return contract[1](
+            exchange_name, request, ttl_seconds=ttl_seconds,
+            timeout_seconds=timeout_seconds, first_send_ticket=first_send_ticket,
+        )
 
     def dispatch_order(self, exchange_name, request_key, *, market_ref=None, timeout_seconds=5.0):
         self._check(exchange_name)
@@ -352,59 +432,85 @@ class GatewayBtApi:
                 "REQUEST_DENIED", code="RISK_REQUEST_INVALID", risk_code="risk_request_invalid",
                 risk_denied="risk_request_invalid",
             )
-        # D64-02: Risk selected but unavailable refuses the PLACE; it never
-        # falls back to the Gateway. The request provably never left.
+        # This particular Risk operation provably never left the client.
         return GatewayRiskRoutedResult(
             "REQUEST_DENIED", code="RISK_UNAVAILABLE", risk_code="risk_unavailable",
             risk_denied="risk_unavailable",
         )
 
-    def _risk_reserve(self, request, ttl_seconds, timeout_seconds):
+    def _risk_reserve(self, request, ttl_seconds, timeout_seconds, first_send_ticket, *,
+                      _ticket_host_contract=None, _ticket_guard=None):
         from bt_api_py.gateway_direct_client import build_gateway_order_intent
 
-        # The same durable intent as direct.reserve; nothing is sent without it.
+        # A pre-existing intent is normal for BT: the framework durably saved
+        # the submitted order first. Only a host-issued single-use capability
+        # distinguishes that initial call from a restored or duplicated key.
+        key = None
         try:
-            candidate = build_gateway_order_intent(
-                self._binding_object, self._route_object, request, ttl_seconds=ttl_seconds
-            )
-            key = candidate.request_key
-            existing = self._host.load_intent(key)
-            if existing is None:
-                self._host.save_intent(candidate)
-                existing = self._host.load_intent(key)
-            if (
-                existing is None
-                or existing.binding != candidate.binding
-                or existing.route != candidate.route
-                or existing.request_key != key
-                or existing.canonical_payload != candidate.canonical_payload
-                or existing.digest != candidate.digest
-            ):
-                raise ValueError("INTENT_CONFLICT")
+            key = getattr(request, "idempotency_key", None)
+            if type(key) is not str or not key:
+                return GatewayRiskRoutedResult("TRANSPORT_NOT_STARTED", code="INTENT_NOT_DURABLE")
+            if _ticket_guard is not None:
+                _ticket_guard()
+            with self._lock:
+                if (key in self._risk_keys or key in self._risk_permits
+                    or key in self._risk_uncertain_keys):
+                    # A concurrent duplicate gets its own UNKNOWN; it must not
+                    # invalidate the original invocation's eventual receipt.
+                    return GatewayRiskRoutedResult("UNKNOWN", code="RISK_OUTCOME_UNKNOWN")
+                candidate = build_gateway_order_intent(
+                    self._binding_object, self._route_object, request, ttl_seconds=ttl_seconds
+                )
+                if _ticket_guard is not None:
+                    _ticket_guard()
+                if candidate.request_key != key:
+                    raise ValueError("INTENT_CONFLICT")
+                ticket = first_send_ticket
+                host = self._host if _ticket_host_contract is None else _ticket_host_contract[1].__self__
+                if ticket is None:
+                    create = (getattr(host, "create_risk_reserve_intent", None)
+                              if _ticket_host_contract is None else _ticket_host_contract[2])
+                    if not callable(create):
+                        return GatewayRiskRoutedResult("UNKNOWN", code="RISK_OUTCOME_UNKNOWN")
+                    ticket = create(candidate)
+                    if _ticket_guard is not None:
+                        _ticket_guard()
+                consume = (getattr(host, "consume_risk_reserve_ticket", None)
+                           if _ticket_host_contract is None else _ticket_host_contract[3])
+                if ticket is None or not callable(consume):
+                    return GatewayRiskRoutedResult("UNKNOWN", code="RISK_OUTCOME_UNKNOWN")
+                existing = host.load_intent(key)
+                if _ticket_guard is not None:
+                    _ticket_guard()
+                if (
+                    existing is None
+                    or existing.binding != candidate.binding
+                    or existing.route != candidate.route
+                    or existing.request_key != key
+                    or existing.canonical_payload != candidate.canonical_payload
+                    or existing.digest != candidate.digest
+                ):
+                    raise ValueError("INTENT_CONFLICT")
+                consumed = consume(candidate, ticket)
+                if _ticket_guard is not None:
+                    _ticket_guard()
+                if consumed is not True:
+                    return GatewayRiskRoutedResult("UNKNOWN", code="RISK_OUTCOME_UNKNOWN")
+                # Retain the key as uncertain even though this invocation
+                # performs no reservation I/O; an earlier host may have used it.
+                self._risk_keys.add(key)
+                self._risk_uncertain_keys.add(key)
         except Exception:
+            if type(key) is str and key:
+                if _ticket_guard is not None:
+                    self._risk_uncertain_keys.add(key)
+                return GatewayRiskRoutedResult("UNKNOWN", code="RISK_OUTCOME_UNKNOWN")
             return GatewayRiskRoutedResult("TRANSPORT_NOT_STARTED", code="INTENT_NOT_DURABLE")
-        self._risk_reconnect(timeout_seconds)
-        call = self._risk.reserve(request, request_key=key, timeout_seconds=timeout_seconds)
-        if call.outcome == "NOT_SENT":
-            return self._risk_not_sent(call)
-        self._risk_keys.add(key)
-        if call.outcome != "ANSWERED":
-            return GatewayRiskRoutedResult("UNKNOWN", code="RISK_OUTCOME_UNKNOWN")
-        answer = call.answer
-        if answer.outcome == "DENIED":
-            return self._risk_refusal(answer)
-        if answer.outcome == "RESERVED":
-            self._risk_permits[key] = answer
-            return GatewayRiskRoutedResult(
-                "OBSERVED",
-                record=GatewayRiskPermitRecord(
-                    key, "RESERVED", answer.permit_id, answer.reservation_id,
-                    answer.view_digest, candidate.digest,
-                ),
-                risk_answer=answer,
-            )
-        # A replayed key answers its durable state; the caller asks by status.
-        return GatewayRiskRoutedResult("UNKNOWN", code="RISK_OUTCOME_UNKNOWN", risk_answer=answer)
+        # V1 cannot establish first creation in the Gateway journal. Do not
+        # create a reservation that this facade could neither dispatch nor
+        # release: the key's earlier history remains unknown until the v2
+        # first-creation proof is wired end to end.
+        return GatewayRiskRoutedResult("UNKNOWN", code="RISK_OUTCOME_UNKNOWN")
 
     def _risk_reconnect(self, timeout_seconds):
         # D64-02: a lost Risk route refuses PLACE now and is re-registered on a
@@ -429,25 +535,18 @@ class GatewayBtApi:
         permit = self._risk_permits.get(request_key)
         if permit is not None:
             return permit, None
-        self._risk_reconnect(timeout_seconds)
-        call = self._risk.status(request_key, timeout_seconds=timeout_seconds)
-        if call.outcome == "NOT_SENT":
-            return None, self._risk_not_sent(call)
-        if (
-            call.outcome != "ANSWERED"
-            or call.answer.outcome not in ("RESERVED", "DISPATCHED")
-            or call.answer.permit_id is None
-        ):
-            return None, GatewayRiskRoutedResult(
-                "TRANSPORT_NOT_STARTED", code="RISK_PERMIT_UNAVAILABLE"
-            )
-        return call.answer, None
+        # A status response is an observation, not authority to release a
+        # reservation that a previous process or host may own.
+        return None, GatewayRiskRoutedResult("UNKNOWN", code="RISK_OUTCOME_UNKNOWN")
 
     def _risk_dispatch(self, request_key, market_ref, timeout_seconds):
+        with self._lock:
+            if request_key in self._risk_uncertain_keys:
+                return GatewayRiskRoutedResult("UNKNOWN", code="RISK_OUTCOME_UNKNOWN")
         permit = self._risk_permits.get(request_key)
         if permit is None or permit.outcome != "RESERVED":
-            # Only a reservation this facade received may be dispatched.
-            return GatewayRiskRoutedResult("TRANSPORT_NOT_STARTED", code="RISK_PERMIT_UNAVAILABLE")
+            # No locally held proof means the prior order remains unknown.
+            return GatewayRiskRoutedResult("UNKNOWN", code="RISK_OUTCOME_UNKNOWN")
         self._risk_reconnect(timeout_seconds)
         call = self._risk.dispatch(
             request_key,
@@ -481,6 +580,9 @@ class GatewayBtApi:
     def _risk_release(self, request_key, operation_id, timeout_seconds):
         if type(operation_id) is not str or not operation_id or operation_id != operation_id.strip():
             return GatewayRiskRoutedResult("TRANSPORT_NOT_STARTED", code="INVALID_RELEASE")
+        with self._lock:
+            if request_key in self._risk_uncertain_keys:
+                return GatewayRiskRoutedResult("UNKNOWN", code="RISK_OUTCOME_UNKNOWN")
         permit, failure = self._risk_permit(request_key, timeout_seconds)
         if failure is not None:
             # A release is not a PLACE: an unreachable Risk is not a refusal here.
@@ -638,3 +740,35 @@ class GatewayBtApi:
         return self._session.get_instrument_spec(
             exchange_name, symbol, timeout_seconds=timeout_seconds
         )
+
+
+# Keep the contract tied to the implementation that actually accepts and
+# consumes the host ticket, rather than guessing from a callable's signature.
+_TICKET_RESERVE_IMPLEMENTATION = GatewayBtApi.reserve_order
+_TICKET_RISK_RESERVE_IMPLEMENTATION = GatewayBtApi._risk_reserve
+_TICKET_FACADE_CONTRACT_IMPLEMENTATION = GatewayBtApi.risk_first_send_reserve_contract
+
+
+def _ticket_reserve_contract_matches(api, risk, host):
+    if type(api) is not GatewayBtApi or risk is None or host is None:
+        return False
+    state = vars(api)
+    return (
+        state.get("_risk") is risk
+        and state.get("_host") is host
+        and "reserve_order" not in state
+        and "_risk_reserve" not in state
+        and "risk_first_send_reserve_contract" not in state
+        and GatewayBtApi.__dict__.get("reserve_order") is _TICKET_RESERVE_IMPLEMENTATION
+        and GatewayBtApi.__dict__.get("_risk_reserve") is _TICKET_RISK_RESERVE_IMPLEMENTATION
+        and GatewayBtApi.__dict__.get("risk_first_send_reserve_contract")
+        is _TICKET_FACADE_CONTRACT_IMPLEMENTATION
+    )
+
+
+def _ticket_host_contract_valid(host, contract):
+    return (
+        type(contract) is tuple and len(contract) == 4
+        and type(contract[0]) is str and contract[0] == "local-first-send-host-v1"
+        and all(type(method) is MethodType and method.__self__ is host for method in contract[1:])
+    )

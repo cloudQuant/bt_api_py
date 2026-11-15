@@ -20,6 +20,32 @@ from bt_api_risk.risk_order_journal_contracts import (
 )
 
 
+def _validate_cancel_resolution_source_binding(scope, execution_scope, wire_scope_template, store):
+    """Validate the existing exact source binding contract without granting authority."""
+    try:
+        from bt_api_execution import ExecutionScope, SqliteExecutionStore
+        from bt_api_base.service_protocol import WireScope
+    except Exception:
+        raise RiskOrderJournalError("CANCEL_EXECUTION_SOURCE_UNAVAILABLE") from None
+    if (
+        type(scope) is not AccountScope
+        or type(execution_scope) is not ExecutionScope
+        or type(wire_scope_template) is not WireScope
+        or type(store) is not SqliteExecutionStore
+        or scope.provider != execution_scope.provider
+        or scope.environment != execution_scope.environment
+        or wire_scope_template.run_id is not None
+        or wire_scope_template.strategy_ref != execution_scope.strategy_id
+        or wire_scope_template.account_ref != execution_scope.account_ref
+        or wire_scope_template.account_refs
+        or wire_scope_template.strategy_ref is None
+        or wire_scope_template.manual_book_ref is not None
+        or wire_scope_template.group_id is not None
+        or wire_scope_template.leg_id is not None
+    ):
+        raise RiskOrderJournalError("CANCEL_EXECUTION_SOURCE_BINDING_INVALID")
+
+
 class RiskExecutionJournalBridge:
     """Bind exact Execution source objects to a Risk journal instance."""
 
@@ -40,28 +66,7 @@ class RiskExecutionJournalBridge:
         cannot select the store or the Risk account mapping.
         """
 
-        try:
-            from bt_api_execution import ExecutionScope, SqliteExecutionStore
-            from bt_api_base.service_protocol import WireScope
-        except Exception:
-            raise RiskOrderJournalError("CANCEL_EXECUTION_SOURCE_UNAVAILABLE") from None
-        if (
-            type(scope) is not AccountScope
-            or type(execution_scope) is not ExecutionScope
-            or type(wire_scope_template) is not WireScope
-            or type(store) is not SqliteExecutionStore
-            or scope.provider != execution_scope.provider
-            or scope.environment != execution_scope.environment
-            or wire_scope_template.run_id is not None
-            or wire_scope_template.strategy_ref != execution_scope.strategy_id
-            or wire_scope_template.account_ref != execution_scope.account_ref
-            or wire_scope_template.account_refs
-            or wire_scope_template.strategy_ref is None
-            or wire_scope_template.manual_book_ref is not None
-            or wire_scope_template.group_id is not None
-            or wire_scope_template.leg_id is not None
-        ):
-            raise RiskOrderJournalError("CANCEL_EXECUTION_SOURCE_BINDING_INVALID")
+        _validate_cancel_resolution_source_binding(scope, execution_scope, wire_scope_template, store)
         key = (scope.key, execution_scope.key)
         with self._cancel_resolution_sources_lock:
             prior = self._cancel_resolution_sources.get(key)

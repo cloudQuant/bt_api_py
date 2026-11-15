@@ -394,7 +394,8 @@ GATEWAY_DISPATCH_COVERAGE = {
     "market": ("gateway_market_dispatch_gate.market_change",),
     "parent_facts": ("direct_command_journal.authorizer",),
     "control": ("direct_command_journal.authorizer",),
-    "session_source": ("ctp.trader.connection_change", "ctp.md_stream.source_change"),
+    "session_source": ("ctp.trader.connection_change", "ctp.md_stream.source_change",
+                       "gateway_direct_owner.lifecycle_change"),
 }
 # Present only when the composition runs a periodic clock refresher; a single
 # startup calibration has no later writer.

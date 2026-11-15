@@ -337,7 +337,12 @@ def _bootstrap_from_wire(raw: Any) -> MarketBootstrap:
 
 
 class GatewayMarketOwner:
-    """Construct and use all original market clients on the runtime owner."""
+    """Construct and use market clients on the runtime owner.
+
+    Strict mode refuses factory and recovery operations until client custody is
+    composed. Poll remains available and can revoke a subscriber or change a
+    cursor; the source and cleanup of a single client remain unproven here.
+    """
 
     def __init__(
         self,
@@ -346,7 +351,14 @@ class GatewayMarketOwner:
         stream_scope: WireScope,
         security_profiles: Mapping[str, ClientCurveKeys],
         mount: str = "store.market",
+        strict_cleanup: bool = False,
+        cleanup_guard=None,
+        cleanup_uncertain_callback=None,
     ) -> None:
+        if (type(strict_cleanup) is not bool
+                or (cleanup_guard is not None and not callable(cleanup_guard))
+                or (cleanup_uncertain_callback is not None and not callable(cleanup_uncertain_callback))):
+            raise ValueError("INVALID_CLEANUP_POLICY")
         self._settings = _copy_settings(settings)
         if type(stream_scope) is not WireScope or any(
             (
@@ -391,12 +403,22 @@ class GatewayMarketOwner:
         self._consumers: dict[str, str] = {}
         self._gaps: set[str] = set()
         self._closed = False
+        self._strict_cleanup = strict_cleanup
+        self._cleanup_guard = cleanup_guard
+        self._cleanup_uncertain_callback = cleanup_uncertain_callback
+        self._cleanup_lock = threading.Lock()
+        self._cleanup_closing = False
+        self._cleanup_starting = False
+        self._cleanup_sticky = False
+        self._cleanup_inflight = []
 
     @property
     def cleanup_uncertainties(self) -> int:
         return len(self._uncertain)
 
     def start(self, raw: Any) -> None:
+        if self._strict_cleanup:
+            return self._start_strict(raw)
         factory = ZmqMarketTransportFactory(self._profiles)
         for name, setting in self._settings.subscriptions.items():
             self._clients[name] = ServiceMarketClient(
@@ -412,6 +434,54 @@ class GatewayMarketOwner:
                 expected_source_identity=setting.expected_source_identity,
             )
 
+    def _start_strict(self, raw: Any) -> None:
+        with self._cleanup_lock:
+            if self._closed:
+                raise OwnerOperationError("OWNER_CLOSED")
+            if self._cleanup_starting or self._clients:
+                raise OwnerOperationError("OWNER_OPERATION_PENDING")
+            self._cleanup_starting = True
+        completed = False
+        try:
+            factory = ZmqMarketTransportFactory(self._profiles)
+            for name, setting in self._settings.subscriptions.items():
+                if not self._strict_guard_clear():
+                    self._mark_cleanup_sticky(name)
+                    raise OwnerOperationError("LOCAL_CLOSE_FAILED")
+                client = ServiceMarketClient(
+                    raw,
+                    self._mount,
+                    setting.key,
+                    subscriber_factory=factory,
+                    stream_scope=self._scope,
+                    queue_capacity=setting.queue_capacity,
+                    queue_max_bytes=setting.queue_max_bytes,
+                    head_check_interval_seconds=setting.head_check_interval_seconds,
+                    require_source_descriptor=setting.require_source_descriptor,
+                    expected_source_identity=setting.expected_source_identity,
+                    strict_cleanup=True,
+                    cleanup_guard=self._cleanup_guard,
+                    cleanup_uncertain_callback=self._cleanup_uncertain_callback,
+                )
+                clear = self._strict_guard_clear()
+                with self._cleanup_lock:
+                    interrupted = not clear or self._cleanup_sticky or self._closed
+                    if interrupted:
+                        # close may have reentered the constructor before it returned.
+                        self._cleanup_inflight.append((name, client))
+                    else:
+                        self._clients[name] = client
+                if interrupted:
+                    self._mark_cleanup_sticky(name)
+                    raise OwnerOperationError("LOCAL_CLOSE_FAILED")
+            completed = True
+        finally:
+            with self._cleanup_lock:
+                interrupted = self._cleanup_sticky or self._closed
+                self._cleanup_starting = False
+            if completed and interrupted:
+                raise OwnerOperationError("LOCAL_CLOSE_FAILED")
+
     def invoke(self, operation: str, arguments: Mapping[str, Any]) -> Any:
         if self._closed:
             raise OwnerOperationError("OWNER_CLOSED")
@@ -420,6 +490,12 @@ class GatewayMarketOwner:
         name, method = operation.split(".")
         if name not in self._clients or method not in _METHODS or type(arguments) is not dict:
             raise OwnerOperationError("INVALID_OWNER_OPERATION")
+        # Strict factory custody and recovery are not yet composed; reject
+        # before binding lookup, consumer binding, subscriber actions, or RPC.
+        if self._strict_cleanup and method in {
+            "start", "recover", "accept_resync", "resync_after_regrant"
+        }:
+            raise OwnerOperationError("STRICT_MARKET_FACTORY_UNAVAILABLE")
         if method != "status":
             if name in self._gaps:
                 raise OwnerOperationError("LOCAL_RESULT_GAP")
@@ -540,6 +616,8 @@ class GatewayMarketOwner:
         return resume()
 
     def close(self) -> None:
+        if self._strict_cleanup:
+            return self._close_strict()
         self._closed = True
         failed = False
         for name, client in list(self._clients.items()):
@@ -567,6 +645,79 @@ class GatewayMarketOwner:
                 del self._clients[name]
         if failed:
             raise OwnerOperationError("LOCAL_CLOSE_FAILED")
+
+    def _mark_cleanup_sticky(self, name: str) -> None:
+        # The notification can reenter this owner. Never call it under the lock.
+        with self._cleanup_lock:
+            first = not self._cleanup_sticky
+            self._cleanup_sticky = True
+            self._uncertain.add(name)
+        if first:
+            self._notify_cleanup_sticky()
+
+    def _notify_cleanup_sticky(self) -> None:
+        if self._cleanup_uncertain_callback is not None:
+            try:
+                self._cleanup_uncertain_callback()
+            except BaseException:
+                pass
+
+    def _strict_guard_clear(self) -> bool:
+        try:
+            clear = self._cleanup_guard is None or self._cleanup_guard() is False
+        except BaseException:
+            clear = False
+        with self._cleanup_lock:
+            return clear and not self._cleanup_sticky
+
+    def _close_strict(self) -> None:
+        with self._cleanup_lock:
+            self._closed = True
+            sticky = self._cleanup_sticky
+            reentered = (self._cleanup_closing or self._cleanup_starting) and not sticky
+            if reentered:
+                self._cleanup_sticky = True
+                self._uncertain.add("<reentrant>")
+            if not sticky and not reentered:
+                self._cleanup_closing = True
+                clients = list(self._clients.items())
+                self._cleanup_inflight = clients[:]
+        if reentered:
+            self._notify_cleanup_sticky()
+        if sticky or reentered:
+            raise OwnerOperationError("LOCAL_CLOSE_FAILED")
+        try:
+            for name, client in clients:
+                if not self._strict_guard_clear():
+                    self._mark_cleanup_sticky(name)
+                    raise OwnerOperationError("LOCAL_CLOSE_FAILED")
+                try:
+                    client.close()
+                except BaseException:
+                    self._mark_cleanup_sticky(name)
+                    raise OwnerOperationError("LOCAL_CLOSE_FAILED") from None
+                if not self._strict_guard_clear():
+                    self._mark_cleanup_sticky(name)
+                    raise OwnerOperationError("LOCAL_CLOSE_FAILED")
+                try:
+                    uncertain = client.unsubscription_uncertain is not False
+                except BaseException:
+                    uncertain = True
+                if uncertain or not self._strict_guard_clear():
+                    self._mark_cleanup_sticky(name)
+                    raise OwnerOperationError("LOCAL_CLOSE_FAILED")
+                with self._cleanup_lock:
+                    remove = not self._cleanup_sticky and self._clients.get(name) is client
+                    if remove:
+                        del self._clients[name]
+                        self._uncertain.discard(name)
+                        self._cleanup_inflight.pop(0)
+                if not remove:
+                    self._mark_cleanup_sticky(name)
+                    raise OwnerOperationError("LOCAL_CLOSE_FAILED")
+        finally:
+            with self._cleanup_lock:
+                self._cleanup_closing = False
 
 
 class GatewayMarketSubscriptionClient:

@@ -110,10 +110,11 @@ def _append(service, count, *, size=0):
         return after
 
 
-def _call(service, after, limit, checker, caller=None):
+def _call(service, after, limit, checker, caller=None, through=None, snapshot=None):
     source = operator_ctx() if caller is None else caller
     context = SimpleNamespace(**vars(source), result_fits=checker)
-    return service.handle("risk.audit.read", context=context, arguments={"after": after, "limit": limit})
+    return service.handle("risk.audit.read", context=context, arguments={"after": after, "limit": limit,
+                                                                         "through": through, "snapshot": snapshot})
 
 
 def _append_raw(service, detail_json):
@@ -137,7 +138,8 @@ def web(live_adapter):
 
     def call(operation, arguments, timeout_seconds):
         assert operation == "risk.audit.read" and timeout_seconds > 0
-        return run(_call, service, arguments["after"], arguments["limit"], _fits(budget[0]))
+        return run(_call, service, arguments["after"], arguments["limit"], _fits(budget[0]),
+                   None, arguments["through"], arguments["snapshot"])
 
     app = create_app(origin=ORIGIN, authenticate=lambda request: session, admin_caller=call)
     with TestClient(app, base_url=ORIGIN, client=("127.0.0.1", 50000)) as client:
@@ -171,8 +173,10 @@ def test_small_frame_requires_smaller_limit_and_pages_without_skipping(web):
     assert refused.status_code == 409
     assert refused.json()["code"] == "risk_audit_page_too_large"
     received = []
-    for _ in range(13):
-        response = client.get(f"/api/v1/risk/audit?after={after}&limit=1")
+    through = snapshot = None
+    for _ in range(20):
+        suffix = "" if through is None else f"&through={through}&snapshot={snapshot}"
+        response = client.get(f"/api/v1/risk/audit?after={after}&limit=1{suffix}")
         assert response.status_code == 200, response.text
         page = response.json()
         records = page["records"]
@@ -181,8 +185,11 @@ def test_small_frame_requires_smaller_limit_and_pages_without_skipping(web):
             assert page["next_after"] == after
             break
         assert page["next_after"] == records[-1]["seq"] > after
-        received.extend(row["detail"]["index"] for row in records)
+        received.extend(row["detail"]["index"] for row in records if row["kind"] == "audit_test")
         after = page["next_after"]
+        through, snapshot = page["through"], page["snapshot"]
+        if not page["has_more"]:
+            break
     assert received == list(range(12))
 
 
@@ -203,14 +210,19 @@ def test_web_node_budget_refuses_page_before_old_clients_can_treat_it_as_eof(web
     assert refused.status_code == 409
     assert refused.json()["code"] == "risk_audit_page_too_large"
     received = []
-    for _ in range(7):
-        response = client.get(f"/api/v1/risk/audit?after={after}&limit=100")
+    through = snapshot = None
+    for _ in range(8):
+        suffix = "" if through is None else f"&through={through}&snapshot={snapshot}"
+        response = client.get(f"/api/v1/risk/audit?after={after}&limit=100{suffix}")
         assert response.status_code == 200, response.text
         page = response.json()
         if not page["records"]:
             break
-        received.extend(row["detail"]["index"] for row in page["records"])
+        received.extend(row["detail"]["index"] for row in page["records"] if row["kind"] == "audit_test")
         after = page["next_after"]
+        through, snapshot = page["through"], page["snapshot"]
+        if not page["has_more"]:
+            break
     assert received == list(range(600))
 
 
@@ -239,7 +251,8 @@ def test_oversized_record_after_fitting_prefix_is_not_skipped(web):
     assert len(page["records"]) == 1 and page["records"][0]["detail"]["index"] == 0
     assert page["next_after"] == page["records"][-1]["seq"]
     for _ in range(2):
-        blocked = client.get(f"/api/v1/risk/audit?after={page['next_after']}&limit=1000")
+        blocked = client.get(f"/api/v1/risk/audit?after={page['next_after']}&limit=1000"
+                             f"&through={page['through']}&snapshot={page['snapshot']}")
         assert blocked.status_code == 409
         assert blocked.json()["code"] == "risk_audit_record_too_large"
 
@@ -259,7 +272,7 @@ def test_oversized_page_is_not_a_short_success_for_eof_clients(live_adapter):
     page = run(_call, service, after, 319, fits)
     assert len(page["records"]) == 319
     assert page["next_after"] == page["records"][-1]["seq"]
-    followup = run(_call, service, page["next_after"], 319, fits)
+    followup = run(_call, service, page["next_after"], 319, fits, None, page["through"], page["snapshot"])
     assert [row["detail"]["index"] for row in followup["records"]] == list(range(319, 638))
 
 
@@ -336,7 +349,8 @@ def test_old_engine_without_bounded_reader_fails_without_calling_legacy_reader(l
     def call_old():
         old = service._engine
         legacy_calls = []
-        service._engine = SimpleNamespace(read_audit=lambda *args: legacy_calls.append(args))
+        service._engine = SimpleNamespace(read_audit=lambda *args: legacy_calls.append(args),
+                                          audit_read_rejection=lambda *_: None)
         try:
             result = _call(service, 0, 1, _fits(4096))
             return result, legacy_calls
@@ -444,12 +458,12 @@ def test_real_registry_size_checker_preserves_complete_pages(live_adapter, tmp_p
 
     registry, registration = run(make_registry)
 
-    def request(registry, registration, after, limit, hint=None):
+    def request(registry, registration, after, limit, hint=None, through=None, snapshot=None):
         payload = {
             "registration_id": registration["registration_id"],
             "service_epoch": registration["service_epoch"],
             "instance_id": "risk-instance",
-            "arguments": {"after": after, "limit": limit},
+            "arguments": {"after": after, "limit": limit, "through": through, "snapshot": snapshot},
         }
         if hint is not None:
             payload["max_reply_message_bytes"] = hint
@@ -472,7 +486,7 @@ def test_real_registry_size_checker_preserves_complete_pages(live_adapter, tmp_p
             assert operation == "risk.audit.read" and timeout_seconds > 0
             web_calls.append(dict(arguments))
             _, result = run(request, registry, registration, arguments["after"], arguments["limit"],
-                            1024 * 1024)
+                            1024 * 1024, arguments["through"], arguments["snapshot"])
             assert result["ok"] is True
             return result["result"]
 
@@ -500,7 +514,9 @@ def test_real_registry_size_checker_preserves_complete_pages(live_adapter, tmp_p
             first = client.get(f"/api/v1/risk/audit?after={cursor}&limit=1")
             assert first.status_code == 200
             cursor = first.json()["next_after"]
-            second = client.get(f"/api/v1/risk/audit?after={cursor}&limit=1")
+            first_page = first.json()
+            second = client.get(f"/api/v1/risk/audit?after={cursor}&limit=1"
+                                f"&through={first_page['through']}&snapshot={first_page['snapshot']}")
             assert second.status_code == 200
             assert first.json()["records"][0]["detail"]["value"] == "a" * 400_000
             assert second.json()["records"][0]["detail"]["value"] == "b" * 400_000
@@ -510,7 +526,7 @@ def test_real_registry_size_checker_preserves_complete_pages(live_adapter, tmp_p
             previous_engine = run(lambda: service._engine)
             legacy_calls = []
             run(setattr, service, "_engine", SimpleNamespace(
-                read_audit=lambda *args: legacy_calls.append(args)))
+                read_audit=lambda *args: legacy_calls.append(args), audit_read_rejection=lambda *_: None))
             try:
                 unavailable = client.get("/api/v1/risk/audit?after=0&limit=1")
                 assert unavailable.status_code == 409
@@ -527,7 +543,8 @@ def test_real_registry_size_checker_preserves_complete_pages(live_adapter, tmp_p
             def unavailable_reader(*args):
                 raise RiskAdminError("risk_audit_unavailable")
 
-            run(setattr, service, "_engine", SimpleNamespace(read_audit_bounded=unavailable_reader))
+            run(setattr, service, "_engine", SimpleNamespace(read_audit_page=unavailable_reader,
+                                                             audit_read_rejection=lambda *_: None))
             try:
                 unavailable = client.get("/api/v1/risk/audit?after=0&limit=1")
                 assert unavailable.status_code == 409
@@ -561,7 +578,8 @@ def test_real_registry_size_checker_preserves_complete_pages(live_adapter, tmp_p
         def old_engine_refusal():
             old = service._engine
             calls = []
-            service._engine = SimpleNamespace(read_audit=lambda *args: calls.append(args))
+            service._engine = SimpleNamespace(read_audit=lambda *args: calls.append(args),
+                                              audit_read_rejection=lambda *_: None)
             try:
                 envelope, reply = request(registry, registration, 0, 1, 1024 * 1024)
                 return envelope, reply, calls
@@ -582,7 +600,8 @@ def test_real_registry_size_checker_preserves_complete_pages(live_adapter, tmp_p
         assert oversized["result"] == {
             "status": "REQUEST_REJECTED", "code": "risk_audit_page_too_large"}
         _, first = run(request, registry, registration, page_after, 1, 1024 * 1024)
-        _, second = run(request, registry, registration, first["result"]["next_after"], 1, 1024 * 1024)
+        _, second = run(request, registry, registration, first["result"]["next_after"], 1, 1024 * 1024,
+                        first["result"]["through"], first["result"]["snapshot"])
         assert first["result"]["records"][0]["detail"]["value"] == "a" * 400_000
         assert second["result"]["records"][0]["detail"]["value"] == "b" * 400_000
 
@@ -592,20 +611,26 @@ def test_real_registry_size_checker_preserves_complete_pages(live_adapter, tmp_p
         assert too_large["result"] == {"status": "REQUEST_REJECTED", "code": "risk_audit_page_too_large"}
         assert service_reply_fits(SERVICE_ID, envelope, too_large, max_message_bytes=4096)
         received = []
-        for _ in range(6):
-            envelope, page = run(request, registry, registration, after, 1, 4096)
+        through = snapshot = None
+        for _ in range(10):
+            envelope, page = run(request, registry, registration, after, 1, 4096, through, snapshot)
             assert page["ok"] is True
             result = page["result"]
             assert service_reply_fits(SERVICE_ID, envelope, page, max_message_bytes=4096)
             if not result["records"]:
                 break
-            received.append(result["records"][0]["detail"]["index"])
+            if result["records"][0]["kind"] == "audit_test":
+                received.append(result["records"][0]["detail"]["index"])
             after = result["next_after"]
+            through, snapshot = result["through"], result["snapshot"]
+            if not result["has_more"]:
+                break
         assert received == list(range(5))
 
         # A server-side frame smaller than the client hint also limits the reply.
+        probe_after = run(lambda: _append(service, 1, size=350))
         server_limit[0] = 1024
-        envelope, too_small = run(request, registry, registration, after - 1, 1, 8192)
+        envelope, too_small = run(request, registry, registration, probe_after, 1, 8192)
         assert too_small["result"] == {
             "status": "REQUEST_REJECTED", "code": "risk_audit_record_too_large"}
         assert service_reply_fits(SERVICE_ID, envelope, too_small, max_message_bytes=1024)
@@ -613,7 +638,7 @@ def test_real_registry_size_checker_preserves_complete_pages(live_adapter, tmp_p
         # A tiny frame may be too small even for a finite error wrapper. The
         # registry can classify it but cannot guarantee a deliverable reply.
         server_limit[0] = 128
-        envelope, tiny = run(request, registry, registration, after - 1, 1, 8192)
+        envelope, tiny = run(request, registry, registration, probe_after, 1, 8192)
         assert tiny["ok"] is False
         assert not service_reply_fits(SERVICE_ID, envelope, tiny, max_message_bytes=128)
     finally:

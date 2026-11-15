@@ -13,7 +13,26 @@ def service(tmp_path):
     yield from _service_fixture.__wrapped__(tmp_path)
 
 
+def _historical_reserve(service, context, key="k1"):
+    """Build a synthetic pre-quarantine row; never unguard the tested RPC."""
+    from bt_api_risk.pretrade import engine as pretrade_engine
+
+    caller, code = service.caller(context, "risk.order.reserve")
+    assert code is None and caller is not None
+    view, canonical, refusal = service.build_view(caller, key, payload(key), None, None)
+    assert refusal is None and view is not None and canonical is not None
+    with pytest.MonkeyPatch.context() as legacy:
+        legacy.setattr(pretrade_engine, "_v1_source_quarantined", lambda: False)
+        result = service._engine.reserve(caller, view, canonical, caller.run_id)
+    assert pretrade_engine._v1_source_quarantined() is True
+    assert result.outcome == "RESERVED"
+    assert result.permit_id and result.reservation_id and result.view_digest
+    return result.to_mapping()
+
+
 def _args(reply, operation):
+    assert reply["outcome"] == "RESERVED" and reply["permit_id"]
+    assert reply["reservation_id"] and reply["view_digest"]
     result = {"request_key": "k1", "permit_id": reply["permit_id"]}
     if operation == "risk.order.dispatch":
         result.update(reservation_id=reply["reservation_id"], view_digest=reply["view_digest"])
@@ -21,6 +40,7 @@ def _args(reply, operation):
 
 
 def _snapshot(service, permit_id):
+    assert permit_id
     with service._ledger.transaction() as txn:
         return tuple(txn._c.execute(
             "SELECT state,row_version,quantity,view_json,view_digest FROM risk_pretrade_permits "
@@ -35,7 +55,7 @@ def _snapshot(service, permit_id):
      ("instrument_json", "{}"), ("quantity", "not-a-decimal")],
 )
 def test_corrupt_permit_is_unknown_without_side_effects(service, operation, column, value):
-    reply = reserve(service, ctx("principal-a"))
+    reply = _historical_reserve(service, ctx("principal-a"))
     assert reply["outcome"] == "RESERVED"
     with service._ledger.transaction() as txn:
         # Column names are test constants, not user input.
@@ -53,7 +73,7 @@ def test_corrupt_permit_is_unknown_without_side_effects(service, operation, colu
 
 @pytest.mark.parametrize("operation", ["risk.order.dispatch", "risk.order.release"])
 def test_foreign_and_missing_permits_have_same_unknown_reply(service, operation):
-    reply = reserve(service, ctx("principal-a"))
+    reply = _historical_reserve(service, ctx("principal-a"))
     original = list(service.gateway.calls), list(service.runs)
     args = _args(reply, operation)
     context = ctx("principal-b", strategy="strategy-b")
@@ -64,48 +84,80 @@ def test_foreign_and_missing_permits_have_same_unknown_reply(service, operation)
     assert (service.gateway.calls, service.runs) == original
 
 
-def test_valid_legacy_permit_with_bad_request_digest_is_refused(service):
-    reply = reserve(service, ctx("principal-a"))
+def test_quarantine_keeps_bad_request_digest_unknown(service):
+    reply = _historical_reserve(service, ctx("principal-a"))
     before = list(service.gateway.calls), list(service.runs)
     result = service.handle(
         "risk.order.dispatch", context=ctx("principal-a"),
         arguments={**_args(reply, "risk.order.dispatch"), "view_digest": "a" * 64},
     )
-    assert result["outcome"] == "DENIED" and result["code"] == "risk_permit_mismatch"
+    assert result["outcome"] == "UNKNOWN" and result["code"] == "risk_permit_mismatch"
     assert (service.gateway.calls, service.runs) == before
 
 
 @pytest.mark.parametrize("value", [None, "UNKNOWN", "ready", True, object()])
-def test_preflight_result_must_be_exact_ready(service, monkeypatch, value):
-    reply = reserve(service, ctx("principal-a"))
+def test_quarantine_stops_before_preflight_result(service, monkeypatch, value):
+    reply = _historical_reserve(service, ctx("principal-a"))
     before = list(service.gateway.calls), list(service.runs)
-    monkeypatch.setattr(service._engine, "permit_integrity_status", lambda *args, **kwargs: value)
+    calls = []
+
+    def preflight(*args, **kwargs):
+        calls.append(True)
+        return value
+
+    monkeypatch.setattr(service._engine, "permit_integrity_status", preflight)
     result = service.handle("risk.order.release", context=ctx("principal-a"),
                             arguments=_args(reply, "risk.order.release"))
     assert result["outcome"] == "UNKNOWN"
+    assert calls == []
+    assert (service.gateway.calls, service.runs) == before
+    # Exercise the private, non-authorizing mapper independently: the public
+    # write path above intentionally does not reach it while quarantined.
+    caller, code = service.caller(ctx("principal-a"), "risk.order.release")
+    assert code is None and caller is not None
+    mapped = service._permit_integrity_preflight(
+        caller, "risk.order.release", "k1", _args(reply, "risk.order.release")
+    )
+    assert mapped is not None and mapped.outcome == "UNKNOWN" and calls == [True]
     assert (service.gateway.calls, service.runs) == before
 
 
-def test_preflight_exception_is_unknown_without_side_effects(service, monkeypatch):
-    reply = reserve(service, ctx("principal-a"))
+def test_quarantine_stops_before_preflight_exception(service, monkeypatch):
+    reply = _historical_reserve(service, ctx("principal-a"))
     before = list(service.gateway.calls), list(service.runs)
 
+    calls = []
+
     def fail(*args, **kwargs):
+        calls.append(True)
         raise RuntimeError("local failure")
 
     monkeypatch.setattr(service._engine, "permit_integrity_status", fail)
     result = service.handle("risk.order.release", context=ctx("principal-a"),
                             arguments=_args(reply, "risk.order.release"))
     assert result["outcome"] == "UNKNOWN"
+    assert calls == []
+    assert (service.gateway.calls, service.runs) == before
+    caller, code = service.caller(ctx("principal-a"), "risk.order.release")
+    assert code is None and caller is not None
+    mapped = service._permit_integrity_preflight(
+        caller, "risk.order.release", "k1", _args(reply, "risk.order.release")
+    )
+    assert mapped is not None and mapped.outcome == "UNKNOWN" and calls == [True]
     assert (service.gateway.calls, service.runs) == before
 
 
-def test_corruption_after_preflight_is_rechecked_by_engine(service, monkeypatch):
-    reply = reserve(service, ctx("principal-a"))
+def test_quarantine_stops_before_preflight_corruption(service, monkeypatch):
+    reply = _historical_reserve(service, ctx("principal-a"))
     original = service._engine.permit_integrity_status
     calls, runs = list(service.gateway.calls), list(service.runs)
 
+    # The former corruption-after-preflight race remains GAP/NOT_RUN: this
+    # quarantined public path never invokes the injected corruption callback.
+    preflight_calls = []
+
     def corrupt_after_read(*args, **kwargs):
+        preflight_calls.append(True)
         result = original(*args, **kwargs)
         assert result == "READY"
         with service._ledger.transaction() as txn:
@@ -120,14 +172,14 @@ def test_corruption_after_preflight_is_rechecked_by_engine(service, monkeypatch)
                             arguments=_args(reply, "risk.order.dispatch"))
     assert result["outcome"] == "UNKNOWN" and result["code"] == "risk_permit_mismatch"
     assert result["permit_id"] is None and result["view_digest"] is None
+    assert preflight_calls == []
     assert service.gateway.calls == calls
-    # Preflight and delegate preparation are not an atomic engine claim.
-    assert service.runs == runs + [("strategy-a", "run-1")]
+    assert service.runs == runs
 
 
 @pytest.mark.parametrize("wrong_digest", [False, True])
 def test_v2_remains_unknown_without_note_run(service, wrong_digest):
-    reply = reserve(service, ctx("principal-a"))
+    reply = _historical_reserve(service, ctx("principal-a"))
     fence = service._ledger.fence
     with service._ledger.transaction() as txn:
         permit = txn.permit(reply["permit_id"])
@@ -161,7 +213,7 @@ def test_v2_remains_unknown_without_note_run(service, wrong_digest):
      ("instrument_json", "{}"), ("quantity", "not-a-decimal")],
 )
 def test_corrupt_permit_lookup_is_unknown_without_side_effects(service, operation, column, value):
-    reply = reserve(service, ctx("principal-a"))
+    reply = _historical_reserve(service, ctx("principal-a"))
     assert reply["outcome"] == "RESERVED"
     with service._ledger.transaction() as txn:
         txn._c.execute(
@@ -179,17 +231,18 @@ def test_corrupt_permit_lookup_is_unknown_without_side_effects(service, operatio
     assert service.gateway.calls == calls and service.runs == runs
 
 
-def test_existing_order_status_remains_visible_to_owning_strategy_across_runs(service):
-    old = reserve(service, ctx("principal-a", run="old-run"))
+def test_existing_order_status_is_unknown_to_owning_strategy_across_runs(service):
+    old = _historical_reserve(service, ctx("principal-a", run="old-run"))
     before = list(service.gateway.calls), list(service.runs)
     result = service.handle("risk.order.status", context=ctx("principal-a", run="new-run"),
                             arguments={"request_key": "k1"})
-    assert result["outcome"] == "RESERVED" and result["permit_id"] == old["permit_id"]
+    assert old["permit_id"] and old["reservation_id"]
+    assert result["outcome"] == "UNKNOWN" and result["permit_id"] is None
     assert (service.gateway.calls, service.runs) == before
 
 
 def test_existing_key_invalid_payload_is_not_final_rejection(service):
-    reply = reserve(service, ctx("principal-a"))
+    reply = _historical_reserve(service, ctx("principal-a"))
     before = _snapshot(service, reply["permit_id"]), list(service.gateway.calls), list(service.runs)
     result = service.handle("risk.order.reserve", context=ctx("principal-a"), arguments={
         "request_key": "k1", "payload": {}, "parent_ref": None, "child_id": None,
@@ -199,20 +252,22 @@ def test_existing_key_invalid_payload_is_not_final_rejection(service):
 
 
 def test_existing_key_changed_payload_remains_unknown_without_rebinding(service):
-    old = reserve(service, ctx("principal-a"))
+    old = _historical_reserve(service, ctx("principal-a"))
     before = _snapshot(service, old["permit_id"]), list(service.gateway.calls), list(service.runs)
     result = reserve(service, ctx("principal-a"), quantity="2")
-    assert result["outcome"] == "UNKNOWN" and result["code"] == "risk_request_conflict"
+    assert result["outcome"] == "UNKNOWN" and result["code"] == "risk_permit_mismatch"
     assert result["permit_id"] is None and result["reservation_id"] is None
     assert (_snapshot(service, old["permit_id"]), service.gateway.calls, service.runs) == before
 
 
 @pytest.mark.parametrize("operation", ["risk.order.reserve", "risk.order.status"])
-def test_lookup_exception_returns_unknown_without_side_effects(service, monkeypatch, operation):
-    old = reserve(service, ctx("principal-a"))
+def test_lookup_exception_or_quarantine_returns_unknown_without_side_effects(service, monkeypatch, operation):
+    old = _historical_reserve(service, ctx("principal-a"))
     before = _snapshot(service, old["permit_id"]), list(service.gateway.calls), list(service.runs)
+    lookup_calls = []
 
     def fail(*args, **kwargs):
+        lookup_calls.append(True)
         raise RuntimeError("local failure")
 
     monkeypatch.setattr(service._engine, "lookup_order", fail)
@@ -221,14 +276,21 @@ def test_lookup_exception_returns_unknown_without_side_effects(service, monkeypa
         args.update(payload=payload("k1"), parent_ref=None, child_id=None)
     result = service.handle(operation, context=ctx("principal-a"), arguments=args)
     assert result["outcome"] == "UNKNOWN" and result["code"] == "risk_permit_mismatch"
+    # Reserve is stopped before lookup; status actually observes the exception.
+    assert lookup_calls == ([] if operation == "risk.order.reserve" else [True])
     assert (_snapshot(service, old["permit_id"]), service.gateway.calls, service.runs) == before
 
 
-def test_existing_reserve_snapshot_never_retries_or_rebinds(service, monkeypatch):
-    old = reserve(service, ctx("principal-a"))
+def test_quarantine_stops_before_existing_reserve_lookup(service, monkeypatch):
+    old = _historical_reserve(service, ctx("principal-a"))
     original, calls, runs = service._engine.lookup_order, list(service.gateway.calls), list(service.runs)
 
+    # The former corruption-after-lookup race remains GAP/NOT_RUN: this
+    # quarantined public path does not enter the injected callback.
+    lookup_calls = []
+
     def corrupt_after_read(*args, **kwargs):
+        lookup_calls.append(True)
         lookup = original(*args, **kwargs)
         assert lookup.kind.value == "RESULT"
         with service._ledger.transaction() as txn:
@@ -241,18 +303,22 @@ def test_existing_reserve_snapshot_never_retries_or_rebinds(service, monkeypatch
     monkeypatch.setattr(service._engine, "lookup_order", corrupt_after_read)
     result = reserve(service, ctx("principal-a"))
     assert result["outcome"] == "UNKNOWN"
+    assert lookup_calls == []
     assert service.gateway.calls == calls
     assert service.runs == runs
 
 
 @pytest.mark.parametrize("other_writer", ["foreign", "old_run"])
-def test_new_lookup_race_preserves_inserted_order_as_unknown(service, monkeypatch, other_writer):
+def test_quarantine_stops_before_new_lookup_race(service, monkeypatch, other_writer):
     from dataclasses import replace
 
     original = service._engine.lookup_order
-    inserted_calls = []
+    # The former insert-after-lookup identity race remains GAP/NOT_RUN: the
+    # quarantined public path does not perform the lookup or synthetic insert.
+    inserted_calls, lookup_calls = [], []
 
     def insert_after_lookup(*args, **kwargs):
+        lookup_calls.append(True)
         lookup = original(*args, **kwargs)
         assert lookup.kind.value == "NEW"
         caller = args[0]
@@ -267,7 +333,7 @@ def test_new_lookup_race_preserves_inserted_order_as_unknown(service, monkeypatc
     result = reserve(service, ctx("principal-a"))
     assert result["outcome"] == "UNKNOWN"
     assert result["permit_id"] is None and result["reservation_id"] is None
-    assert service.gateway.calls == inserted_calls and len(inserted_calls) == 1
+    assert lookup_calls == [] and inserted_calls == [] and service.gateway.calls == []
 
 
 @pytest.mark.parametrize("column,value", [
@@ -279,6 +345,7 @@ def test_execution_reserve_corruption_is_unknown_without_side_effects(service, m
     from bt_api_base.risk_service_protocol import RISK_ORDER_OPERATIONS, RiskParentView
     from bt_api_base.service_protocol import WireRole
     from bt_api_risk.pretrade import CallerIdentity
+    from bt_api_risk.pretrade import engine as pretrade_engine
     from bt_api_risk.pretrade.engine import PretradeEngine
 
     from tests.unit.test_iter64_risk_service_component import ACCOUNT, DAY, RB, ROUTE
@@ -293,12 +360,15 @@ def test_execution_reserve_corruption_is_unknown_without_side_effects(service, m
         valid_until_trading_day=DAY,
     )
     with monkeypatch.context() as legacy:
+        legacy.setattr(pretrade_engine, "_v1_source_quarantined", lambda: False)
         legacy.setattr(PretradeEngine, "_parent_contract_verified", staticmethod(lambda: True))
         assert service._engine.parent_reserve(caller, parent).outcome == "RESERVED"
         view, canonical, refusal = service.build_view(caller, "k1", payload("k1"), "P1", "child")
         assert refusal is None
         old = service._engine.reserve(caller, view, canonical, caller.run_id)
+    assert pretrade_engine._v1_source_quarantined() is True
     assert old.outcome == "RESERVED"
+    assert old.permit_id and old.reservation_id and old.view_digest
     with service._ledger.transaction() as txn:
         txn._c.execute(
             f"UPDATE risk_pretrade_permits SET {column}=? WHERE scope_key=? AND permit_id=?",  # noqa: S608

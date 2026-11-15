@@ -56,10 +56,100 @@ def _instrument():
     return MarketInstrumentKey("ctp", "SHFE", "simnow", "future", "rb", "rb")
 
 
+def _gateway_fixture_message(messages, message):
+    """Send a fixed test-fixture message without exposing exception contents."""
+    try:
+        messages.put(message)
+        return True
+    except BaseException:
+        return False
+
+
+def _gateway_fixture_cleanup(host, owner, messages, *, run_failed, _clock=None, _sleep=None):
+    """Report local fixture cleanup only when both owners confirm it.
+
+    This is not evidence of strict remote unregister acknowledgement. A failed
+    run or uncertain shutdown emits no success marker and does not retry close;
+    the surrounding test must track uncertain resources and prevent unsafe reuse.
+    """
+    clock = time.monotonic if _clock is None else _clock
+    sleep = time.sleep if _sleep is None else _sleep
+    reason = None
+    try:
+        if run_failed:
+            reason = "RUN_FAILED"
+        elif host is None or owner is None:
+            reason = "RESOURCE_UNVERIFIED"
+        elif host.state not in ("started", "closed"):
+            reason = "HOST_UNVERIFIED"
+        else:
+            if host.state == "started":
+                host.close()
+            if host.state != "closed":
+                reason = "HOST_UNVERIFIED"
+            else:
+                summary = host.summary
+                failures = summary["cleanup_failures"]
+                if (summary["state"] != "closed" or type(failures) is not tuple
+                        or failures):
+                    reason = "HOST_UNVERIFIED"
+                elif owner.close(5) is not True or owner.closed is not True:
+                    reason = "OWNER_UNVERIFIED"
+                else:
+                    # close() may observe _done just before the owner thread
+                    # naturally returns. Wait briefly without retrying close.
+                    deadline = clock() + 0.25
+                    while True:
+                        status = owner.status()
+                        if status.thread_alive is not True:
+                            break
+                        remaining = deadline - clock()
+                        if remaining <= 0:
+                            break
+                        sleep(min(0.01, remaining))
+                    if (status.thread_alive is not False or status.running is not False
+                            or status.accepting is not False
+                            or type(status.queue_depth) is not int or status.queue_depth != 0
+                            or type(status.service_queue_depth) is not int
+                            or status.service_queue_depth != 0
+                            or status.failure_category is not None):
+                        reason = "OWNER_UNVERIFIED"
+    except BaseException:
+        reason = "CLEANUP_EXCEPTION"
+
+    if reason is not None:
+        _gateway_fixture_message(messages, ("cleanup_uncertain", reason))
+        return False
+    if not _gateway_fixture_message(messages, ("closed", os.getpid())):
+        _gateway_fixture_message(messages, ("cleanup_uncertain", "MESSAGE_UNVERIFIED"))
+        return False
+    return True
+
+
+def _gateway_fixture_closed(messages, pid, *, timeout_seconds=5, drain_timeout_seconds=0.1):
+    """Require one matching success marker and no later uncertainty message."""
+    if type(pid) is not int or pid <= 0:
+        return False
+    try:
+        message = messages.get(timeout=timeout_seconds)
+        if (type(message) is not tuple or len(message) != 2 or type(message[0]) is not str
+                or message[0] != "closed"
+                or type(message[1]) is not int or message[1] != pid):
+            return False
+        try:
+            messages.get(timeout=drain_timeout_seconds)
+        except queue.Empty:
+            return True
+        return False
+    except BaseException:
+        return False
+
+
 def _gateway(root, endpoint, server_keys, publics, messages, controls):
     """Loopback Gateway (adapted from the 63.13 delegate fixture) in its own process."""
     sys.path.insert(0, str(SDK_ROOT / "bt_api/bt_api_gateway/tests"))
     owner = host = None
+    run_failed = False
     try:
         from bt_api_base.direct_cancel_protocol import PreparedCancelRequest
         from bt_api_base.direct_write_protocol import (
@@ -283,21 +373,46 @@ def _gateway(root, endpoint, server_keys, publics, messages, controls):
                 ).result(timeout_seconds=5)
                 messages.put(("ingested", client_order_id, result.disposition))
             host.serve_once(10)
-    except BaseException as error:
-        import traceback
-
-        messages.put(("error", type(error).__name__, str(error), traceback.format_exc()))
+    except BaseException:
+        run_failed = True
+        _gateway_fixture_message(messages, ("error", "SYNTHETIC_GATEWAY_ERROR"))
     finally:
-        if host is not None and host.state == "started":
-            host.close()
-        if owner is not None:
-            owner.close(5)
-        messages.put(("closed", os.getpid()))
+        _gateway_fixture_cleanup(host, owner, messages, run_failed=run_failed)
 
 
 def _write_key(path: Path, key: bytes, *, secret: bool) -> str:
-    path.write_bytes(key + b"\n")
-    os.chmod(path, 0o600 if secret else 0o644)
+    if not secret:
+        path.write_bytes(key + b"\n")
+        os.chmod(path, 0o644)
+        return str(path)
+    if type(key) is not bytes:
+        raise TypeError("SYNTHETIC_SECRET_INVALID")
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        raise FileExistsError("SYNTHETIC_SECRET_EXISTS") from None
+    except Exception:
+        raise OSError("SYNTHETIC_SECRET_CREATE_FAILED") from None
+    failed = False
+    try:
+        payload = key + b"\n"
+        offset = 0
+        while offset < len(payload):
+            written = os.write(fd, payload[offset:])
+            if type(written) is not int or not 0 < written <= len(payload) - offset:
+                raise OSError("SYNTHETIC_SECRET_SHORT_WRITE")
+            offset += written
+    except Exception:
+        failed = True
+    finally:
+        try:
+            os.close(fd)
+        except Exception:
+            failed = True
+    if failed:
+        # Keep the newly created 0600-or-stricter file for diagnosis; do not
+        # erase it or accidentally replace an existing path on a retry.
+        raise OSError("SYNTHETIC_SECRET_WRITE_FAILED")
     return str(path)
 
 
@@ -427,6 +542,29 @@ def _strategy_host():
     from tests.unit.test_iter63_gateway_direct_client import MemoryHost
 
     class StrategyMemoryHost(MemoryHost):
+        def __init__(self):
+            super().__init__()
+            import threading
+            self._risk_ticket_lock = threading.Lock()
+            self._risk_tickets = {}
+
+        def create_risk_reserve_intent(self, intent):
+            with self._risk_ticket_lock:
+                if self.load_intent(intent.request_key) is not None:
+                    return None
+                self.save_intent(intent)
+                ticket = object()
+                self._risk_tickets[intent.request_key] = (intent, ticket)
+                return ticket
+
+        def consume_risk_reserve_ticket(self, intent, ticket):
+            with self._risk_ticket_lock:
+                entry = self._risk_tickets.get(intent.request_key)
+                if entry is None or entry[0] != intent or entry[1] is not ticket:
+                    return False
+                del self._risk_tickets[intent.request_key]
+                return True
+
         def save_cancel_plan(self, plan):
             return plan
 
@@ -591,7 +729,7 @@ def test_strategy_order_through_the_risk_process_reaches_the_gateway_and_settles
         assert admin("risk.latch.list", {"active_only": False}) == {"status": "OBSERVED",
                                                                     "latches": []}
         assert admin("risk.latch.list", {"active_only": 1})["code"] == "risk_request_invalid"
-        audit = admin("risk.audit.read", {"after": 0, "limit": 500})
+        audit = admin("risk.audit.read", {"after": 0, "limit": 500, "through": None, "snapshot": None})
         kinds = [record["kind"] for record in audit["records"]]
         assert "policy_publish" in kinds and "dispatched" in kinds and "reserve_refused" in kinds
     finally:
@@ -612,6 +750,7 @@ def test_strategy_order_through_the_risk_process_reaches_the_gateway_and_settles
         gateway.join(20)
     assert risk_exit == 0, risk.communicate(timeout=10) if risk is not None else None
     assert not gateway.is_alive() and gateway.exitcode == 0
+    assert _gateway_fixture_closed(messages, gateway.pid), "gateway_fixture_cleanup_unverified"
 
     # The Risk ledger names the delegated order with the Risk origin (read after exit).
     database = risk_root / "state" / "risk.sqlite"

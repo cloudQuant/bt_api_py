@@ -640,18 +640,18 @@ def _strategy_origin_source_factory(instruments):
     declaration the strategy ledger resolves against. An order for anything
     else has no origin and is refused. The source is built on the owner thread.
     """
-    declared = {(item.venue, item.native_symbol): item for item in instruments}
+    from bt_api_py.gateway_strategy_origin_source import snapshot_strategy_origin_instruments
+
+    # The factory can outlive the parsed bundle; do not retain its mutable keys.
+    declared = snapshot_strategy_origin_instruments(instruments)
 
     def factory(_journal, _guard, _session):
         from bt_api_py.gateway_strategy_origin_source import GatewayStrategyOriginSource
 
-        def resolve(_context, order):
-            return declared[(order.exchange_id, order.symbol)]
+        from bt_api_base.market_protocol import MarketInstrumentKey
 
-        def recheck(instrument):
-            return declared.get((instrument.venue, instrument.native_symbol)) == instrument
-
-        return GatewayStrategyOriginSource(resolve=resolve, recheck=recheck)
+        return GatewayStrategyOriginSource(
+            instruments=tuple(MarketInstrumentKey(*entry) for entry in declared))
 
     return factory
 

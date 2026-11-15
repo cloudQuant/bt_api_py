@@ -67,6 +67,7 @@ from bt_api_risk import (
     DispatchTerminalResolutionReceiptStatus,
     DispatchTerminalState,
     DurableRiskAdmissionAdapter,
+    DurableRiskGate,
     ExposureAccountingMode,
     InstrumentRiskMetadata,
     OrderExposureObservationProof,
@@ -98,8 +99,8 @@ from .service_execution_group_authority import ExecutionGroupAuthorityGuard, Gro
 from .service_group_reservations import GroupReservationTarget
 from .service_registry import ServiceCallContext
 from .service_risk_order_entry import RiskBtApiProviderContract, RiskOrderTarget
+from bt_api_risk.risk_order_journal import RiskFenceExitCleanup, RiskOrderJournal
 from .service_risk_order_journal import (
-    RiskOrderJournal,
     RiskOrderWriterFence,
     canonical_json,
     sha256_text,
@@ -127,6 +128,20 @@ class GroupProofSourceError(RuntimeError):
             raise ValueError("invalid group proof source code")
         self.code = code
         super().__init__(code)
+
+
+def _close_borrowed_risk_fence(journal, manager, fence) -> None:
+    """Close this exact borrowed owner once and require its local receipt."""
+    try:
+        journal.assert_borrowed_fence(manager, fence)
+        journal.prepare_borrowed_fence_close(manager, fence)
+        manager.__exit__(None, None, None)
+        if journal.consume_borrowed_fence_close(manager, fence) is not RiskFenceExitCleanup.COMPLETE:
+            raise GroupProofSourceError("GROUP_RISK_FENCE_RELEASE_UNAVAILABLE")
+    except GroupProofSourceError:
+        raise
+    except Exception:
+        raise GroupProofSourceError("GROUP_RISK_FENCE_RELEASE_UNAVAILABLE") from None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1004,6 +1019,10 @@ class GroupProofRuntimeBundle:
             account_scoped_admission.require_admission_gate(risk_admission)
         except Exception:
             raise GroupProofSourceError("GROUP_RISK_ADMISSION_GATE_IDENTITY_MISMATCH") from None
+        gate = getattr(risk_admission, "_gate", None)
+        if (type(gate) is not DurableRiskGate
+                or getattr(gate, "_execution_journal_authority", None) is not proof_source):
+            raise GroupProofSourceError("GROUP_RISK_PROOF_SOURCE_IDENTITY_MISMATCH")
         for wire_scope in reservation_targets:
             reservation_target = reservation_targets[wire_scope]
             proof_target = proof_targets[wire_scope]
@@ -1023,6 +1042,7 @@ class GroupProofRuntimeBundle:
             ):
                 raise GroupProofSourceError("GROUP_RUNTIME_BUNDLE_SCOPE_INVALID")
         self.risk_admission = risk_admission
+        self._risk_gate = gate
         self.risk_policy_binding = risk_policy_binding
         self.account_scoped_admission = account_scoped_admission
         self.reservation_targets = reservation_targets
@@ -1061,6 +1081,10 @@ class GroupProofRuntimeBundle:
         self._assert_reservations_only_policy()
 
     def _assert_reservations_only_policy(self) -> None:
+        if (getattr(self.risk_admission, "_gate", None) is not self._risk_gate
+                or getattr(self._risk_gate, "_execution_journal_authority", None)
+                is not self.proof_source):
+            raise GroupProofSourceError("GROUP_RISK_PROOF_SOURCE_IDENTITY_MISMATCH")
         try:
             current = self.risk_admission.policy_binding
         except Exception:
@@ -1966,9 +1990,11 @@ class GroupProofSource:
             raise GroupProofSourceError("GROUP_PERMIT_BINDING_MISMATCH")
         current = _ACTIVE_SESSION.get()
         if current is not None:
-            if current.source is not self or current.intent.intent_id != intent.intent_id:
+            if (current.source is not self or current.target is not target
+                    or current.intent.intent_id != intent.intent_id):
                 raise GroupProofSourceError("GROUP_SESSION_CONTEXT_MISMATCH")
-            return self._read_receipt_locked(
+            current._assert_current()
+            result = self._read_receipt_locked(
                 target=target,
                 binding=binding,
                 intent=intent,
@@ -1980,9 +2006,17 @@ class GroupProofSource:
                 service_context=service_context,
                 active_authority=active_authority,
             )
+            current._assert_current()
+            return result
         try:
-            with target.risk_order_journal.writer_fence(target.account_scope):
-                return self._read_receipt_locked(
+            manager = target.risk_order_journal.writer_fence(target.account_scope)
+            fence = manager.__enter__()
+            try:
+                target.risk_order_journal.assert_borrowed_fence(manager, fence)
+            except Exception:
+                raise GroupProofSourceError("GROUP_RISK_FENCE_RELEASE_UNAVAILABLE") from None
+            try:
+                result = self._read_receipt_locked(
                     target=target,
                     binding=binding,
                     intent=intent,
@@ -1994,6 +2028,13 @@ class GroupProofSource:
                     service_context=service_context,
                     active_authority=active_authority,
                 )
+            except Exception:
+                # An ordinary read error is not itself a reason to keep the
+                # fence, provided the exact owner can still close completely.
+                _close_borrowed_risk_fence(target.risk_order_journal, manager, fence)
+                raise
+            _close_borrowed_risk_fence(target.risk_order_journal, manager, fence)
+            return result
         except GroupProofSourceError:
             raise
         except Exception:
@@ -2703,13 +2744,7 @@ class GroupProofSource:
             )
             return receipt
         finally:
-            if session._context_token is not None:
-                _ACTIVE_SESSION.reset(session._context_token)
-                session._context_token = None
-            if session._risk_fence_context is not None:
-                with suppress(Exception):
-                    session._risk_fence_context.__exit__(None, None, None)
-                session._risk_fence_context = None
+            session._release_risk_fence()
 
     def _read_recovery_receipt(
         self, session: GroupProofDispatchSession
@@ -3422,6 +3457,7 @@ class GroupProofDispatchSession:
         self.active_authority = active_authority
         self._risk_fence_context = None
         self._risk_fence: RiskOrderWriterFence | None = None
+        self._risk_fence_uncertain = False
         self._context_token = None
         self._authorization: GroupLegAuthorization | None = None
         self._writer_lease: WriterLease | None = None
@@ -3547,11 +3583,7 @@ class GroupProofDispatchSession:
                     authorization=self._authorization,
                     writer_lease=self._writer_lease,
                 )
-            with self.target.risk_order_journal.writer_fence(
-                self.target.account_scope
-            ) as current_fence:
-                if current_fence != self._risk_fence:
-                    raise GroupProofSourceError("GROUP_RISK_FENCE_CHANGED")
+            self._assert_risk_fence()
         except GroupProofSourceError:
             raise
         except Exception:
@@ -5291,11 +5323,7 @@ class GroupProofDispatchSession:
         # validating the receipt has not changed. The coordinator hold is
         # expected to be gone after normal package return.
         try:
-            with self.target.risk_order_journal.writer_fence(
-                self.target.account_scope
-            ) as current_fence:
-                if current_fence != self._risk_fence:
-                    raise GroupProofSourceError("GROUP_RISK_FENCE_CHANGED")
+            self._assert_risk_fence()
         except GroupProofSourceError:
             raise
         except Exception:
@@ -5312,6 +5340,18 @@ class GroupProofDispatchSession:
             self._mark_unknown("GROUP_SESSION_ABORTED")
         self._release_risk_fence()
 
+    def _assert_risk_fence(self) -> None:
+        try:
+            if (self._risk_fence_uncertain or self._risk_fence_context is None
+                    or self._risk_fence is None):
+                raise GroupProofSourceError("GROUP_RISK_FENCE_UNAVAILABLE")
+            self.target.risk_order_journal.assert_borrowed_fence(
+                self._risk_fence_context, self._risk_fence
+            )
+        except BaseException:
+            self._risk_fence_uncertain = True
+            raise
+
     def _release_risk_fence(self) -> None:
         token = self._context_token
         self._context_token = None
@@ -5319,11 +5359,21 @@ class GroupProofDispatchSession:
             with suppress(Exception):
                 _ACTIVE_SESSION.reset(token)
         context = self._risk_fence_context
+        fence = self._risk_fence
+        if context is None:
+            if fence is None:
+                return
+            self._risk_fence_uncertain = True
+            raise GroupProofSourceError("GROUP_RISK_FENCE_RELEASE_UNAVAILABLE")
+        if fence is None or self._risk_fence_uncertain:
+            raise GroupProofSourceError("GROUP_RISK_FENCE_RELEASE_UNAVAILABLE")
+        # Mark before exit: an interrupted or failed cleanup must never be
+        # retried with the same owner. Keep its exact identities retained.
+        self._risk_fence_uncertain = True
+        _close_borrowed_risk_fence(self.target.risk_order_journal, context, fence)
         self._risk_fence_context = None
         self._risk_fence = None
-        if context is not None:
-            with suppress(Exception):
-                context.__exit__(None, None, None)
+        self._risk_fence_uncertain = False
 
 
 def _normalized_order(value: Mapping[str, Any]) -> dict[str, Any]:

@@ -178,7 +178,11 @@ def gateway_process(root, endpoint, server_keys, publics, messages, controls, pa
             GatewayDirectServiceBinding,
         )
         from bt_api_py.gateway_execution_stream_service import GatewayExecutionStreamService
-        from bt_api_py.gateway_strategy_origin_source import GatewayStrategyOriginSource
+        import bt_api_py.gateway_strategy_origin_source as source_module
+        from tests._synthetic_strategy_origin_source import SyntheticStrategyOriginSource
+
+        # Child-process synthetic source only; it does not establish claim coverage.
+        source_module.GatewayStrategyOriginSource = SyntheticStrategyOriginSource
         from bt_api_py.service_components import ComponentResources
         from bt_api_py.service_config import parse_service_config
         from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority
@@ -229,7 +233,7 @@ def gateway_process(root, endpoint, server_keys, publics, messages, controls, pa
                 getattr(journal, step)(guard)
             holder["control"] = GatewayDirectControl(journal, guard)
             holder["ledger"] = GatewayDirectExecutionLedger(journal, guard)
-            holder["source"] = GatewayStrategyOriginSource(
+            holder["source"] = SyntheticStrategyOriginSource(
                 resolve=lambda _context, order: instruments[order.symbol],
                 recheck=lambda value: value in instruments.values(),
             )
@@ -1135,13 +1139,16 @@ class RiskScenarioEnv:
 
     def audit(self) -> list[dict]:
         records, after = [], 0
+        through = snapshot = None
         while True:
-            reply = self.admin("risk.audit.read", {"after": after, "limit": 500})
+            reply = self.admin("risk.audit.read", {"after": after, "limit": 500,
+                                                  "through": through, "snapshot": snapshot})
             assert reply["status"] == "OBSERVED", reply
             records.extend(reply["records"])
-            if len(reply["records"]) < 500:
+            if not reply["has_more"]:
                 return records
             after = reply["next_after"]
+            through, snapshot = reply["through"], reply["snapshot"]
 
     def risk_database(self) -> Path:
         return self.root / "risk" / "state" / "risk.sqlite"

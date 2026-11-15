@@ -6,6 +6,7 @@ its status/call replaced; no Risk host, Gateway or socket exists.
 from __future__ import annotations
 
 import json
+import threading
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -50,7 +51,8 @@ def risk_route():
 def snapshot(route, *, state="running", healthy=True, registration="reg-1", ops=OPS):
     binding = BindingSnapshot(registration, "epoch-1", True, route.mount, route.service_id,
                               route.instance_id, route.scope_ref, route.scope, frozenset(ops), True)
-    return RuntimeSnapshot(state, state == "running", healthy, None, (binding,), 0, 0,
+    bindings = (binding,) if state == "running" else ()
+    return RuntimeSnapshot(state, state == "running", healthy, None, bindings, 0, 0,
                            route.identity, route.scope.run_id, unknown_registration_count=0,
                            strict_unregister_ack=True)
 
@@ -255,6 +257,41 @@ class Host:
 
     def __init__(self):
         self.intents, self.records = {}, {}
+        self._risk_tickets = {}
+        self._risk_ticket_lock = threading.Lock()
+
+    def risk_first_send_host_contract(self):
+        """Declare fake local ticket callbacks; no real durability is implied."""
+        from types import MethodType
+
+        def save(host, intent, **_kwargs):
+            return host.create_risk_reserve_intent(intent)
+
+        def create(host, intent):
+            return host.create_risk_reserve_intent(intent)
+
+        def consume(host, intent, ticket):
+            return host.consume_risk_reserve_ticket(intent, ticket)
+
+        return ("local-first-send-host-v1", MethodType(save, self),
+                MethodType(create, self), MethodType(consume, self))
+
+    def create_risk_reserve_intent(self, intent):
+        with self._risk_ticket_lock:
+            if intent.request_key in self.intents:
+                return None
+            self.intents[intent.request_key] = intent
+            ticket = object()
+            self._risk_tickets[intent.request_key] = (intent, ticket)
+            return ticket
+
+    def consume_risk_reserve_ticket(self, intent, ticket):
+        with self._risk_ticket_lock:
+            entry = self._risk_tickets.get(intent.request_key)
+            if entry is None or entry[0] != intent or entry[1] is not ticket:
+                return False
+            del self._risk_tickets[intent.request_key]
+            return True
 
     def save_intent(self, intent):
         self.intents.setdefault(intent.request_key, intent)
@@ -332,17 +369,44 @@ def delegated_observation(state="SENT"):
                                               "res-1", "f" * 64, state, versions[state], "g1", "g1")
 
 
-def test_selected_risk_reserve_never_calls_the_gateway(monkeypatch):
+def test_v1_reserve_keeps_the_key_unknown_without_any_wire_write(monkeypatch):
     api, host, wire, gateway = facade(monkeypatch, replies=[answer("RESERVED")])
+    consumed = []
+    consume_ticket = host.consume_risk_reserve_ticket
+
+    def consume_once(intent, ticket):
+        result = consume_ticket(intent, ticket)
+        consumed.append((intent.request_key, result))
+        return result
+
+    monkeypatch.setattr(host, "consume_risk_reserve_ticket", consume_once)
     result = api.reserve_order("CTP___FUTURE", order(), timeout_seconds=2.0)
-    assert result.outcome == "OBSERVED" and result.record.state == "RESERVED"
-    assert (result.record.permit_id, result.record.reservation_id) == ("permit-1", "res-1")
-    assert gateway == [] and [c[1] for c in wire.calls] == ["risk.order.reserve"]
-    assert host.load_intent("same-key").request_key == "same-key"  # durable before sending
+    assert (result.outcome, result.code, result.record) == ("UNKNOWN", "RISK_OUTCOME_UNKNOWN", None)
+    assert gateway == [] and wire.calls == [] and len(wire.replies) == 1
+    assert host.load_intent("same-key").request_key == "same-key"
+    assert consumed == [("same-key", True)] and host._risk_tickets == {}
+    assert "same-key" in api._risk_keys and "same-key" in api._risk_uncertain_keys
+    assert "same-key" not in api._risk_permits
+    assert api.dispatch_order("CTP___FUTURE", "same-key").outcome == "UNKNOWN"
+    assert api.release_order("CTP___FUTURE", "same-key", operation_id="release-1").outcome == "UNKNOWN"
+    assert gateway == [] and wire.calls == []
+
+
+def test_v1_duplicate_keeps_the_original_intent_and_never_resends(monkeypatch):
+    api, host, wire, gateway = facade(monkeypatch, replies=[answer("RESERVED")])
+    assert api.reserve_order("CTP___FUTURE", order()).outcome == "UNKNOWN"
+    original = host.load_intent("same-key")
+    assert original is not None
+    # A different retry payload with the same key must not replace the old intent.
+    result = api.reserve_order("CTP___FUTURE", replace(order(), quantity=order().quantity * 2))
+    assert (result.outcome, result.code) == ("UNKNOWN", "RISK_OUTCOME_UNKNOWN")
+    assert host.load_intent("same-key") is original
+    assert "same-key" in api._risk_uncertain_keys and "same-key" not in api._risk_permits
+    assert wire.calls == [] and len(wire.replies) == 1 and gateway == []
 
 
 @pytest.mark.parametrize("make_down", ["not_registered", "not_sent", "not_ready"])
-def test_unavailable_risk_refuses_place_and_sends_nothing_to_the_gateway(monkeypatch, make_down):
+def test_v1_gate_does_not_consume_unavailable_risk_replies(monkeypatch, make_down):
     api, _, wire, gateway = facade(monkeypatch)
     if make_down == "not_registered":
         wire.state["snapshot"] = snapshot(wire.route, state="failed", healthy=False)
@@ -351,41 +415,53 @@ def test_unavailable_risk_refuses_place_and_sends_nothing_to_the_gateway(monkeyp
     else:
         wire.replies.append(ThreadedRuntimeError("NOT_READY"))
     result = api.reserve_order("CTP___FUTURE", order())
-    assert (result.outcome, result.code) == ("REQUEST_DENIED", "RISK_UNAVAILABLE")
-    assert (result.risk_code, result.risk_denied) == ("risk_unavailable", "risk_unavailable")
-    assert gateway == []
-    assert api.dispatch_order("CTP___FUTURE", "same-key").code == "RISK_PERMIT_UNAVAILABLE"
-    assert gateway == []
+    assert (result.outcome, result.code) == ("UNKNOWN", "RISK_OUTCOME_UNKNOWN")
+    assert result.risk_denied is None
+    assert gateway == [] and wire.calls == []
+    assert len(wire.replies) == (0 if make_down == "not_registered" else 1)
+    assert api.dispatch_order("CTP___FUTURE", "same-key").outcome == "UNKNOWN"
+    assert gateway == [] and wire.calls == []
 
 
-def test_risk_refusal_projects_upper_case_code_and_lowercase_risk_code(monkeypatch):
-    api, _, _, gateway = facade(monkeypatch, replies=[
+def test_synthetic_client_refusal_projection_preserves_risk_code(monkeypatch):
+    # Direct client plus private projector: v1 facade reserve never reaches this branch.
+    api, _, wire, gateway = facade(monkeypatch, replies=[
         answer("DENIED", code="risk_order_quantity_exceeds_cap", state="DENIED")])
-    result = api.reserve_order("CTP___FUTURE", order())
+    call = api._risk.reserve(order(), request_key="same-key")
+    assert call.outcome == "ANSWERED" and call.answer.outcome == "DENIED"
+    result = api._risk_refusal(call.answer)
     assert (result.outcome, result.code) == ("REQUEST_DENIED", "RISK_ORDER_QUANTITY_EXCEEDS_CAP")
     assert result.risk_denied == "risk_order_quantity_exceeds_cap" and gateway == []
+    assert [entry[1] for entry in wire.calls] == ["risk.order.reserve"]
 
 
-def test_gateway_refusal_through_risk_keeps_the_gateway_code(monkeypatch):
-    api, _, _, _ = facade(monkeypatch, replies=[
-        answer("DENIED", code="risk_gateway_refused", gateway_code="CONTROL_STOP_NEW")])
-    result = api.reserve_order("CTP___FUTURE", order())
+def test_synthetic_client_gateway_refusal_projection_keeps_gateway_code(monkeypatch):
+    # This exercises the projector, not a reachable facade reserve path.
+    api, _, wire, gateway = facade(monkeypatch, replies=[
+        answer("DENIED", state="DENIED", code="risk_gateway_refused", gateway_code="CONTROL_STOP_NEW")])
+    call = api._risk.reserve(order(), request_key="same-key")
+    assert call.outcome == "ANSWERED" and call.answer.outcome == "DENIED"
+    result = api._risk_refusal(call.answer)
     assert (result.outcome, result.code) == ("REQUEST_DENIED", "CONTROL_STOP_NEW")
     assert (result.risk_code, result.risk_denied) == ("risk_gateway_refused", None)
+    assert [entry[1] for entry in wire.calls] == ["risk.order.reserve"] and gateway == []
 
 
 @pytest.mark.parametrize("reply", [ThreadedRuntimeError("TIMEOUT_AFTER_START"),
                                    {"not": "a result"}, answer("UNKNOWN")])
-def test_unknown_risk_outcome_stays_unknown(monkeypatch, reply):
-    api, _, _, gateway = facade(monkeypatch, replies=[reply])
+def test_v1_gate_does_not_consume_unknown_risk_outcome(monkeypatch, reply):
+    api, _, wire, gateway = facade(monkeypatch, replies=[reply])
     result = api.reserve_order("CTP___FUTURE", order())
     assert result.outcome == "UNKNOWN" and result.risk_denied is None and gateway == []
+    assert wire.calls == [] and wire.replies == [reply]
     assert "same-key" in api._risk_keys  # later status/cancel use the delegated path
 
 
-def test_dispatch_uses_the_kept_permit_and_never_the_gateway(monkeypatch):
-    api, _, wire, gateway = facade(monkeypatch, replies=[answer("RESERVED"), answer("DISPATCHED")])
-    api.reserve_order("CTP___FUTURE", order())
+def test_synthetic_held_permit_dispatches_through_risk_not_gateway(monkeypatch):
+    api, _, wire, gateway = facade(monkeypatch, replies=[answer("DISPATCHED")])
+    # Injected only to test downstream projection; no v1 facade can acquire it.
+    api._risk_keys.add("same-key")
+    api._risk_permits["same-key"] = RiskOrderResult.from_mapping(answer("RESERVED"))
     ref = {"key": {"source_ref": "s", "entitlement_ref": "e",
                    "instrument": {"provider": "ctp", "venue": "SHFE", "environment": "paper",
                                   "product_type": "future", "instrument_id": "rb",
@@ -395,25 +471,29 @@ def test_dispatch_uses_the_kept_permit_and_never_the_gateway(monkeypatch):
     result = api.dispatch_order("CTP___FUTURE", "same-key", market_ref=ref)
     assert result.outcome == "QUEUED" and result.record.state == "DISPATCHED"
     assert gateway == []
-    _, operation, arguments, _ = wire.calls[1]
+    assert len(wire.calls) == 1
+    _, operation, arguments, _ = wire.calls[0]
     assert operation == "risk.order.dispatch"
     assert {k: arguments[k] for k in ("permit_id", "reservation_id", "view_digest")} == {
         "permit_id": "permit-1", "reservation_id": "res-1", "view_digest": DIGEST}
 
 
-def test_release_of_an_unsent_risk_reservation_goes_to_risk(monkeypatch):
-    api, _, wire, gateway = facade(monkeypatch, replies=[answer("RESERVED"), answer("RELEASED")])
-    api.reserve_order("CTP___FUTURE", order())
+def test_synthetic_held_permit_release_uses_risk_not_gateway(monkeypatch):
+    api, _, wire, gateway = facade(monkeypatch, replies=[answer("RELEASED")])
+    # Artificial in-process state is not proof of a real not-sent reservation.
+    api._risk_keys.add("same-key")
+    api._risk_permits["same-key"] = RiskOrderResult.from_mapping(answer("RESERVED"))
     result = api.release_order("CTP___FUTURE", "same-key", operation_id="release-1")
     assert result.outcome == "OBSERVED" and result.record.state == "RELEASED"
-    assert gateway == [] and wire.calls[1][1:3] == (
+    assert gateway == [] and len(wire.calls) == 1 and wire.calls[0][1:3] == (
         "risk.order.release", {"request_key": "same-key", "permit_id": "permit-1"})
 
 
-def test_status_and_cancel_of_a_risk_placed_order_use_delegated_gateway_even_with_risk_down(
+def test_unknown_risk_key_status_and_cancel_use_delegated_gateway_even_with_risk_down(
         monkeypatch):
-    api, _, wire, gateway = facade(monkeypatch, replies=[answer("RESERVED")])
+    api, _, wire, gateway = facade(monkeypatch)
     api.reserve_order("CTP___FUTURE", order())
+    assert wire.calls == []  # v1 gate left the key UNKNOWN; no reservation was sent.
     wire.state["snapshot"] = snapshot(wire.route, state="failed", healthy=False)  # Risk down
     observation = delegated_observation("SENT")
     delegated = []
@@ -436,17 +516,18 @@ def test_status_and_cancel_of_a_risk_placed_order_use_delegated_gateway_even_wit
     assert delegated == [("status", "same-key"), ("status", "same-key"),
                          ("cancel", observation, "cancel-1")]
     assert gateway == []            # never direct.cancel / direct.command_status
-    assert len(wire.calls) == 1     # cancel and status never touched Risk
+    assert wire.calls == []         # cancel and status never touched Risk
 
 
 def test_unavailable_delegated_observation_never_cancels(monkeypatch):
-    api, _, _, gateway = facade(monkeypatch, replies=[answer("RESERVED")])
+    api, _, wire, gateway = facade(monkeypatch, replies=[answer("RESERVED")])
     api.reserve_order("CTP___FUTURE", order())
     monkeypatch.setattr(api._delegated, "status", lambda key, **kw: GatewayDelegatedCommandResult(
         "UNAVAILABLE", code="DELEGATED_COMMAND_UNAVAILABLE"))
     monkeypatch.setattr(api._delegated, "cancel", lambda *a, **kw: pytest.fail("cancelled blind"))
     result = api.cancel_order("CTP___FUTURE", "same-key", operation_id="cancel-1")
     assert result.outcome == "TRANSPORT_NOT_STARTED" and gateway == []
+    assert wire.calls == [] and len(wire.replies) == 1
 
 
 def test_unknown_provenance_never_passes_not_found_on(monkeypatch):
@@ -508,7 +589,7 @@ def test_risk_start_failure_does_not_stop_the_gateway_session(monkeypatch):
     assert api._risk_start_code == "START_FAILED"
     wire.state["snapshot"] = snapshot(wire.route, state="failed", healthy=False)
     assert api.risk_available is False
-    assert api.reserve_order("CTP___FUTURE", order()).code == "RISK_UNAVAILABLE"
+    assert api.reserve_order("CTP___FUTURE", order()).code == "RISK_OUTCOME_UNKNOWN"
 
 
 def test_facade_refuses_a_risk_client_for_another_run(monkeypatch):
@@ -554,6 +635,9 @@ def lost_runtime_client(monkeypatch, *, start_ok=True):
         runtime = ThreadedServiceClientRuntime(lambda: None, require_unregister_ack=True)
         box = {"snapshot": snapshot(route, state=state, healthy=state == "running")}
         monkeypatch.setattr(runtime, "status", lambda: box["snapshot"])
+        monkeypatch.setattr(runtime, "bounded_status", lambda **_: runtime.status())
+        monkeypatch.setattr(runtime, "cleanup_observation", lambda **_: (runtime.status(),
+                                                                        runtime._thread is not None))
 
         def start(**kw):
             if not start_ok:
@@ -571,7 +655,11 @@ def lost_runtime_client(monkeypatch, *, start_ok=True):
             return answer("RESERVED", key=arguments["request_key"])
 
         monkeypatch.setattr(runtime, "start", start)
+        monkeypatch.setattr(runtime, "start_bounded_once", lambda **kw: runtime.start(
+            timeout_seconds=kw["timeout_seconds"]))
         monkeypatch.setattr(runtime, "close", close)
+        monkeypatch.setattr(runtime, "close_once_if_state", lambda **kw: runtime.close(
+            timeout_seconds=kw["timeout_seconds"]))
         monkeypatch.setattr(runtime, "call", call)
         return runtime
 
@@ -617,20 +705,23 @@ def test_factory_exception_is_bounded_and_blocks_further_attempts(monkeypatch):
     assert client.status("prior", timeout_seconds=1).outcome == "NOT_SENT"
 
 
-def test_factory_exception_projects_risk_unavailable_without_gateway_fallback(monkeypatch):
+def test_v1_gate_does_not_invoke_unavailable_runtime_factory(monkeypatch):
     data = parts()
     session = GatewayStrategyClientSession(**{**data, "host": Host(), "cancel_host": Host()})
     client, _made, calls, _clock = lost_runtime_client(monkeypatch)
     old = client._runtime
+    factory_calls = []
     def fail():
+        factory_calls.append(True)
         raise RuntimeError("synthetic factory failure")
     client._factory = fail
     api = GatewayBtApi(session, exchange_name="CTP___FUTURE", risk_client=client)
     monkeypatch.setattr(api._command, "reserve", lambda *a, **kw: pytest.fail("Gateway fallback"))
     api._risk_keys.add("unknown-old-key")
     refused = api.reserve_order("CTP___FUTURE", order())
-    assert (refused.outcome, refused.code) == ("REQUEST_DENIED", "RISK_UNAVAILABLE")
-    assert client._runtime is old and calls == [] and "unknown-old-key" in api._risk_keys
+    assert (refused.outcome, refused.code) == ("UNKNOWN", "RISK_OUTCOME_UNKNOWN")
+    assert client._runtime is old and calls == [] and factory_calls == []
+    assert "unknown-old-key" in api._risk_keys
     session.close()
 
 
@@ -638,7 +729,14 @@ def test_factory_exception_projects_risk_unavailable_without_gateway_fallback(mo
 def test_reconnect_keeps_original_when_cleanup_is_not_proven(monkeypatch, problem):
     client, made, calls, clock = lost_runtime_client(monkeypatch)
     old = client._runtime
+    cleanup_calls = []
+    # The owner has not furnished a stopped, clean proof. Do not prod its
+    # close path: the owner may already be waiting to retry an uncertain close.
+    monkeypatch.setattr(old, "status", lambda: replace(
+        snapshot(client.route, state="close_failed", healthy=False),
+        error_code="CLEANUP_FAILED"))
     def close(**_kwargs):
+        cleanup_calls.append(True)
         if problem == "error":
             raise ThreadedRuntimeError("CLEANUP_FAILED")
         return replace(snapshot(client.route, state="failed", healthy=False),
@@ -649,12 +747,17 @@ def test_reconnect_keeps_original_when_cleanup_is_not_proven(monkeypatch, proble
     monkeypatch.setattr(old, "close", close)
     assert client.reconnect(timeout_seconds=1.0) is False
     assert client._runtime is old and made == [] and calls == []
-    # Only after the original cleanup is confirmed may a later attempt replace it.
-    monkeypatch.setattr(old, "close", lambda **_kwargs: snapshot(
-        client.route, state="closed", healthy=False))
+    # A failed or ambiguous close is not retried, even if a later fake would
+    # report success: the original owner may still hold retained resources.
+    def later_close(**_kwargs):
+        cleanup_calls.append(True)
+        return snapshot(client.route, state="closed", healthy=False)
+    monkeypatch.setattr(old, "close", later_close)
     clock.now += 1.0
-    assert client.reconnect(timeout_seconds=1.0) is True
-    assert len(made) == 1 and calls == []
+    assert client.reconnect(timeout_seconds=1.0) is False
+    with pytest.raises(ThreadedRuntimeError, match="CLEANUP_FAILED"):
+        client.close(timeout_seconds=1.0)
+    assert client._runtime is old and cleanup_calls == [] and made == [] and calls == []
 
 
 @pytest.mark.parametrize("proof", [None, False, 1])
@@ -678,7 +781,7 @@ def test_factory_without_strict_contract_never_starts_and_keeps_old(monkeypatch)
     unsafe = ThreadedServiceClientRuntime(lambda: pytest.fail("unsafe factory started"))
     client._factory = lambda: unsafe
     assert client.reconnect(timeout_seconds=1) is False
-    assert client._runtime is old and unsafe.status().state == "closed" and calls == []
+    assert client._runtime is old and unsafe.status().state == "new" and calls == []
     assert client._pending_runtime is unsafe
 
 
@@ -712,9 +815,13 @@ def test_failed_candidate_with_uncertain_cleanup_is_retained_and_never_paralleli
     client, made, calls, clock = lost_runtime_client(monkeypatch)
     old, normal_factory = client._runtime, client._factory
     candidate = ThreadedServiceClientRuntime(lambda: None, require_unregister_ack=True)
+    monkeypatch.setattr(candidate, "cleanup_observation", lambda **_: (candidate.status(),
+                                                                         candidate._thread is not None))
     closed = replace(snapshot(client.route, state="failed", healthy=False), unregister_uncertainties=1)
     monkeypatch.setattr(candidate, "start", lambda **_: (_ for _ in ()).throw(
         ThreadedRuntimeError("START_FAILED")))
+    monkeypatch.setattr(candidate, "start_bounded_once", lambda **kw: candidate.start(
+        timeout_seconds=kw["timeout_seconds"]))
     monkeypatch.setattr(candidate, "close", lambda **_: closed)
     monkeypatch.setattr(candidate, "status", lambda: closed)
     factory_calls = []
@@ -724,13 +831,17 @@ def test_failed_candidate_with_uncertain_cleanup_is_retained_and_never_paralleli
     clock.now += 1
     assert client.reconnect(timeout_seconds=1) is False
     assert client._runtime is old and client._pending_runtime is candidate and factory_calls == [True]
-    # Simulated positive cleanup evidence, not production resolution of UNKNOWN.
-    monkeypatch.setattr(candidate, "close", lambda **_: replace(closed, unregister_uncertainties=0))
+    # A later synthetic success cannot justify repeating an uncertain cleanup.
+    cleanup_calls = []
+    monkeypatch.setattr(candidate, "close", lambda **_: cleanup_calls.append(True) or replace(
+        closed, unregister_uncertainties=0))
     monkeypatch.setattr(candidate, "status", lambda: replace(closed, unregister_uncertainties=0))
     client._factory = normal_factory
     clock.now += 2
-    assert client.reconnect(timeout_seconds=1) is True
-    assert client._pending_runtime is None and len(made) == 1 and calls == []
+    assert client.reconnect(timeout_seconds=1) is False
+    with pytest.raises(ThreadedRuntimeError, match="CLEANUP_FAILED"):
+        client.close(timeout_seconds=1)
+    assert client._pending_runtime is candidate and cleanup_calls == [] and made == [] and calls == []
 
 
 @pytest.mark.parametrize("problem", ["status_raises", "status_mismatch", "thread_alive"])
@@ -738,16 +849,20 @@ def test_candidate_close_needs_its_own_consistent_stopped_snapshot(monkeypatch, 
     client, made, calls, clock = lost_runtime_client(monkeypatch)
     old = client._runtime
     candidate = ThreadedServiceClientRuntime(lambda: None, require_unregister_ack=True)
+    monkeypatch.setattr(candidate, "cleanup_observation", lambda **_: (candidate.status(),
+                                                                         candidate._thread is not None))
     clean = snapshot(client.route, state="closed", healthy=False)
     monkeypatch.setattr(candidate, "start", lambda **_: (_ for _ in ()).throw(
         ThreadedRuntimeError("START_FAILED")))
+    monkeypatch.setattr(candidate, "start_bounded_once", lambda **kw: candidate.start(
+        timeout_seconds=kw["timeout_seconds"]))
     monkeypatch.setattr(candidate, "close", lambda **_: clean)
     if problem == "status_raises":
         monkeypatch.setattr(candidate, "status", lambda: (_ for _ in ()).throw(RuntimeError("status")))
     elif problem == "status_mismatch":
         monkeypatch.setattr(candidate, "status", lambda: replace(clean, unregister_uncertainties=1))
     else:
-        monkeypatch.setattr(candidate, "status", lambda: clean)
+        monkeypatch.setattr(candidate, "status", lambda: replace(clean, thread_alive=True))
         monkeypatch.setattr(candidate, "_thread", SimpleNamespace(is_alive=lambda: True))
     issued = []
     client._factory = lambda: issued.append(candidate) or candidate
@@ -785,28 +900,33 @@ def test_a_running_but_unhealthy_runtime_is_left_to_recover(monkeypatch):
     assert client.reconnect(timeout_seconds=1.0) is False and made == []
 
 
-def test_place_after_risk_came_back_reconnects_and_in_flight_keys_are_kept(monkeypatch):
+def test_explicit_client_reconnect_keeps_v1_facade_keys_unknown_and_unsent(monkeypatch):
     data = parts()
     session = GatewayStrategyClientSession(**{**data, "host": Host(), "cancel_host": Host()})
     client, made, calls, clock = lost_runtime_client(monkeypatch, start_ok=False)
     api = GatewayBtApi(session, exchange_name="CTP___FUTURE", risk_client=client)
     monkeypatch.setattr(api._command, "reserve", lambda *a, **kw: pytest.fail("Gateway reserve"))
     api._risk_keys.add("in-flight-key")  # an earlier reserve whose outcome was not learned
-    refused = api.reserve_order("CTP___FUTURE", order())
-    assert (refused.outcome, refused.code) == ("REQUEST_DENIED", "RISK_UNAVAILABLE")
-    assert calls == []
+    initial = api.reserve_order("CTP___FUTURE", order())
+    assert (initial.outcome, initial.code) == ("UNKNOWN", "RISK_OUTCOME_UNKNOWN")
+    assert calls == [] and made == []  # facade gate does not try to reconnect or send
+    # Explicitly exercise client reconnection, independently of the gated facade.
+    assert client.reconnect(timeout_seconds=1) is False and len(made) == 1
     clock.now += 60.0
     monkeypatch.setattr(made[-1], "start", lambda **kw: (_ for _ in ()).throw(
         ThreadedRuntimeError("START_FAILED")))
-    # Risk is back: the next PLACE re-registers once and is answered.
+    # Risk is back: explicitly reconnect the synthetic client, not PLACE.
     healthy = {"value": False}
 
     def factory_ok():
         runtime = ThreadedServiceClientRuntime(lambda: None, require_unregister_ack=True)
         box = {"snapshot": snapshot(client.route, state="new", healthy=False)}
         monkeypatch.setattr(runtime, "status", lambda: box["snapshot"])
+        monkeypatch.setattr(runtime, "bounded_status", lambda **_: runtime.status())
         monkeypatch.setattr(runtime, "start", lambda **kw: box.update(
             snapshot=snapshot(client.route, registration="reg-ok")) or box["snapshot"])
+        monkeypatch.setattr(runtime, "start_bounded_once", lambda **kw: runtime.start(
+            timeout_seconds=kw["timeout_seconds"]))
         monkeypatch.setattr(runtime, "close", lambda **kw: box["snapshot"])
 
         def call(mount, operation, arguments, **kwargs):
@@ -818,10 +938,19 @@ def test_place_after_risk_came_back_reconnects_and_in_flight_keys_are_kept(monke
         return runtime
 
     client._factory = factory_ok
-    accepted = api.reserve_order("CTP___FUTURE", order())
-    assert accepted.outcome == "OBSERVED" and healthy["value"] is True
-    assert calls == [("risk.order.reserve", "same-key")]  # the in-flight key was never resent
-    assert "in-flight-key" in api._risk_keys and "same-key" in api._risk_permits
+    assert client.reconnect(timeout_seconds=1) is True and healthy["value"] is True
+    # Neither the prior uncertain key nor a fresh key gains first-send proof.
+    prior = api.reserve_order("CTP___FUTURE", replace(order(), idempotency_key="in-flight-key"))
+    assert (prior.outcome, prior.code) == ("UNKNOWN", "RISK_OUTCOME_UNKNOWN")
+    assert calls == []
+    assert api.reserve_order("CTP___FUTURE", order()).outcome == "UNKNOWN"
+    fresh = api.reserve_order(
+        "CTP___FUTURE", replace(order(), idempotency_key="new-key")
+    )
+    assert (fresh.outcome, fresh.code) == ("UNKNOWN", "RISK_OUTCOME_UNKNOWN")
+    assert calls == []
+    assert {"in-flight-key", "same-key", "new-key"} <= api._risk_keys
+    assert api._risk_permits == {}
     session.close()
 
 
@@ -830,5 +959,8 @@ def test_risk_order_status_never_makes_a_read_back_permit_dispatchable(monkeypat
     call = api.risk_order_status("CTP___FUTURE", "restored-key")
     assert call.outcome == "ANSWERED" and call.answer.outcome == "RESERVED"
     assert "restored-key" in api._risk_keys and "restored-key" not in api._risk_permits
-    assert api.dispatch_order("CTP___FUTURE", "restored-key").code == "RISK_PERMIT_UNAVAILABLE"
+    result = api.dispatch_order("CTP___FUTURE", "restored-key")
+    assert (result.outcome, result.code) == ("UNKNOWN", "RISK_OUTCOME_UNKNOWN")
+    result = api.release_order("CTP___FUTURE", "restored-key", operation_id="release-restored")
+    assert (result.outcome, result.code) == ("UNKNOWN", "RISK_OUTCOME_UNKNOWN")
     assert [c[1] for c in wire.calls] == ["risk.order.status"] and gateway == []

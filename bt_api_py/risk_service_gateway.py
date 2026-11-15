@@ -35,6 +35,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
+from functools import wraps
 from typing import Any
 
 from bt_api_base.gateway_delegation_protocol import GatewayDelegatedCommand
@@ -192,6 +193,20 @@ class _DelegateSlot:
     connection_attempted: bool = False
 
 
+def _guard_delegate_cleanup(method: Callable[..., Any]) -> Callable[..., Any]:
+    """Discard a reply if a reentrant callback makes cleanup uncertain."""
+    @wraps(method)
+    def guarded(self: Any, *args: Any, **kwargs: Any) -> Any:
+        result = method(self, *args, **kwargs)
+        if not self._sync_cleanup_uncertain():
+            return result
+        from bt_api_risk.pretrade import GatewayReply
+
+        return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+
+    return guarded
+
+
 class DelegateOrderPort:
     """``GatewayOrderPort`` over per-(strategy, run) delegate clients (G64-11).
 
@@ -218,6 +233,8 @@ class DelegateOrderPort:
         timeout_seconds: float,
         retry_seconds: float,
         monotonic: Callable[[], float] = time.monotonic,
+        on_cleanup_uncertain: Callable[[object, str], None] | None = None,
+        is_cleanup_uncertain: Callable[[], bool] | None = None,
     ) -> None:
         self._account, self._domain = account_scope, execution_domain_ref
         self._identity = identity
@@ -232,11 +249,44 @@ class DelegateOrderPort:
         self._reserving: set[str] = set()
         self._handling: set[str] = set()
         self._closing = False
+        self._cleanup_in_progress = False
+        self._cleanup_uncertain = False
+        self._cleanup_resource: object | None = None
+        self._on_cleanup_uncertain = on_cleanup_uncertain
+        self._is_cleanup_uncertain = is_cleanup_uncertain
         self._pid, self._thread = os.getpid(), threading.current_thread()
 
     def _owned(self) -> None:
         if os.getpid() != self._pid or threading.current_thread() is not self._thread:
             raise RuntimeError("RISK_DELEGATE_WRONG_OWNER")
+
+    @property
+    def cleanup_uncertain(self) -> bool:
+        self._owned()
+        return self._sync_cleanup_uncertain()
+
+    def _sync_cleanup_uncertain(self) -> bool:
+        if not self._cleanup_uncertain and self._is_cleanup_uncertain is not None:
+            try:
+                value = self._is_cleanup_uncertain()
+            except BaseException:
+                self._cleanup_uncertain = True
+                raise
+            if type(value) is not bool:
+                self._cleanup_uncertain = True
+                raise RuntimeError("RISK_DELEGATE_CLEANUP_STATE_INVALID")
+            if value:
+                self._cleanup_uncertain = True
+        return self._cleanup_uncertain
+
+    def _cleanup_failed(self, resource: object, reason: str) -> None:
+        self._cleanup_resource = resource
+        self._cleanup_uncertain = True
+        if self._on_cleanup_uncertain is not None:
+            try:
+                self._on_cleanup_uncertain(resource, reason)
+            except Exception:
+                _LOG.warning("Risk delegate cleanup uncertainty callback failed")
 
     def route_for(self, strategy_ref: str, run_id: str) -> Any:
         from bt_api_py.gateway_delegate_service_client import GatewayDelegateRoute
@@ -256,6 +306,8 @@ class DelegateOrderPort:
     def note_run(self, strategy_ref: str, run_id: str) -> None:
         """Record the strategy's authenticated run; a new run retires the old client."""
         self._owned()
+        if self._sync_cleanup_uncertain() or self._cleanup_in_progress:
+            return
         if not _ref(strategy_ref) or not _ref(run_id) or strategy_ref not in self._revisions:
             return
         if strategy_ref in self._reserving or strategy_ref in self._handling or self._closing:
@@ -287,40 +339,75 @@ class DelegateOrderPort:
             self._slots[strategy_ref] = _DelegateSlot(run_id)
 
     def current_run(self, strategy_ref: str) -> str | None:
+        self._owned()
+        if self._sync_cleanup_uncertain() or self._cleanup_in_progress:
+            return None
         slot = self._slots.get(strategy_ref)
         return None if slot is None else slot.run_id
 
     def invalidate_registrations(self) -> None:
         """Retire old Gateway registrations lazily; never resend a command."""
         self._owned()
+        if self._sync_cleanup_uncertain():
+            return
         for slot in self._slots.values():
             slot.invalid = True
             slot.invalid_generation += 1
 
     def _close_slot(self, slot: _DelegateSlot) -> bool:
+        if self._sync_cleanup_uncertain() or self._cleanup_in_progress:
+            return False
         handle = slot.handle
         if handle is not None:
+            connection_attempted = slot.connection_attempted
+            self._cleanup_in_progress = True
             try:
-                snapshot = handle.close()
-                if not runtime_cleanup_confirmed(snapshot):
+                try:
+                    snapshot = handle.close()
+                    if self._sync_cleanup_uncertain():
+                        return False
+                    confirmed = runtime_cleanup_confirmed(snapshot)
+                    if self._sync_cleanup_uncertain():
+                        return False
+                except BaseException as error:
+                    if self._sync_cleanup_uncertain():
+                        raise
                     slot.blocked = True
+                    self._cleanup_failed(handle, "HANDLE_CLOSE_EXCEPTION")
+                    if not isinstance(error, Exception):
+                        raise
+                    _LOG.warning("Risk delegate client close failed; cleanup uncertain")
                     return False
-            except BaseException as error:
+                if not confirmed:
+                    slot.blocked = True
+                    self._cleanup_failed(handle, "HANDLE_CLOSE_UNCONFIRMED")
+                    return False
+            finally:
+                self._cleanup_in_progress = False
+            if slot.handle is not handle:
                 slot.blocked = True
-                if not isinstance(error, Exception):
-                    raise
-                _LOG.warning("Risk delegate client close failed; cleanup uncertain")
                 return False
             slot.handle = None
+            if slot.connection_attempted != connection_attempted:
+                slot.connection_attempted = True
+                slot.blocked = True
+                return False
             slot.connection_attempted = False
             return True
         if slot.connection_attempted:
             slot.blocked = True
+            self._cleanup_in_progress = True
+            try:
+                self._cleanup_failed(slot, "SLOT_REGISTRATION_UNCONFIRMED")
+            finally:
+                self._cleanup_in_progress = False
             return False
         return not slot.blocked
 
     def _handle(self, strategy_ref: str, run_id: str | None, *, reserve_owner: bool = False) -> Any:
         self._owned()
+        if self._sync_cleanup_uncertain() or self._cleanup_in_progress:
+            return None
         if not _ref(run_id) or strategy_ref not in self._revisions:
             return None
         if (self._closing or strategy_ref in self._handling
@@ -342,7 +429,7 @@ class DelegateOrderPort:
         if slot.invalid:
             invalid_generation = slot.invalid_generation
             if not self._close_slot(slot):
-                if reserve_owner:
+                if reserve_owner and not self._sync_cleanup_uncertain():
                     slot.blocked = True
                 return None
             if slot.blocked or slot.invalid_generation != invalid_generation:
@@ -354,18 +441,22 @@ class DelegateOrderPort:
             try:
                 runtime = getattr(slot.handle, "runtime", None)
             except Exception:
-                if reserve_owner:
+                if reserve_owner and not self._sync_cleanup_uncertain():
                     slot.blocked = True
+                return None
+            if self._sync_cleanup_uncertain():
                 return None
             if runtime is not None:
                 try:
                     state = runtime.status().state
                 except Exception:
                     return None
+                if self._sync_cleanup_uncertain():
+                    return None
                 if state in ("failed", "closed", "close_failed", "stopping"):
                     invalid_generation = slot.invalid_generation
                     if not self._close_slot(slot):
-                        if reserve_owner:
+                        if reserve_owner and not self._sync_cleanup_uncertain():
                             slot.blocked = True
                         return None
                     if slot.blocked or slot.invalid_generation != invalid_generation:
@@ -373,15 +464,24 @@ class DelegateOrderPort:
                         return None
                     slot.failed_at = None
         if slot.handle is None:
-            if slot.failed_at is not None and self._monotonic() - slot.failed_at < self._retry:
-                return None
+            failed_at = slot.failed_at
+            if failed_at is not None:
+                now = self._monotonic()
+                if self._sync_cleanup_uncertain():
+                    return None
+                if now - failed_at < self._retry:
+                    return None
             try:
                 slot.connection_attempted = True
                 slot.handle = self._connect(self.route_for(strategy_ref, run_id))
+                if self._sync_cleanup_uncertain():
+                    return None
                 slot.failed_at = None
                 if slot.handle is None:
                     slot.blocked = True
             except BaseException as error:
+                if self._sync_cleanup_uncertain():
+                    raise
                 # A generic connect failure does not prove that an attempted
                 # registration was cleaned up, even on a read-only call.
                 slot.blocked = True
@@ -389,9 +489,11 @@ class DelegateOrderPort:
                 if not isinstance(error, Exception):
                     raise
                 try:
-                    slot.failed_at = self._monotonic()
+                    failed_at = self._monotonic()
                 except Exception:
-                    slot.failed_at = None
+                    failed_at = None
+                if not self._sync_cleanup_uncertain():
+                    slot.failed_at = failed_at
                 return None
         if slot.blocked or slot.invalid:
             if slot.invalid:
@@ -400,14 +502,27 @@ class DelegateOrderPort:
         if slot.handle is not None:
             try:
                 client = slot.handle.client
-                if (not callable(getattr(client, "reserve", None))
-                        or not callable(getattr(slot.handle, "close", None))
-                        or getattr(slot.handle, "host", None) is None):
-                    slot.blocked = True
+                if self._sync_cleanup_uncertain():
+                    return None
+                reserve = getattr(client, "reserve", None)
+                if self._sync_cleanup_uncertain():
+                    return None
+                close = getattr(slot.handle, "close", None)
+                if self._sync_cleanup_uncertain():
+                    return None
+                host = getattr(slot.handle, "host", None)
+                if self._sync_cleanup_uncertain():
+                    return None
+                if not callable(reserve) or not callable(close) or host is None:
+                    if not self._sync_cleanup_uncertain():
+                        slot.blocked = True
                     return None
             except Exception:
-                slot.blocked = True
+                if not self._sync_cleanup_uncertain():
+                    slot.blocked = True
                 return None
+        if self._sync_cleanup_uncertain():
+            return None
         return slot.handle
 
     @staticmethod
@@ -416,6 +531,29 @@ class DelegateOrderPort:
 
         return GatewayReply("TRANSPORT_NOT_STARTED", code="ROUTE_UNAVAILABLE")
 
+    def _binding(self, strategy_ref: str, run_id: str | None, handle: Any) -> Callable[[], bool]:
+        if self._sync_cleanup_uncertain():
+            return lambda: False
+        slot = self._slots.get(strategy_ref)
+        generation = None if slot is None else slot.invalid_generation
+
+        def same_slot() -> bool:
+            return (not self._sync_cleanup_uncertain() and not self._cleanup_in_progress
+                    and slot is not None and self._slots.get(strategy_ref) is slot
+                    and slot.run_id == run_id and not slot.blocked and not slot.invalid
+                    and slot.invalid_generation == generation and slot.handle is handle)
+
+        return same_slot
+
+    @staticmethod
+    def _bound_reply(same_slot: Callable[[], bool], reply: Any) -> Any:
+        if same_slot():
+            return reply
+        from bt_api_risk.pretrade import GatewayReply
+
+        return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+
+    @_guard_delegate_cleanup
     def reserve(
         self,
         *,
@@ -433,7 +571,8 @@ class DelegateOrderPort:
 
         self._owned()
         unavailable = GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
-        if (not _ref(strategy_ref) or not _ref(run_id) or strategy_ref not in self._revisions
+        if (self._sync_cleanup_uncertain() or self._cleanup_in_progress
+                or not _ref(strategy_ref) or not _ref(run_id) or strategy_ref not in self._revisions
                 or strategy_ref in self._reserving):
             return unavailable
         slot = self._slots.get(strategy_ref)
@@ -442,6 +581,8 @@ class DelegateOrderPort:
         self._reserving.add(strategy_ref)
         try:
             handle = self._handle(strategy_ref, run_id, reserve_owner=True)
+            if self._sync_cleanup_uncertain():
+                return unavailable
             slot = self._slots.get(strategy_ref)
             if (handle is None or slot is None or slot.run_id != run_id or slot.blocked
                     or slot.invalid or slot.handle is not handle):
@@ -452,29 +593,43 @@ class DelegateOrderPort:
                 return unavailable
             try:
                 client = handle.client
-                if (not callable(getattr(client, "reserve", None))
-                        or not callable(getattr(handle, "close", None))
-                        or getattr(handle, "host", None) is None):
+                if self._sync_cleanup_uncertain():
+                    return unavailable
+                reserve = getattr(client, "reserve", None)
+                if self._sync_cleanup_uncertain():
+                    return unavailable
+                close = getattr(handle, "close", None)
+                if self._sync_cleanup_uncertain():
+                    return unavailable
+                host = getattr(handle, "host", None)
+                if self._sync_cleanup_uncertain():
+                    return unavailable
+                if not callable(reserve) or not callable(close) or host is None:
                     slot.blocked = True
                     return unavailable
             except Exception:
-                slot.blocked = True
+                if not self._sync_cleanup_uncertain():
+                    slot.blocked = True
                 return unavailable
             invalid_generation = slot.invalid_generation
 
             def same_slot() -> bool:
-                return (self._slots.get(strategy_ref) is slot and slot.run_id == run_id
+                return (not self._sync_cleanup_uncertain() and self._slots.get(strategy_ref) is slot and slot.run_id == run_id
                         and not slot.blocked and not slot.invalid
                         and slot.invalid_generation == invalid_generation and slot.handle is handle)
 
             payload = json.loads(canonical_payload)
             request = decode_gateway_order_request(payload, self._account)
+            if self._sync_cleanup_uncertain():
+                return unavailable
             instrument = self._instrument_for(request.exchange_id, request.symbol)
+            if self._sync_cleanup_uncertain():
+                return unavailable
             if type(instrument) is not MarketInstrumentKey:
                 raise ValueError("RISK_INSTRUMENT_UNMAPPED")
             # Reentrant callbacks may invalidate a slot while parsing/mapping.
             if not same_slot():
-                if slot.invalid and slot.handle is not None:
+                if not self._sync_cleanup_uncertain() and slot.invalid and slot.handle is not None:
                     slot.blocked = True
                 return unavailable
             # parent_ref/child_id stay Risk bookkeeping: a ``risk`` delegate command has none.
@@ -491,24 +646,27 @@ class DelegateOrderPort:
                 instrument,
                 self._revisions[strategy_ref],
             )
-            result = client.reserve(
+            if not same_slot():
+                return unavailable
+            result = reserve(
                 command, request, ttl_seconds=ttl_seconds, timeout_seconds=self._timeout
             )
             # The call may already have reached Gateway.  A callback that
             # invalidated or retired this slot makes its reply inconclusive.
             if not same_slot():
-                if slot.invalid and slot.handle is not None:
+                if not self._sync_cleanup_uncertain() and slot.invalid and slot.handle is not None:
                     slot.blocked = True
                 return unavailable
             mapped = map_delegate_result(result)
             if not same_slot():
-                if slot.invalid and slot.handle is not None:
+                if not self._sync_cleanup_uncertain() and slot.invalid and slot.handle is not None:
                     slot.blocked = True
                 return unavailable
             return mapped
         finally:
             self._reserving.discard(strategy_ref)
 
+    @_guard_delegate_cleanup
     def dispatch(
         self, *, strategy_ref: str, run_id: str | None, request_key: str, market_ref: dict | None
     ) -> Any:
@@ -517,34 +675,86 @@ class DelegateOrderPort:
         handle = self._handle(strategy_ref, run_id)
         if handle is None:
             return self._no_route()
-        result = handle.client.dispatch(
+        same_slot = self._binding(strategy_ref, run_id, handle)
+        if not same_slot():
+            return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+        client = handle.client
+        if not same_slot():
+            return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+        dispatch = client.dispatch
+        if not same_slot():
+            return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+        result = dispatch(
             request_key, market_ref=market_ref, timeout_seconds=self._timeout
         )
-        if getattr(result, "outcome", None) == "QUEUED":
+        if not same_slot():
+            return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+        outcome = getattr(result, "outcome", None)
+        if not same_slot():
+            return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+        if outcome == "QUEUED":
             # The Gateway accepted the dispatch into its owner queue behind its own
             # dispatch marker (freeze 5, dispatch-3: QUEUED -> DISPATCHED).
-            observation = handle.host.load_delegate_observation(request_key)
+            if not same_slot():
+                return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+            host = handle.host
+            if not same_slot():
+                return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+            load = host.load_delegate_observation
+            if not same_slot():
+                return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+            observation = load(request_key)
+            if not same_slot():
+                return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+            reservation_id = None if observation is None else observation.reservation_id
+            if not same_slot():
+                return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+            code = _code(getattr(result, "code", None))
+            if not same_slot():
+                return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
             return GatewayReply(
                 "QUEUED",
                 state="DISPATCHING",
-                reservation_id=None if observation is None else observation.reservation_id,
-                code=_code(getattr(result, "code", None)),
+                reservation_id=reservation_id,
+                code=code,
             )
-        return map_delegate_result(result)
+        return self._bound_reply(same_slot, map_delegate_result(result))
 
-    def _actor_status(self, handle: Any, request_key: str) -> tuple[Any, Any]:
-        result = handle.client.actor_status(request_key, timeout_seconds=self._timeout)
+    def _actor_status(self, handle: Any, request_key: str, same_slot: Callable[[], bool]) -> tuple[Any, Any]:
+        from bt_api_risk.pretrade import GatewayReply
+
+        client = handle.client
+        if not same_slot():
+            return None, GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+        actor_status = client.actor_status
+        if not same_slot():
+            return None, GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+        result = actor_status(request_key, timeout_seconds=self._timeout)
+        if not same_slot():
+            return result, GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
         observation = getattr(result, "observation", None)
-        if getattr(result, "outcome", None) == "OBSERVED" and observation is not None:
-            return result, _observation_reply(observation.command)
-        return result, map_delegate_result(result)
+        if not same_slot():
+            return result, GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+        outcome = getattr(result, "outcome", None)
+        if not same_slot():
+            return result, GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+        if outcome == "OBSERVED" and observation is not None:
+            return result, self._bound_reply(same_slot, _observation_reply(observation.command))
+        return result, self._bound_reply(same_slot, map_delegate_result(result))
 
+    @_guard_delegate_cleanup
     def status(self, *, strategy_ref: str, run_id: str | None, request_key: str) -> Any:
+        from bt_api_risk.pretrade import GatewayReply
+
         handle = self._handle(strategy_ref, run_id)
         if handle is None:
             return self._no_route()
-        return self._actor_status(handle, request_key)[1]
+        same_slot = self._binding(strategy_ref, run_id, handle)
+        if not same_slot():
+            return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+        return self._actor_status(handle, request_key, same_slot)[1]
 
+    @_guard_delegate_cleanup
     def release(
         self, *, strategy_ref: str, run_id: str | None, request_key: str, operation_id: str
     ) -> Any:
@@ -553,20 +763,52 @@ class DelegateOrderPort:
         handle = self._handle(strategy_ref, run_id)
         if handle is None:
             return self._no_route()
-        result, reply = self._actor_status(handle, request_key)
+        same_slot = self._binding(strategy_ref, run_id, handle)
+        if not same_slot():
+            return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+        result, reply = self._actor_status(handle, request_key, same_slot)
         if reply.outcome != "OBSERVED" or reply.state != "RESERVED":
             return reply
-        released = handle.client.release_actor(
-            result.observation, operation_id=operation_id, timeout_seconds=self._timeout
+        if not same_slot():
+            return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+        client = handle.client
+        if not same_slot():
+            return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+        observation = result.observation
+        if not same_slot():
+            return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+        release_actor = client.release_actor
+        if not same_slot():
+            return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+        released = release_actor(
+            observation, operation_id=operation_id, timeout_seconds=self._timeout
         )
+        if not same_slot():
+            return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
         outcome = getattr(released, "outcome", None)
+        if not same_slot():
+            return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
         if outcome == "OBSERVED" and getattr(released, "state", None) in ("RELEASED", "EXPIRED"):
             # The client stored the verified terminal observation; its generations prove it.
-            return _observation_reply(handle.host.load_delegate_observation(request_key))
+            if not same_slot():
+                return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+            host = handle.host
+            if not same_slot():
+                return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+            load = host.load_delegate_observation
+            if not same_slot():
+                return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+            observation = load(request_key)
+            if not same_slot():
+                return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+            return self._bound_reply(same_slot, _observation_reply(observation))
         if outcome in ("REQUEST_DENIED", "TRANSPORT_NOT_STARTED"):
-            return GatewayReply(outcome, code=_code(getattr(released, "code", None)))
-        return GatewayReply("UNKNOWN", code=_code(getattr(released, "code", None)))
+            reply = GatewayReply(outcome, code=_code(getattr(released, "code", None)))
+        else:
+            reply = GatewayReply("UNKNOWN", code=_code(getattr(released, "code", None)))
+        return self._bound_reply(same_slot, reply)
 
+    @_guard_delegate_cleanup
     def cancel(
         self, *, strategy_ref: str, run_id: str | None, request_key: str, operation_id: str
     ) -> Any:
@@ -575,22 +817,45 @@ class DelegateOrderPort:
         handle = self._handle(strategy_ref, run_id)
         if handle is None:
             return self._no_route()
-        result, reply = self._actor_status(handle, request_key)
+        same_slot = self._binding(strategy_ref, run_id, handle)
+        if not same_slot():
+            return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+        result, reply = self._actor_status(handle, request_key, same_slot)
         if reply.outcome != "OBSERVED" or reply.state not in _ACTOR_OPEN_STATES:
             return reply
-        cancelled = handle.client.cancel_actor(
-            result.observation, operation_id=operation_id, timeout_seconds=self._timeout
+        if not same_slot():
+            return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+        client = handle.client
+        if not same_slot():
+            return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+        observation = result.observation
+        if not same_slot():
+            return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+        cancel_actor = client.cancel_actor
+        if not same_slot():
+            return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
+        cancelled = cancel_actor(
+            observation, operation_id=operation_id, timeout_seconds=self._timeout
         )
+        if not same_slot():
+            return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
         outcome = getattr(cancelled, "outcome", None)
+        if not same_slot():
+            return GatewayReply("UNKNOWN", code="ROUTE_UNAVAILABLE")
         if outcome in ("QUEUED", "OBSERVED", "REQUEST_DENIED", "TRANSPORT_NOT_STARTED"):
-            return GatewayReply(outcome, code=_code(getattr(cancelled, "code", None)))
-        return GatewayReply("UNKNOWN", code=_code(getattr(cancelled, "code", None)))
+            reply = GatewayReply(outcome, code=_code(getattr(cancelled, "code", None)))
+        else:
+            reply = GatewayReply("UNKNOWN", code=_code(getattr(cancelled, "code", None)))
+        return self._bound_reply(same_slot, reply)
 
     def ready(self) -> bool:
-        return True  # per-run clients are created on demand; readiness is per call
+        self._owned()
+        return not (self._sync_cleanup_uncertain() or self._cleanup_in_progress)
 
     def close(self) -> bool:
         self._owned()
+        if self._sync_cleanup_uncertain() or self._cleanup_in_progress:
+            return False
         if self._reserving or self._handling or self._closing:
             # Do not drop a slot whose connect callback has not returned its
             # handle yet; retain its cleanup obligation and prevent sending.
@@ -604,14 +869,20 @@ class DelegateOrderPort:
         self._closing = True
         try:
             for strategy, slot in list(self._slots.items()):
-                if slot.blocked and slot.handle is None:
+                if self._slots.get(strategy) is not slot:
+                    return False
+                if slot.blocked and slot.handle is None and not slot.connection_attempted:
+                    del self._slots[strategy]
                     continue
-                generation = slot.invalid_generation
                 if self._close_slot(slot):
-                    if slot.invalid_generation == generation:
+                    if (not self._sync_cleanup_uncertain()
+                            and self._slots.get(strategy) is slot
+                            and slot.handle is None and not slot.connection_attempted):
                         del self._slots[strategy]
                     else:
-                        slot.blocked = True
+                        return False
+                else:
+                    return False
         finally:
             self._closing = False
         return not self._slots
@@ -623,11 +894,41 @@ class DelegateOrderPort:
 _CANCEL_TARGET_STATES = frozenset({"QUEUED", "SENT", "NOT_SENT", "UNKNOWN", "TERMINAL"})
 _CANCEL_ATTEMPT_STATES = frozenset({"REQUESTED", "DISPATCHING", "SENT", "NOT_SENT", "UNKNOWN"})
 _CANCEL_INSTRUMENT_SCOPE = re.compile(r"[A-Za-z0-9]{1,16}:[A-Za-z0-9][A-Za-z0-9._-]{0,63}\Z")
+_CONTROL_RELEASER = re.compile(r"(?:operator:[0-9a-f]{64}|system:[a-z][a-z0-9-]{0,62}[a-z0-9])\Z")
+_CONTROL_CAUSE_FIELDS = frozenset({"account", "cause_id", "scope_kind", "scope_value", "mode", "origin",
+                                   "generation", "version", "active", "resume_id"})
 
 
 def _cancel_status_text(value: object) -> bool:
     # Gateway DirectControl's persisted identifier contract allows 512 characters.
     return type(value) is str and bool(value) and value == value.strip() and len(value) <= 512
+
+
+def _valid_control_cause(cause: object, cause_id: str, account: str) -> bool:
+    if (type(cause) is not dict or set(cause) not in (_CONTROL_CAUSE_FIELDS, _CONTROL_CAUSE_FIELDS | {"releaser"})
+            or type(account) is not str or cause["account"] != account
+            or not _cancel_status_text(cause["account"])
+            or type(cause_id) is not str or cause["cause_id"] != cause_id
+            or not all(_cancel_status_text(cause[key]) for key in ("cause_id", "origin", "generation"))
+            or type(cause["mode"]) is not str or cause["mode"] not in ("STOP_NEW", "FREEZE", "DRAIN")):
+        return False
+    kind, value = cause["scope_kind"], cause["scope_value"]
+    if (type(kind) is not str or type(value) is not str
+            or (kind == "account" and value != "")
+            or (kind == "strategy" and not _cancel_status_text(value))
+            or (kind == "instrument" and _CANCEL_INSTRUMENT_SCOPE.fullmatch(value) is None)
+            or kind not in ("account", "strategy", "instrument")):
+        return False
+    active, version, resume = cause["active"], cause["version"], cause["resume_id"]
+    if (type(active) not in (bool, int) or active not in (0, 1)
+            or type(version) is not int or version != (1 if active else 2)
+            or (active and resume is not None) or (not active and not _cancel_status_text(resume))):
+        return False
+    if "releaser" in cause:
+        releaser = cause["releaser"]
+        if active or type(releaser) is not str or _CONTROL_RELEASER.fullmatch(releaser) is None:
+            return False
+    return True
 
 
 def _valid_cancel_status(raw: object, operation_id: str, after: str, limit: int) -> bool:
@@ -684,12 +985,27 @@ def _valid_cancel_status(raw: object, operation_id: str, after: str, limit: int)
     return True
 
 
+def _valid_cancel_reply(raw: object, operation_id: str, scope_kind: str, scope_value: str) -> bool:
+    if (type(raw) is not dict or set(raw) != {
+            "status", "operation_id", "scope_kind", "scope_value", "issued", "counts"}
+            or raw["status"] != "OBSERVED"
+            or type(raw["operation_id"]) is not str or raw["operation_id"] != operation_id
+            or type(raw["scope_kind"]) is not str or raw["scope_kind"] != scope_kind
+            or type(raw["scope_value"]) is not str or raw["scope_value"] != scope_value):
+        return False
+    issued, counts = raw["issued"], raw["counts"]
+    return (type(issued) is int and 0 <= issued <= _CANCEL_SCOPE_LIMIT
+            and type(counts) is dict and set(counts) == _CANCEL_TARGET_STATES
+            and all(type(count) is int and 0 <= count <= 2**63 - 1 for count in counts.values())
+            and issued <= sum(counts.values()))
+
+
 class GatewayControlAdapter:
     """``GatewayControlPort`` over the Risk control principal's threaded runtime.
 
-    Scope comes from the account-wide registration plus an optional contract
-    (``"<venue>:<native_symbol>"``). A strategy-scope control needs a
-    strategy-scoped registration this adapter does not hold; it is refused
+    Only account scope is supported. A contract alias cannot establish a
+    unique complete contract across the Gateway account, and this adapter
+    does not hold a strategy-scoped registration. Those scopes are refused
     locally with ``RISK_CONTROL_SCOPE_UNSUPPORTED`` and never sent.
     """
 
@@ -756,12 +1072,9 @@ class GatewayControlAdapter:
             return None, ControlReply("UNKNOWN")
         return raw, None
 
-    @staticmethod
-    def _scope_arguments(scope_kind: str, scope_value: str) -> dict | None:
+    def _scope_arguments(self, scope_kind: str, scope_value: str) -> dict | None:
         if scope_kind == "account" and scope_value == "":
             return {}
-        if scope_kind == "instrument" and _ref(scope_value) and scope_value.count(":") == 1:
-            return {"instrument": scope_value}
         return None
 
     def apply(self, *, cause_id: str, mode: str, scope_kind: str, scope_value: str) -> Any:
@@ -776,16 +1089,21 @@ class GatewayControlAdapter:
         if error is not None:
             return error
         try:
-            if raw.get("status") != "OBSERVED" or raw.get("cause_id") != cause_id:
+            if (set(raw) != {"status", "cause_id", "version", "active"}
+                    or raw.get("status") != "OBSERVED" or type(raw.get("cause_id")) is not str
+                    or type(cause_id) is not str or raw["cause_id"] != cause_id):
                 raise ValueError
             active = raw.get("active")
-            active = bool(active) if active in (0, 1, True, False) else None
+            if type(active) is not bool:
+                raise ValueError
             version = raw.get("version")
+            if type(version) is not int or version != (1 if active else 2):
+                raise ValueError
             return ControlReply(
                 "OBSERVED",
                 cause_id=cause_id,
                 active=active,
-                version=version if type(version) is int and version >= 0 else None,
+                version=version,
             )
         except Exception:
             return ControlReply("UNKNOWN", code="INVALID_OR_UNAVAILABLE_REPLY")
@@ -797,20 +1115,24 @@ class GatewayControlAdapter:
         if error is not None:
             return error
         try:
-            if raw.get("status") == "NOT_FOUND" and raw.get("cause_id") == cause_id:
+            if (raw.get("status") == "NOT_FOUND" and set(raw) == {"status", "cause_id"}
+                    and type(cause_id) is str and type(raw["cause_id"]) is str
+                    and raw["cause_id"] == cause_id):
                 # Not a refusal and not proof of anything: the cause is simply absent.
                 return ControlReply("OBSERVED", cause_id=cause_id, active=False)
             cause = raw.get("cause")
-            if raw.get("status") != "OBSERVED" or type(cause) is not dict:
+            if (raw.get("status") != "OBSERVED" or set(raw) != {"status", "cause"}
+                    or not _valid_control_cause(cause, cause_id, self._account)):
                 raise ValueError
-            if cause.get("cause_id") != cause_id or cause.get("active") not in (0, 1, True, False):
-                raise ValueError
-            version = cause.get("version")
             return ControlReply(
                 "OBSERVED",
                 cause_id=cause_id,
                 active=bool(cause["active"]),
-                version=version if type(version) is int and version >= 0 else None,
+                version=cause["version"],
+                scope_kind=cause["scope_kind"],
+                scope_value=cause["scope_value"],
+                mode=cause["mode"],
+                origin=cause["origin"],
             )
         except Exception:
             return ControlReply("UNKNOWN", code="INVALID_OR_UNAVAILABLE_REPLY")
@@ -821,15 +1143,19 @@ class GatewayControlAdapter:
         extra = self._scope_arguments(scope_kind, scope_value)
         if extra is None:
             return ControlReply("REQUEST_DENIED", code="RISK_CONTROL_SCOPE_UNSUPPORTED")
+        self.last_cancel_status.pop(operation_id, None)
         raw, error = self._call(
             "direct.control.cancel_scope",
             {"operation_id": operation_id, "limit": _CANCEL_SCOPE_LIMIT, **extra},
         )
         if error is not None:
             return error
-        if raw.get("status") != "OBSERVED" or raw.get("operation_id") != operation_id:
+        if not _valid_cancel_reply(raw, operation_id, scope_kind, scope_value):
             return ControlReply("UNKNOWN", code="INVALID_OR_UNAVAILABLE_REPLY")
-        self.last_cancel_status[operation_id] = raw
+        self.last_cancel_status[operation_id] = _detach_wire(raw)
+        # SENT and TERMINAL are observations, not confirmation of venue cancellation.
+        if any(raw["counts"][state] for state in ("QUEUED", "UNKNOWN", "NOT_SENT")):
+            return ControlReply("UNKNOWN", code="CANCEL_SCOPE_INCOMPLETE")
         return ControlReply("OBSERVED")
 
     def cancel_scope_status(self, operation_id: str, *, after: str = "", limit: int = 256) -> Mapping | None:
@@ -907,18 +1233,30 @@ class RiskFactsCache:
         self._financials: dict[str, Any] = {}
         self._financial_received_ns: int | None = None
         self._prices: dict[str, Any] = {}
+        self._price_receipts: dict[str, tuple[object, int, int]] = {}
+        self._price_receipts_lock = threading.Lock()
         self._market_refs: dict[str, dict] = {}
         self._account: Any = None
         self._account_received_ns: int | None = None
         self._market_days: dict[str, str] = {}
         self._event_day: str | None = None
 
-    def note_tick(self, instrument_id: str, price: Any, market_ref: dict | None, trading_day: str | None) -> None:
+    def note_tick(self, instrument_id: str, price: Any, market_ref: dict | None, trading_day: str | None, *, _local_receive: tuple[int, int] | None = None) -> None:
         if type(instrument_id) is not str:
             return
         # A failed reference snapshot must not retain the preceding tick's ref.
         self._market_refs.pop(instrument_id, None)
-        self._prices[instrument_id] = price
+        # Each assignment gets a new identity even if the exact same fact
+        # object is re-used. The primary cache never waits for telemetry.
+        entry = (price, object())
+        self._prices[instrument_id] = entry
+        if self._price_receipts_lock.acquire(False):
+            try:
+                self._price_receipts.pop(instrument_id, None)
+                if _local_receive is not None:
+                    self._price_receipts[instrument_id] = (entry, *_local_receive)
+            finally:
+                self._price_receipts_lock.release()
         snapshot = _market_ref_snapshot(market_ref)
         if snapshot is not None:
             self._market_refs[instrument_id] = snapshot
@@ -957,17 +1295,59 @@ class RiskFactsCache:
 
     def forget_market(self) -> None:
         self._prices.clear()
+        # Replacing the telemetry map is nonblocking; an old row cannot match
+        # a later primary entry's distinct identity, even during concurrent writes.
+        self._price_receipts = {}
         self._market_refs.clear()
         self._market_days.clear()
 
     # FactsPort -----------------------------------------------------------------
+
+    def _local_receive_for_entry(self, price: Any, entry: object) -> tuple[int, int] | None:
+        """Match only the exact entry read alongside the fact."""
+        if not self._price_receipts_lock.acquire(False):
+            return None
+        try:
+            key = getattr(price, "instrument", None)
+            if type(key) is not MarketInstrumentKey:
+                return None
+            row = self._price_receipts.get(key.instrument_id)
+            current = self._prices.get(key.instrument_id)
+            if (row is None or row[0] is not entry or current is not entry
+                    or entry is None or entry[0] is not price
+                    or row[2] != os.getpid()):
+                return None
+            return row[1], row[2]
+        finally:
+            self._price_receipts_lock.release()
+
+    def reference_price_with_local_receive(self, instrument: Any) -> tuple[Any, tuple[int, int] | None]:
+        """Read one entry and its matching local observation, without waiting for telemetry."""
+        from bt_api_risk.pretrade import PriceFact
+
+        # An overridden facts reader retains its business semantics; without
+        # the native entry snapshot it cannot contribute this telemetry.
+        if getattr(self.reference_price, "__func__", None) is not RiskFactsCache.reference_price:
+            return self.reference_price(instrument), None
+        if type(instrument) is not MarketInstrumentKey:
+            return None, None
+        entry = self._prices.get(instrument.instrument_id)
+        price = None if entry is None else entry[0]
+        if type(price) is not PriceFact or price.instrument != instrument:
+            return None, None
+        try:
+            local = self._local_receive_for_entry(price, entry)
+        except Exception:
+            local = None
+        return price, local
 
     def reference_price(self, instrument: Any) -> Any:
         from bt_api_risk.pretrade import PriceFact
 
         if type(instrument) is not MarketInstrumentKey:
             return None
-        price = self._prices.get(instrument.instrument_id)
+        entry = self._prices.get(instrument.instrument_id)
+        price = None if entry is None else entry[0]
         if type(price) is not PriceFact or price.instrument != instrument:
             return None
         return price
@@ -1146,6 +1526,34 @@ class RiskMarketFeed:
             return False
         return True
 
+    @staticmethod
+    def _local_receive(client: Any, received: Any, key: MarketSubscriptionKey) -> tuple[int, int] | None:
+        """Take only a locally issued PUB receipt; this asserts no current liveness."""
+        from bt_api_py.gateway_strategy_market import GatewayMarketReceivedEvent, GatewayMarketSubscriptionClient
+        from bt_api_py.service_market import MarketReceiveReceipt
+        if type(client) is not GatewayMarketSubscriptionClient or type(received) is not GatewayMarketReceivedEvent:
+            return None
+        receipt = received.receipt
+        if type(receipt) is not MarketReceiveReceipt or not client._issuance_lock.acquire(False):
+            return None
+        try:
+            header = received.event.header
+            if (client._issued_received_event is not received or receipt.source != "pub"
+                    or receipt.pid != os.getpid() or client._owner_pid != os.getpid()
+                    or type(receipt.received_monotonic_ns) is not int
+                    or receipt.received_monotonic_ns <= 0
+                    or receipt.received_monotonic_ns > time.monotonic_ns()
+                    or receipt.stream_id != header.stream_id or receipt.stream_id != key.stream_id
+                    or receipt.stream_epoch != header.stream_epoch or receipt.sequence != header.sequence
+                    or receipt.message_id != header.message_id
+                    or received.event.payload.get("key") != key.to_dict()):
+                return None
+            return receipt.received_monotonic_ns, receipt.pid
+        except Exception:
+            return None
+        finally:
+            client._issuance_lock.release()
+
     def poll(self) -> int:
         if not self._poll_lock.acquire(blocking=False):
             raise RuntimeError("RISK_MARKET_POLL_BUSY")
@@ -1193,7 +1601,14 @@ class RiskMarketFeed:
             if not self._attested(client, received):
                 self.attestation_failures += 1
                 ref = None
-            self._facts.note_tick(instrument_id, fact, ref, day)
+            try:
+                local_receive = self._local_receive(client, received, key)
+            except Exception:
+                local_receive = None
+            if local_receive is None:
+                self._facts.note_tick(instrument_id, fact, ref, day)
+            else:
+                self._facts.note_tick(instrument_id, fact, ref, day, _local_receive=local_receive)
         return count
 
 
@@ -1307,23 +1722,23 @@ def account_snapshot_from_observation(
 class RiskAccountSnapshotSource:
     """Refresh the operator account snapshot (``account.snapshot.typed``) into the cache."""
 
-    def __init__(self, client: Any, facts: RiskFactsCache, *, instrument_ids: Mapping[tuple[str, str], str], timeout_seconds: float) -> None:
+    def __init__(self, client: Any, facts: RiskFactsCache, *, instrument_ids: Mapping[MarketInstrumentKey, str], timeout_seconds: float) -> None:
         self._client, self._facts = client, facts
-        # The host passes legacy aliases, which alone cannot identify a full
-        # contract. Recover the keys only from this cache's configured bindings.
+        # Check the host's complete identities against this cache's bindings.
         full_ids: dict[MarketInstrumentKey, str] = {}
-        aliases: dict[tuple[str, str], str] = {}
-        for instrument_id, binding in facts._instruments.items():
-            key = binding.key
-            if (type(key) is not MarketInstrumentKey or not _ref(instrument_id)
-                    or binding.instrument_id != instrument_id or key.instrument_id != instrument_id
-                    or key in full_ids or (key.venue, key.native_symbol) in aliases):
-                raise ValueError("RISK_ACCOUNT_POSITION_CONFIG_INVALID")
-            full_ids[key] = instrument_id
-            aliases[(key.venue, key.native_symbol)] = instrument_id
-        if not isinstance(instrument_ids, Mapping) or dict(instrument_ids) != aliases:
-            raise ValueError("RISK_ACCOUNT_POSITION_CONFIG_INVALID")
-        self._instrument_ids = full_ids
+        try:
+            for instrument_id, binding in facts._instruments.items():
+                key = binding.key
+                if (type(key) is not MarketInstrumentKey or not _ref(instrument_id)
+                        or binding.instrument_id != instrument_id or key.instrument_id != instrument_id
+                        or key in full_ids):
+                    raise ValueError
+                full_ids[key] = instrument_id
+            if not isinstance(instrument_ids, Mapping) or dict(instrument_ids) != full_ids:
+                raise ValueError
+        except (AttributeError, TypeError, ValueError):
+            raise ValueError("RISK_ACCOUNT_POSITION_CONFIG_INVALID") from None
+        self._instrument_ids = dict(full_ids)
         self._timeout = float(timeout_seconds)
         self.failures = 0
 

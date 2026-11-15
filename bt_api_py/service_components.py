@@ -638,7 +638,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             module_name="bt_api_py.gateway_direct_service",
             operations_attribute=("TRADING_OPERATIONS",),
             resource_keys=frozenset({"binding"}),
-            optional_resource_keys=frozenset({"owner_guard_binding", "lease_drain", "cancel_only", "instrument_block", "account_comparison", "account_strategy_reads", "account_observer", "account_facts", "delegation_service", "delegate_actor_service", "delegate_actor_stream", "parent_service", "claim_coordinator", "claim_sealer", "claim_wired"}),
+            optional_resource_keys=frozenset({"owner_guard_binding", "lease_drain", "cancel_only", "instrument_block", "account_comparison", "account_strategy_reads", "account_observer", "account_facts", "account_cancel_attempts", "delegation_service", "delegate_actor_service", "delegate_actor_stream", "parent_service", "claim_coordinator", "claim_sealer", "claim_wired"}),
             public_ports=MappingProxyType(
                 {
                     "service.direct_write": frozenset(
@@ -667,6 +667,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                             "account.events.read_after", "account.events.progress", "account.events.ack",
                             "account.facts.read_after", "account.facts.progress", "account.facts.ack", "account.facts.status",
                             "account.facts.snapshot_info", "account.facts.snapshot_read", "account.facts.snapshot_confirm",
+                            "account.cancel_attempts.read_after", "account.cancel_attempts.progress", "account.cancel_attempts.ack",
                         }
                     ),
                     "service.market_source": frozenset(
@@ -1447,6 +1448,8 @@ def validate_components(specs: Sequence[ComponentSpec]) -> tuple[PreparedCompone
         }:
             operations = operations - {"account.snapshot.typed"}
         if spec.component == "gateway" and spec.options.get("role") == "trading_owner":
+            if normalized.get('cancel_attempt_stream_enabled') is not True:
+                operations = operations - module.ACCOUNT_CANCEL_ATTEMPT_OPERATIONS
             if normalized.get("dispatch_enabled") is not True:
                 operations = operations - {"direct.dispatch"}
             if normalized.get("cancel_enabled") is not True:
@@ -2438,6 +2441,7 @@ def build_component(
         trading_account_strategy_reads: object | None = None
         trading_account_observer: object | None = None
         trading_account_facts: object | None = None
+        trading_account_cancel_attempts: object | None = None
         trading_delegation_adapter: object | None = None
         trading_delegate_actor_adapter: object | None = None
         trading_delegate_actor_stream: object | None = None
@@ -2677,6 +2681,18 @@ def build_component(
                                     or trading_account_facts.account_scope != adapter.account_scope
                                     or not trading_account_facts.principals <= frozenset(trading_read_adapter._principals)):
                                 raise ServiceComponentError('INVALID_ACCOUNT_FACTS_BINDING')
+                        if 'account_cancel_attempts' in values:
+                            from bt_api_py.gateway_account_cancel_attempts import GatewayAccountCancelAttempts
+                            trading_account_cancel_attempts = values['account_cancel_attempts']
+                            if (type(trading_account_cancel_attempts) is not GatewayAccountCancelAttempts
+                                    or trading_account_cancel_attempts.owner is not adapter._owner
+                                    or trading_account_cancel_attempts.journal is not adapter._journal
+                                    or trading_account_cancel_attempts.account_scope != adapter.account_scope
+                                    or not trading_account_cancel_attempts.principals <= frozenset(trading_read_adapter._principals)):
+                                raise ServiceComponentError('INVALID_ACCOUNT_CANCEL_ATTEMPTS_BINDING')
+                        if (prepared.options.get('cancel_attempt_stream_enabled') is True
+                                and trading_account_cancel_attempts is None):
+                            raise ServiceComponentError('ACCOUNT_CANCEL_ATTEMPTS_UNAVAILABLE')
                 else:
                     constructor = getattr(module, "GatewayReadService", None)
                     constructor_args = {
@@ -3489,6 +3505,9 @@ def build_component(
             if (spec.component == "gateway" and spec.options.get("role") == "trading_owner"
                     and port == "service.account_read" and trading_account_facts is None):
                 operations = operations - prepared.module.ACCOUNT_FACTS_OPERATIONS
+            if (spec.component == "gateway" and spec.options.get("role") == "trading_owner"
+                    and port == "service.account_read" and trading_account_cancel_attempts is None):
+                operations = operations - prepared.module.ACCOUNT_CANCEL_ATTEMPT_OPERATIONS
             if (
                 spec.component == "gateway"
                 and spec.options.get("role") == "trading_owner"
@@ -3797,6 +3816,9 @@ def build_component(
                     if _operation in prepared.module.ACCOUNT_FACTS_OPERATIONS:
                         assert trading_account_facts is not None
                         return trading_account_facts.handle(_operation, context, arguments)
+                    if _operation in prepared.module.ACCOUNT_CANCEL_ATTEMPT_OPERATIONS:
+                        assert trading_account_cancel_attempts is not None
+                        return trading_account_cancel_attempts.handle(_operation, context, arguments)
                     if _operation in prepared.module.INSTRUMENT_OPERATIONS:
                         assert trading_instrument_adapter is not None
                         return trading_instrument_adapter.handle(_operation, context=context, arguments=arguments)

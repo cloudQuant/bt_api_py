@@ -209,25 +209,33 @@ def test_unconfirmed_delegate_unregister_prevents_replacement():
     assert first.outcome == "OBSERVED"
     old = handles[0]
     old.runtime = SimpleNamespace(status=lambda: SimpleNamespace(state="failed"))
-    old.close = lambda: SimpleNamespace(state="failed", thread_alive=False, error_code="MAINTENANCE_FAILED",
-                                        unregister_uncertainties=1, owner_cleanup_uncertainties=0)
+    closes = []
+    def close_unconfirmed():
+        closes.append(1)
+        return SimpleNamespace(state="failed", thread_alive=False, error_code="MAINTENANCE_FAILED",
+                               unregister_uncertainties=1, owner_cleanup_uncertainties=0)
+    old.close = close_unconfirmed
     result = value.status(strategy_ref="strategy-a", run_id="run-1", request_key="k1")
-    assert result.outcome == "TRANSPORT_NOT_STARTED" and len(handles) == 1
+    assert result.outcome == "UNKNOWN" and len(handles) == 1
     assert value._slots["strategy-a"].handle is old
     assert [call[0] for call in old.client.calls] == ["reserve"]
+    assert not value.close() and closes == [1]
 
 
 def test_failed_delegate_cleanup_blocks_both_old_and_new_run():
     value, handles = port()
     value.status(strategy_ref="strategy-a", run_id="run-1", request_key="k1")
     old = handles[0]
+    closes = []
     def fail():
+        closes.append(1)
         raise RuntimeError("cleanup unconfirmed")
     old.close = fail
     value.note_run("strategy-a", "run-2")
-    assert value.status(strategy_ref="strategy-a", run_id="run-1", request_key="k1").outcome == "TRANSPORT_NOT_STARTED"
-    assert value.status(strategy_ref="strategy-a", run_id="run-2", request_key="k1").outcome == "TRANSPORT_NOT_STARTED"
+    assert value.status(strategy_ref="strategy-a", run_id="run-1", request_key="k1").outcome == "UNKNOWN"
+    assert value.status(strategy_ref="strategy-a", run_id="run-2", request_key="k1").outcome == "UNKNOWN"
     assert len(handles) == 1 and value._slots["strategy-a"].handle is old
+    assert not value.close() and closes == [1]
 
 
 def test_observer_reconnect_invalidates_delegate_without_replaying_prior_write():
@@ -255,11 +263,16 @@ def test_delegate_owner_cleanup_uncertainty_prevents_replacement():
     value, handles = port()
     value.status(strategy_ref="strategy-a", run_id="run-1", request_key="k1")
     old = handles[0]
-    old.close = lambda: SimpleNamespace(state="failed", thread_alive=False, error_code="MAINTENANCE_FAILED",
-                                        unregister_uncertainties=0, owner_cleanup_uncertainties=1)
+    closes = []
+    def close_unconfirmed():
+        closes.append(1)
+        return SimpleNamespace(state="failed", thread_alive=False, error_code="MAINTENANCE_FAILED",
+                               unregister_uncertainties=0, owner_cleanup_uncertainties=1)
+    old.close = close_unconfirmed
     value.invalidate_registrations()
-    assert value.status(strategy_ref="strategy-a", run_id="run-1", request_key="k1").outcome == "TRANSPORT_NOT_STARTED"
+    assert value.status(strategy_ref="strategy-a", run_id="run-1", request_key="k1").outcome == "UNKNOWN"
     assert len(handles) == 1 and value._slots["strategy-a"].handle is old
+    assert not value.close() and closes == [1]
 
 
 def test_delegate_factory_cleanup_unproven_does_not_reconnect():
@@ -267,11 +280,16 @@ def test_delegate_factory_cleanup_unproven_does_not_reconnect():
     value.status(strategy_ref="strategy-a", run_id="run-1", request_key="k1")
     old = handles[0]
     old.runtime = SimpleNamespace(status=lambda: SimpleNamespace(state="failed"))
-    old.close = lambda: SimpleNamespace(state="failed", thread_alive=False,
-        error_code="FACTORY_FAILED_CLEANUP_UNPROVEN", unregister_uncertainties=0,
-        owner_cleanup_uncertainties=0)
-    assert value.status(strategy_ref="strategy-a", run_id="run-1", request_key="k1").outcome == "TRANSPORT_NOT_STARTED"
+    closes = []
+    def close_unconfirmed():
+        closes.append(1)
+        return SimpleNamespace(state="failed", thread_alive=False,
+            error_code="FACTORY_FAILED_CLEANUP_UNPROVEN", unregister_uncertainties=0,
+            owner_cleanup_uncertainties=0)
+    old.close = close_unconfirmed
+    assert value.status(strategy_ref="strategy-a", run_id="run-1", request_key="k1").outcome == "UNKNOWN"
     assert len(handles) == 1 and value._slots["strategy-a"].handle is old
+    assert not value.close() and closes == [1]
 
 
 def test_dispatch_queued_is_dispatching_and_other_outcomes_are_exact():
@@ -336,14 +354,12 @@ def control(replies, registered=True):
                                  account_ref=ACCOUNT, timeout_seconds=5), runtime
 
 
-def test_control_apply_instrument_scope_and_reply_mapping():
-    adapter, runtime = control([{"status": "OBSERVED", "cause_id": "c1", "version": 1,
-                                 "active": True}])
+def test_control_apply_instrument_scope_is_refused_locally():
+    adapter, runtime = control([])
     reply = adapter.apply(cause_id="c1", mode="STOP_NEW", scope_kind="instrument",
                           scope_value="SHFE:rb")
-    assert (reply.outcome, reply.active, reply.version) == ("OBSERVED", True, 1)
-    assert runtime.calls == [("direct.control.apply",
-                              {"cause_id": "c1", "mode": "STOP_NEW", "instrument": "SHFE:rb"})]
+    assert (reply.outcome, reply.code) == ("REQUEST_DENIED", "RISK_CONTROL_SCOPE_UNSUPPORTED")
+    assert runtime.calls == []
 
 
 def test_control_strategy_scope_is_refused_locally_and_never_sent():

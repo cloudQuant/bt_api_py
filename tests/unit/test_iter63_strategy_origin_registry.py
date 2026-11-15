@@ -14,14 +14,16 @@ from bt_api_gateway.strategy_position_ledger import StrategyBaselineEvidence, St
 from bt_api_py._contracts.models import OrderRequest, OrderType, Side
 from bt_api_py.gateway_direct_owner import GatewayDirectOwner, GatewayDirectOwnerResources
 from bt_api_py.gateway_direct_service import GatewayDirectGrant, GatewayDirectServiceBinding
-from bt_api_py.gateway_strategy_origin_source import GatewayStrategyOriginSource
+from tests._synthetic_strategy_origin_source import SyntheticStrategyOriginSource
 from bt_api_py.service_registry import PrincipalGrant, ResourceGrant, ServiceCapability, ServiceRegistry
 from tests.unit.test_service_registry import _next_request, _register
 
 
 @pytest.mark.parametrize("with_source", [True, False])
 @pytest.mark.parametrize("schema_version", [16, 17, 18, 19])
-def test_actual_registry_owner_origin_source_and_recheck(tmp_path, with_source, schema_version):
+def test_actual_registry_owner_origin_source_and_recheck(tmp_path, with_source, schema_version, monkeypatch):
+    import bt_api_py.gateway_strategy_origin_source as source_module
+    monkeypatch.setattr(source_module, "GatewayStrategyOriginSource", SyntheticStrategyOriginSource)
     directory = tmp_path / "guards"
     directory.mkdir()
     state = {"current": True}
@@ -56,7 +58,7 @@ def test_actual_registry_owner_origin_source_and_recheck(tmp_path, with_source, 
             journal.enable_account_fact_recovery(guard)
         if schema_version >= 19:
             journal.enable_account_event_recovery(guard)
-        source = GatewayStrategyOriginSource(resolve=lambda *_: instrument,
+        source = SyntheticStrategyOriginSource(resolve=lambda *_: instrument,
                                              recheck=lambda _: state["current"]) if with_source else None
         holder.update(journal=journal, source=source)
         dispatcher = GatewayDirectDispatcher(journal, "CTP", guard, lambda *_: None,

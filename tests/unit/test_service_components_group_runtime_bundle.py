@@ -48,7 +48,7 @@ from bt_api_py.service_execution_group_proofs import (
 )
 from bt_api_py.service_registry import TrustedGroupResolutionPolicy, TrustedGroupWritePolicy
 from bt_api_py.service_risk_order_entry import RiskBtApiProviderContract, RiskOrderTarget
-from bt_api_py.service_risk_order_journal import RiskOrderJournal
+from bt_api_risk.risk_order_journal import RiskOrderJournal
 
 
 class _UnusedDispatch:

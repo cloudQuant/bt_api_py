@@ -37,7 +37,7 @@ from bt_api_py.service_execution_group_proofs import (
 )
 from bt_api_py.service_group_reservations import GroupReservationTarget
 from bt_api_py.service_risk_order_entry import RiskBtApiProviderContract, RiskOrderTarget
-from bt_api_py.service_risk_order_journal import RiskOrderJournal
+from bt_api_risk.risk_order_journal import RiskOrderJournal
 
 
 def test_group_source_progress_normalizes_persisted_quantity_and_binds_fill_history() -> None:
@@ -776,7 +776,6 @@ def test_group_finish_requires_receipt_cached_under_the_live_authority_hold() ->
     and a missing callback cache or changed record remains fail-closed.
     """
 
-    from contextlib import contextmanager
     from decimal import Decimal
     from types import SimpleNamespace
 
@@ -932,10 +931,13 @@ def test_group_finish_requires_receipt_cached_under_the_live_authority_hold() ->
     authorization = object()
     fence = object()
 
-    @contextmanager
-    def risk_writer_fence(_scope):
-        # The exact Risk fence remains owned by the session until finish.
-        yield fence
+    manager = SimpleNamespace(__exit__=lambda *_args: None)
+
+    def assert_borrowed_fence(actual_manager, actual_fence):
+        assert actual_manager is manager
+        assert actual_fence is fence
+
+    from bt_api_risk.risk_order_journal import RiskFenceExitCleanup
 
     target = SimpleNamespace(
         execution_scope=execution_scope,
@@ -945,7 +947,11 @@ def test_group_finish_requires_receipt_cached_under_the_live_authority_hold() ->
                 record if intent_id == intent.intent_id and scope == execution_scope else None
             )
         ),
-        risk_order_journal=SimpleNamespace(writer_fence=risk_writer_fence),
+        risk_order_journal=SimpleNamespace(
+            assert_borrowed_fence=assert_borrowed_fence,
+            prepare_borrowed_fence_close=assert_borrowed_fence,
+            consume_borrowed_fence_close=lambda m, f: RiskFenceExitCleanup.COMPLETE,
+        ),
     )
     session = object.__new__(GroupProofDispatchSession)
     session._finished = False
@@ -962,7 +968,8 @@ def test_group_finish_requires_receipt_cached_under_the_live_authority_hold() ->
     session._authorization = authorization
     session._writer_lease = lease
     session._risk_fence = fence
-    session._risk_fence_context = None
+    session._risk_fence_context = manager
+    session._risk_fence_uncertain = False
     session._context_token = None
     session._attempt_started = True
     session._attempt_unknown = False

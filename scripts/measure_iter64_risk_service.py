@@ -22,6 +22,7 @@ few minutes (the crash-restart phase waits for the Gateway registry lease).
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import math
@@ -34,7 +35,6 @@ import sqlite3
 import statistics
 import subprocess
 import sys
-import tempfile
 import time
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -119,7 +119,7 @@ class MeasurementResourceError(RuntimeError):
     """A fixed diagnostic category, never an exception message or process output."""
 
     def __init__(self, category: str):
-        if category not in {"risk_host_stop_not_clean"}:
+        if category not in {"risk_host_stop_not_clean", "cleanup_unknown"}:
             raise ValueError("unknown measurement resource category")
         super().__init__(category)
         self.category = category
@@ -128,7 +128,8 @@ class MeasurementResourceError(RuntimeError):
 class MeasurementCleanupError(RuntimeError):
     def __init__(self, categories: list[str]):
         allowed = {"risk_clients_close_failed", "risk_host_stop_not_clean",
-                   "risk_host_stop_failed", "strategy_session_close_failed", "gateway_stop_failed"}
+                   "risk_host_stop_failed", "strategy_session_close_failed", "gateway_stop_failed",
+                   "worker_cleanup_unknown", "cleanup_unknown"}
         if not categories or any(category not in allowed for category in categories):
             raise ValueError("unknown measurement cleanup category")
         super().__init__("measurement cleanup incomplete")
@@ -139,8 +140,83 @@ def _cleanup_result(error: BaseException | None) -> dict:
     if error is None:
         return {"status": "COMPLETE", "categories": []}
     if type(error) is MeasurementCleanupError:
-        return {"status": "INCOMPLETE", "categories": error.categories}
-    return {"status": "INCOMPLETE", "categories": ["unknown_cleanup_failure"]}
+        return {"status": "UNKNOWN", "categories": error.categories}
+    return {"status": "UNKNOWN", "categories": ["unknown_cleanup_failure"]}
+
+
+# Keep failure evidence independently of exception attributes: arbitrary
+# exception subclasses may reject attribute writes or intercept attribute reads.
+_MEASUREMENT_CLEANUP_FAILURES = []
+_MEASUREMENT_REPORT_FAILURES = []
+
+
+def _record_report_write_failure(primary: BaseException) -> None:
+    detail = {"status": "UNKNOWN", "category": "report_write_failed"}
+    # A failed write may have partially succeeded; neither memory nor
+    # stderr is evidence that the report reached persistent storage.
+    try:
+        _MEASUREMENT_REPORT_FAILURES.append((primary, detail))
+    except BaseException:
+        pass
+    try:
+        primary.measurement_report_error = detail
+    except BaseException:
+        pass
+    try:
+        sys.stderr.write("measurement_report_write_failed\n")
+    except BaseException:
+        pass
+
+
+def _save_failure_report(save, primary: BaseException) -> None:
+    """Best effort only: preserve the original failure if reporting fails."""
+    try:
+        save()
+    except BaseException:
+        _record_report_write_failure(primary)
+
+
+def _record_cleanup_error(error: BaseException, detail: dict) -> None:
+    previous = _cleanup_detail(error)
+    if type(previous) is dict:
+        categories = list(previous.get("categories", []))
+        for category in detail.get("categories", []):
+            if category not in categories:
+                categories.append(category)
+        detail = {"status": "UNKNOWN", "categories": categories}
+    _MEASUREMENT_CLEANUP_FAILURES.append((error, detail))
+    try:
+        error.measurement_cleanup_error = detail
+    except BaseException:
+        pass
+
+
+def _cleanup_detail(error: BaseException):
+    for recorded_error, detail in reversed(_MEASUREMENT_CLEANUP_FAILURES):
+        if recorded_error is error:
+            return detail
+    try:
+        return getattr(error, "measurement_cleanup_error", None)
+    except BaseException:
+        return None
+
+
+def _closed_client(client) -> None:
+    """Require a strict stopped snapshot, not merely a returned close call."""
+    from bt_api_py.service_runtime_cleanup import runtime_cleanup_confirmed
+    from bt_api_py.service_runtime_thread import RuntimeSnapshot
+
+    snapshot = client.close(timeout_seconds=5)
+    if (type(snapshot) is not RuntimeSnapshot or snapshot.strict_unregister_ack is not True
+            or type(snapshot.bindings) is not tuple or snapshot.bindings
+            or type(snapshot.cleanup_failures) is not int or snapshot.cleanup_failures != 0
+            or not runtime_cleanup_confirmed(snapshot)):
+        raise RuntimeError("client cleanup not confirmed")
+
+
+# Hold partially constructed or uncertain rigs; do not allow finalization to
+# dispose of their handles or attempt a second cleanup.
+_RETAINED_RIGS = []
 
 
 def _safe_error_name(error: BaseException) -> str:
@@ -154,9 +230,7 @@ def _safe_error_name(error: BaseException) -> str:
 def _risk_stop_observation(value, *, operation: str, after_forced_kill: bool = False) -> dict:
     """Project only a bounded return from the synthetic Risk stop helper."""
     if value is None:
-        # With a non-null process, the concrete helper returns None only after
-        # its wait timed out and it killed and reaped that child.
-        result, exit_code = "timeout_forced_kill", None
+        result, exit_code = "unknown", None
     elif type(value) is int and -255 <= value <= 255:
         result, exit_code = "observed_exit", value
     else:
@@ -169,6 +243,10 @@ class Rig:
     """Loopback Gateway + Risk host + strategy clients for one measurement run."""
 
     def __init__(self, root: Path, strategies: int, *, observation_poll: str, ttl_seconds: int):
+        _RETAINED_RIGS.append(self)
+        self._cleanup_unknown = False
+        self._workers = []
+        self._worker_resources = []
         from tests.integration import _iter64_recovery_support as support
         from tests.integration.test_service_account_instrument_metadata import _free_endpoint
 
@@ -182,8 +260,13 @@ class Rig:
         self.risk_root.mkdir()
         self.gateway_endpoint, self.risk_endpoint = _free_endpoint(), _free_endpoint()
         self.context = multiprocessing.get_context("spawn")
-        self.messages, self.controls = self.context.Queue(), self.context.Queue()
+        self.messages = self.controls = None
+        self._cleanup_unknown = True
+        self.messages = self.context.Queue()
+        self.controls = self.context.Queue()
+        self._cleanup_unknown = False
         self.gateway = None
+        self.gateway_owner = None
         self.journal_id = None
         self.sessions: list = []
         self.risk = None
@@ -205,52 +288,56 @@ class Rig:
             try:
                 self.close()
             except BaseException as cleanup_error:
-                error.measurement_cleanup_error = type(cleanup_error).__name__
+                _record_cleanup_error(error, _cleanup_result(cleanup_error))
             raise
 
     # --------------------------------------------------------------- processes
 
     def start_gateway(self) -> float:
+        if self._cleanup_unknown or self.gateway is not None:
+            raise MeasurementResourceError("cleanup_unknown")
         started = time.perf_counter()
-        self.gateway = self.context.Process(
-            target=self.support.gateway_main,
-            args=(str(self.gateway_root), self.gateway_endpoint, self.keys["gateway_server"],
-                  self.support.gateway_publics(self.keys, self.strategy_count),
-                  self.strategy_count, self.messages, self.controls),
-        )
-        self.gateway.start()
-        ready = self.support.next_message(self.messages, "ready", 60)
-        self.journal_id = ready[2]
+        self._cleanup_unknown = True
+        try:
+            self.gateway = self.context.Process(
+                target=self.support.gateway_main,
+                args=(str(self.gateway_root), self.gateway_endpoint, self.keys["gateway_server"],
+                      self.support.gateway_publics(self.keys, self.strategy_count),
+                      self.strategy_count, self.messages, self.controls),
+            )
+            self.gateway_owner = self.support.SyntheticGatewayStop(
+                self.gateway, self.controls, self.messages)
+            self.gateway.start()
+            ready = self.support.next_message(self.messages, "ready", 60)
+            self.gateway_owner.bind_ready(ready)
+            self.journal_id = ready[2]
+        except BaseException as error:
+            _record_cleanup_error(error, {"status": "UNKNOWN", "categories": ["cleanup_unknown"]})
+            raise
+        self._cleanup_unknown = False
         return time.perf_counter() - started
 
     def stop_gateway(self) -> float:
+        if self._cleanup_unknown:
+            raise MeasurementResourceError("cleanup_unknown")
+        if (self.gateway is None or self.gateway_owner is None
+                or self.gateway_owner.process is not self.gateway):
+            self._cleanup_unknown = True
+            raise MeasurementResourceError("cleanup_unknown")
         started = time.perf_counter()
-        forced = False
-        self.controls.put("stop")
-        self.gateway.join(30)
-        if self.gateway.is_alive():
-            forced = True
-            self.gateway.terminate()
-            self.gateway.join(5)
-        if self.gateway.is_alive():
-            self.gateway.kill()
-            self.gateway.join(5)
-        if self.gateway.is_alive():
-            raise RuntimeError("measurement gateway cleanup incomplete")
-        if forced:
-            raise RuntimeError("measurement gateway required forced termination")
+        self._cleanup_unknown = True
+        try:
+            self.gateway_owner.close()
+        except BaseException as error:
+            _record_cleanup_error(error, {"status": "UNKNOWN", "categories": ["gateway_stop_failed"]})
+            raise
+        self.gateway = None
+        self.gateway_owner = None
+        self._cleanup_unknown = False
         return time.perf_counter() - started
 
     def open_sessions(self) -> None:
-        failures = []
-        for session in self.sessions:
-            try:
-                session.close(timeout_seconds=5)
-            except Exception as error:
-                failures.append(type(error).__name__)
-        self.sessions = []
-        if failures:
-            raise RuntimeError("strategy session cleanup incomplete: " + ",".join(failures))
+        self.close_sessions()
         for index in range(self.strategy_count):
             session = self.support.strategy_session(
                 self.gateway_endpoint, self.keys, self.journal_id, index)
@@ -259,7 +346,24 @@ class Rig:
             if not session.start(timeout_seconds=20).healthy:
                 raise RuntimeError("strategy session not healthy")
 
+    def close_sessions(self) -> None:
+        if self._cleanup_unknown:
+            raise MeasurementResourceError("cleanup_unknown")
+        while self.sessions:
+            session = self.sessions[0]
+            self._cleanup_unknown = True
+            try:
+                _closed_client(session)
+                self.sessions.pop(0)
+            except BaseException as error:
+                if not isinstance(error, Exception):
+                    raise
+                raise MeasurementCleanupError(["strategy_session_close_failed"]) from None
+            self._cleanup_unknown = False
+
     def start_risk(self, *, launcher=None, extra_env=None) -> float:
+        if self._cleanup_unknown or self.risk is not None:
+            raise MeasurementResourceError("cleanup_unknown")
         started = time.perf_counter()
         if self.ready_file.exists():
             self.ready_file.unlink()
@@ -271,10 +375,12 @@ class Rig:
         env.update(extra_env or {})
         command = launcher or [sys.executable, "-m", "bt_api_py.risk_service_host"]
         # Store the child immediately so interruption during startup cannot lose it.
+        self._cleanup_unknown = True
         self.risk = subprocess.Popen(  # noqa: S603 - internal fixed launcher and synthetic fixture
             command + ["run", "--config", str(self.config), "--ready-file", str(self.ready_file)],
             cwd=str(SDK_ROOT), env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
+        self._cleanup_unknown = False
         try:
             deadline = time.monotonic() + 90
             while not self.ready_file.exists():
@@ -290,7 +396,7 @@ class Rig:
             try:
                 self.stop_risk()
             except BaseException as cleanup_error:
-                error.measurement_cleanup_error = type(cleanup_error).__name__
+                _record_cleanup_error(error, _cleanup_result(cleanup_error))
             raise
 
     def open_risk_clients(self) -> None:
@@ -300,14 +406,21 @@ class Rig:
             client = None
             for attempt in range(5):
                 client = self.support.risk_client(self.risk_endpoint, self.keys, index)
+                self.clients.append(client)
                 try:
                     if client.start(timeout_seconds=20).healthy:
                         break
                 except BaseException as error:
+                    self._cleanup_unknown = True
                     try:
-                        client.close(timeout_seconds=5)
-                    except Exception as cleanup_error:
-                        raise RuntimeError("risk client startup cleanup incomplete") from cleanup_error
+                        _closed_client(client)
+                        self.clients.pop()
+                    except BaseException:
+                        _record_cleanup_error(error, {
+                            "status": "UNKNOWN", "categories": ["risk_clients_close_failed"]
+                        })
+                        raise error from None
+                    self._cleanup_unknown = False
                     if not isinstance(error, Exception):
                         raise
                     client = None
@@ -315,15 +428,19 @@ class Rig:
                         raise RuntimeError("risk client not healthy") from error
                     time.sleep(2)
                     continue
+                self._cleanup_unknown = True
                 try:
-                    client.close(timeout_seconds=5)
-                except Exception as error:
-                    raise RuntimeError("risk client startup cleanup incomplete") from error
+                    _closed_client(client)
+                    self.clients.pop()
+                except BaseException as error:
+                    if not isinstance(error, Exception):
+                        raise
+                    raise MeasurementCleanupError(["risk_clients_close_failed"]) from None
+                self._cleanup_unknown = False
                 client = None
                 if attempt == 4:
                     raise RuntimeError("risk client not healthy")
                 time.sleep(2)
-            self.clients.append(client)
         self.operator = self.support.operator_runtime(self.risk_endpoint, self.keys)
         self.operator.start(timeout_seconds=20)
 
@@ -358,15 +475,22 @@ class Rig:
                                              {"warmups": outcomes, "settlement": settlement})
 
     def close_risk_clients(self) -> None:
-        failures = []
-        for client in self.clients + ([self.operator] if self.operator is not None else []):
+        if self._cleanup_unknown:
+            raise MeasurementResourceError("cleanup_unknown")
+        while self.clients or self.operator is not None:
+            client = self.clients[0] if self.clients else self.operator
+            self._cleanup_unknown = True
             try:
-                client.close(timeout_seconds=5)
-            except Exception as error:
-                failures.append(type(error).__name__)
-        self.clients, self.operator = [], None
-        if failures:
-            raise RuntimeError("risk client cleanup incomplete: " + ",".join(failures))
+                _closed_client(client)
+                if self.clients:
+                    self.clients.pop(0)
+                else:
+                    self.operator = None
+            except BaseException as error:
+                if not isinstance(error, Exception):
+                    raise
+                raise MeasurementCleanupError(["risk_clients_close_failed"]) from None
+            self._cleanup_unknown = False
 
     def _record_risk_stop(self, value, *, operation: str) -> dict:
         observations = getattr(self, "risk_stop_observations", None)
@@ -377,73 +501,44 @@ class Rig:
             after_forced_kill=getattr(self, "_timed_out_risk", None) is self.risk,
         )
         observations.append(observation)
-        if observation["result"] == "timeout_forced_kill":
-            self._timed_out_risk = self.risk
         return observation
 
     def stop_risk(self, *, kill=False) -> float:
         started = time.perf_counter()
-        error = None
-        try:
-            self.close_risk_clients()
-        except Exception as caught:
-            error = caught
-        try:
-            if self.risk is not None:
-                if kill:
-                    if self.risk.poll() is not None:
-                        raise RuntimeError("risk host exited before planned SIGKILL")
-                    self.risk.send_signal(signal.SIGKILL)
-                    if self.risk.wait(timeout=30) != -signal.SIGKILL:
-                        raise RuntimeError("risk host did not exit from planned SIGKILL")
-                else:
-                    try:
-                        exitcode = self.support.stop_risk(self.risk)
-                    except Exception:
-                        self._record_risk_stop(object(), operation="stop")
-                        raise
-                    observation = self._record_risk_stop(exitcode, operation="stop")
-                    if (observation["result"] != "observed_exit"
-                            or observation["exit_code"] != 0):
-                        raise MeasurementResourceError("risk_host_stop_not_clean")
-                self.risk = None
-        except Exception as caught:
-            error = error or caught
-        if error is not None:
-            raise error
-        return time.perf_counter() - started
+        if self._cleanup_unknown:
+            raise MeasurementResourceError("cleanup_unknown")
+        if kill:
+            # No explicit close proof exists after SIGKILL, so do not run
+            # this fault scenario or proceed with a replacement host.
+            raise MeasurementResourceError("cleanup_unknown")
+        self.close_risk_clients()
+        if self.risk is None:
+            return time.perf_counter() - started
+        # The support helper may kill on timeout.  Request a graceful stop
+        # once but keep the child and files until a close receipt exists.
+        self._cleanup_unknown = True
+        if self.risk.poll() is None:
+            self.risk.send_signal(signal.SIGTERM)
+            with contextlib.suppress(subprocess.TimeoutExpired):
+                self.risk.wait(timeout=30)
+        self._record_risk_stop(object(), operation="stop")
+        raise MeasurementResourceError("risk_host_stop_not_clean")
 
     def close(self) -> None:
-        failures = []
-        try:
-            self.close_risk_clients()
-        except Exception:
-            failures.append("risk_clients_close_failed")
+        if self._cleanup_unknown or self._workers or self._worker_resources:
+            raise MeasurementCleanupError(["cleanup_unknown"])
+        self.close_risk_clients()
         if self.risk is not None:
-            try:
-                exitcode = self.support.stop_risk(self.risk)
-                observation = self._record_risk_stop(exitcode, operation="cleanup")
-                if (observation["result"] != "observed_exit"
-                        or observation["exit_code"] != 0):
-                    failures.append("risk_host_stop_not_clean")
-            except Exception:
-                self._record_risk_stop(object(), operation="cleanup")
-                failures.append("risk_host_stop_failed")
-        for session in self.sessions:
-            try:
-                session.close(timeout_seconds=5)
-            except Exception:
-                failures.append("strategy_session_close_failed")
-        if self.gateway is not None and self.gateway.pid is not None:
-            if self.gateway.is_alive():
-                try:
-                    self.stop_gateway()
-                except Exception:
-                    failures.append("gateway_stop_failed")
-            else:
-                self.gateway.join(0)
-        if failures:
-            raise MeasurementCleanupError(failures)
+            self.stop_risk()
+        self.close_sessions()
+        if self.gateway is not None:
+            self.stop_gateway()
+        # Queue shutdown is not acknowledged by the existing harness either.
+        if getattr(self, "messages", None) is not None or getattr(self, "controls", None) is not None:
+            self._cleanup_unknown = True
+            raise MeasurementCleanupError(["cleanup_unknown"])
+        if self in _RETAINED_RIGS:
+            _RETAINED_RIGS.remove(self)
 
     # --------------------------------------------------------------- helpers
 
@@ -802,24 +897,29 @@ def phase_round_trips(rig: Rig, orders: int) -> dict:
 
 
 def _claim_worker(index, gateway_endpoint, risk_endpoint, keys, journal_id, per_client,
-                  ready, start, results):
+                  ready, start, results, abort=None):
     """One strategy process: its own Gateway session (write claim) and Risk client."""
     from tests.integration import _iter64_recovery_support as support
 
     session = client = None
-    ready_sent = False
     prepared = []
     reserve_attempts = []
     latencies, outcomes, reserve_outcomes, dispatched_keys = [], {}, {}, []
     first = last = None
     error_name = None
+    abort_status = "NOT_REQUESTED"
+    failure_report_status = "NOT_REQUESTED"
     warmup_key = warmup_outcome = None
     try:
+        if abort is not None and abort.is_set():
+            raise RuntimeError("claim phase aborted")
         session = support.strategy_session(gateway_endpoint, keys, journal_id, index)
         session.start(timeout_seconds=30)
         client = support.risk_client(risk_endpoint, keys, index)
         client.start(timeout_seconds=30)
         for n in range(per_client + 1):
+            if abort is not None and abort.is_set():
+                raise RuntimeError("claim phase aborted")
             key = "tp-" + str(index) + "-" + str(n) + "-" + str(time.time_ns())
             attempt = {"request_key": key, "outcome": "UNKNOWN"}
             reserve_attempts.append(attempt)
@@ -833,22 +933,29 @@ def _claim_worker(index, gateway_endpoint, risk_endpoint, keys, journal_id, per_
                 prepared.append((key, answer))
             else:
                 break
-        if prepared:  # the first claim creates Risk's delegate runtime for this run (G64-11)
-            key, answer = prepared.pop(0)
-            warmup_key = key  # retain the original key even if the dispatch reply is lost
-            warmup_result = client.dispatch(
-                key, permit_id=answer.permit_id, reservation_id=answer.reservation_id,
-                view_digest=answer.view_digest, timeout_seconds=30)
-            warmup_outcome = (getattr(warmup_result.answer, "outcome", "UNKNOWN")
-                              if warmup_result.outcome == "ANSWERED" else warmup_result.outcome)
-            if warmup_outcome != "DISPATCHED":
-                raise RuntimeError("warmup dispatch incomplete")
-        ready.put(index)
-        ready_sent = True
+        if len(prepared) != per_client + 1:
+            raise RuntimeError("claim batch reservation incomplete")
+        # The first claim creates Risk's delegate runtime for this run (G64-11).
+        if abort is not None and abort.is_set():
+            raise RuntimeError("claim phase aborted")
+        key, answer = prepared.pop(0)
+        warmup_key = key  # retain the original key even if the dispatch reply is lost
+        warmup_result = client.dispatch(
+            key, permit_id=answer.permit_id, reservation_id=answer.reservation_id,
+            view_digest=answer.view_digest, timeout_seconds=30)
+        warmup_outcome = (getattr(warmup_result.answer, "outcome", "UNKNOWN")
+                          if warmup_result.outcome == "ANSWERED" else warmup_result.outcome)
+        if warmup_outcome != "DISPATCHED":
+            raise RuntimeError("warmup dispatch incomplete")
+        ready.put((index, "READY"))
         if not start.wait(120):
             raise TimeoutError("claim start barrier timed out")
+        if abort is not None and abort.is_set():
+            raise RuntimeError("claim phase aborted")
         first = time.time()
         for key, answer in prepared:
+            if abort is not None and abort.is_set():
+                raise RuntimeError("claim phase aborted")
             started = time.perf_counter()
             dispatched_keys.append(key)  # preserve an attempt even if its reply is lost
             result = client.dispatch(key, permit_id=answer.permit_id,
@@ -860,8 +967,18 @@ def _claim_worker(index, gateway_endpoint, risk_endpoint, keys, journal_id, per_
         last = time.time()
     except BaseException as error:  # reported, never raised into the measuring process
         error_name = type(error).__name__
-        if not ready_sent:
-            ready.put(index)
+        abort_status = "UNKNOWN"
+        if abort is not None:
+            try:
+                abort.set()
+                abort_status = "SET"
+            except BaseException:
+                pass
+        try:
+            ready.put((index, "FAILED"))
+            failure_report_status = "SENT"
+        except BaseException:
+            failure_report_status = "UNKNOWN"
     finally:
         if first is not None and last is None:
             last = time.time()
@@ -876,7 +993,8 @@ def _claim_worker(index, gateway_endpoint, risk_endpoint, keys, journal_id, per_
                      "reserve_outcomes": reserve_outcomes, "keys": dispatched_keys,
                      "reserve_attempts": reserve_attempts,
                      "warmup_key": warmup_key, "warmup_outcome": warmup_outcome,
-                     "error": error_name})
+                     "error": error_name, "abort_status": abort_status,
+                     "failure_report_status": failure_report_status})
 
 
 def _join_workers(workers, timeout: float) -> list:
@@ -889,19 +1007,16 @@ def _join_workers(workers, timeout: float) -> list:
 
 def _cleanup_workers(workers) -> tuple[list, int]:
     remaining = _join_workers(workers, 12)
-    forced = len(remaining)
-    for worker in remaining:
-        worker.terminate()
-    remaining = _join_workers(remaining, 3)
-    for worker in remaining:
-        worker.kill()
-    return _join_workers(remaining, 3), forced
+    # Workers own client registrations. Never force a timed-out worker or
+    # interpret process exit as proof of its client cleanup.
+    return remaining, 0
 
 
-def _queue_until(source, count: int, timeout: float) -> list:
+def _queue_until(source, count: int, timeout: float, items=None, stop=None) -> list:
     """Collect within one shared deadline, preserving partial results."""
     deadline = time.monotonic() + timeout
-    items = []
+    if items is None:
+        items = []
     while len(items) < count:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
@@ -910,7 +1025,26 @@ def _queue_until(source, count: int, timeout: float) -> list:
             items.append(source.get(timeout=remaining))
         except queue.Empty:
             break
+        if stop is not None and stop(items):
+            break
     return items
+
+
+def _valid_readiness_prefix(rows, concurrency: int) -> bool:
+    """Reject an unsuccessful, malformed, duplicate or foreign readiness row."""
+    indexes = set()
+    for row in rows:
+        if (type(row) is not tuple or len(row) != 2 or type(row[0]) is not int
+                or not 0 <= row[0] < concurrency or type(row[1]) is not str
+                or row[1] != "READY" or row[0] in indexes):
+            return False
+        indexes.add(row[0])
+    return True
+
+
+def _all_workers_ready(rows, concurrency: int) -> bool:
+    """Require exactly one successful, in-range readiness message per worker."""
+    return len(rows) == concurrency and _valid_readiness_prefix(rows, concurrency)
 
 
 def phase_claim_processes(rig: Rig, concurrency: int, per_client: int, *,
@@ -919,31 +1053,112 @@ def phase_claim_processes(rig: Rig, concurrency: int, per_client: int, *,
     working_at_start = rig.working()
     permits_at_start = rig.permit_evidence()
     rig.close_risk_clients()
-    for session in rig.sessions:
-        session.close(timeout_seconds=5)
-    rig.sessions = []
-    ready, results = rig.context.Queue(), rig.context.Queue()
+    rig.close_sessions()
+    # Keep each original handle before creating the next one.  If a factory
+    # is interrupted before returning, block all subsequent cleanup/restarts.
+    rig._cleanup_unknown = True
+    ready = rig.context.Queue()
+    rig._worker_resources.append(ready)
+    results = rig.context.Queue()
+    rig._worker_resources.append(results)
+    abort = rig.context.Event()
+    rig._worker_resources.append(abort)
     start = rig.context.Event()
+    rig._worker_resources.append(start)
+    rig._cleanup_unknown = False
     workers = [rig.context.Process(target=_claim_worker, args=(
         i, rig.gateway_endpoint, rig.risk_endpoint, rig.keys, rig.journal_id, per_client,
-        ready, start, results)) for i in range(concurrency)]
-    started, ready_rows, rows, cleanup_remaining, forced = [], [], [], [], 0
+        ready, start, results, abort)) for i in range(concurrency)]
+    rig._worker_result_rows = []
+    started, ready_rows, rows, cleanup_remaining, forced = [], [], rig._worker_result_rows, [], 0
+    start_released = False
+    abort_attempted = abort_confirmed = wake_attempted = False
     try:
         for worker in workers:
+            # Register before the start call, which can be interrupted after
+            # creating a child but before returning to the caller.
+            rig._workers.append(worker)
+            rig._cleanup_unknown = True
             worker.start()
+            rig._cleanup_unknown = False
             started.append(worker)
-        ready_rows = _queue_until(ready, len(workers), readiness_timeout)
+        ready_rows = _queue_until(
+            ready, len(workers), readiness_timeout, None,
+            lambda rows: not _valid_readiness_prefix(rows, concurrency),
+        )
+        all_ready = _all_workers_ready(ready_rows, concurrency)
+        if not all_ready:
+            abort_attempted = True
+            abort.set()
+            abort_confirmed = True
+        else:
+            aborted = abort.is_set()
+            if type(aborted) is not bool:
+                raise RuntimeError("invalid worker abort state")
+            if aborted:
+                all_ready = False
+                abort_attempted = abort_confirmed = True
+        wake_attempted = True
         start.set()
+        start_released = True
         # Do not wait for results from a worker indefinitely; partial rows
         # remain visible and explicitly make the measurement incomplete.
-        rows = _queue_until(results, len(workers), result_timeout
-                            if len(set(ready_rows)) == concurrency else 1)
+        _queue_until(results, len(workers), result_timeout
+                     if all_ready else 1, rows)
+        if len(rows) < len(workers) and not abort_attempted:
+            abort_attempted = True
+            abort.set()
+            abort_confirmed = True
     finally:
-        start.set()
-        cleanup_remaining, forced = _cleanup_workers(started)
-        for q in (ready, results):
-            q.close()
-            q.cancel_join_thread()
+        primary_error = sys.exc_info()[1]
+        wake_error = cleanup_error = None
+        if primary_error is not None and rig._workers:
+            try:
+                # Abort before releasing the barrier so a woken worker does
+                # not start the pending measured dispatches.
+                if not abort_attempted:
+                    abort_attempted = True
+                    abort.set()
+                    abort_confirmed = True
+                if not abort_confirmed or (wake_attempted and not start_released):
+                    wake_error = primary_error
+                elif not wake_attempted:
+                    wake_attempted = True
+                    start.set()
+            except BaseException as error:
+                wake_error = error
+        try:
+            cleanup_remaining, forced = _cleanup_workers(started)
+        except BaseException as error:
+            cleanup_error = error
+        finally:
+            # Current worker replies do not carry strict unregister evidence.
+            # Retain the original processes and queues, even after a clean exit.
+            rig._worker_queues = (ready, results, start, abort)
+            rig._worker_result_evidence = {
+                "retention": "PROCESS_MEMORY_ONLY", "expected_count": concurrency,
+                "received_count": len(rows), "unreceived_or_unverified": "UNKNOWN",
+            }
+            if rig._workers:
+                rig._cleanup_unknown = True
+        if primary_error is not None and (wake_error is not None or cleanup_error is not None or rig._workers):
+            cleanup = _cleanup_result(cleanup_error)
+            cleanup["categories"] = list(cleanup["categories"])
+            if wake_error is not None:
+                cleanup["status"] = "UNKNOWN"
+                cleanup["categories"].append("worker_wakeup_failed")
+            if rig._workers:
+                cleanup["status"] = "UNKNOWN"
+                cleanup["categories"].append("worker_cleanup_unknown")
+            _record_cleanup_error(primary_error, cleanup)
+        elif cleanup_error is not None:
+            if rig._workers:
+                _record_cleanup_error(cleanup_error, {
+                    "status": "UNKNOWN", "categories": ["worker_cleanup_unknown"]
+                })
+            raise cleanup_error
+        elif rig._workers:
+            raise MeasurementCleanupError(["worker_cleanup_unknown"])
     latencies = [value for row in rows for value in row["latencies"]]
     outcomes: dict[str, int] = {}
     reserve_outcomes: dict[str, int] = {}
@@ -963,7 +1178,7 @@ def phase_claim_processes(rig: Rig, concurrency: int, per_client: int, *,
     settled = rig.settle(attempted, required_risk_orders=attempted)
     errors = [row["error"] for row in rows if row["error"] is not None]
     exitcodes = [worker.exitcode for worker in started]
-    complete = (len(set(ready_rows)) == concurrency and len(rows) == concurrency
+    complete = (all_ready and len(rows) == concurrency
                 and not errors and not cleanup_remaining and not forced
                 and all(code == 0 for code in exitcodes)
                 and all(row["warmup_outcome"] == "DISPATCHED" for row in rows)
@@ -989,7 +1204,7 @@ def phase_claim_processes(rig: Rig, concurrency: int, per_client: int, *,
         "reserve_outcomes_including_warmup": reserve_outcomes,
         "worker_reserve_attempts": [{"strategy_index": row["index"],
                                      "attempts": row.get("reserve_attempts", [])} for row in rows],
-        "workers_ready": len(set(ready_rows)), "worker_results": len(rows),
+        "workers_ready": concurrency if all_ready else 0, "worker_results": len(rows),
         "worker_errors": errors, "workers_forced": forced,
         "worker_exitcodes": exitcodes,
         "worker_warmups": [{"strategy_index": row["index"], "request_key": row["warmup_key"],
@@ -1370,7 +1585,13 @@ def _guard(phase, *, substage=None):
     """Run one phase; a failure is recorded as its result instead of ending the run."""
     try:
         return phase()
+    except (MeasurementCleanupError, MeasurementResourceError):
+        # An uncertain owner must not be followed by another phase or start.
+        raise
     except Exception as error:
+        if _cleanup_detail(error) is not None:
+            # A failed cleanup forbids proceeding to another measurement phase.
+            raise
         result = {"phase_failed": _safe_error_name(error),
                   "code": error.category if type(error) is MeasurementResourceError else "",
                   "measurement_status": "INCOMPLETE"}
@@ -1378,8 +1599,6 @@ def _guard(phase, *, substage=None):
             result["substage"] = substage()
         if isinstance(error, MeasurementIncompleteError):
             result["evidence"] = error.evidence
-        if hasattr(error, "measurement_cleanup_error"):
-            result["cleanup_error"] = "cleanup_failed"
         return result
 
 
@@ -1400,6 +1619,17 @@ def _positive_int(value: str) -> int:
     if result <= 0:
         raise argparse.ArgumentTypeError("must be a positive integer")
     return result
+
+
+def _prepare_workdir(out: Path, result: dict, save) -> Path:
+    """Name retained work before creation; never remove an existing directory."""
+    path = out / "risk_service_measurements.work"
+    result["working_directory"] = str(path)
+    result["working_directory_retained"] = True
+    result["cleanup"] = {"status": "UNKNOWN", "categories": ["construction_not_confirmed"]}
+    save()
+    path.mkdir(exist_ok=False)
+    return path
 
 
 def main(argv=None) -> int:
@@ -1458,7 +1688,9 @@ def main(argv=None) -> int:
     stage = "construct"
     result["active_stage"] = stage
     save()  # even interrupted initialization leaves explicitly incomplete evidence
-    with tempfile.TemporaryDirectory(dir=out) as tmp:
+    # Publish the deterministic location before creation: if construction or
+    # cleanup is interrupted the partial report still identifies what to retain.
+    with contextlib.nullcontext(_prepare_workdir(out, result, save)) as tmp:
         rig = None
         try:
             rig = Rig(Path(tmp), strategies, observation_poll=args.observation_poll, ttl_seconds=30)
@@ -1538,8 +1770,12 @@ def main(argv=None) -> int:
             result["load_average"]["end"] = _load()
         except BaseException as error:
             result["failure"] = {"stage": stage, "type": _safe_error_name(error)}
-            if hasattr(error, "measurement_cleanup_error"):
-                result["cleanup_error"] = "cleanup_failed"
+            if rig is not None and hasattr(rig, "_worker_result_evidence"):
+                result["worker_result_evidence"] = rig._worker_result_evidence
+            cleanup_detail = _cleanup_detail(error)
+            if cleanup_detail is not None:
+                result["phase_cleanup"] = (cleanup_detail if type(cleanup_detail) is dict
+                                           else {"status": "UNKNOWN", "categories": ["cleanup_unknown"]})
             if rig is not None:
                 try:
                     rig.close()
@@ -1547,21 +1783,30 @@ def main(argv=None) -> int:
                 except BaseException as cleanup_error:
                     result["cleanup_error"] = _safe_error_name(cleanup_error)
                     result["cleanup"] = _cleanup_result(cleanup_error)
+                    _record_cleanup_error(error, result["cleanup"])
             else:
                 result["cleanup"] = {
                     "status": "UNKNOWN", "categories": ["constructor_cleanup_not_confirmed"]
                 }
-            save()
+            _save_failure_report(save, error)
             raise
         else:
             stage = result["active_stage"] = "close"
-            save()
+            try:
+                save()
+            except BaseException as error:
+                _record_report_write_failure(error)
+                try:
+                    rig.close()
+                except BaseException as cleanup_error:
+                    _record_cleanup_error(error, _cleanup_result(cleanup_error))
+                raise
             try:
                 rig.close()
             except BaseException as error:
                 result["failure"] = {"stage": stage, "type": _safe_error_name(error)}
                 result["cleanup"] = _cleanup_result(error)
-                save()
+                _save_failure_report(save, error)
                 raise
             result["cleanup"] = _cleanup_result(None)
             save()

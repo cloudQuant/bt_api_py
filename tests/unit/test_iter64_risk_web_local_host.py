@@ -32,6 +32,7 @@ from bt_api_py.service_runtime import (
     ServiceRuntimeRequestNotSentError,
 )
 from bt_api_py.service_runtime_thread import BindingSnapshot, RuntimeSnapshot, ThreadedRuntimeError
+from _iter64_web_bound_fake import fake_bound_call
 
 ORIGIN = "http://127.0.0.1:8710"
 LOGIN_TOKEN = "a1" * 32
@@ -61,6 +62,8 @@ def reply_for(operation, arguments):
 class FakeRuntime:
     """The threaded SDK runtime surface the caller and host use."""
 
+    call_bound = fake_bound_call
+
     def __init__(self, factory=None, *, require_unregister_ack=False):
         self.factory_result = factory() if factory is not None else None
         self.require_unregister_ack = require_unregister_ack
@@ -71,7 +74,7 @@ class FakeRuntime:
 
     def status(self):
         return RuntimeSnapshot(self.state, self.thread_alive, self.healthy, None, self.bindings, 0, 0,
-                               self.identity)
+                               self.identity, "web-fake-run")
 
     def start(self, *, timeout_seconds):
         self.state = "running"
@@ -116,8 +119,11 @@ def test_caller_sends_one_admin_operation_on_the_admin_mount_only():
     call = build_admin_caller(runtime, **ROUTE)
     reply = call("risk.admin.status", {}, 5.0)
     assert reply["status"] == "OBSERVED"
-    assert runtime.calls == [(RISK_ADMIN_MOUNT, "risk.admin.status", {},
-                              {"account_ref": "account-a", "scope_ref": "scope-a", "timeout_seconds": 5.0})]
+    assert len(runtime.calls) == 1
+    mount, operation, arguments, kwargs = runtime.calls[0]
+    assert (mount, operation, arguments) == (RISK_ADMIN_MOUNT, "risk.admin.status", {})
+    assert kwargs["timeout_seconds"] == 5.0
+    assert kwargs["route"].scope == SCOPE and kwargs["route"].scope_ref == "scope-a"
 
 
 @pytest.mark.parametrize("operation", sorted(RISK_ORDER_OPERATIONS) + ["direct.control.apply", "risk.admin.x", 7])
@@ -162,13 +168,13 @@ def test_without_exactly_this_operators_registration_nothing_is_sent(change):
 
 
 @pytest.mark.parametrize("error,kind,code", [
-    (ServiceRuntimeRequestNotSentError(), "NOT_SENT", "REQUEST_NOT_SENT"),
+    (ServiceRuntimeRequestNotSentError(), "UNKNOWN", ""),
     (ThreadedRuntimeError("QUEUE_FULL"), "NOT_SENT", "QUEUE_FULL"),
     (ThreadedRuntimeError("TIMEOUT_BEFORE_START"), "NOT_SENT", "TIMEOUT_BEFORE_START"),
-    (ThreadedRuntimeError("TIMEOUT_AFTER_START"), "TIMEOUT", ""),
+    (ThreadedRuntimeError("TIMEOUT_AFTER_START"), "UNKNOWN", ""),
     (ThreadedRuntimeError("OWNER_OUTCOME_UNKNOWN"), "UNKNOWN", ""),
-    (refused("DENIED"), "REFUSED", "DENIED"),
-    (refused("SCOPE_DENIED"), "REFUSED", "SCOPE_DENIED"),
+    (refused("DENIED"), "UNKNOWN", ""),
+    (refused("SCOPE_DENIED"), "UNKNOWN", ""),
     (refused("DENIED", from_service=False), "UNKNOWN", ""),
     (refused("INVALID_REQUEST"), "UNKNOWN", ""),
     (refused("HANDLER_FAILED"), "UNKNOWN", ""),

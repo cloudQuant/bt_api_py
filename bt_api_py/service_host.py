@@ -938,6 +938,8 @@ class ServiceHost:
                         omitted |= direct_module.ACCOUNT_OBSERVER_OPERATIONS
                     if 'account_facts' not in pending_resources.values:
                         omitted |= direct_module.ACCOUNT_FACTS_OPERATIONS
+                    if 'account_cancel_attempts' not in pending_resources.values:
+                        omitted |= direct_module.ACCOUNT_CANCEL_ATTEMPT_OPERATIONS
                     trading_account_optional_omissions[item.spec.instance_id] = omitted
                 if item.spec.component == 'gateway' and item.spec.options.get('role') == 'trading_owner' and 'delegation_service' in pending_resources.values:
                     from bt_api_py.gateway_delegation_service import GatewayDelegationService
@@ -2467,7 +2469,7 @@ class ServiceHost:
                 optional_keys = _ROLE_BUILTINS[("gateway", "trading_owner")].optional_resource_keys
                 if "service.account_read" not in item.operations_by_port:
                     optional_keys = optional_keys - {
-                        "account_comparison", "account_strategy_reads", "account_observer", "account_facts"
+                        "account_comparison", "account_strategy_reads", "account_observer", "account_facts", "account_cancel_attempts"
                     }
                 expected_keys.update(optional_keys.intersection(resources.values))
             if "service.account_read" in item.operations_by_port:

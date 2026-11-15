@@ -19,10 +19,15 @@ from __future__ import annotations
 import json
 import os
 import queue
+import re
+import secrets
 import sqlite3
 import subprocess
 import sys
+import tempfile
+import threading
 import time
+from contextlib import closing
 from decimal import Decimal
 from pathlib import Path
 
@@ -118,10 +123,221 @@ def synthetic_return_fact(item, instrument_key):
 # ----------------------------------------------------------------------------- Gateway child
 
 
+_GATEWAY_CLEANUP_RETAINED = {}
+_GATEWAY_CHILD_RETAINED = {}
+
+
+def retained_loopback_root(pytest_base):
+    """Create a fresh root outside pytest's cleanup tree; never delete it here.
+
+    Gateway cleanup alone does not establish that the Risk child, clients,
+    and queues are closed. Until their close results are bound, even a
+    successful Gateway close is insufficient to delete this shared root.
+    """
+    base = Path(tempfile.gettempdir()).resolve()
+    pytest_root = Path(pytest_base).resolve()
+    if base == pytest_root or pytest_root in base.parents:
+        raise RuntimeError("RETAINED_ROOT_UNAVAILABLE")
+    root = Path(tempfile.mkdtemp(prefix="iter64-risk-loopback-", dir=str(base))).resolve()
+    if root == pytest_root or pytest_root in root.parents:
+        raise RuntimeError("RETAINED_ROOT_UNAVAILABLE")
+    return root
+
+
+def _gateway_token(value):
+    return type(value) is str and re.fullmatch(r"[0-9a-f]{32}", value, flags=re.ASCII) is not None
+
+
+def gateway_stop_command(run_id, generation, stop_id):
+    """Bind one synthetic stop to the ready message and a fresh caller nonce."""
+    if not all(_gateway_token(value) for value in (run_id, generation, stop_id)):
+        raise ValueError("INVALID_GATEWAY_STOP_IDENTITY")
+    return ("stop", run_id, generation, stop_id)
+
+
+def _gateway_stop_id(command, run_id, generation):
+    if (type(command) is tuple and len(command) == 4 and type(command[0]) is str
+            and command[0] == "stop" and all(_gateway_token(value) for value in command[1:])
+            and command[1:3] == (run_id, generation)):
+        return command[3]
+    return None
+
+
+def gateway_close_receipt_matches(receipt, *, pid, run_id, generation, stop_id):
+    """Check the child cleanup result, not process exit or client unregister."""
+    return (
+        type(pid) is int and pid > 0
+        and all(_gateway_token(value) for value in (run_id, generation, stop_id))
+        and type(receipt) is tuple
+        and len(receipt) == 6 and type(receipt[1]) is int
+        and all(type(receipt[index]) is str for index in (0, 2, 3, 4, 5))
+        and receipt == ("gateway_close", pid, run_id, generation, stop_id, "COMPLETE")
+    )
+
+
+class SyntheticGatewayStop:
+    """Retain the original child before startup and own one stop attempt."""
+
+    def __init__(self, process, controls, messages):
+        self.process, self.controls, self.messages = process, controls, messages
+        self._process_id = os.getpid()
+        self._owner_thread = threading.current_thread()
+        self.pid = self.generation = self.run_id = None
+        self._binding_attempted = False
+        self._bound = False
+        self._attempted = False
+        self._closed = False
+        _GATEWAY_CHILD_RETAINED[id(self)] = self
+
+    def bind_ready(self, ready):
+        if os.getpid() != self._process_id or threading.current_thread() is not self._owner_thread:
+            raise RuntimeError("GATEWAY_OWNER_IDENTITY_CHANGED")
+        if self._binding_attempted:
+            raise RuntimeError("GATEWAY_READY_ALREADY_ATTEMPTED")
+        self._binding_attempted = True
+        if (type(ready) is not tuple or len(ready) != 5 or ready[0] != "ready"
+                or type(ready[1]) is not int or ready[1] <= 0
+                or type(ready[2]) is not str or not ready[2]
+                or not _gateway_token(ready[3]) or not _gateway_token(ready[4])
+                or type(self.process.pid) is not int or self.process.pid != ready[1]):
+            raise ValueError("INVALID_GATEWAY_READY_IDENTITY")
+        self.pid, self.generation, self.run_id = ready[1], ready[3], ready[4]
+        self._bound = True
+
+    def close(self):
+        if os.getpid() != self._process_id or threading.current_thread() is not self._owner_thread:
+            raise RuntimeError("GATEWAY_OWNER_IDENTITY_CHANGED")
+        if self._closed:
+            return
+        if self._attempted:
+            raise RuntimeError("GATEWAY_CLEANUP_ALREADY_ATTEMPTED")
+        self._attempted = True
+        if not self._bound:
+            raise RuntimeError("GATEWAY_CLEANUP_UNKNOWN")
+        stop_id = secrets.token_hex(16)
+        try:
+            self.controls.put(gateway_stop_command(self.run_id, self.generation, stop_id))
+        except Exception:
+            raise RuntimeError("GATEWAY_CLEANUP_UNKNOWN") from None
+        deadline = time.monotonic() + 30
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise RuntimeError("GATEWAY_CLEANUP_UNKNOWN")
+            try:
+                item = self.messages.get(timeout=remaining)
+            except Exception:
+                raise RuntimeError("GATEWAY_CLEANUP_UNKNOWN") from None
+            if type(item) is not tuple or not item:
+                raise RuntimeError("GATEWAY_CLEANUP_UNKNOWN")
+            if item[0] in ("error", "gateway_close_unknown", "control_rejected"):
+                raise RuntimeError("GATEWAY_CLEANUP_UNKNOWN")
+            if item[0] == "gateway_close":
+                if not gateway_close_receipt_matches(
+                    item, pid=self.pid, run_id=self.run_id,
+                    generation=self.generation, stop_id=stop_id,
+                ):
+                    raise RuntimeError("GATEWAY_CLEANUP_UNKNOWN")
+                break
+        self.process.join(20)
+        if (self.process.is_alive() is not False or type(self.process.exitcode) is not int
+                or self.process.exitcode != 0):
+            raise RuntimeError("GATEWAY_CLEANUP_UNKNOWN")
+        self._closed = True
+        del _GATEWAY_CHILD_RETAINED[id(self)]
+
+
+def _close_synthetic_gateway(host, owner, stream, read_service, read_source):
+    """Close this fixture's owners once; failure retains its exact handles.
+
+    The Host borrows the stream and read service. The fixture owns the stream
+    and the synthetic account read model; the owner thread owns its guard.
+    Completion covers only these local cleanup calls, not account authority,
+    client unregister, or the child process being reaped by its parent.
+    """
+    retained = (host, owner, stream, read_service, read_source)
+    key = id(retained)
+    _GATEWAY_CLEANUP_RETAINED[key] = retained
+    if any(value is None for value in retained):
+        return "RESOURCES_UNAVAILABLE"
+    try:
+        if host.state != "started" or read_service.state_source is not read_source:
+            return "IDENTITY_UNAVAILABLE"
+        if host.close() is not None or host.state != "closed":
+            return "HOST_UNCONFIRMED"
+        if stream.close(5) is not True:
+            return "STREAM_UNCONFIRMED"
+        if read_service.state_source is not read_source or read_source.close() is not None:
+            return "READ_MODEL_UNCONFIRMED"
+        status = read_source.read_status()
+        if (read_source._state != "closed" or read_source.session_generation is not None
+                or status.get("session_generation") is not None or status.get("ready") is not False):
+            return "READ_MODEL_UNCONFIRMED"
+        if owner.close(5) is not True or owner.closed is not True:
+            return "OWNER_UNCONFIRMED"
+        from bt_api_py.gateway_direct_owner import GatewayDirectOwnerStatus
+
+        owner_status = owner.status()
+        if (type(owner_status) is not GatewayDirectOwnerStatus
+                or owner_status.failure_category is not None
+                or type(owner_status.queue_depth) is not int or owner_status.queue_depth != 0
+                or type(owner_status.service_queue_depth) is not int
+                or owner_status.service_queue_depth != 0
+                or owner_status.running is not False or owner_status.accepting is not False):
+            return "OWNER_UNCONFIRMED"
+    except Exception:
+        return "CLEANUP_EXCEPTION"
+    del _GATEWAY_CLEANUP_RETAINED[key]
+    return "COMPLETE"
+
+
+def _retained_gateway_wait(controls):
+    """Ignore commands and interruptions while an unclosed child owns resources."""
+    try:
+        controls.get()
+    except BaseException:
+        # A broken control queue must not make the holder exit or busy-spin.
+        try:
+            time.sleep(1)
+        except BaseException:
+            pass
+
+
+def _hold_synthetic_gateway(controls):
+    # No command grants permission to retry cleanup or release unknown owners.
+    while True:
+        _retained_gateway_wait(controls)
+
+
+def _finish_synthetic_gateway(host, owner, stream, read_service, read_source,
+                              messages, controls, run_id, generation, stop_id):
+    # Local references remain live even if cleanup itself is interrupted before
+    # it can register the tuple in _GATEWAY_CLEANUP_RETAINED.
+    try:
+        cleanup = _close_synthetic_gateway(host, owner, stream, read_service, read_source)
+    except BaseException:
+        cleanup = "CLEANUP_INTERRUPTED"
+    complete = type(cleanup) is str and cleanup == "COMPLETE"
+    try:
+        if (complete and _gateway_token(run_id)
+                and _gateway_token(generation) and _gateway_token(stop_id)):
+            messages.put(("gateway_close", os.getpid(), run_id, generation, stop_id, "COMPLETE"))
+        else:
+            messages.put(("gateway_close_unknown", os.getpid(), run_id,
+                          "UNBOUND_STOP" if complete else "CLEANUP_UNKNOWN"))
+    except BaseException:
+        # A failed report is not proof of cleanup and must not release a holder.
+        pass
+    if not complete:
+        _hold_synthetic_gateway(controls)
+
+
 def gateway_main(root, endpoint, server_keys, publics, strategy_count, messages, controls):
     """Loopback Gateway in its own process; reopens its journal when restarted on ``root``."""
     sys.path.insert(0, str(SDK_ROOT / "bt_api/bt_api_gateway/tests"))
-    owner = host = None
+    owner = host = stream = read_service = read_source = None
+    run_id = secrets.token_hex(16)
+    generation = stop_id = None
     try:
         from bt_api_base.direct_cancel_protocol import PreparedCancelRequest
         from bt_api_base.direct_write_protocol import (
@@ -177,7 +393,7 @@ def gateway_main(root, endpoint, server_keys, publics, strategy_count, messages,
             guard = LocalAccountSessionGuard(root / "guard", ACCOUNT, "owner")
             generation = guard.acquire()
             if database.exists():
-                with sqlite3.connect(database) as connection:
+                with closing(sqlite3.connect(database)) as connection:
                     journal_id, revision = connection.execute(
                         "SELECT journal_id, revision FROM direct_journal_meta"
                     ).fetchone()
@@ -283,6 +499,7 @@ def gateway_main(root, endpoint, server_keys, publics, strategy_count, messages,
         read_root = root / ("read-" + str(time.time_ns()))
         read_root.mkdir()
         read_service = _read_service(read_root, observers)
+        read_source = read_service.state_source
         comparison = GatewayAccountComparison(
             owner, journal, account_scope=ACCOUNT, principals=frozenset(),
             instruments=frozenset({key}),
@@ -335,7 +552,8 @@ def gateway_main(root, endpoint, server_keys, publics, strategy_count, messages,
             ),
         )
         host.start()
-        messages.put(("ready", os.getpid(), journal.journal_id, journal.generation))
+        generation = journal.generation
+        messages.put(("ready", os.getpid(), journal.journal_id, generation, run_id))
         while True:
             try:
                 item = controls.get_nowait()
@@ -343,6 +561,13 @@ def gateway_main(root, endpoint, server_keys, publics, strategy_count, messages,
                 item = None
             if item == "stop":
                 break
+            if type(item) is tuple and item and item[0] == "stop":
+                candidate_stop_id = _gateway_stop_id(item, run_id, generation)
+                if candidate_stop_id is not None:
+                    stop_id = candidate_stop_id
+                    break
+                messages.put(("control_rejected", "INVALID_GATEWAY_STOP_IDENTITY"))
+                continue
             if item == "stats":
                 messages.put(("stats", dict(holder["places"])))
             elif item is not None:
@@ -362,11 +587,8 @@ def gateway_main(root, endpoint, server_keys, publics, strategy_count, messages,
 
         messages.put(("error", type(error).__name__, str(error), traceback.format_exc()))
     finally:
-        if host is not None and host.state == "started":
-            host.close()
-        if owner is not None:
-            owner.close(5)
-        messages.put(("closed", os.getpid()))
+        _finish_synthetic_gateway(host, owner, stream, read_service, read_source,
+                                  messages, controls, run_id, generation, stop_id)
 
 
 # ----------------------------------------------------------------------------- files and clients

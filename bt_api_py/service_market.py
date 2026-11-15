@@ -304,6 +304,13 @@ class ZmqMarketTransportFactory:
             raise
 
 
+def _reject_strict_market_clients(clients) -> None:
+    # No token, registry, guard, callback or factory currently supplies the
+    # required producer and cleanup proof. Do not infer trust from a flag.
+    if any(getattr(client, "_strict_cleanup", False) is True for client in clients):
+        raise ServiceMarketError("STRICT_MARKET_FACTORY_UNAVAILABLE")
+
+
 class ServiceMarketClient:
     """One owner-thread market subscription backed by RPC control and replay."""
 
@@ -325,7 +332,16 @@ class ServiceMarketClient:
         monotonic_clock: Any = time.monotonic,
         require_source_descriptor: bool = False,
         expected_source_identity: ExpectedMarketSourceIdentity | None = None,
+        strict_cleanup: bool = False,
+        cleanup_guard: Any = None,
+        cleanup_uncertain_callback: Any = None,
     ) -> None:
+        if (
+            type(strict_cleanup) is not bool
+            or (cleanup_guard is not None and not callable(cleanup_guard))
+            or (cleanup_uncertain_callback is not None and not callable(cleanup_uncertain_callback))
+        ):
+            raise ServiceMarketError("INVALID_CLEANUP_POLICY")
         if type(runtime) is not ServiceClientRuntime:
             raise ServiceMarketError("INVALID_RUNTIME")
         if type(mount) is not str or not mount:
@@ -377,6 +393,11 @@ class ServiceMarketClient:
             raise ServiceMarketError("INVALID_MONOTONIC_CLOCK")
 
         self._runtime = runtime
+        # No current market factory has a verified quiescence and partial
+        # construction contract. A guard or callback alone cannot establish it.
+        self._strict_cleanup = strict_cleanup
+        self._cleanup_guard = cleanup_guard
+        self._cleanup_uncertain_callback = cleanup_uncertain_callback
         self.mount = mount
         self.key = key
         self._subscriber_factory = subscriber_factory
@@ -525,6 +546,7 @@ class ServiceMarketClient:
         selected = tuple(clients)
         if any(type(client) is not cls for client in selected):
             raise ServiceMarketError("INVALID_BOOTSTRAP_BATCH")
+        _reject_strict_market_clients(selected)
         first = selected[0]
         for client in selected:
             client._assert_owner()
@@ -780,6 +802,7 @@ class ServiceMarketClient:
         return tuple(bootstraps)
 
     def start(self) -> MarketBootstrap:
+        _reject_strict_market_clients((self,))
         self._assert_owner()
         if self.key.channel == "bar" and self._subscriber_factory is None:
             raise ServiceMarketError("HISTORY_ONLY_CLIENT")
@@ -1099,6 +1122,7 @@ class ServiceMarketClient:
         resumes such a subscription.
         """
 
+        _reject_strict_market_clients((self,))
         self._assert_owner()
         if _async_bootstrap_available(self._get_binding()):
             return _drive_bootstrap(self.begin_recover())[0]
@@ -1225,6 +1249,7 @@ class ServiceMarketClient:
         never claims that the hub supplied a complete snapshot.
         """
 
+        _reject_strict_market_clients((self,))
         self._assert_owner()
         if type(acknowledge_data_loss) is not bool or not acknowledge_data_loss:
             raise ServiceMarketError("RESYNC_ACKNOWLEDGEMENT_REQUIRED")
@@ -1262,6 +1287,42 @@ class ServiceMarketClient:
         """Unsubscribe and close locally; failed owner-thread closes are retryable."""
 
         self._assert_owner()
+        if getattr(self, "_strict_cleanup", False) is True:
+            extra = getattr(self, "_bootstrap_extra_subscribers", [])
+            if (
+                self._state not in {"new", "closed"}
+                or self._binding is not None
+                or self._subscriber is not None
+                or self._source_descriptor is not None
+                or self._remote_active is not False
+                or self._remote_unknown is not False
+                or self._unsubscription_uncertain is not False
+                or self._uncertain_registration_id is not None
+                or getattr(self, "_bootstrap_operation", None) is not None
+                or self._recovery_required is not False
+                or self._resync_required is not False
+                or self._authorization_interrupted is not None
+                or self._authorization_generation != 0
+                or self._authorization_resync is not False
+                or self._pending_resync is not None
+                or self._pending_poll_replay is not None
+                or self._pending_poll_gap_event is not None
+                or self._pending_poll_gap_receipt is not None
+                or self._last_delivered_receipt is not None
+                or self._last_bootstrap is not None
+                or self._cursor_epoch is not None
+                or self._cursor_sequence != 0
+                or self._queued_epoch is not None
+                or self._queued_sequence != 0
+                or self._bounded_replay_deferred is not False
+                or self._queue
+                or self._queue_bytes != 0
+                or type(extra) is not list
+                or extra
+            ):
+                raise ServiceMarketError("STRICT_MARKET_CLEANUP_UNAVAILABLE")
+            self._state = "closed"
+            return
         extra = getattr(self, "_bootstrap_extra_subscribers", [])
         while extra:
             try:
@@ -1413,6 +1474,7 @@ class ServiceMarketClient:
         returned bootstrap has ``resync_required=True`` (acknowledged loss).
         """
 
+        _reject_strict_market_clients((self,))
         self._assert_owner()
         if _async_bootstrap_available(self._get_binding()):
             return _drive_bootstrap(self.begin_resync_after_regrant())[0]
@@ -2105,6 +2167,7 @@ class ServiceMarketClient:
     def _try_unsubscribe(
         self, binding: ServiceMarketBindingView, *, preserve_uncertainty: bool
     ) -> bool:
+        _reject_strict_market_clients((self,))
         try:
             self._rpc("market.unsubscribe", {"key": self.key.to_dict()})
         except ServiceMarketError:
@@ -2115,6 +2178,7 @@ class ServiceMarketClient:
         return True
 
     def _cleanup_failed_start(self) -> None:
+        _reject_strict_market_clients((self,))
         binding = self._binding
         if binding is not None and (self._remote_active or self._remote_unknown):
             self._try_unsubscribe(binding, preserve_uncertainty=False)
@@ -2127,6 +2191,7 @@ class ServiceMarketClient:
         self._state = "failed"
 
     def _close_subscriber(self) -> None:
+        _reject_strict_market_clients((self,))
         subscriber = self._subscriber
         if subscriber is None:
             return
@@ -2138,6 +2203,7 @@ class ServiceMarketClient:
         self._subscriber = None
 
     def _make_subscriber(self, binding: ServiceMarketBindingView) -> EventSubscriber:
+        _reject_strict_market_clients((self,))
         try:
             wire_version = _market_wire_version(binding)
             if wire_version == MARKET_WIRE_VERSION_LEGACY:
@@ -2278,6 +2344,7 @@ class ServiceMarketBootstrapOperation:
         self.clients = tuple(clients)
         if any(type(client) is not ServiceMarketClient for client in self.clients):
             raise ServiceMarketError("INVALID_BOOTSTRAP_BATCH")
+        _reject_strict_market_clients(self.clients)
         if mode not in {"start", "recover", "regrant"} or (
             mode != "start" and len(self.clients) != 1
         ):
@@ -2530,6 +2597,7 @@ class ServiceMarketBootstrapOperation:
                 raise ServiceMarketError("RUNTIME_BINDING_CHANGED")
 
     def step(self):
+        _reject_strict_market_clients(self.clients)
         if self.done:
             raise ServiceMarketError("BOOTSTRAP_OPERATION_FINISHED")
         self._binding_current()
@@ -2738,6 +2806,7 @@ class ServiceMarketBootstrapOperation:
         return tuple(result)
 
     def cancel(self) -> bool:
+        _reject_strict_market_clients(self.clients)
         if self.done:
             return True
         self._cancel_requested = True

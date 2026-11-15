@@ -239,6 +239,18 @@ def test_disabled_optional_freshness_remains_none_with_fake_keys(monkeypatch):
     assert config.strategy_financial_max_age_seconds is None
 
 
+def test_same_native_alias_config_keeps_full_keys_and_refuses_ambiguous_lookup(monkeypatch):
+    doc = synthetic_refresh_document(monkeypatch)
+    doc["account"]["instruments"]["rb-option"] = {
+        "venue": "SHFE", "native_symbol": "rb2701", "product_type": "option"
+    }
+    config = parse_risk_service_config(doc, path=Path("/synthetic/risk_service.yaml"))
+    future, option = config.instruments["rb2701"], config.instruments["rb-option"]
+    assert future.key != option.key
+    assert config.instrument_for("SHFE", "rb2701") is None
+    assert config.instrument_for("SHFE", "unknown") is None
+
+
 def test_seconds_rejects_float_overflow_without_a_maximum():
     with pytest.raises(RiskServiceConfigError) as raised:
         risk_config._seconds("1e999")

@@ -6,37 +6,7 @@ from pathlib import Path
 import pytest
 
 import bt_api_py.risk_service_config as config
-def document():
-    return {
-        "schema": "bt_api_risk.service.v1",
-        "service": {"service_id": "risk-service", "principal_ref": "risk-host",
-                    "instance_id": "risk-a", "scope_ref": "risk-scope",
-                    "rpc_bind": "tcp://example.invalid:1", "public_key_file": "server.pub",
-                    "secret_key_file": "server.sec"},
-        "account": {"route": "route", "provider": "ctp", "environment": "demo",
-                    "account_scope": "synthetic-account", "execution_domain_ref": "paper:demo",
-                    "instruments": {"rb": {"venue": "SHFE", "native_symbol": "rb",
-                                           "product_type": "future"}}},
-        "storage": {"directory": "state"}, "policy": {"file": "policy.yaml"},
-        "principals": [
-            {"principal_ref": "strategy", "role": "strategy", "actor_ref": "s",
-             "strategy_refs": ["s"], "operations": ["risk.status"], "public_key_file": "s.pub"},
-            {"principal_ref": "operator", "role": "operator", "actor_ref": "ops",
-             "strategy_refs": [], "operations": ["risk.admin.status"], "public_key_file": "op.pub"},
-        ],
-        "gateway": {"service_id": "gateway", "principal_ref": "gateway-principal",
-                    "instance_id": "g", "scope_ref": "scope", "rpc_endpoint": "tcp://example.invalid:2",
-                    "server_public_key_file": "gateway.pub",
-                    "delegate": {"principal_ref": "delegate", "actor_ref": "delegate-actor",
-                                 "public_key_file": "delegate.pub", "secret_key_file": "delegate.sec",
-                                 "grant_revisions": {"s": "revision"}},
-                    "control": {"principal_ref": "control", "actor_ref": "control-actor",
-                                "public_key_file": "control.pub", "secret_key_file": "control.sec"}},
-        "deadlines": {"call_timeout_seconds": 5, "reservation_ttl_seconds": "10",
-                      "dispatch_recheck_seconds": 5},
-        "refresh": {"loop_timeout_ms": 20, "observation_poll_seconds": "0.2",
-                    "maintain_seconds": 1, "dispatch_recheck_limit": 8},
-    }
+from tests.unit.test_iter64_r04_v2_config_fake import document
 
 
 @pytest.fixture(autouse=True)

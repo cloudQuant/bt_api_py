@@ -53,8 +53,12 @@ class _Loopback:
             args=(str(self.gateway_root), self.gateway_endpoint, self.keys["gateway_server"],
                   support.gateway_publics(self.keys, 1), 1, self.messages, self.controls),
         )
+        self.gateway_stop = support.SyntheticGatewayStop(
+            self.gateway, self.controls, self.messages)
         self.gateway.start()
-        self.journal_id = support.next_message(self.messages, "ready", 40)[2]
+        ready = support.next_message(self.messages, "ready", 40)
+        self.journal_id = ready[2]
+        self.gateway_stop.bind_ready(ready)
         self.config = support.risk_files(
             self.risk_root, self.keys, 1, self.gateway_endpoint, self.risk_endpoint,
             ttl_seconds=TTL_SECONDS, dispatch_recheck_seconds=1,
@@ -120,16 +124,14 @@ class _Loopback:
         support.stop_risk(self.risk)
         if self.strategy is not None:
             self.strategy.close(timeout_seconds=5)
-        self.controls.put("stop")
-        self.gateway.join(20)
-        if self.gateway.is_alive():
-            self.gateway.terminate()
-            self.gateway.join(5)
+        self.gateway_stop.close()
 
 
 @pytest.fixture
-def loopback(tmp_path):
-    state = _Loopback(tmp_path)
+def loopback(tmp_path_factory):
+    root = support.retained_loopback_root(tmp_path_factory.getbasetemp())
+    print(f"Retained synthetic Risk loopback root: {root}")
+    state = _Loopback(root)
     try:
         yield state
     finally:
@@ -200,7 +202,8 @@ def test_after_gateway_reserve_recovers_by_status_and_releases_only_with_proof(l
     assert released.gateway_state in ("RELEASED", "EXPIRED"), released
     # Recovered by status onto the Gateway's own reservation (not a new one), then released.
     assert released.reservation_id == gateway_reservation
-    records = loopback.admin("risk.audit.read", {"after": 0, "limit": 500})["records"]
+    records = loopback.admin("risk.audit.read", {"after": 0, "limit": 500,
+                                                 "through": None, "snapshot": None})["records"]
     path = [(r["kind"], r["detail"].get("from"), r["detail"].get("to"))
             for r in records if r.get("request_key") == "risk-1"]
     assert ("resolve", "RESERVING", "RESERVED") in path, path

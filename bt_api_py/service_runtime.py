@@ -45,6 +45,15 @@ from bt_api_py.service_config import ClientConfig, ServiceConfig
 from bt_api_py.service_deployment import MOUNT_PORTS, OPTIONAL_MOUNT_PORTS
 from bt_api_py.service_registry import SERVICE_ERROR_CODES
 
+# An uncertain raw cleanup must survive the caller dropping its runtime, even
+# when a notification callback is absent in effect or fails. These roots are
+# deliberately retained for the process lifetime; there is no automatic
+# retry or release of an unresolved cleanup.
+_RAW_STICKY_CLEANUP_ROOTS: dict[int, Any] = {}
+_RAW_STICKY_CLEANUP_ROOTS_LOCK = threading.RLock()
+# Bound sends compare lease times only in this process's native clock domain.
+_BOUND_MONOTONIC = time.monotonic
+
 # Code-owned action lists. Deployments may expose a subset; configuration and
 # remote discovery cannot introduce new actions into a proxy.
 PORT_OPERATIONS = MappingProxyType(
@@ -107,6 +116,9 @@ PORT_OPERATIONS = MappingProxyType(
                 "account.facts.snapshot_info",
                 "account.facts.snapshot_read",
                 "account.facts.snapshot_confirm",
+                "account.cancel_attempts.read_after",
+                "account.cancel_attempts.progress",
+                "account.cancel_attempts.ack",
                 "account.reconciliation_cut",
             }
         ),
@@ -367,6 +379,19 @@ class _RequestNotSentAdapter:
         except self._error_type:
             raise ServiceRuntimeRequestNotSentError() from None
 
+    def _request_bound(self, request: WireEnvelope, *, timeout: float,
+                       lineage: tuple, verify_owner) -> WireEnvelope:
+        """Delegate only to the exact transport that owns this lineage."""
+        from bt_api_transport_zmq.service_v2 import ZmqServiceClient
+        if type(self._transport) is not ZmqServiceClient or lineage[0] is not self._transport:
+            raise ServiceRuntimeError("BOUND_ROUTE_UNAVAILABLE")
+        try:
+            return self._transport._request_bound(
+                request, timeout=timeout, lineage=lineage, verify_owner=verify_owner
+            )
+        except self._error_type:
+            raise ServiceRuntimeRequestNotSentError() from None
+
     @property
     def last_reply_receipt(self):
         # The optional receipt is currently defined only by this exact ZMQ
@@ -410,6 +435,39 @@ class RegisteredBinding:
     risk_policy_ref: str | None = None
     risk_policy_version: str | None = None
     requirements_ref: str | None = None
+
+
+def _bound_binding_values(binding: RegisteredBinding) -> tuple:
+    """Copy routing fields for a local same-owner check, not an authority proof."""
+    if type(binding) is not RegisteredBinding or type(binding.scope) is not WireScope:
+        raise ValueError("BOUND_ROUTE_UNAVAILABLE")
+    scope = tuple(vars(WireScope(**vars(binding.scope))).items())
+    return tuple((key, scope if key == "scope" else value) for key, value in vars(binding).items())
+
+
+def _bound_runtime_values(runtime: ServiceClientRuntime) -> tuple:
+    if type(runtime.identity) is not WireIdentity:
+        raise ValueError("BOUND_ROUTE_UNAVAILABLE")
+    return (*tuple(vars(WireIdentity(**vars(runtime.identity))).items()), ("run_id", runtime.run_id))
+
+
+@dataclass(frozen=True)
+class _BoundSendFence:
+    """Owner-local expectation for the actual send; this is not an authority token."""
+
+    binding: RegisteredBinding
+    binding_values: tuple
+    runtime_values: tuple
+    transport: object
+    peer: WireIdentity
+    fingerprint: str
+    mount: str
+    operation: str
+    account_ref: str | None
+    portfolio_ref: str | None
+    scope_ref: str | None
+    checked_at: float
+    lease_deadline: float
 
 
 @dataclass(frozen=True)
@@ -484,6 +542,8 @@ class ServiceClientRuntime:
         requested_operations: Mapping[str, frozenset[str]] | None = None,
         monotonic_clock: Callable[[], float] = time.monotonic,
         require_unregister_ack: bool = False,
+        cleanup_unknown: Callable[[], bool] | None = None,
+        on_cleanup_sticky: Callable[[], None] | None = None,
     ) -> None:
         if type(config) not in (ClientConfig, ServiceConfig):
             raise ServiceRuntimeError("INVALID_CONFIG")
@@ -508,6 +568,20 @@ class ServiceClientRuntime:
         if type(require_unregister_ack) is not bool:
             raise ServiceRuntimeError("INVALID_CLEANUP_POLICY")
         self._require_unregister_ack = require_unregister_ack
+        if (cleanup_unknown is None) != (on_cleanup_sticky is None) or (
+            cleanup_unknown is not None
+            and (not callable(cleanup_unknown) or not callable(on_cleanup_sticky))
+        ):
+            raise ServiceRuntimeError("INVALID_CLEANUP_POLICY")
+        self._cleanup_unknown = cleanup_unknown
+        self._on_cleanup_sticky = on_cleanup_sticky
+        self._cleanup_sticky = False
+        self._cleanup_in_progress = False
+        self._cleanup_evidence: tuple[Any, ...] | None = None
+        self._cleanup_reentrant_evidence: list[tuple[Any, ...]] = []
+        self._cleanup_latch: dict[str, object] = {}
+        self._start_in_progress = False
+        self._registration_in_progress: dict[str, Any] | None = None
         self._owner_thread_id = threading.get_ident()
         self._observation_owner_pid = os.getpid()
         self._observation_owner_thread = threading.current_thread()
@@ -543,6 +617,18 @@ class ServiceClientRuntime:
         self._last_unresolved_registration_id: str | None = None
         self._unknown_registration_count = 0
         self._last_unknown_registration_key: str | None = None
+
+    @property
+    def sticky_cleanup_enabled(self) -> bool:
+        return self._cleanup_unknown is not None
+
+    def _has_sticky_cleanup(self) -> bool:
+        if self._cleanup_sticky:
+            return True
+        # Rooting may have completed in a finally block after the flag write
+        # was interrupted. A retained runtime must never become retryable.
+        with _RAW_STICKY_CLEANUP_ROOTS_LOCK:
+            return _RAW_STICKY_CLEANUP_ROOTS.get(id(self)) is self
 
     @property
     def state(self) -> str:
@@ -584,7 +670,8 @@ class ServiceClientRuntime:
 
     @property
     def healthy(self) -> bool:
-        if self._state != "registered":
+        if (self._state != "registered" or self._cleanup_in_progress
+                or (self.sticky_cleanup_enabled and self._has_sticky_cleanup())):
             return False
         now = self._monotonic_now()
         return not any(
@@ -599,6 +686,7 @@ class ServiceClientRuntime:
     def authenticated_peer_for_binding(self, binding: RegisteredBinding):
         """Return only a peer proven by this binding's authenticated ZMQ registration."""
         self._assert_owner_thread()
+        self._strict_business_entry()
         if (type(binding) is not RegisteredBinding or not binding.active or binding not in self._bindings
                 or not self.healthy or self._state != 'registered'):
             return None
@@ -619,7 +707,8 @@ class ServiceClientRuntime:
             return None
         return proof
 
-    def _has_current_registration_observation(self, binding: RegisteredBinding) -> bool:
+    def _has_current_registration_observation(self, binding: RegisteredBinding, *,
+                                              _inflight: bool = False, _startup: bool = False) -> bool:
         """Observe local registration lineage, not remote liveness or authority."""
         if (os.getpid() != self._observation_owner_pid
                 or threading.get_ident() != self._owner_thread_id
@@ -631,15 +720,23 @@ class ServiceClientRuntime:
         try:
             valid = (
                 type(binding) is RegisteredBinding
-                and self._state == "registered"
+                and ((not _startup and self._state == "registered" and self.healthy)
+                     or (_startup and self._state == "starting" and self._startup_maintaining
+                         and not self._startup_rollback
+                         and self._monotonic_clock is _BOUND_MONOTONIC
+                         and all(not item.active or not item.required
+                                 or self._monotonic_now() < item.lease_deadline
+                                 for item in self._bindings)))
                 and any(item is binding for item in self._bindings)
                 and binding.active and not binding.remote_lease_inactive
-                and self.healthy and self._monotonic_now() < binding.lease_deadline
+                and self._monotonic_now() < binding.lease_deadline
                 and tuple(vars(binding).items()) == proof[1]
-                and self._registration_transport_is_current(proof[2])
+                and (self._registration_transport_is_current(proof[2], _inflight=True)
+                     if _inflight else self._registration_transport_is_current(proof[2]))
                 and proof[3].payload.get("result") is proof[5]
                 and encode_envelope(proof[3]) == proof[6]
                 and tuple(vars(proof[4]).items()) == proof[7]
+                and self._renewal_lineage_is_current(proof, binding)
             )
         except Exception:
             valid = False
@@ -647,7 +744,26 @@ class ServiceClientRuntime:
             self._registration_lineage.pop(id(binding), None)
         return valid
 
-    def _registration_transport_is_current(self, proof: tuple[Any, ...]) -> bool:
+    def _renewal_lineage_is_current(self, proof: tuple, binding: RegisteredBinding) -> bool:
+        """Recheck the last validated renewal while retaining original registration evidence."""
+        if len(proof) == 9:
+            return True
+        if len(proof) != 10:
+            return False
+        reply, receipt, result, encoded, receipt_fields, started = proof[9]
+        self._validate_renewal_receipt(result, binding)
+        return (
+            reply.payload.get("result") is result
+            and reply.header.operation == "service.renew"
+            and receipt.operation == "service.renew"
+            and reply.header.correlation_id == receipt.request_message_id
+            and reply.header.message_id == receipt.reply_message_id
+            and encode_envelope(reply) == encoded
+            and tuple(vars(receipt).items()) == receipt_fields
+            and binding.lease_deadline == started + self._lease_remaining(result)
+        )
+
+    def _registration_transport_is_current(self, proof: tuple[Any, ...], *, _inflight: bool = False) -> bool:
         """Check captured objects independently of the backend's last receipt."""
         from bt_api_transport_zmq.service_v2 import ZmqServiceClient
         key, adapter, client, socket, context, generation, server_key, client_key, failures = proof
@@ -659,7 +775,7 @@ class ServiceClientRuntime:
             and client._owner_pid == self._observation_owner_pid
             and client._owner_thread == self._owner_thread_id
             and client._observation_owner_thread is self._observation_owner_thread
-            and not client._closed and not client._close_pending and not client._inflight
+            and not client._closed and not client._close_pending and client._inflight is _inflight
             and not client._socket_retirement_pending
             and client._socket is socket and client._context is context
             and socket is not None and context is not None
@@ -676,6 +792,7 @@ class ServiceClientRuntime:
         """Return a trusted frozen profile view for one registered market mount."""
 
         self._assert_owner_thread()
+        self._strict_business_entry()
         self._require_healthy()
         if self._state != "registered":
             raise ServiceRuntimeError("SESSION_NOT_REGISTERED")
@@ -753,6 +870,7 @@ class ServiceClientRuntime:
         """Return a trusted frozen view for one registered account-read mount."""
 
         self._assert_owner_thread()
+        self._strict_business_entry()
         self._require_healthy()
         if self._state != "registered":
             raise ServiceRuntimeError("SESSION_NOT_REGISTERED")
@@ -798,12 +916,14 @@ class ServiceClientRuntime:
 
     def start(self) -> RegistrationSummary:
         self._assert_owner_thread()
+        self._strict_public_lifecycle_entry()
         if self._state == "registered":
             return RegistrationSummary(
                 self.bindings, self._degraded, tuple(self._degradation_codes)
             )
         if self._state != "new":
             raise ServiceRuntimeError("SESSION_NOT_NEW")
+        self._start_in_progress = self.sticky_cleanup_enabled
         self._state = "starting"
         try:
             for client in self._config.get("clients", {}).values():
@@ -818,6 +938,7 @@ class ServiceClientRuntime:
                             timeout_ms=timeout_ms,
                             heartbeat_interval_seconds=heartbeat_interval,
                         )
+                        self._strict_start_check()
                         self._startup_maintain_if_due()
                     except Exception as error:
                         if isinstance(error, ServiceRuntimeStartupCleanupError):
@@ -847,23 +968,37 @@ class ServiceClientRuntime:
                         )
             self._startup_maintain_if_due()
             self._startup_check_required_leases()
+            self._strict_start_check()
             self._state = "registered"
             return RegistrationSummary(
                 self.bindings, self._degraded, tuple(self._degradation_codes)
             )
-        except BaseException:
+        except BaseException as error:
             # Startup can be interrupted after a transport or registration has
             # been acquired. Try every local close, and retain any transport
             # whose owner-thread cleanup did not complete.
             self._startup_rollback = True
             try:
-                self._release(capture_base_exceptions=True)
+                if not (self.sticky_cleanup_enabled and self._has_sticky_cleanup()):
+                    try:
+                        self._release(capture_base_exceptions=True)
+                    except BaseException:
+                        if self.sticky_cleanup_enabled and not isinstance(error, Exception):
+                            raise error
+                        raise
             finally:
                 self._startup_rollback = False
+            if self.sticky_cleanup_enabled and self._has_sticky_cleanup():
+                self._state = "close_failed"
+                if not isinstance(error, Exception):
+                    raise
+                raise ServiceRuntimeError("CLOSE_FAILED") from None
             self._state = "close_failed" if self._transports else "failed"
             if self._transports:
                 raise ServiceRuntimeError("CLOSE_FAILED") from None
             raise
+        finally:
+            self._start_in_progress = False
 
     def call(
         self,
@@ -876,8 +1011,15 @@ class ServiceClientRuntime:
         scope_ref: str | None = None,
         max_reply_message_bytes: int | None = None,
         include_receive_receipt: bool = False,
+        _expected_binding: RegisteredBinding | None = None,
+        _expected_binding_values: tuple | None = None,
+        _expected_runtime_values: tuple | None = None,
+        _expected_transport: object | None = None,
+        _expected_peer: WireIdentity | None = None,
+        _expected_fingerprint: str | None = None,
     ) -> Mapping[str, Any] | tuple[Mapping[str, Any], object | None]:
         self._assert_owner_thread()
+        self._strict_business_entry()
         if type(include_receive_receipt) is not bool:
             raise ServiceRuntimeError("INVALID_RECEIPT_REQUEST")
         self._require_healthy()
@@ -901,6 +1043,11 @@ class ServiceClientRuntime:
         if len(matches) != 1:
             raise ServiceRuntimeError("AMBIGUOUS_OR_MISSING_ROUTE")
         binding = matches[0]
+        # Owner-bound calls may only use the exact binding inspected by their
+        # owner immediately before this selection.  A caller-provided object is
+        # not authority: normal selection, lease and transport checks still run.
+        if _expected_binding is not None and binding is not _expected_binding:
+            raise ServiceRuntimeError("BOUND_ROUTE_UNAVAILABLE")
         if operation not in binding.operations:
             raise ServiceRuntimeError("ACTION_NOT_GRANTED")
         reply_limit = max_reply_message_bytes
@@ -912,7 +1059,8 @@ class ServiceClientRuntime:
         if reply_limit is not None or tracked_account_read or operation == "direct.events.read_after":
             profile_limit = self._profile_max_message_bytes(binding.transport_ref)
             reply_limit = profile_limit if reply_limit is None else min(profile_limit, reply_limit)
-        remaining = binding.lease_deadline - self._monotonic_now()
+        checked_at = self._monotonic_now()
+        remaining = binding.lease_deadline - checked_at
         if remaining <= 0:
             self._expire_binding(binding)
             self._require_healthy()
@@ -925,6 +1073,37 @@ class ServiceClientRuntime:
         }
         if reply_limit is not None:
             payload["max_reply_message_bytes"] = reply_limit
+        if _expected_binding is not None:
+            try:
+                final_matches = [
+                    b for b in self._bindings
+                    if b.active and b.mount == mount and operation in b.operations
+                    and (account_ref is None or b.scope.account_ref == account_ref)
+                    and (portfolio_ref is None or b.scope.portfolio_ref == portfolio_ref)
+                    and (scope_ref is None or b.scope_ref == scope_ref)
+                ]
+                if (self._state != "registered"
+                        or len(final_matches) != 1 or final_matches[0] is not _expected_binding
+                        or binding is not _expected_binding
+                        or _bound_binding_values(binding) != _expected_binding_values
+                        or _bound_runtime_values(self) != _expected_runtime_values
+                        or self._transports.get((binding.service_id, binding.transport_ref)) is not _expected_transport
+                        or self._peers.get(binding.service_id) != _expected_peer
+                        or self._authenticated_registration_peers.get(
+                            (binding.service_id, binding.transport_ref,
+                             binding.registration_id, binding.service_epoch)
+                        ) != (_expected_peer, _expected_fingerprint)):
+                    raise ValueError
+            except Exception:
+                raise ServiceRuntimeError("BOUND_ROUTE_UNAVAILABLE") from None
+        bound_kwargs = {}
+        if _expected_binding is not None:
+            bound_kwargs["_bound_send_fence"] = _BoundSendFence(
+                _expected_binding, _expected_binding_values, _expected_runtime_values,
+                _expected_transport, _expected_peer, _expected_fingerprint,
+                mount, operation, account_ref, portfolio_ref, scope_ref,
+                checked_at, binding.lease_deadline,
+            )
         return self._rpc(
             binding.service_id,
             binding.transport_ref,
@@ -934,6 +1113,7 @@ class ServiceClientRuntime:
             control=False,
             timeout=min(binding.timeout, remaining * 0.8),
             include_receive_receipt=include_receive_receipt,
+            **bound_kwargs,
         )
 
     def renew(self) -> RegistrationSummary:
@@ -950,6 +1130,7 @@ class ServiceClientRuntime:
         """Seconds until the next active binding should be maintained, if any."""
 
         self._assert_owner_thread()
+        self._strict_business_entry()
         if self._state != "registered":
             return None
         deadlines = [binding.renewal_due_at for binding in self._bindings if binding.active]
@@ -959,6 +1140,7 @@ class ServiceClientRuntime:
 
     def _maintain(self, *, force: bool) -> RegistrationSummary:
         self._assert_owner_thread()
+        self._strict_business_entry()
         if self._state != "registered":
             raise ServiceRuntimeError("SESSION_NOT_REGISTERED")
         self._require_healthy()
@@ -1003,6 +1185,11 @@ class ServiceClientRuntime:
                 continue
             renewal_timeout = min(binding.timeout, remaining * 0.5)
             timing: dict[str, Any] = {}
+            old_lineage = None
+            if (binding.operations.intersection({
+                    "account.cancel_attempts.read_after", "account.cancel_attempts.ack"})
+                    and self._has_current_registration_observation(binding, _startup=startup)):
+                old_lineage = self._registration_lineage.get(id(binding))
             try:
                 receipt, request_started = self._rpc(
                     binding.service_id,
@@ -1096,6 +1283,8 @@ class ServiceClientRuntime:
                     binding.heartbeat_interval_seconds,
                 ),
             )
+            lineage_unchanged = (old_lineage is not None
+                                 and self._registration_lineage.get(id(binding)) is old_lineage)
             self._registration_lineage.pop(id(binding), None)
             self._bindings[index] = renewed
             if self._monotonic_now() >= new_deadline:
@@ -1104,6 +1293,35 @@ class ServiceClientRuntime:
                     raise ServiceRuntimeError("LEASE_EXPIRED_DURING_RENEWAL")
                 self._expire_binding(renewed)
                 continue
+            if lineage_unchanged:
+                try:
+                    observed = timing.get("renewal_observation")
+                    (transport_proof, observed_reply, observed_receipt, observed_result,
+                     encoded_body, receipt_fields, observed_registration, observed_epoch) = observed
+                    original_transport = old_lineage[2]
+                    if (type(observed) is tuple and len(observed) == 8
+                            and observed_result is receipt
+                            and observed_reply.payload.get("result") is receipt
+                            and observed_registration == binding.registration_id
+                            and observed_epoch == binding.service_epoch
+                            and tuple(vars(binding).items()) == old_lineage[1]
+                            and transport_proof[0] == original_transport[0]
+                            and all(transport_proof[i] is original_transport[i] for i in (1, 2, 3, 4))
+                            and transport_proof[5:] == original_transport[5:]
+                            and self._registration_transport_is_current(original_transport)
+                            and encode_envelope(observed_reply) == encoded_body
+                            and tuple(vars(observed_receipt).items()) == receipt_fields
+                            and self._monotonic_now() < renewed.lease_deadline
+                            and self._bindings[index] is renewed):
+                        self._registration_lineage[id(renewed)] = (
+                            renewed, tuple(vars(renewed).items()), *old_lineage[2:9],
+                            (observed_reply, observed_receipt, observed_result, encoded_body,
+                             receipt_fields, request_started),
+                        )
+                except Exception:
+                    # The renewed service binding remains usable by ordinary
+                    # paths, but cancel-stream lineage cannot be inferred.
+                    pass
             index += 1
         if startup:
             self._startup_check_required_leases()
@@ -1115,9 +1333,18 @@ class ServiceClientRuntime:
         """Start a fresh registration session without replaying business calls."""
 
         self._assert_owner_thread()
-        self._registration_lineage.clear()
+        self._strict_public_lifecycle_entry()
+        if not self.sticky_cleanup_enabled:
+            self._registration_lineage.clear()
         if self._state not in {"registered", "failed", "close_failed"}:
             raise ServiceRuntimeError("SESSION_NOT_RECOVERABLE")
+        if self.sticky_cleanup_enabled:
+            self._release()
+            self.client_session_id = uuid.uuid4().hex
+            self._degraded = 0
+            self._degradation_codes.clear()
+            self._state = "new"
+            return self.start()
         try:
             self._release(capture_base_exceptions=True)
         except BaseException:
@@ -1137,6 +1364,15 @@ class ServiceClientRuntime:
 
     def close(self) -> None:
         self._assert_owner_thread()
+        self._strict_public_lifecycle_entry()
+        if self.sticky_cleanup_enabled:
+            try:
+                self._release()
+                self._state = "closed"
+            except BaseException as error:
+                self._set_cleanup_sticky(error)
+                raise
+            return
         self._registration_lineage.clear()
         if self._state == "closed":
             return
@@ -1240,6 +1476,19 @@ class ServiceClientRuntime:
         self._degrade_binding(binding, "LEASE_EXPIRED")
 
     def _degrade_binding(self, binding: RegisteredBinding, code: str) -> None:
+        if self.sticky_cleanup_enabled:
+            self._strict_cleanup_entry()
+            self._cleanup_in_progress = True
+            try:
+                self._strict_unregister_binding(binding)
+                self._degraded += 1
+                self._degradation_codes.append(code)
+            except BaseException as error:
+                self._set_cleanup_sticky(binding, error)
+                raise
+            finally:
+                self._cleanup_in_progress = False
+            return
         self._registration_lineage.pop(id(binding), None)
         self._degraded += 1
         self._degradation_codes.append(code)
@@ -1271,6 +1520,7 @@ class ServiceClientRuntime:
 
     def _monotonic_now(self) -> float:
         value = self._monotonic_clock()
+        self._strict_start_check()
         if type(value) not in (int, float) or not math.isfinite(value):
             raise ServiceRuntimeError("INVALID_MONOTONIC_CLOCK")
         return float(value)
@@ -1315,7 +1565,9 @@ class ServiceClientRuntime:
     ) -> None:
         service_id, transport_ref = binding["service_id"], binding["transport_ref"]
         scope = self._scope(binding)
+        self._strict_start_check()
         peer = self._peer_resolver(service_id)
+        self._strict_start_check()
         if type(peer) is not WireIdentity or peer.role is not WireRole.SERVICE:
             raise ServiceRuntimeError("INVALID_PEER")
         if service_id in self._peers and self._peers[service_id] != peer:
@@ -1330,9 +1582,11 @@ class ServiceClientRuntime:
             except ServiceRuntimeStartupCleanupError as error:
                 self._transports[key] = error.transport
                 raise
+            self._strict_start_check()
         discovered = self._rpc(
             service_id, transport_ref, scope, "service.discover", {}, timeout=timeout
         )
+        self._strict_start_check()
         # Version handshake (iteration 60, P1-3): both the protocol version and
         # the wire contract digest (envelope + typed registry) must match.
         if (
@@ -1420,6 +1674,55 @@ class ServiceClientRuntime:
                     )
 
     def _register_port(
+        self,
+        binding,
+        scope,
+        port,
+        capabilities,
+        *,
+        timeout,
+        required,
+        heartbeat_interval_seconds,
+    ):
+        if not self.sticky_cleanup_enabled:
+            return self._register_port_impl(
+                binding, scope, port, capabilities, timeout=timeout, required=required,
+                heartbeat_interval_seconds=heartbeat_interval_seconds,
+            )
+        if self._registration_in_progress is not None:
+            error = ServiceRuntimeError("CLOSE_FAILED")
+            self._set_cleanup_sticky(self._registration_in_progress, error)
+            raise error
+        window: dict[str, Any] = {"attempted": False, "timing": None, "handle_recorded": False}
+        self._registration_in_progress = window
+        try:
+            return self._register_port_impl(
+                binding, scope, port, capabilities, timeout=timeout, required=required,
+                heartbeat_interval_seconds=heartbeat_interval_seconds,
+            )
+        except BaseException as error:
+            timing = window["timing"]
+            proven_not_sent = type(timing) is dict and (
+                timing.get("request_not_sent") is True or timing.get("server_rejected") is True
+            )
+            # A handle that was once inserted may have disappeared during a
+            # later replacement or a reentrant mutation. Only the exact
+            # placeholder or final object still installed, or a completed
+            # unregister, avoids treating the registration as unresolved.
+            handle_present = window["handle_recorded"] and any(
+                item is window.get("placeholder") or item is window.get("final_binding")
+                for item in self._bindings
+            )
+            if (window["attempted"] and not proven_not_sent
+                    and not handle_present and not window.get("released", False)):
+                self._set_cleanup_sticky(binding, scope, port, window, error)
+                if self._unknown_registration_count == window["unknown_count"]:
+                    self._record_unknown_registration(window["registration_key"])
+            raise
+        finally:
+            self._registration_in_progress = None
+
+    def _register_port_impl(
         self,
         binding,
         scope,
@@ -1638,6 +1941,13 @@ class ServiceClientRuntime:
         attempt_scope = scope
         for attempt in ("initial", "adopted"):
             timing: dict[str, Any] = {}
+            if self.sticky_cleanup_enabled:
+                self._registration_in_progress["attempted"] = False
+                self._registration_in_progress.update(
+                    timing=timing, handle_recorded=False,
+                    registration_key=registration_key, unknown_count=self._unknown_registration_count,
+                )
+                self._registration_in_progress["attempted"] = True
             try:
                 result, request_started = self._rpc(
                     binding["service_id"],
@@ -1649,6 +1959,8 @@ class ServiceClientRuntime:
                     include_started_at=True,
                     timing=timing,
                 )
+                if self.sticky_cleanup_enabled and self._has_sticky_cleanup():
+                    raise ServiceRuntimeError("CLOSE_FAILED")
             except ServiceRuntimeError as error:
                 adopted_run_id = self._released_run_adoption_run_id(error, attempt_scope)
                 if attempt == "initial" and adopted_run_id is not None:
@@ -1666,14 +1978,18 @@ class ServiceClientRuntime:
                     and not timing.get("request_not_sent", False)
                 ):
                     self._record_unknown_registration(registration_key)
+                    if self.sticky_cleanup_enabled:
+                        self._set_cleanup_sticky(binding, attempt_scope, registration_key, error)
                 raise
-            except BaseException:
+            except BaseException as error:
                 if (
                     timing.get("request_started") is not None
                     and not timing.get("server_rejected", False)
                     and not timing.get("request_not_sent", False)
                 ):
                     self._record_unknown_registration(registration_key)
+                    if self.sticky_cleanup_enabled:
+                        self._set_cleanup_sticky(binding, attempt_scope, registration_key, error)
                 raise
             scope = attempt_scope
             break
@@ -1706,19 +2022,27 @@ class ServiceClientRuntime:
                 required=bool(required),
                 active=False,
             )
+            if self.sticky_cleanup_enabled:
+                self._registration_in_progress["placeholder"] = placeholder
             placeholder_index = len(self._bindings)
             self._bindings.append(placeholder)
-        except BaseException:
+            if self.sticky_cleanup_enabled:
+                self._registration_in_progress["handle_recorded"] = True
+        except BaseException as error:
             if placeholder is None:
                 # A successful remote registration without a locally retained
                 # cleanup handle is explicitly uncertain, never silently lost.
                 self._record_unknown_registration(registration_key)
+                if self.sticky_cleanup_enabled:
+                    self._set_cleanup_sticky(binding, scope, registration_key, error)
             else:
                 try:
                     if not any(item is placeholder for item in self._bindings):
                         self._bindings.append(placeholder)
                 except BaseException:
                     self._record_unknown_registration(registration_key)
+                    if self.sticky_cleanup_enabled:
+                        self._set_cleanup_sticky(placeholder, error)
                     raise
             raise
         try:
@@ -1767,7 +2091,20 @@ class ServiceClientRuntime:
                 risk_policy_version=policy_metadata[4],
                 requirements_ref=policy_metadata[5],
             )
-        except BaseException:
+        except BaseException as original_error:
+            if self.sticky_cleanup_enabled:
+                self._strict_cleanup_entry(allow_registration=True)
+                self._cleanup_in_progress = True
+                try:
+                    try:
+                        self._strict_unregister_binding(placeholder)
+                    except BaseException:
+                        if not isinstance(original_error, Exception):
+                            raise original_error
+                        raise
+                finally:
+                    self._cleanup_in_progress = False
+                raise
             try:
                 cleanup_acknowledged = self._unregister_during_startup(
                     binding["service_id"],
@@ -1787,6 +2124,8 @@ class ServiceClientRuntime:
             else:
                 self._bindings = [item for item in self._bindings if item is not placeholder]
             raise
+        if self.sticky_cleanup_enabled:
+            self._registration_in_progress["final_binding"] = final_binding
         if (
             placeholder_index < len(self._bindings)
             and self._bindings[placeholder_index] is placeholder
@@ -1961,6 +2300,71 @@ class ServiceClientRuntime:
         cls._expiry(result)
         cls._lease_remaining(result)
 
+    def _bound_send_boundary(self, fence: _BoundSendFence, service_id: str, transport_ref: str,
+                             scope: WireScope, operation: str, request: WireEnvelope,
+                             timeout: float) -> tuple[object, WireIdentity, float, float]:
+        """Recheck one local owner binding at the last controllable send boundary."""
+        try:
+            if (type(fence) is not _BoundSendFence or type(fence.binding) is not RegisteredBinding
+                    or type(fence.peer) is not WireIdentity or type(fence.fingerprint) is not str
+                    or self._monotonic_clock is not _BOUND_MONOTONIC or self._state != "registered"):
+                raise ValueError
+            binding = fence.binding
+            def same_binding() -> bool:
+                matches = [
+                    b for b in self._bindings
+                    if b.active and b.mount == fence.mount and operation in b.operations
+                    and (fence.account_ref is None or b.scope.account_ref == fence.account_ref)
+                    and (fence.portfolio_ref is None or b.scope.portfolio_ref == fence.portfolio_ref)
+                    and (fence.scope_ref is None or b.scope_ref == fence.scope_ref)
+                ]
+                return (
+                    self._state == "registered" and len(matches) == 1 and matches[0] is binding
+                    and binding.active is True and binding.required is True
+                    and binding.remote_lease_inactive is False
+                    and service_id == binding.service_id and transport_ref == binding.transport_ref
+                    and operation == fence.operation == request.header.operation
+                    and scope is binding.scope and request.header.scope is not scope
+                    and request.header.scope == binding.scope
+                    and request.header.identity is not self.identity
+                    and request.header.identity == self.identity
+                    and _bound_binding_values(binding) == fence.binding_values
+                    and _bound_runtime_values(self) == fence.runtime_values
+                    and self._transports.get((service_id, transport_ref)) is fence.transport
+                    and fence.transport is not None and self._peers.get(service_id) == fence.peer
+                    and self._authenticated_registration_peers.get(
+                        (service_id, transport_ref, binding.registration_id, binding.service_epoch)
+                    ) == (fence.peer, fence.fingerprint)
+                    and request.payload.get("registration_id") == binding.registration_id
+                    and request.payload.get("service_epoch") == binding.service_epoch
+                    and request.payload.get("instance_id") == binding.instance_id
+                    and binding.lease_deadline == fence.lease_deadline
+                )
+            if (not same_binding() or type(fence.checked_at) not in (int, float)
+                    or not math.isfinite(fence.checked_at)
+                    or type(fence.lease_deadline) not in (int, float)
+                    or not math.isfinite(fence.lease_deadline)
+                    or type(timeout) not in (int, float) or not math.isfinite(timeout) or timeout <= 0):
+                raise ValueError
+            # This is the same native monotonic domain used for the bound lease.
+            # Re-sample *after* envelope construction and routing checks.
+            now = self._monotonic_now()
+            if (type(now) not in (int, float) or not math.isfinite(now)
+                    or now < fence.checked_at or now >= fence.lease_deadline):
+                raise ValueError
+            if not same_binding() or self._monotonic_clock is not _BOUND_MONOTONIC:
+                raise ValueError
+            send_now = _BOUND_MONOTONIC()
+            if (type(send_now) not in (int, float) or not math.isfinite(send_now)
+                    or send_now < now or send_now >= fence.lease_deadline):
+                raise ValueError
+            remaining_timeout = min(timeout, (fence.lease_deadline - send_now) * 0.8)
+            if not math.isfinite(remaining_timeout) or remaining_timeout <= 0:
+                raise ValueError
+            return fence.transport, fence.peer, send_now, remaining_timeout
+        except Exception:
+            raise ServiceRuntimeError("BOUND_ROUTE_UNAVAILABLE") from None
+
     def _rpc(
         self,
         service_id,
@@ -1975,22 +2379,27 @@ class ServiceClientRuntime:
         started_at=None,
         timing=None,
         include_receive_receipt=False,
+        _bound_send_fence: _BoundSendFence | None = None,
     ):
         self._assert_owner_thread()
         try:
+            bound_kwargs = {} if _bound_send_fence is None else {"_bound_send_fence": _bound_send_fence}
             return self._rpc_impl(
                 service_id, transport_ref, scope, operation, payload,
                 control=control, timeout=timeout, include_started_at=include_started_at,
                 started_at=started_at, timing=timing,
                 include_receive_receipt=include_receive_receipt,
+                **bound_kwargs,
             )
         except BaseException:
             key = (service_id, transport_ref)
-            self._registration_failure_generation[key] = self._registration_failure_generation.get(key, 0) + 1
-            self._registration_lineage = {
-                ident: proof for ident, proof in self._registration_lineage.items()
-                if proof[2][0] != key
-            }
+            if not (self.sticky_cleanup_enabled and self._cleanup_in_progress):
+                self._registration_failure_generation[key] = self._registration_failure_generation.get(key, 0) + 1
+                if not (self.sticky_cleanup_enabled and operation == "service.register"):
+                    self._registration_lineage = {
+                        ident: proof for ident, proof in self._registration_lineage.items()
+                        if proof[2][0] != key
+                    }
             raise
 
     def _rpc_impl(
@@ -2007,6 +2416,7 @@ class ServiceClientRuntime:
         started_at=None,
         timing=None,
         include_receive_receipt=False,
+        _bound_send_fence: _BoundSendFence | None = None,
     ):
         self._assert_owner_thread()
         if type(include_receive_receipt) is not bool or (include_receive_receipt and include_started_at):
@@ -2031,14 +2441,25 @@ class ServiceClientRuntime:
                 raise
         else:
             effective_timeout = configured_timeout
+        # Bound headers must not retain the live binding/identity objects: they
+        # can change after the last local check, including while clock sampling.
+        # These detached frozen values remain claims, not authorization proofs.
+        if _bound_send_fence is not None:
+            try:
+                request_identity = WireIdentity(**vars(self.identity))
+                request_scope = WireScope(**vars(scope))
+            except Exception:
+                raise ServiceRuntimeError("BOUND_ROUTE_UNAVAILABLE") from None
+        else:
+            request_identity, request_scope = self.identity, scope
         request = WireEnvelope(
             WireHeader(
                 protocol_version=WIRE_PROTOCOL_VERSION,
                 kind=WireMessageKind.REQUEST,
                 message_id=uuid.uuid4().hex,
                 correlation_id=None,
-                identity=self.identity,
-                scope=scope,
+                identity=request_identity,
+                scope=request_scope,
                 operation=operation,
                 schema_id="sdk.service.control" if control else "sdk.service.call",
                 schema_version=1,
@@ -2056,25 +2477,68 @@ class ServiceClientRuntime:
                     timing["request_not_sent"] = True
                 raise
         # No automatic retry: a timed-out write requires business reconciliation.
-        request_started = self._monotonic_now()
+        # For an owner-bound call, the selected transport and peer must be the
+        # same ones the owner authenticated, not a fresh lookup after checking.
+        if _bound_send_fence is not None:
+            if control or include_started_at or started_at is not None or timing is not None:
+                raise ServiceRuntimeError("BOUND_ROUTE_UNAVAILABLE")
+            transport, peer, request_started, effective_timeout = self._bound_send_boundary(
+                _bound_send_fence, service_id, transport_ref, scope, operation, request, effective_timeout
+            )
+        else:
+            request_started = self._monotonic_now()
         if started_at is not None:
             started_at.append(request_started)
         if timing is not None:
             timing["request_started"] = request_started
         try:
-            reply = self._transports[(service_id, transport_ref)].request(
-                request, timeout=effective_timeout
-            )
+            if (_bound_send_fence is not None and operation in {
+                    "account.cancel_attempts.read_after", "account.cancel_attempts.ack"}):
+                # A cancellation-stream receipt must be obtained and consumed
+                # on the registration's original local socket. The transport
+                # enforces its object lineage; this SDK owner verifies the
+                # separately held registration, routing and lease facts.
+                binding = _bound_send_fence.binding
+                if not self._has_current_registration_observation(binding):
+                    raise ServiceRuntimeError("BOUND_ROUTE_UNAVAILABLE")
+                proof = self._registration_lineage.get(id(binding))
+                if type(proof) is not tuple or type(transport) is not _RequestNotSentAdapter:
+                    raise ServiceRuntimeError("BOUND_ROUTE_UNAVAILABLE")
+                transport_proof = proof[2]
+                client = transport._transport
+                lineage = (client, transport_proof[3], transport_proof[4], transport_proof[5],
+                           transport_proof[6], transport_proof[7], client._receiver)
+
+                def verify_owner() -> None:
+                    if (self._registration_lineage.get(id(binding)) is not proof
+                            or not self._has_current_registration_observation(binding, _inflight=True)
+                            or hashlib.sha256(client._server_key).hexdigest() != _bound_send_fence.fingerprint):
+                        raise ServiceRuntimeError("BOUND_ROUTE_UNAVAILABLE")
+                    selected, selected_peer, _, _ = self._bound_send_boundary(
+                        _bound_send_fence, service_id, transport_ref, scope, operation, request, effective_timeout
+                    )
+                    if selected is not transport or selected_peer != peer:
+                        raise ServiceRuntimeError("BOUND_ROUTE_UNAVAILABLE")
+
+                reply = transport._request_bound(
+                    request, timeout=effective_timeout, lineage=lineage, verify_owner=verify_owner
+                )
+            else:
+                reply = (transport if _bound_send_fence is not None
+                         else self._transports[(service_id, transport_ref)]).request(
+                             request, timeout=effective_timeout
+                         )
         except ServiceRuntimeRequestNotSentError:
             if timing is not None:
                 timing["request_not_sent"] = True
             raise
-        validate_reply(reply, request, expected_peer=self._peers[service_id])
+        validate_reply(reply, request, expected_peer=peer if _bound_send_fence is not None else self._peers[service_id])
         receipt = None
         if include_receive_receipt:
             try:
                 from bt_api_transport_zmq.service_v2 import ServiceReplyReceipt
-                candidate = getattr(self._transports[(service_id, transport_ref)], "last_reply_receipt", None)
+                candidate = getattr(transport if _bound_send_fence is not None
+                                    else self._transports[(service_id, transport_ref)], "last_reply_receipt", None)
                 if (type(candidate) is ServiceReplyReceipt
                         and candidate.request_message_id == request.header.message_id
                         and candidate.reply_message_id == reply.header.message_id
@@ -2114,6 +2578,27 @@ class ServiceClientRuntime:
             if not control:
                 raise ServiceCallOutcomeUnknownError(request.header.message_id, operation)
             raise ServiceRuntimeError("INVALID_SERVICE_REPLY")
+        if operation == "service.renew" and timing is not None:
+            # Capture only the exact authenticated transport's validated
+            # renewal response; this is not a replacement registration grant.
+            try:
+                from bt_api_transport_zmq.service_v2 import ZmqServiceClient
+                adapter = self._transports[(service_id, transport_ref)]
+                client = adapter._transport if type(adapter) is _RequestNotSentAdapter else None
+                if type(client) is ZmqServiceClient:
+                    candidate = client.last_reply_receipt
+                    server_key, client_key = client._fixed_curve_keys
+                    if client._is_current_renewal_observation(
+                            reply, candidate, server_public_key=server_key, client_public_key=client_key):
+                        timing["renewal_observation"] = (
+                            ((service_id, transport_ref), adapter, client, client._socket,
+                             client._context, client._socket_generation, server_key, client_key,
+                             self._registration_failure_generation.get((service_id, transport_ref), 0)),
+                            reply, candidate, result, encode_envelope(reply), tuple(vars(candidate).items()),
+                            request.payload.get("registration_id"), request.payload.get("service_epoch"),
+                        )
+            except Exception:
+                pass
         if operation == "service.register" and timing is not None:
             # The backend observation expires at the next request. Verify it
             # now while this exact reply and receipt are still current.
@@ -2234,7 +2719,7 @@ class ServiceClientRuntime:
         return run_id
 
     def _unregister_binding(self, binding: RegisteredBinding) -> bool:
-        if binding.remote_lease_inactive and not self._require_unregister_ack:
+        if binding.remote_lease_inactive and not self._require_unregister_ack and not self.sticky_cleanup_enabled:
             self._unregister_uncertainties.pop(binding.registration_id, None)
             return True
         unregister = (
@@ -2248,6 +2733,126 @@ class ServiceClientRuntime:
             binding.service_epoch,
             binding.timeout,
         )
+
+    def _strict_start_check(self) -> None:
+        if (self.sticky_cleanup_enabled and self._start_in_progress
+                and self._has_sticky_cleanup()):
+            raise ServiceRuntimeError("CLOSE_FAILED")
+
+    def _strict_public_lifecycle_entry(self) -> None:
+        if self.sticky_cleanup_enabled and self._start_in_progress:
+            error = ServiceRuntimeError("CLOSE_FAILED")
+            self._set_cleanup_sticky("startup_in_progress", error)
+            raise error
+        self._strict_cleanup_entry()
+
+    def _strict_cleanup_entry(self, *, allow_registration: bool = False) -> None:
+        if (self.sticky_cleanup_enabled and self._registration_in_progress is not None
+                and not allow_registration):
+            error = ServiceRuntimeError("CLOSE_FAILED")
+            self._set_cleanup_sticky(self._registration_in_progress, error)
+            raise error
+        if self.sticky_cleanup_enabled and (self._has_sticky_cleanup() or self._cleanup_in_progress):
+            raise ServiceRuntimeError("CLOSE_FAILED")
+
+    def _strict_business_entry(self) -> None:
+        if not self.sticky_cleanup_enabled:
+            return
+        if self._has_sticky_cleanup():
+            raise ServiceRuntimeError("CLOSE_FAILED")
+        if self._cleanup_in_progress:
+            error = ServiceRuntimeError("CLOSE_FAILED")
+            self._set_cleanup_sticky(error)
+            raise error
+        # The guard itself is external code and may synchronously reenter.
+        self._cleanup_in_progress = True
+        try:
+            self._strict_guard()
+        finally:
+            self._cleanup_in_progress = False
+
+    def _set_cleanup_sticky(self, *evidence: Any) -> None:
+        # A single asynchronous exception between setting the flag and
+        # installing the root must still run the rooting attempt. Python cannot
+        # guarantee retention if rooting itself is interrupted or fails.
+        try:
+            self._cleanup_sticky = True
+        finally:
+            with _RAW_STICKY_CLEANUP_ROOTS_LOCK:
+                _RAW_STICKY_CLEANUP_ROOTS.setdefault(id(self), self)
+        # A signal can synchronously reenter even while the RLock is held.
+        # Elect one immutable evidence snapshot; idempotent assignments make
+        # a resumed or reentrant initializer preserve the same first snapshot.
+        candidate = (object(), self._cleanup_failures,
+                     (evidence, tuple(self._bindings), tuple(self._transports.items()),
+                      tuple(self._registration_lineage.items())))
+        elected = self._cleanup_latch.setdefault("owner", candidate)
+        if elected is not candidate:
+            self._cleanup_reentrant_evidence.append(evidence)
+        self._state = "close_failed"
+        self._cleanup_failures = max(self._cleanup_failures, elected[1] + 1)
+        self._cleanup_evidence = elected[2]
+        notification = object()
+        if self._cleanup_latch.setdefault("notification", notification) is notification:
+            try:
+                self._on_cleanup_sticky()
+            except BaseException:
+                # Notification cannot replace the error that caused uncertainty.
+                pass
+
+    def _strict_resource_snapshot(self) -> tuple[Any, ...]:
+        return (tuple(self._bindings), tuple(self._transports.items()),
+                dict(self._registration_failure_generation))
+
+    def _strict_verify_resources(self, snapshot: tuple[Any, ...]) -> None:
+        bindings, transports, generations = snapshot
+        unchanged = (
+            len(bindings) == len(self._bindings)
+            and all(before is after for before, after in zip(bindings, self._bindings))
+            and len(transports) == len(self._transports)
+            and all(key in self._transports and self._transports[key] is transport
+                    for key, transport in transports)
+            and generations == self._registration_failure_generation
+        )
+        if not unchanged:
+            error = ServiceRuntimeError("CLOSE_FAILED")
+            self._set_cleanup_sticky(snapshot, error)
+            raise error
+
+    def _strict_guard(self, *evidence: Any) -> None:
+        snapshot = self._strict_resource_snapshot()
+        try:
+            safe = self._cleanup_unknown()
+            self._strict_verify_resources(snapshot)
+            if safe is not False or self._has_sticky_cleanup():
+                raise ServiceRuntimeError("CLOSE_FAILED")
+        except BaseException as error:
+            self._set_cleanup_sticky(*evidence, snapshot, error)
+            raise
+
+    def _strict_unregister_binding(self, binding: RegisteredBinding) -> None:
+        key = (binding.service_id, binding.transport_ref)
+        transport = self._transports.get(key)
+        self._strict_guard(binding, transport)
+        snapshot = self._strict_resource_snapshot()
+        try:
+            if transport is None or self._unregister_binding(binding) is not True:
+                raise ServiceRuntimeError("CLOSE_FAILED")
+            self._strict_verify_resources(snapshot)
+            self._strict_guard(binding, transport)
+            self._bindings = [item for item in self._bindings if item is not binding]
+            self._registration_lineage.pop(id(binding), None)
+            if (self._registration_in_progress is not None
+                    and self._registration_in_progress.get("placeholder") is binding):
+                self._registration_in_progress["released"] = True
+        except BaseException as error:
+            self._set_cleanup_sticky(binding, transport, snapshot, error)
+            self._unregister_uncertainties[binding.registration_id] = None
+            raise
+
+    def _strict_release_bindings(self, first: int) -> None:
+        for binding in tuple(self._bindings[first:]):
+            self._strict_unregister_binding(binding)
 
     def _unregister(
         self,
@@ -2277,6 +2882,8 @@ class ServiceClientRuntime:
             self._unregister_uncertainties.pop(registration_id, None)
             return True
         except ServiceRuntimeError as error:
+            if self.sticky_cleanup_enabled:
+                raise
             if not self._require_unregister_ack and timing.get("server_rejected") is True and error.code in {
                 "NOT_REGISTERED",
                 "STALE_EPOCH",
@@ -2287,11 +2894,23 @@ class ServiceClientRuntime:
             self._unregister_uncertainties[registration_id] = None
             return False
         except Exception:
+            if self.sticky_cleanup_enabled:
+                raise
             self._cleanup_failures += 1
             self._unregister_uncertainties[registration_id] = None
             return False
 
     def _release_bindings(self, first=0, *, capture_base_exceptions=False) -> None:
+        if self.sticky_cleanup_enabled:
+            self._strict_cleanup_entry()
+            self._cleanup_in_progress = True
+            try:
+                self._strict_guard()
+                self._strict_release_bindings(first)
+                self._strict_guard()
+            finally:
+                self._cleanup_in_progress = False
+            return
         for binding in self._bindings[first:]:
             self._registration_lineage.pop(id(binding), None)
         retained = self._bindings[:first]
@@ -2318,6 +2937,39 @@ class ServiceClientRuntime:
         self._bindings = retained
 
     def _release(self, *, capture_base_exceptions=False) -> None:
+        if self.sticky_cleanup_enabled:
+            self._strict_cleanup_entry()
+            self._cleanup_in_progress = True
+            try:
+                self._strict_guard()
+                self._strict_release_bindings(0)
+                if self._bindings:
+                    error = ServiceRuntimeError("CLOSE_FAILED")
+                    self._set_cleanup_sticky(error)
+                    raise error
+                for key, transport in tuple(self._transports.items()):
+                    self._strict_guard(transport)
+                    snapshot = self._strict_resource_snapshot()
+                    try:
+                        transport.close()
+                        self._strict_verify_resources(snapshot)
+                        self._strict_guard(transport)
+                        del self._transports[key]
+                    except BaseException as error:
+                        self._set_cleanup_sticky(transport, snapshot, error)
+                        raise
+                self._strict_guard()
+                if self._bindings or self._transports:
+                    error = ServiceRuntimeError("CLOSE_FAILED")
+                    self._set_cleanup_sticky(error)
+                    raise error
+                self._registration_lineage.clear()
+            except BaseException as error:
+                self._set_cleanup_sticky(error)
+                raise
+            finally:
+                self._cleanup_in_progress = False
+            return
         self._registration_lineage.clear()
         self._release_bindings(capture_base_exceptions=capture_base_exceptions)
         for key, transport in tuple(self._transports.items()):

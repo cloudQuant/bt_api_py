@@ -102,6 +102,7 @@ _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS = frozenset({
     "account.events.read_after", "account.events.progress", "account.events.ack",
     "account.facts.read_after", "account.facts.progress", "account.facts.ack", "account.facts.status",
     "account.facts.snapshot_info", "account.facts.snapshot_read", "account.facts.snapshot_confirm",
+    "account.cancel_attempts.read_after", "account.cancel_attempts.progress", "account.cancel_attempts.ack",
 })
 _GATEWAY_PARENT_OPERATIONS = frozenset({'direct.parent.register', 'direct.parent.query', 'direct.parent.cancel', 'direct.parent.operation'})
 _GATEWAY_PARENT_READ_OPERATIONS = frozenset({'direct.parent.query', 'direct.parent.operation'})
@@ -1178,7 +1179,7 @@ class ServiceDispatchAdmission:
                         # not seal for an already invalid request, and do not
                         # rely on authority or time from before that wait.
                         validate_current()
-                        if self._binding.operation not in ({"account.events.progress", "account.facts.progress", "account.facts.status", "account.facts.snapshot_info"} | _GATEWAY_CONTROL_PURE_READ_OPERATIONS | _GATEWAY_PARENT_READ_OPERATIONS | (_GATEWAY_DELEGATE_ACTOR_READ_OPERATIONS - {'direct.delegate_events.read_after', 'direct.delegate_events.ack'}) | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS):
+                        if self._binding.operation not in ({"account.events.progress", "account.facts.progress", "account.facts.status", "account.facts.snapshot_info", "account.cancel_attempts.progress"} | _GATEWAY_CONTROL_PURE_READ_OPERATIONS | _GATEWAY_PARENT_READ_OPERATIONS | (_GATEWAY_DELEGATE_ACTOR_READ_OPERATIONS - {'direct.delegate_events.read_after', 'direct.delegate_events.ack'}) | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS):
                             try:
                                 fact_kind = ("cursor" if self._binding.operation in (_GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_DELEGATE_STREAM_OPERATIONS)
                                              else "dispatch")
@@ -3198,7 +3199,8 @@ class ServiceRegistry:
             'SELECT * FROM sessions WHERE instance_id=? AND port=? AND principal=? AND service_epoch=? AND expires_at>?',
             (instance_id, 'service.account_read', principal, self._epoch, self._now())).fetchall()
         matches = []
-        family = ('account.facts.' if operation.startswith('account.facts.') else 'account.events.')
+        family = ('account.facts.' if operation.startswith('account.facts.') else
+                  'account.cancel_attempts.' if operation.startswith('account.cancel_attempts.') else 'account.events.')
         for row in rows:
             current_identity = self._stored_identity(row['identity_json'])
             current_scope = self._stored_scope(row['scope_json'])
@@ -4632,7 +4634,7 @@ class ServiceRegistry:
                                       and operation in _RISK_ADMIN_WRITE_OPERATIONS)):
             write_fact_kind = "dispatch"
         elif capability.port == "service.account_read" and (
-            operation in {"account.ack", "account.events.read_after", "account.events.ack", "account.facts.read_after", "account.facts.ack", "account.facts.snapshot_read", "account.facts.snapshot_confirm"}
+            operation in {"account.ack", "account.events.read_after", "account.events.ack", "account.facts.read_after", "account.facts.ack", "account.facts.snapshot_read", "account.facts.snapshot_confirm", "account.cancel_attempts.read_after", "account.cancel_attempts.ack"}
             or (
                 operation == "account.read_after"
                 and arguments.get("track_delivery", False) is True

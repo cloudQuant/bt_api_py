@@ -1,10 +1,13 @@
 """Controlled Risk client reconstruction, synthetic processes and no venue."""
 
+from tests.integration import _iter64_recovery_support as support
 from tests.integration.test_iter64_risk_crash_matrix import _Loopback
 
 
-def test_composed_risk_client_reconnects_after_ack_without_business_replay(tmp_path):
-    env = _Loopback(tmp_path)
+def test_composed_risk_client_reconnects_after_ack_without_business_replay(tmp_path_factory):
+    root = support.retained_loopback_root(tmp_path_factory.getbasetemp())
+    print(f"Retained synthetic Risk loopback root: {root}")
+    env = _Loopback(root)
     try:
         env.start_risk()
         old = env.client._runtime

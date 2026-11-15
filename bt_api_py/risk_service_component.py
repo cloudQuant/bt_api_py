@@ -30,12 +30,14 @@ from typing import Any
 from bt_api_base.gateway_direct_protocol import canonical_gateway_payload
 from bt_api_base.market_protocol import MarketInstrumentKey
 from bt_api_base.risk_service_protocol import (
+    OFFSETS,
     RISK_ADMIN_OPERATIONS,
     RISK_ADMIN_PORT,
     RISK_ORDER_OPERATIONS,
     RISK_REFUSAL_CODES,
     RISK_SERVICE_PORT,
     RISK_SERVICE_SCHEMA,
+    SIDES,
     RiskOrderResult,
     RiskOrderView,
     RiskParentView,
@@ -317,8 +319,24 @@ class RiskOrderService:
 
     # ------------------------------------------------------------------ dispatch
 
+    def _audit_read_rejected(self, caller: Any) -> bool:
+        try:
+            record = getattr(self._engine, "audit_read_rejection", None)
+            if not callable(record):
+                return False
+            record(caller)
+            return True
+        except Exception:
+            return False
+
     def handle(self, operation: str, *, context: Any, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
-        if operation not in SUPPORTED_OPERATIONS or not isinstance(arguments, Mapping):
+        if operation not in SUPPORTED_OPERATIONS:
+            return _rejected("risk_request_invalid")
+        if not isinstance(arguments, Mapping):
+            if operation == "risk.audit.read":
+                caller, _ = self.caller(context, operation)
+                if caller is not None and not self._audit_read_rejected(caller):
+                    return _rejected("risk_audit_unavailable")
             return _rejected("risk_request_invalid")
         try:
             # The Registry hands frozen wire containers; work on bounded plain copies.
@@ -326,12 +344,25 @@ class RiskOrderService:
             if type(arguments) is not dict:
                 raise ValueError
         except Exception:
+            if operation == "risk.audit.read":
+                caller, _ = self.caller(context, operation)
+                if caller is not None and not self._audit_read_rejected(caller):
+                    return _rejected("risk_audit_unavailable")
             return _rejected("risk_request_invalid")
         caller, code = self.caller(context, operation)
         if operation in RISK_ADMIN_OPERATIONS:
             if caller is None:
                 return _rejected(code or "risk_unauthorized")
-            return self._admin(operation, caller, arguments, context=context)
+            try:
+                result = self._admin(operation, caller, arguments, context=context)
+            except Exception:
+                if operation != "risk.audit.read":
+                    raise
+                result = _rejected("risk_audit_unavailable")
+            if operation == "risk.audit.read" and result.get("status") != "OBSERVED":
+                if not self._audit_read_rejected(caller):
+                    return _rejected("risk_audit_unavailable")
+            return result
         if operation == "risk.status":
             if caller is None or arguments:
                 return _rejected(code or "risk_request_invalid")
@@ -361,6 +392,12 @@ class RiskOrderService:
         key = arguments.get("request_key")
         if not _ref(key):
             return _rejected("risk_request_invalid")
+        if caller is not None and operation in ORDER_WRITE_OPERATIONS:
+            # V1 has no Registry admission bound to an atomic Gateway first
+            # creation and one-shot dispatch proof.  A valid key may already
+            # name an older order, even when this request's other fields are
+            # malformed; neither a local refusal nor retry proves its outcome.
+            return RiskOrderResult(key, "UNKNOWN", code="risk_permit_mismatch").to_mapping()
         if not fields[0] <= set(arguments) <= fields[0] | fields[1]:
             return RiskOrderResult(key, "DENIED", code="risk_request_invalid").to_mapping()
         if caller is None:
@@ -502,14 +539,14 @@ class RiskOrderService:
                 if (caller.role != "execution" or parent.strategy_ref not in caller.strategy_refs
                     or parent.account_scope != self._account or parent.route != self._route):
                     return _rejected("risk_unauthorized")
-                result = self._unsupported_parent(caller, parent.parent_ref, parent=parent)
+                result = self._unsupported_parent(parent.parent_ref)
             else:
                 if set(arguments) != {"parent_ref"} or not _ref(arguments["parent_ref"]):
                     return _rejected("risk_request_invalid")
                 if operation == "risk.parent.release":
                     if caller.role != "execution":
                         return _rejected("risk_unauthorized")
-                    result = self._unsupported_parent(caller, arguments["parent_ref"])
+                    result = self._unsupported_parent(arguments["parent_ref"])
                 else:
                     result = engine.parent_status(caller, arguments["parent_ref"])
         except RiskRequestError as error:
@@ -534,26 +571,11 @@ class RiskOrderService:
             ),
         }
 
-    def _unsupported_parent(self, caller: Any, parent_ref: str, *, parent: RiskParentView | None = None) -> Any:
-        """Read only a same-principal, same-run legacy parent; never mutate it."""
+    def _unsupported_parent(self, parent_ref: str) -> Any:
+        """The disabled write path cannot establish any legacy parent outcome."""
         from bt_api_risk.pretrade.engine import RiskParentResult
 
-        (strategy,) = tuple(caller.strategy_refs)
-        with self._ledger.transaction() as txn:
-            existing = txn.parent(strategy, parent_ref)
-            if existing is None:
-                return RiskParentResult(parent_ref, "DENIED", code="risk_parent_unavailable")
-            if existing.principal_ref != caller.principal_ref or existing.run_id != caller.run_id:
-                return RiskParentResult(parent_ref, "DENIED", code="risk_parent_unavailable")
-            if parent is not None and existing.view_digest != parent.digest():
-                return RiskParentResult(parent_ref, "DENIED", code="risk_request_conflict")
-            allocated = sum((child.allocation for child in txn.children(strategy, parent_ref)), Decimal(0))
-            unallocated = (max(Decimal(0), existing.total_quantity - allocated)
-                           if existing.state in ("ACTIVE", "FROZEN") else Decimal(0))
-            return RiskParentResult(parent_ref, "UNKNOWN", state=existing.state,
-                code="risk_parent_unavailable", total_quantity=existing.total_quantity,
-                allocated_quantity=allocated, unallocated_quantity=unallocated,
-                policy_version=str(existing.policy_version))
+        return RiskParentResult(parent_ref, "UNKNOWN", code="risk_parent_unavailable")
 
     def _status(self, caller: Any) -> Mapping:
         summary = self._engine.status_summary()
@@ -653,7 +675,7 @@ class RiskOrderService:
             "risk.latch.release": {"latch_id", "expected_version", "reason"},
             "risk.unknown.list": set(),
             "risk.counts.export": {"trading_day", "format"},
-            "risk.audit.read": {"after", "limit"},
+            "risk.audit.read": {"after", "limit", "through", "snapshot"},
             "risk.cancel.request": {"operation_id", "scope_kind", "scope_value"},
             "risk.cancel.status": {"operation_id"},
         }[operation]
@@ -711,20 +733,93 @@ class RiskOrderService:
                 )
                 return {"status": "OBSERVED", "latch": _latch(row)}
             if operation == "risk.unknown.list":
-                return {
-                    "status": "OBSERVED",
-                    "permits": [_unknown(row) for row in engine.list_unknown()],
-                }
+                # An old Risk deployment has only an unbounded reader. It must
+                # be upgraded together with this endpoint; never fall back.
+                try:
+                    result_fits = context.result_fits
+                    read_bounded = getattr(engine, "list_unknown_bounded", None)
+                except Exception:
+                    return _rejected("risk_unknown_list_unavailable")
+                if not callable(result_fits) or not callable(read_bounded):
+                    return _rejected("risk_unknown_list_unavailable")
+                try:
+                    rows = read_bounded()
+                except RiskAdminError as error:
+                    code = error.code if error.code in {
+                        "risk_unknown_list_too_large", "risk_unknown_list_corrupt",
+                        "risk_unknown_list_unavailable",
+                    } else "risk_unknown_list_unavailable"
+                    return _rejected(code)
+                except Exception:
+                    return _rejected("risk_unknown_list_unavailable")
+                if type(rows) is not list:
+                    return _rejected("risk_unknown_list_unavailable")
+                if len(rows) > 10_000:
+                    return _rejected("risk_unknown_list_too_large")
+                try:
+                    permits = []
+                    permit_ids = set()
+                    request_keys = set()
+                    remaining = 900 * 1024
+                    for row in rows:
+                        permit = _unknown(row)
+                        permit_id = permit["permit_id"]
+                        request_identity = (permit["strategy_ref"], permit["request_key"])
+                        if permit_id in permit_ids or request_identity in request_keys:
+                            raise ValueError("duplicate unknown identity")
+                        permit_ids.add(permit_id)
+                        request_keys.add(request_identity)
+                        for value in permit.values():
+                            if value is None:
+                                continue
+                            if type(value) is not str:
+                                raise ValueError("invalid unknown field")
+                            # Avoid encoding a single already-over-budget string.
+                            if len(value) > remaining:
+                                raise OverflowError("unknown list too large")
+                            remaining -= len(value.encode("utf-8", errors="strict"))
+                            if remaining < 0:
+                                raise OverflowError("unknown list too large")
+                        permits.append(permit)
+                except OverflowError:
+                    return _rejected("risk_unknown_list_too_large")
+                except Exception:
+                    return _rejected("risk_unknown_list_corrupt")
+                response = {"status": "OBSERVED", "permits": permits}
+                if not _audit_nodes_fit(response):
+                    return _rejected("risk_unknown_list_too_large")
+                # Registry checks its 900 KiB result limit; only a configured
+                # frame checker additionally proves the complete envelope.
+                # Never give a callback the result that will be returned.
+                checks = []
+                for _ in range(2):
+                    snapshot = deepcopy(response)
+                    try:
+                        accepted = result_fits(snapshot)
+                        if type(accepted) is not bool or snapshot != response:
+                            return _rejected("risk_unknown_list_unavailable")
+                    except Exception:
+                        return _rejected("risk_unknown_list_unavailable")
+                    checks.append(accepted)
+                if checks[0] != checks[1]:
+                    return _rejected("risk_unknown_list_unavailable")
+                return response if checks[0] else _rejected("risk_unknown_list_too_large")
             if operation == "risk.counts.export":
                 content = engine.export_counts(arguments["trading_day"], arguments["format"])
                 return {"status": "OBSERVED", "format": arguments["format"], "content": content}
             if operation == "risk.audit.read":
                 after, limit = arguments["after"], arguments["limit"]
+                through, snapshot = arguments["through"], arguments["snapshot"]
                 if (
                     type(after) is not int
                     or not 0 <= after <= 2**63 - 1
                     or type(limit) is not int
                     or not 1 <= limit <= _AUDIT_LIMIT
+                    or ((through is None) != (snapshot is None))
+                    or (through is not None and (
+                        type(through) is not int or not after <= through <= 2**63 - 1
+                        or type(snapshot) is not int or not 1 <= snapshot <= 2**63 - 1
+                    ))
                 ):
                     return _rejected("risk_request_invalid")
                 # The Registry enforces its result budget here. A configured
@@ -739,14 +834,24 @@ class RiskOrderService:
                 # The old reader may allocate unbounded audit details before
                 # any transport-size check; never silently fall back to it.
                 try:
-                    read_bounded = getattr(engine, "read_audit_bounded", None)
+                    read_bounded = getattr(engine, "read_audit_page", None)
                 except Exception:
                     return _rejected("risk_audit_size_unavailable")
                 if not callable(read_bounded):
                     return _rejected("risk_audit_size_unavailable")
-                raw_records = read_bounded(after, limit)
+                raw_page = read_bounded(caller, after, limit, through, snapshot)
+                if (type(raw_page) is not dict
+                        or set(raw_page) != {"records", "next_after", "through", "snapshot", "has_more"}
+                        or type(raw_page["through"]) is not int
+                        or not after <= raw_page["through"] <= 2**63 - 1
+                        or type(raw_page["snapshot"]) is not int
+                        or not 1 <= raw_page["snapshot"] <= 2**63 - 1
+                        or type(raw_page["has_more"]) is not bool
+                        or (through is not None and (raw_page["through"] != through
+                            or raw_page["snapshot"] != snapshot))):
+                    return _rejected("risk_audit_size_unavailable")
                 try:
-                    records = _audit_json_copy(raw_records)
+                    records = _audit_json_copy(raw_page["records"])
                 except (ValueError, TypeError, RecursionError, UnicodeError, OverflowError):
                     return _rejected("risk_audit_corrupt")
                 if type(records) is not list or len(records) > limit:
@@ -754,13 +859,22 @@ class RiskOrderService:
                 previous = after
                 for record in records:
                     if (type(record) is not dict or type(record.get("seq")) is not int
-                            or not previous < record["seq"] <= 2**63 - 1):
+                            or not previous < record["seq"] <= raw_page["through"]):
                         return _rejected("risk_audit_size_unavailable")
                     previous = record["seq"]
+                expected_more = len(records) == limit and previous < raw_page["through"]
+                expected_after = previous if expected_more else raw_page["through"]
+                if (type(raw_page["next_after"]) is not int or raw_page["next_after"] != expected_after
+                        or raw_page["has_more"] != expected_more):
+                    return _rejected("risk_audit_size_unavailable")
 
                 def candidate(count: int) -> dict:
+                    truncated = count < len(records)
                     return {"status": "OBSERVED", "records": records[:count],
-                            "next_after": records[count - 1]["seq"] if count else after}
+                            "next_after": (records[count - 1]["seq"] if count else after)
+                            if truncated else raw_page["next_after"],
+                            "through": raw_page["through"], "snapshot": raw_page["snapshot"],
+                            "has_more": True if truncated else raw_page["has_more"]}
 
                 def fits(count: int) -> bool | None:
                     response = candidate(count)
@@ -893,6 +1007,42 @@ def _latch(row: Mapping) -> dict:
 
 
 def _unknown(row: Mapping) -> dict:
+    for name in ("request_key", "strategy_ref", "permit_id", "instrument_id"):
+        ref = row[name]
+        if type(ref) is not str or len(ref) > 256 or not _ref(ref):
+            raise ValueError("invalid unknown identity")
+    if type(row["side"]) is not str or row["side"] not in SIDES:
+        raise ValueError("invalid unknown side")
+    if type(row["offset"]) is not str or row["offset"] not in OFFSETS:
+        raise ValueError("invalid unknown offset")
+    created_ns = row["created_ns"]
+    if type(created_ns) is not int or created_ns < 0:
+        raise ValueError("invalid unknown timestamp")
+    try:
+        since = iso_utc(created_ns)
+    except (ValueError, OverflowError, OSError):
+        raise ValueError("invalid unknown timestamp") from None
+    quantity = row["quantity"]
+    if type(quantity) is not Decimal:
+        raise ValueError("invalid quantity")
+    if type(quantity) is Decimal:
+        if not quantity.is_finite():
+            raise ValueError("non-finite quantity")
+        sign, digits, exponent = quantity.as_tuple()
+        # Decimal('0E-999999') has one digit but formats to almost 1 MiB.
+        # Bound the fixed-point representation before calling format().
+        if quantity.is_zero() and exponent >= 0:
+            length = 1
+        elif exponent >= 0:
+            length = len(digits) + exponent
+        elif len(digits) + exponent > 0:
+            length = len(digits) + 1
+        else:
+            length = 2 - exponent
+        if length + sign > 900 * 1024:
+            raise OverflowError("unknown quantity too large")
+        if quantity <= 0:
+            raise ValueError("nonpositive quantity")
     return {
         "request_key": row["request_key"],
         "strategy_ref": row["strategy_ref"],
@@ -902,8 +1052,8 @@ def _unknown(row: Mapping) -> dict:
         "instrument": row["instrument_id"],
         "side": row["side"],
         "offset": row["offset"],
-        "quantity": json_safe(row["quantity"]),
-        "since": iso_utc(row["created_ns"]),
+        "quantity": json_safe(quantity),
+        "since": since,
     }
 
 

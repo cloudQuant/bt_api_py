@@ -80,6 +80,7 @@ ACCOUNT_COMPARISON_OPERATIONS = frozenset({"account.strategy_net_comparison"})
 ACCOUNT_STRATEGY_READ_OPERATIONS = frozenset({"account.strategy_financial", "account.strategy_book"})
 ACCOUNT_OBSERVER_OPERATIONS = frozenset({"account.events.read_after", "account.events.progress", "account.events.ack"})
 ACCOUNT_FACTS_OPERATIONS = frozenset({"account.facts.read_after", "account.facts.progress", "account.facts.ack", "account.facts.status", "account.facts.snapshot_info", "account.facts.snapshot_read", "account.facts.snapshot_confirm"})
+ACCOUNT_CANCEL_ATTEMPT_OPERATIONS = frozenset({'account.cancel_attempts.read_after', 'account.cancel_attempts.progress', 'account.cancel_attempts.ack'})
 DELEGATED_STRATEGY_READ_OPERATIONS = frozenset({"direct.delegated_command_status", "direct.delegated_cancel_status"})
 DELEGATED_STRATEGY_CANCEL_OPERATIONS = frozenset({"direct.delegated_cancel"})
 DELEGATED_WRITE_OPERATIONS = frozenset({"direct.delegated_reserve", "direct.delegated_dispatch"})
@@ -112,7 +113,7 @@ MARKET_OPERATIONS = frozenset({
 })
 TRADING_OPERATIONS = (
     SUPPORTED_OPERATIONS | CANCEL_OPERATIONS | ACCOUNT_READ_OPERATIONS | INSTRUMENT_OPERATIONS | EVENT_OPERATIONS
-    | MARKET_OPERATIONS | CONTROL_OPERATIONS | STRATEGY_POSITION_OPERATIONS | STRATEGY_FINANCIAL_OPERATIONS | ACCOUNT_COMPARISON_OPERATIONS | ACCOUNT_STRATEGY_READ_OPERATIONS | ACCOUNT_OBSERVER_OPERATIONS | ACCOUNT_FACTS_OPERATIONS | DELEGATED_STRATEGY_READ_OPERATIONS | DELEGATED_STRATEGY_CANCEL_OPERATIONS | DELEGATED_WRITE_OPERATIONS | DELEGATE_ACTOR_OPERATIONS | DELEGATE_ACTOR_STREAM_OPERATIONS | PARENT_OPERATIONS
+    | MARKET_OPERATIONS | CONTROL_OPERATIONS | STRATEGY_POSITION_OPERATIONS | STRATEGY_FINANCIAL_OPERATIONS | ACCOUNT_COMPARISON_OPERATIONS | ACCOUNT_STRATEGY_READ_OPERATIONS | ACCOUNT_OBSERVER_OPERATIONS | ACCOUNT_FACTS_OPERATIONS | ACCOUNT_CANCEL_ATTEMPT_OPERATIONS | DELEGATED_STRATEGY_READ_OPERATIONS | DELEGATED_STRATEGY_CANCEL_OPERATIONS | DELEGATED_WRITE_OPERATIONS | DELEGATE_ACTOR_OPERATIONS | DELEGATE_ACTOR_STREAM_OPERATIONS | PARENT_OPERATIONS
 )
 WRITE_OPERATIONS = frozenset(
     {"direct.reserve", "direct.release", "direct.dispatch", "direct.cancel", "direct.delegate_actor_cancel", "direct.delegate_actor_release"} | CONTROL_WRITE_OPERATIONS | DELEGATED_STRATEGY_CANCEL_OPERATIONS | DELEGATED_WRITE_OPERATIONS | PARENT_WRITE_OPERATIONS
@@ -244,7 +245,7 @@ def validate_service_options(
     options: Mapping[str, object], bind_ports: tuple[str, ...]
 ) -> Mapping[str, object]:
     if (
-        set(options) - {"role", "dispatch_enabled", "cancel_enabled", "bounded_read_after", "control_enabled", "strategy_ledger_enabled", "account_extensions_enabled", "delegation_enabled", "parent_authority_enabled", "account_facts_financial_enabled", "actor_stream_enabled", "strategy_origin_enabled", "control_cancel_enabled", "account_fact_recovery_enabled", "account_event_recovery_enabled"}
+        set(options) - {"role", "dispatch_enabled", "cancel_enabled", "bounded_read_after", "control_enabled", "strategy_ledger_enabled", "account_extensions_enabled", "delegation_enabled", "parent_authority_enabled", "account_facts_financial_enabled", "actor_stream_enabled", "strategy_origin_enabled", "control_cancel_enabled", "account_fact_recovery_enabled", "account_event_recovery_enabled", "cancel_attempt_stream_enabled"}
         or options.get("role") != "trading_owner"
         or type(options.get("dispatch_enabled", False)) is not bool
         or type(options.get("cancel_enabled", False)) is not bool
@@ -259,6 +260,9 @@ def validate_service_options(
         or type(options.get('control_cancel_enabled', False)) is not bool
         or type(options.get('account_fact_recovery_enabled', False)) is not bool
         or type(options.get('account_event_recovery_enabled', False)) is not bool
+        or type(options.get('cancel_attempt_stream_enabled', False)) is not bool
+        or (options.get('cancel_attempt_stream_enabled', False) and not options.get('cancel_enabled', False))
+        or (options.get('cancel_attempt_stream_enabled', False) and 'service.account_read' not in bind_ports)
         or (options.get('account_event_recovery_enabled', False) and not options.get('account_fact_recovery_enabled', False))
         or (options.get('account_fact_recovery_enabled', False) and not (options.get('control_cancel_enabled', False) and options.get('account_facts_financial_enabled', False)))
         or (options.get('control_cancel_enabled', False) and (not options.get('control_enabled', False) or not options.get('cancel_enabled', False) or not options.get('strategy_origin_enabled', False)))
@@ -306,6 +310,8 @@ def validate_service_options(
         result['account_fact_recovery_enabled'] = options['account_fact_recovery_enabled']
     if 'account_event_recovery_enabled' in options:
         result['account_event_recovery_enabled'] = options['account_event_recovery_enabled']
+    if 'cancel_attempt_stream_enabled' in options:
+        result['cancel_attempt_stream_enabled'] = options['cancel_attempt_stream_enabled']
     if "service.market_source" in bind_ports:
         result["bounded_read_after"] = options.get("bounded_read_after", False)
     return result
@@ -1423,17 +1429,25 @@ class GatewayDirectServiceBinding:
                 raise
             # Read-only preflight supplies a finite conflict result. Races and
             # all exceptions from the subsequent write remain unknown.
+            bound_instrument = getattr(self._journal, '_instrument_binding_enabled', False) is True
+            replay = False
             try:
                 old = self._journal.observe(grant.strategy_ref, key, context.principal_ref)
             except DirectCommandJournalError as error:
                 if error.code == "REQUEST_CONFLICT":
                     return _reject("REQUEST_CONFLICT")
                 if error.code != "NOT_FOUND":
+                    if bound_instrument:
+                        return {'status': 'UNKNOWN'}
                     raise
             else:
                 if old.record.digest != digest:
                     return _reject("REQUEST_CONFLICT")
-                return _public(old, self._journal)
+                if not bound_instrument:
+                    return _public(old, self._journal)
+                # The journal checks the retained complete key and origin under
+                # the current owner permit, including an idempotent replay.
+                replay = True
             fence = self._reservation_fence
             if self._journal._schema_version >= 16:
                 from bt_api_py.gateway_strategy_origin_source import GatewayStrategyOriginSource
@@ -1441,7 +1455,7 @@ class GatewayDirectServiceBinding:
                 if (type(permit) is not ServiceDispatchAdmission or self._owner is None
                         or type(self._strategy_origin_source) is not GatewayStrategyOriginSource
                         or fence is None):
-                    return _reject('STRATEGY_ORIGIN_UNAVAILABLE')
+                    return {'status': 'UNKNOWN'} if bound_instrument else _reject('STRATEGY_ORIGIN_UNAVAILABLE')
                 def reserve_with_origin():
                     with permit.scope() as recheck:
                         def registry_recheck(current):
@@ -1458,6 +1472,10 @@ class GatewayDirectServiceBinding:
                                 registry_recheck=registry_recheck, instrument_recheck=self._strategy_origin_source.recheck)
                         except Exception:
                             recheck()
+                            # On a bound path a concurrent request may have
+                            # inserted the key after the preflight observation.
+                            if bound_instrument:
+                                return {'status': 'UNKNOWN'}
                             return _reject('STRATEGY_ORIGIN_UNAVAILABLE')
                         try:
                             self._journal.reserve(grant.strategy_ref, key, context.principal_ref, payload,
@@ -1470,14 +1488,19 @@ class GatewayDirectServiceBinding:
                             recheck()
                             return _reject('ADMISSION_DENIED')
                         except DirectCommandJournalError as error:
+                            if bound_instrument and (replay or error.code == 'STRATEGY_ORIGIN_UNAVAILABLE'):
+                                return {'status': 'UNKNOWN'}
                             if error.code not in {'SYSTEM_ORDER_UNKNOWN', 'UNKNOWN_SCOPE_UNAVAILABLE',
                                                   'STRATEGY_LEDGER_UNAVAILABLE', 'STRATEGY_CLOSE_EXCEEDS',
                                                   'STRATEGY_ORIGIN_UNAVAILABLE', 'CONTROL_FREEZE', 'CONTROL_STOP_NEW', 'CONTROL_DRAIN'}:
                                 raise
                             recheck()
                             return _reject(error.code)
+                        observation = self._journal.observe(grant.strategy_ref, key, context.principal_ref)
                         recheck()
-                        return _public(self._journal.observe(grant.strategy_ref, key, context.principal_ref), self._journal)
+                        if bound_instrument:
+                            origin.recheck()
+                        return _public(observation, self._journal)
                 try:
                     return self._owner.submit_service_call(reserve_with_origin).result(timeout_seconds=1.0)
                 except Exception:
@@ -1578,6 +1601,12 @@ class GatewayDirectServiceBinding:
             if record.status == "RESERVED" and record.version != arguments["expected_version"]:
                 return _reject("VERSION_CONFLICT")
             admission, transferred, finalize_once = permit
+            if (record.status == 'RESERVED'
+                    and getattr(self._journal, '_instrument_binding_enabled', False) is True):
+                # The source callbacks are not yet covered writers of the
+                # decision-B claim vector. Preserve the reservation until a
+                # source with auditable claim coverage is installed.
+                return _reject('STRATEGY_ORIGIN_CLAIM_UNAVAILABLE')
             if record.status == 'RESERVED':
                 # Without the owner's sealed decision-B claim port (or while it
                 # closes), refuse before the owner queue or any dispatch marker;
@@ -1657,12 +1686,34 @@ class GatewayDirectServiceBinding:
                         or current_payload["symbol"] not in grant.symbols
                     ):
                         raise RuntimeError("DIRECT_DISPATCH_BINDING_CHANGED")
+                    origin = None
+                    if getattr(self._journal, '_instrument_binding_enabled', False) is True:
+                        from bt_api_py.gateway_strategy_origin_source import GatewayStrategyOriginSource
+                        from bt_api_gateway.direct_strategy_origin import authorize_strategy_origin
+                        if type(self._strategy_origin_source) is not GatewayStrategyOriginSource:
+                            raise RuntimeError('STRATEGY_ORIGIN_UNAVAILABLE')
+                        def registry_recheck(current):
+                            if (current is not context or not admission.matches_context(context)
+                                    or not admission.matches_operation('direct.dispatch')
+                                    or not admission.matches(arguments)):
+                                return False
+                            recheck()
+                            return True
+                        instrument = self._strategy_origin_source.resolve(context, current_order)
+                        origin = authorize_strategy_origin(context, instrument, current_payload,
+                            account=self._journal.account_scope, journal_id=self._journal.journal_id,
+                            generation=self._journal.generation, service_epoch=admission._binding.service_epoch,
+                            registry_recheck=registry_recheck, instrument_recheck=self._strategy_origin_source.recheck)
                     def recheck_all():
                         recheck()
+                        if origin is not None:
+                            origin.recheck()
                         if (market_gate is not None and registry.gateway_market_registration_current(
                                 context, instance_id=admission._binding.instance_id,
                                 registration_id=market_registration) != market_registration):
                             raise RuntimeError('MARKET_REGISTRATION_CHANGED')
+                    if origin is not None:
+                        recheck_all.strategy_origin_permit = origin
                     recheck_all()
                     yield recheck_all
 
