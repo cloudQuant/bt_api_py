@@ -7,6 +7,7 @@ import sys
 import threading
 import weakref
 from contextlib import ExitStack
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -52,6 +53,8 @@ class _PublishDuringHandoff:
 
 
 def _host(monkeypatch, initializer, *, stack=None):
+    from bt_api_risk.risk_order_journal import RiskFenceExitCleanup
+
     monkeypatch.setattr(module, "_RETAINED_HOSTS", set())
     monkeypatch.setattr(module, "_STORAGE_INIT_ROOTS", {})
     monkeypatch.setattr(module, "_STORAGE_ACTIVE_ROOTS", {})
@@ -60,8 +63,37 @@ def _host(monkeypatch, initializer, *, stack=None):
     monkeypatch.setattr(module, "_require_supported_r04", lambda _config: None)
     monkeypatch.setattr(module, "ensure_private_directory", lambda _path: None)
     monkeypatch.setattr(module, "restrict_file", lambda _path: None)
-    manager = _Manager()
+    # A completed storage open holds one exact _FencedJournalManager whose exit
+    # delivers a COMPLETE receipt. A duck-typed manager cannot prove a close, so
+    # the host would (correctly) classify every cleanup as uncertain; build the
+    # real receipt-bearing shape instead of relaxing the production check.
+    events = []
+    journal = SimpleNamespace(
+        prepare_borrowed_fence_close=lambda *_args: None,
+        consume_borrowed_fence_close=lambda *_args: RiskFenceExitCleanup.COMPLETE,
+    )
+    fence = object()
+
+    class _Inner:
+        def __enter__(self):
+            return journal, fence
+
+        def __exit__(self, *_args):
+            events.append("exit")
+            return False
+
+    inner = _Inner()
+    manager = module._FencedJournalManager(Path("synthetic-risk.sqlite"), object())
+
+    def _open_context(outer, _path, _scope):
+        events.append("enter")
+        outer._inner_manager = inner
+        outer._binding = (inner, journal, fence)
+        return journal, fence
+
+    manager.events = events
     monkeypatch.setattr(module, "_open_fenced_journal", lambda *_args: manager)
+    monkeypatch.setattr(module, "_open_fenced_journal_context", _open_context)
     monkeypatch.setattr(pretrade, "PretradeLedger", initializer)
     monkeypatch.setattr(pretrade, "PolicyStore", lambda _ledger: object())
     monkeypatch.setattr(pretrade, "RuleRegistry", lambda _rules: object())
@@ -100,8 +132,9 @@ def _host(monkeypatch, initializer, *, stack=None):
 
 
 @pytest.mark.parametrize("error", [
+    # The real PretradeLedger.__init__ wraps every unproven commit as this
+    # code; an interruption stays UNKNOWN because it may replace that wrap.
     RiskOrderJournalError("PRETRADE_INIT_COMMIT_UNCERTAIN"),
-    RuntimeError("unknown initializer error"),
     KeyboardInterrupt(),
 ])
 def test_unknown_initializer_retains_original_entered_stack(monkeypatch, error):
@@ -121,6 +154,26 @@ def test_unknown_initializer_retains_original_entered_stack(monkeypatch, error):
     gc.collect()
     assert reference() is not None
     assert manager.events == ["enter"]
+
+
+def test_unclassified_initializer_error_releases_the_exact_stack(monkeypatch):
+    # PretradeLedger.__init__ re-raises an unclassified body error untouched
+    # only after the transaction's ROLLBACK and connection close returned
+    # normally; an unproven outcome is wrapped as PRETRADE_INIT_COMMIT_UNCERTAIN
+    # (covered above). The host relies on that boundary contract: an ordinary
+    # escaping error proves no unproven state remains and is a finite schema
+    # failure, so the exact stack is closed instead of retained.
+    def initialize(*_args):
+        raise RuntimeError("unclassified but proven-finite initializer error")
+
+    host, manager = _host(monkeypatch, initialize)
+    with pytest.raises(module.RiskServiceStartError, match="RISK_SERVICE_STORAGE_SCHEMA_INVALID"):
+        host._open_storage_owned()
+    assert manager.events == ["enter", "exit"]
+    assert not module._STORAGE_INIT_ROOTS
+    assert host._storage_owner is None
+    assert host._storage_init_uncertain is False
+    assert host._cleanup_uncertain is False
 
 
 def test_prewrite_finite_failure_closes_once_and_releases_provisional_root(monkeypatch):

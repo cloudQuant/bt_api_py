@@ -363,7 +363,11 @@ def _only_exit_callback(stack: Any, owner: Any, exit_method: Any = None) -> bool
     if type(stack) is not ExitStack or len(stack._exit_callbacks) != 1:
         return False
     if exit_method is None:
-        exit_method = type(owner).__exit__
+        # A non-context-manager owner has no registered exit to match; treat
+        # that as no proof instead of letting the attribute lookup escape.
+        exit_method = getattr(type(owner), "__exit__", None)
+        if exit_method is None:
+            return False
     is_sync, callback = stack._exit_callbacks[0]
     return (is_sync is True and getattr(callback, "__self__", None) is owner
             and getattr(callback, "__func__", None) is exit_method)
@@ -1258,13 +1262,20 @@ class RiskServiceHost:
                 _STORAGE_INIT_ROOTS[id(self)] = (self, acquiring, manager, result, journal, fence)
                 self._storage_entry_in_flight = False
             except BaseException as error:
-                if entered:
-                    # The callback was registered and this call returned, so
-                    # the entry itself is proven; only the result handoff did
-                    # not finish. Never classify that as a failed entry and
-                    # never unwind the acquiring stack here. An interruption
-                    # keeps the in-flight mark: unwinding while the process is
-                    # being torn down cannot be shown to complete.
+                # A registered callback bound to this exact manager is the
+                # same complete-entry proof the local flag records: the
+                # interrupt can be delivered after enter_context returned but
+                # before "entered = True" executes. Only the result handoff
+                # did not finish, so never classify that as a failed entry and
+                # never unwind the acquiring stack here. An interruption keeps
+                # the in-flight mark: unwinding while the process is being
+                # torn down cannot be shown to complete. The fenced manager can
+                # also be interrupted inside its own entry, after the inner
+                # manager was acquired but before the result/binding exists;
+                # that window is equally unproven for an interruption.
+                if (entered or _only_exit_callback(acquiring, manager)
+                        or (type(manager) is _FencedJournalManager
+                            and not isinstance(error, Exception))):
                     if isinstance(error, Exception):
                         self._storage_entry_in_flight = False
                     raise
@@ -1272,18 +1283,31 @@ class RiskServiceHost:
                     entry_result = _consume_fence_entry_result(manager, error)
                     code = _fence_entry_result_code(entry_result)
                 except BaseException as classification_error:
+                    # The entry attempt already failed, so ExitStack registered
+                    # no callback for it; what remains unproven is the manager's
+                    # own provisional resources. Retain the manager together
+                    # with both errors, stop classifying, and clear the
+                    # in-flight mark: this attempt is now fully recorded, the
+                    # rooted acquiring stack is never unwound, and the original
+                    # interruption keeps propagating.
                     self._storage_cleanup_uncertain = True
                     self._storage_owner = threading.current_thread()
                     self._uncertain_storage = (manager, error)
+                    self._storage_entry_in_flight = False
                     self._record_cleanup_uncertain(
-                        (acquiring, manager, error, classification_error), "STORAGE_ENTRY_UNKNOWN"
+                        (manager, error, classification_error), "STORAGE_ENTRY_UNKNOWN"
                     )
                     raise
                 if code is None:
+                    # Without an exactly consumed receipt the SDK's controlled
+                    # refusal for this manager is not proven. Retain the manager
+                    # and the original entry error; nothing here is unentered
+                    # state that may be unwound.
                     self._storage_cleanup_uncertain = True
                     self._storage_owner = threading.current_thread()
                     self._uncertain_storage = (manager, error)
-                    self._record_cleanup_uncertain((acquiring, manager, error), "STORAGE_ENTRY_UNKNOWN")
+                    self._storage_entry_in_flight = False
+                    self._record_cleanup_uncertain((manager, error), "STORAGE_ENTRY_UNKNOWN")
                     if (isinstance(error, RiskServiceStartError)
                             and error.code == "RISK_SERVICE_FENCE_HELD"):
                         raise RiskServiceStartError("RISK_SERVICE_STORAGE_UNAVAILABLE") from None
@@ -1313,17 +1337,20 @@ class RiskServiceHost:
                 self._storage_init_in_flight = False
                 _fail("RISK_SERVICE_STORAGE_SCHEMA_INVALID")
             except Exception:
-                # Only the ledger's own explicit classification is proof: an
-                # unproven commit surfaces as PRETRADE_INIT_COMMIT_UNCERTAIN
-                # (handled above) and PRETRADE_SCHEMA_MISMATCH is finite. An
-                # exception the ledger did not classify cannot by itself show
-                # whether a transaction was entered or safely finished.
-                self._storage_init_uncertain = True
-                self._uncertain_storage = (journal, fence)
-                self._record_cleanup_uncertain(
-                    (acquiring, manager, journal, fence), "STORAGE_INIT_UNKNOWN"
-                )
-                _fail("RISK_SERVICE_STORAGE_INIT_COMMIT_UNCERTAIN")
+                # PretradeLedger.__init__ is a proof-producing constructor. It
+                # wraps every unproven COMMIT/ROLLBACK/connection-close outcome
+                # as RiskOrderJournalError("PRETRADE_INIT_COMMIT_UNCERTAIN") and
+                # re-raises the untouched body error only after the transaction
+                # context's ROLLBACK and close both returned normally (ledger
+                # write start is included in the wrap decision). Any ordinary
+                # exception escaping that constructor therefore proves no
+                # unproven state was left behind, so the exact acquiring stack
+                # is released below like a finite schema failure. BaseException
+                # (KeyboardInterrupt/SystemExit) is deliberately excluded: it
+                # can replace the constructor's own wrap while being raised, so
+                # it remains UNKNOWN through the in-flight mark.
+                self._storage_init_in_flight = False
+                _fail("RISK_SERVICE_STORAGE_SCHEMA_INVALID")
             self._storage_init_in_flight = False
             self._check_storage_acquisition_ready()
             # Delegate schema initialization uses its own write transaction.
@@ -2179,7 +2206,16 @@ class RiskServiceHost:
                 and self._resource_owner is None and not self._started
                 and not self._stack._exit_callbacks and not self._runtimes
                 and self.service_host is None and self.order_port is None
-                and pending_root is None):
+                and pending_root is None
+                and not self._storage_init_uncertain
+                and not self._storage_cleanup_uncertain
+                and not (self._storage_entry_in_flight or self._storage_init_in_flight
+                         or self._delegate_init_in_flight or self._storage_handoff_in_flight)
+                and not self._delegate_cleanup_unresolved
+                and self._uncertain_storage is None):
+            # Only a host with no storage lifecycle in flight is known empty;
+            # an in-progress entry or initialization may already hold an
+            # unregistered resource and must not be reported complete.
             self._cleanup_state = "complete"
             return True
         if self._cleanup_state != "ready":

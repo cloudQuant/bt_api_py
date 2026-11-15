@@ -56,7 +56,9 @@ def test_a_holder_that_wins_the_race_refuses_the_host_at_once(tmp_path, monkeypa
     try:
         with pytest.raises(RiskServiceStartError) as raised:
             host.open_storage()
-        assert raised.value.code == "RISK_SERVICE_FENCE_HELD"
+        # The racer runs in this process, so the process-wide latch refuses
+        # before the OS lock; only a separate process reports FENCE_HELD.
+        assert raised.value.code == "RISK_SERVICE_STORAGE_UNAVAILABLE"
         assert time.monotonic() - started < 2.0
     finally:
         release.set()

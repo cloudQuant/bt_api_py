@@ -226,7 +226,13 @@ def test_wrong_owner_or_process_does_not_consume_first_close(host):
 
 
 def test_component_owner_prevents_wrong_thread_close_before_storage(host):
+    from contextlib import ExitStack
+
     attach(host)
+    # "Before storage": there is no acquiring stack or active root yet, so the
+    # component owner is the only thing that can refuse the wrong-thread close.
+    host._stack = ExitStack()
+    module._STORAGE_ACTIVE_ROOTS.pop(id(host), None)
     host._storage_owner = None
     host._claim_resource_owner()
     results = []
@@ -235,7 +241,7 @@ def test_component_owner_prevents_wrong_thread_close_before_storage(host):
     worker.join()
     assert results == [False] and host.events == []
     assert host.close() is True
-    assert host.events == ["service", "port", "last", "first", "stack"]
+    assert host.events == ["service", "port", "last", "first"]
 
 
 def test_start_failure_keeps_original_exception_and_never_recloses(host, monkeypatch):
@@ -775,29 +781,43 @@ def test_observer_factory_reentrant_close_cannot_release_host(host, monkeypatch)
 
 def test_open_storage_body_and_exit_failure_retain_exact_fake_resources(host, monkeypatch):
     import bt_api_risk.core.admission as admission
+    from bt_api_risk.risk_order_journal import RiskFenceExitCleanup
 
-    journal, fence, body_error = object(), object(), ValueError("private body error")
-    class FakeFence:
-        def __enter__(self):
-            host.events.append("enter")
-            assert host.close() is False
-            return journal, fence
+    fence, body_error = object(), ValueError("private body error")
+    class _ReceiptJournal:
+        def prepare_borrowed_fence_close(self, *_args):
+            pass
+        def consume_borrowed_fence_close(self, *_args):
+            return RiskFenceExitCleanup.COMPLETE
+    journal = _ReceiptJournal()
+    class Inner:
         def __exit__(self, *_args):
             host.events.append("exit")
             raise RuntimeError("private exit error")
-    context = FakeFence()
+    inner = Inner()
+    manager = module._FencedJournalManager(Path("synthetic-risk.sqlite"), object())
+    def open_context(outer, _path, _scope):
+        host.events.append("enter")
+        assert host.close() is False
+        outer._inner_manager = inner
+        outer._binding = (inner, journal, fence)
+        return journal, fence
     host.config.storage_directory = object()
     host.config.risk_database = object()
     host.config.provider = host.config.account_scope = host.config.environment = "synthetic"
     monkeypatch.setattr(module, "ensure_private_directory", lambda _: None)
     monkeypatch.setattr(admission, "AccountScope", lambda *_: object())
-    monkeypatch.setattr(module, "_open_fenced_journal", lambda *_: context)
+    monkeypatch.setattr(module, "_open_fenced_journal", lambda *_: manager)
+    monkeypatch.setattr(module, "_open_fenced_journal_context", open_context)
     def fail(_):
         raise body_error
     monkeypatch.setattr(module, "restrict_file", fail)
-    with pytest.raises(ValueError) as exc:
+    # A close that itself raises cannot be shown to have completed, so the
+    # unproven outcome must surface as the cleanup-uncertain code rather than
+    # the original body error; the exact resources stay retained.
+    with pytest.raises(module.RiskServiceStartError,
+                       match="RISK_SERVICE_STORAGE_CLEANUP_UNCERTAIN"):
         host.open_storage()
-    assert exc.value is body_error
     assert host._storage_cleanup_uncertain is True
     assert host._uncertain_storage == (journal, fence)
     assert any(isinstance(item, tuple) and item[1:] == (journal, fence)
@@ -1047,19 +1067,34 @@ def test_factory_state_change_retains_unstarted_runtime(host, monkeypatch, kind)
 
 def test_open_storage_body_failure_with_confirmed_fake_exit_is_not_sticky(host, monkeypatch):
     import bt_api_risk.core.admission as admission
+    from bt_api_risk.risk_order_journal import RiskFenceExitCleanup
 
-    class FakeFence:
-        def __enter__(self):
-            host.events.append("enter")
-            return object(), object()
+    # A confirmed cleanup needs the exact fenced manager and its COMPLETE
+    # receipt; a duck-typed context manager cannot prove a close.
+    fence = object()
+    class _ReceiptJournal:
+        def prepare_borrowed_fence_close(self, *_args):
+            pass
+        def consume_borrowed_fence_close(self, *_args):
+            return RiskFenceExitCleanup.COMPLETE
+    journal = _ReceiptJournal()
+    class Inner:
         def __exit__(self, *_args):
             host.events.append("exit")
+    inner = Inner()
+    manager = module._FencedJournalManager(Path("synthetic-risk.sqlite"), object())
+    def open_context(outer, _path, _scope):
+        host.events.append("enter")
+        outer._inner_manager = inner
+        outer._binding = (inner, journal, fence)
+        return journal, fence
     host.config.storage_directory = object()
     host.config.risk_database = object()
     host.config.provider = host.config.account_scope = host.config.environment = "synthetic"
     monkeypatch.setattr(module, "ensure_private_directory", lambda _: None)
     monkeypatch.setattr(admission, "AccountScope", lambda *_: object())
-    monkeypatch.setattr(module, "_open_fenced_journal", lambda *_: FakeFence())
+    monkeypatch.setattr(module, "_open_fenced_journal", lambda *_: manager)
+    monkeypatch.setattr(module, "_open_fenced_journal_context", open_context)
     def fail(_):
         raise ValueError("synthetic body failure")
     monkeypatch.setattr(module, "restrict_file", fail)
@@ -1096,6 +1131,39 @@ def test_fence_entry_unknown_retains_manager_and_original_without_closing(host, 
     assert any(isinstance(item, tuple) and item == (manager, error)
                for item in host._cleanup_uncertain_resources)
     assert_sticky(host, ["enter"])
+
+
+def test_entry_error_from_non_context_manager_stays_a_proven_refusal(host, monkeypatch):
+    import bt_api_risk.core.admission as admission
+
+    class Manager:
+        """Not a context manager: ExitStack raises TypeError before entry."""
+
+    manager = Manager()
+    host.config.storage_directory = object()
+    host.config.risk_database = object()
+    host.config.provider = host.config.account_scope = host.config.environment = "synthetic"
+    monkeypatch.setattr(module, "ensure_private_directory", lambda *_: None)
+    monkeypatch.setattr(admission, "AccountScope", lambda *_: object())
+    monkeypatch.setattr(module, "_open_fenced_journal", lambda *_: manager)
+    with pytest.raises(TypeError):
+        host.open_storage()
+    # A manager that is not a context manager cannot produce an entry or a
+    # close proof; the refusal is retained instead of being lost.
+    assert host._storage_cleanup_uncertain is True
+    assert host._uncertain_storage[0] is manager
+    assert isinstance(host._uncertain_storage[1], TypeError)
+    assert_sticky(host, [])
+
+
+def test_only_exit_callback_owner_without_exit_is_not_proof():
+    from contextlib import ExitStack
+
+    stack = ExitStack()
+    stack._exit_callbacks.append((True, lambda *_args: None))
+    # A missing __exit__ must read as "no proof" rather than raising while the
+    # caller is already classifying a failed entry.
+    assert module._only_exit_callback(stack, object()) is False
 
 
 def test_fence_manager_factory_exception_is_unknown(host, monkeypatch):
@@ -2101,6 +2169,14 @@ def test_storage_exception_checks_cross_host_unknown_before_cleanup(host, monkey
 
     other = module.RiskServiceHost(host.config)
     other._storage_owner = threading.current_thread()
+    # This test drives open_storage()/start() from a host that has not opened
+    # storage yet. The shared fixture represents a completed open (owner,
+    # acquiring stack and active root); leaving that shape in place would make
+    # this host's own cleanup collide with the fixture's root.
+    host._stack = ExitStack()
+    host._storage_owner = None
+    host._resource_owner = None
+    module._STORAGE_ACTIVE_ROOTS.pop(id(host), None)
 
     class ReceiptJournal:
         # A close is only proven by the fenced-journal receipt; the host must
@@ -2163,23 +2239,54 @@ def test_storage_exception_checks_cross_host_unknown_before_cleanup(host, monkey
         host.start() if invoke_start else host.open_storage()
     order = ["enter", "unpack", "restrict", "ledger", "delegate", "policy", "rules"]
     expected = order[:order.index(stage) + 1]
-    if publish_unknown:
+    # Which failures must retain instead of closing?
+    # - A concurrently published UNKNOWN blocks any cleanup.
+    # - An interruption keeps the entry/result-handoff in-flight mark: unwinding
+    #   during teardown cannot be shown to complete.
+    # - RiskGatewayDelegateJournal has no COMMIT/ROLLBACK-and-close receipt, so
+    #   even an ordinary constructor exception stays UNKNOWN.
+    in_flight_unknown = stage == "delegate" or (interrupt and stage in ("unpack", "ledger"))
+    if publish_unknown or in_flight_unknown:
         assert calls == expected
         assert host._cleanup_uncertain is True
-        assert host in module._RETAINED_HOSTS and other in module._RETAINED_HOSTS
-        resources = [item for item in host._cleanup_uncertain_resources
-                     if isinstance(item, tuple) and len(item) == 6 and isinstance(item[0], ExitStack)]
-        assert len(resources) == 1
-        acquiring, actual_manager, actual_journal, actual_fence, actual_result, body_error = resources[0]
-        assert acquiring is not host._stack and actual_manager is manager and actual_result is pair
-        assert (actual_journal, actual_fence) == ((None, None) if stage == "unpack" else (journal, fence))
-        assert body_error is raised.value
-        assert body_error is original or body_error.__context__ is original
+        assert host in module._RETAINED_HOSTS
+        if publish_unknown:
+            assert other in module._RETAINED_HOSTS
+        resources = host._cleanup_uncertain_resources
+        if stage == "delegate":
+            # The delegate handler records the provisional manager and both
+            # errors before deciding the outcome is unknown; the outer handler
+            # additionally records the exact acquiring stack.
+            five = [item for item in resources
+                    if isinstance(item, tuple) and len(item) == 5]
+            assert len(five) == 1
+            _acquiring, actual_manager, actual_journal, actual_fence, body_error = five[0]
+            assert actual_manager is manager and (actual_journal, actual_fence) == (journal, fence)
+        else:
+            six = [item for item in resources
+                   if isinstance(item, tuple) and len(item) == 6 and isinstance(item[0], ExitStack)]
+            assert len(six) == 1
+            acquiring, actual_manager, actual_journal, actual_fence, actual_result, body_error = six[0]
+            assert acquiring is not host._stack and actual_manager is manager and actual_result is pair
+            assert (actual_journal, actual_fence) == ((None, None) if stage == "unpack" else (journal, fence))
+        if in_flight_unknown:
+            # A retained in-flight UNKNOWN reports its own finite code rather
+            # than the original callback error (it keeps the latch visible).
+            assert body_error is original
+            assert isinstance(raised.value, module.RiskServiceStartError)
+            expected_code = ("RISK_SERVICE_STORAGE_CLEANUP_UNCERTAIN" if stage == "unpack"
+                             else "RISK_SERVICE_STORAGE_INIT_COMMIT_UNCERTAIN")
+            assert raised.value.code == expected_code
+        else:
+            # Only a concurrently published UNKNOWN keeps the host here; the
+            # failure the caller observes is the one recorded for cleanup.
+            assert body_error is raised.value
         assert host.close() is False
         assert calls == expected
     else:
         assert calls == expected + ["exit"]
         assert host._cleanup_uncertain is False and host not in module._RETAINED_HOSTS
+        assert host.close() is True
 
 
 def test_global_unknown_empty_host_finishes_without_touching_global_state(host):
@@ -2621,6 +2728,12 @@ def test_run_once_stops_when_other_host_publishes_unknown(host, monkeypatch, sta
             host.events.append(name)
             if name == stage:
                 other._record_cleanup_uncertain(object(), "SYNTHETIC")
+                if name == "observer":
+                    # run_once calls _reconnect_observer directly, and the real
+                    # method checks global cleanup readiness itself after its
+                    # callbacks. A bare replacement must preserve that step or
+                    # it tests a call path production never uses.
+                    host._check_global_cleanup_ready(host)
         return call
     host.config.loop_timeout_ms = 1
     host.config.observation_poll_seconds = 1
@@ -2654,8 +2767,11 @@ def test_runtime_factory_stops_after_other_host_publishes_unknown(host, monkeypa
         return object()
     monkeypatch.setattr(module, "_gateway_client_config", config)
     monkeypatch.setattr(module, "WireIdentity", lambda *_args, **_kwargs: pytest.fail("identity after UNKNOWN"))
+    # Production always builds a runtime through _call_lifecycle, which retains
+    # the host when the callback publishes an UNKNOWN; calling _service_runtime
+    # directly would bypass that retention and test an impossible call path.
     with pytest.raises(module.RiskServiceStartError):
-        host._service_runtime("synthetic", object(), frozenset())
+        host._call_lifecycle(host._service_runtime, "synthetic", object(), frozenset())
     assert host._cleanup_uncertain is True
 
 

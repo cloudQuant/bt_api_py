@@ -207,17 +207,18 @@ def test_ordinary_journal_error_releases_fence(tmp_path, monkeypatch):
         assert other.close()
 
 
-def test_unclassified_initializer_error_is_unknown_and_retains_fence(tmp_path, monkeypatch):
+def test_unproven_initializer_commit_is_unknown_and_retains_fence(tmp_path, monkeypatch):
     import bt_api_risk.pretrade as pretrade
+    from bt_api_risk.risk_order_journal import RiskOrderJournalError
 
     config = load_risk_service_config(setup(tmp_path))
     host = RiskServiceHost(config)
     with monkeypatch.context() as patch:
         def fail(*_args):
-            # An unclassified failure does not prove that no transaction was
-            # entered or committed, so it must stay UNKNOWN, not be treated as
-            # an ordinary schema error that releases the writer fence.
-            raise ValueError("synthetic schema error")
+            # PretradeLedger.__init__ wraps every unproven COMMIT/ROLLBACK/
+            # connection-close outcome as this code. The host must retain the
+            # fence, never treat it as an ordinary schema error.
+            raise RiskOrderJournalError("PRETRADE_INIT_COMMIT_UNCERTAIN")
         patch.setattr(pretrade, "PretradeLedger", fail)
         with pytest.raises(RiskServiceStartError, match="RISK_SERVICE_STORAGE_INIT_COMMIT_UNCERTAIN"):
             host.start()
@@ -232,6 +233,30 @@ def test_unclassified_initializer_error_is_unknown_and_retains_fence(tmp_path, m
     finally:
         host._stack.close()
         _RETAINED_HOSTS.discard(host)
+
+
+def test_proven_finite_initializer_error_releases_fence(tmp_path, monkeypatch):
+    import bt_api_risk.pretrade as pretrade
+
+    config = load_risk_service_config(setup(tmp_path))
+    host = RiskServiceHost(config)
+    with monkeypatch.context() as patch:
+        def fail(*_args):
+            # The real PretradeLedger re-raises an unclassified body error
+            # untouched only when the transaction's ROLLBACK and connection
+            # close both returned normally. That boundary contract makes an
+            # ordinary escaping exception a proven-finite schema failure.
+            raise ValueError("synthetic proven-finite schema error")
+        patch.setattr(pretrade, "PretradeLedger", fail)
+        with pytest.raises(RiskServiceStartError, match="RISK_SERVICE_STORAGE_SCHEMA_INVALID"):
+            host.start()
+    # No explicit close on the failed host is required to release the fence.
+    assert host.close() is True
+    other = RiskServiceHost(config)
+    try:
+        other.open_storage()
+    finally:
+        assert other.close()
 
 
 def test_normal_storage_close_must_run_on_original_thread(tmp_path):

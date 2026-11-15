@@ -200,7 +200,11 @@ def test_global_unknown_blocks_empty_and_other_host_cleanup(synthetic):
     enter_storage(active, synthetic)
     empty = fake_host()
     synthetic.probe["uncertain"].append((object(), "other owner"))
-    assert empty.close() is False
+    # A host that never acquired storage holds nothing; closing it adds no new
+    # unknown and cannot resolve another owner's state. Only the host that
+    # holds storage is retained.
+    assert empty.close() is True
+    assert empty._cleanup_state == "complete"
     assert active.close() is False
     assert synthetic.inner.events == ["enter"]
     assert id(active) in synthetic.active
