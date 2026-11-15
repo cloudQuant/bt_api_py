@@ -29,7 +29,13 @@ LABEL = {"environment": "SIMULATION_ONLY", "source_authentication": "NOT_PROVEN"
 _FETCH_RETRY_LIMIT = 3
 # A refused claim left no descriptor, intent or result; retrying the same
 # observation ID is safe only after a read-back proves that nothing was written.
-_TRANSIENT_FETCH_REASONS = frozenset({"CLAIM_UNCERTAIN"})
+# CLAIM_UNCERTAIN is the real-AKShare descriptor shape; BUDGET_EXHAUSTED and
+# DESCRIPTOR_UNAVAILABLE are the shapes the daily batch's mock module returns
+# before any descriptor commit. All are retried only when a read-back proves
+# that no descriptor, intent or result exists for the attempt id.
+_TRANSIENT_FETCH_REASONS = frozenset(
+    {"CLAIM_UNCERTAIN", "BUDGET_EXHAUSTED", "DESCRIPTOR_UNAVAILABLE"}
+)
 _TRANSIENT_FETCH_EXCEPTIONS = (TimeoutError, ConnectionError)
 _UNKNOWN_FETCH_STATES = frozenset({"UNKNOWN", "ATTEMPT_UNKNOWN", "COMMIT_UNKNOWN"})
 _ATTEMPT_LABEL = {
@@ -78,7 +84,7 @@ def _classify_fetch(value, unused):
     if type(value) is not dict:
         return "UNKNOWN_OUTCOME", "NON_RESULT"
     if (
-        value.get("descriptor_state") == "NOT_ATTEMPTED"
+        value.get("descriptor_state") != "COMMITTED"
         and value.get("observation_state") == "NOT_ATTEMPTED"
         and value.get("reason") in _TRANSIENT_FETCH_REASONS
     ):

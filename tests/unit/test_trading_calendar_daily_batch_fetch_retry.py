@@ -26,6 +26,16 @@ def _retrying_observe_once(*args, **kwargs):
                     'observation_state': 'NOT_ATTEMPTED',
                     'projection_state': 'NOT_ATTEMPTED',
                     'observation_status': 'NOT_ATTEMPTED', 'reason': 'CLAIM_UNCERTAIN'}
+        if mode == 'BUDGET':
+            return {**base, 'descriptor_state': 'NOT_ATTEMPTED',
+                    'observation_state': 'NOT_ATTEMPTED',
+                    'projection_state': 'NOT_ATTEMPTED',
+                    'observation_status': 'NOT_ATTEMPTED', 'reason': 'BUDGET_EXHAUSTED'}
+        if mode == 'DESCRIPTOR':
+            return {**base, 'descriptor_state': 'ATTEMPT_UNKNOWN',
+                    'observation_state': 'NOT_ATTEMPTED',
+                    'projection_state': 'NOT_ATTEMPTED',
+                    'observation_status': 'NOT_ATTEMPTED', 'reason': 'DESCRIPTOR_UNAVAILABLE'}
         return {**base, 'descriptor_state': 'COMMITTED',
                 'observation_state': 'ATTEMPT_UNKNOWN',
                 'projection_state': 'UNKNOWN', 'observation_status': 'UNKNOWN',
@@ -205,3 +215,65 @@ def test_daily_batch_unknown_outcome_is_not_retried(tmp_path):
     assert result["fetch_retry"]["retried"] == 0
     assert result["fetch_retry"]["outcome_unknown"] == 1
     assert len((tmp_path / "calls").read_text().splitlines()) == 1
+
+
+def test_retry_helper_retries_the_shapes_the_daily_batch_actually_produces():
+    for reason, descriptor in (
+        ("BUDGET_EXHAUSTED", "NOT_ATTEMPTED"),
+        ("DESCRIPTOR_UNAVAILABLE", "ATTEMPT_UNKNOWN"),
+    ):
+        calls = []
+
+        def fetch(calls=calls, reason=reason, descriptor=descriptor):
+            calls.append(1)
+            return {
+                "descriptor_state": descriptor,
+                "observation_state": "NOT_ATTEMPTED",
+                "observation_status": "NOT_ATTEMPTED",
+                "reason": reason,
+            }
+
+        _, attempts, outcome = batch._fetch_with_retry(
+            fetch=fetch, max_attempts=2, unused=lambda: True
+        )
+        assert len(calls) == 2 and outcome == "TRANSIENT_EXHAUSTED"
+        assert attempts[0]["outcome"] == "TRANSIENT_PRECOMMIT"
+
+
+def test_retry_helper_does_not_retry_a_committed_descriptor_or_definite_error():
+    for value in (
+        {
+            "descriptor_state": "COMMITTED",
+            "observation_state": "NOT_ATTEMPTED",
+            "observation_status": "NOT_ATTEMPTED",
+            "reason": "BUDGET_EXHAUSTED",
+        },
+        {
+            "descriptor_state": "NOT_ATTEMPTED",
+            "observation_state": "NOT_ATTEMPTED",
+            "observation_status": "NOT_ATTEMPTED",
+            "reason": "INVALID_OR_UNAVAILABLE_INPUT",
+        },
+    ):
+        calls = []
+
+        def fetch(calls=calls, value=value):
+            calls.append(1)
+            return value
+
+        _, _, outcome = batch._fetch_with_retry(
+            fetch=fetch, max_attempts=3, unused=lambda: True
+        )
+        assert len(calls) == 1
+        assert outcome in ("NOT_RETRIABLE", "UNKNOWN_OUTCOME")
+
+
+def test_daily_batch_retries_the_real_budget_exhausted_shape(tmp_path):
+    root, env, original_run = _root(tmp_path)
+    env["RETRY_FAKE"] = "BUDGET"
+    rc, rows, err = _run(root, env, original_run)
+    assert rc == 0 and rows[-1]["status"] == "COMMITTED", (rows, err)
+    result = rows[-1]
+    retried = [item for item in result["fetch_retry"]["attempts"] if len(item["attempts"]) > 1]
+    assert len(retried) == 1
+    assert retried[0]["attempts"][0]["reason"] == "BUDGET_EXHAUSTED"

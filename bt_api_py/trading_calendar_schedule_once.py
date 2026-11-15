@@ -923,7 +923,11 @@ def _returned_from_result(pending, pending_sha, result):
         "batch_evidence_sha256": evidence_sha,
         "batch_status": batch_status,
         "review_payload_sha256": review_sha,
-        "result_sha256": _digest(result),
+        # fetch_retry carries per-attempt wall-clock timestamps; the returned
+        # digest describes the batch result, not retry timing.
+        "result_sha256": _digest(
+            {key: value for key, value in result.items() if key != "fetch_retry"}
+        ),
     }
 
 
