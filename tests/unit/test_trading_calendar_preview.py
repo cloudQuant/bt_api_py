@@ -1,0 +1,1331 @@
+"""Offline tests for the experimental preview; no real source or account access."""
+
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from bt_api_py import trading_calendar_preview as preview
+from bt_api_py.trading_calendar_check import CalendarCheckReport
+
+
+@pytest.fixture
+def default_sigint_for_mock_supervisor(monkeypatch):
+    # These tests use fake Popen/killpg; pytest supplies a multi-threaded host.
+    import threading
+
+    monkeypatch.setattr(threading, "active_count", lambda: 1)
+    original = preview.signal.getsignal(preview.signal.SIGINT)
+    preview.signal.signal(preview.signal.SIGINT, preview.signal.default_int_handler)
+    try:
+        yield
+    finally:
+        preview.signal.signal(preview.signal.SIGINT, original)
+
+
+def checked(**kwargs):
+    return CalendarCheckReport(
+        "CHECKED",
+        "SUPPLEMENT_UNVERIFIED",
+        0,
+        supplement_status="CANDIDATE",
+        source_verification="UNVERIFIED",
+    )
+
+
+def source(transport, page_status=None):
+    page = None
+    status = transport
+    if transport == "HTTP_OK":
+        status = page_status or "CANDIDATE"
+        page = SimpleNamespace(
+            status=status, verification="UNVERIFIED", products=("private raw product",)
+        )
+    return SimpleNamespace(
+        status=status, transport_status=transport, verification="UNVERIFIED", page=page
+    )
+
+
+def holiday(transport="HTTP_OK", page_status="CANDIDATE"):
+    page = None
+    status = transport
+    if transport == "HTTP_OK":
+        status = page_status
+        page = SimpleNamespace(
+            status=status, verification="UNVERIFIED", coverage="NOT_PROVEN", rows=()
+        )
+    return SimpleNamespace(
+        status=status,
+        transport_status=transport,
+        verification="UNVERIFIED",
+        coverage="NOT_PROVEN",
+        page=page,
+    )
+
+
+def conversion(candidate):
+    return SimpleNamespace(
+        status="CANDIDATE",
+        verification="UNVERIFIED",
+        coverage="NOT_PROVEN",
+        publication="NOT_AUTHORIZED",
+        unresolved_nights=(object(),),
+        supplement=SimpleNamespace(
+            verification="UNVERIFIED",
+            content={
+                "sources": [],
+                "trading_days": [{"venue": "SHFE", "status": "closed"}],
+                "trading_hours": [],
+                "exceptions": [],
+            },
+        ),
+    )
+
+
+def partial_merge(**kwargs):
+    assert kwargs["supplement"] is not None
+    assert kwargs["supplement_coverage"] == "NOT_PROVEN"
+    assert kwargs["supplement_publication"] == "NOT_AUTHORIZED"
+    return SimpleNamespace(
+        status="PARTIAL",
+        reason="",
+        verification="UNVERIFIED",
+        coverage="NOT_PROVEN",
+        publication="NOT_AUTHORIZED",
+        remaining_checks=(
+            "TRADING_HOURS_CONFLICTS_NOT_CHECKED",
+            "EXCEPTIONS_CONFLICTS_NOT_CHECKED",
+            "CROSS_LAYER_CONFLICTS_NOT_CHECKED",
+            "SOURCE_AUTHORITY_UNVERIFIED",
+            "COVERAGE_NOT_PROVEN",
+            "NIGHT_TRADING_DAY_UNRESOLVED",
+        ),
+        supplement=SimpleNamespace(
+            verification="UNVERIFIED",
+            content={"sources": [{}], "trading_days": [{}], "trading_hours": [], "exceptions": []},
+        ),
+    )
+
+
+def normalized(candidate):
+    return SimpleNamespace(
+        status="NORMALIZED",
+        reason="",
+        verification="UNVERIFIED",
+        coverage="NOT_PROVEN",
+        publication="NOT_AUTHORIZED",
+        comparison="FOUR_LAYER_STRUCTURE_ONLY",
+        unresolved_nights="NOT_INCLUDED",
+        json_bytes=b"private normalized content",
+        sha256="a" * 64,
+    )
+
+
+class Clock:
+    def __init__(self):
+        self.value = 0.0
+        self.waits = []
+
+    def now(self):
+        return self.value
+
+    def wait(self, duration):
+        self.waits.append(duration)
+        self.value += duration
+
+
+def run(**kwargs):
+    args = {
+        "config_file": "/private/config",
+        "calendar_root": "/private/root",
+        "supplement_file": "/private/data",
+        "budget_seconds": 1300,
+        "checker": lambda **kw: (checked(**kw), object()),
+        "holiday_collector": lambda **kw: holiday(),
+        "holiday_converter": conversion,
+        "merger": partial_merge,
+        "normalizer": normalized,
+    }
+    args.update(kwargs)
+    return preview.run_preview(**args)
+
+
+def test_check_gates_opt_in_and_sanitizes_failure():
+    calls = []
+
+    def collect(**kwargs):
+        calls.append(kwargs)
+        return source("HTTP_OK")
+
+    result = run(collector=collect)
+    assert result.reason == "SHFE_NOT_REQUESTED" and calls == []
+    result = run(
+        enable_shfe=True,
+        collector=collect,
+        checker=lambda **kw: CalendarCheckReport("ERROR", "CONFIG_YAML_INVALID", 2),
+    )
+    assert result.reason == "INPUT_CHECK_FAILED" and calls == []
+    result = run(
+        enable_shfe=True,
+        collector=collect,
+        checker=lambda **kw: (_ for _ in ()).throw(RuntimeError("private secret")),
+    )
+    assert result.reason == "INPUT_CHECK_FAILED" and "private" not in json.dumps(result.to_dict())
+    assert calls == []
+
+
+def test_transient_retries_count_from_completion_and_success_stays_incomplete():
+    clock = Clock()
+    starts = []
+    replies = iter([source("NETWORK_TIMEOUT"), source("CHILD_TIMEOUT"), source("HTTP_OK")])
+
+    def collect(**kwargs):
+        starts.append((clock.value, kwargs))
+        clock.value += 2
+        return next(replies)
+
+    result = run(enable_shfe=True, collector=collect, monotonic=clock.now, wait=clock.wait)
+    assert [start for start, _ in starts] == [0, 602, 1204]
+    assert all(args["total_timeout"] <= 10 for _, args in starts)
+    assert max(clock.waits) <= 30 and sum(clock.waits) == 1200
+    assert [x.transport_status for x in result.attempts] == [
+        "NETWORK_TIMEOUT",
+        "CHILD_TIMEOUT",
+        "HTTP_OK",
+    ]
+    assert result.reason == "OTHER_VENUES_NOT_IMPLEMENTED"
+    assert result.completeness == "INCOMPLETE" and result.verification == "UNVERIFIED"
+    assert result.other_five_venues == "NOT_IMPLEMENTED" and result.publication == "NOT_ATTEMPTED"
+    assert result.attempts[-1].product_count == 1
+    assert "private" not in json.dumps(result.to_dict())
+
+
+@pytest.mark.parametrize(
+    "transport,page_status,reason",
+    [
+        ("TLS_ERROR", None, "SHFE_NOT_VERIFIED"),
+        ("HTTP_ERROR", None, "SHFE_NOT_VERIFIED"),
+        ("REDIRECT", None, "SHFE_NOT_VERIFIED"),
+        ("CHILD_CLEANUP_UNCERTAIN", None, "CHILD_CLEANUP_UNCERTAIN"),
+        ("HTTP_OK", "STRUCTURE_CHANGED", "SHFE_NOT_VERIFIED"),
+        ("HTTP_OK", "NEEDS_REVIEW", "SHFE_NOT_VERIFIED"),
+    ],
+)
+def test_no_blind_retry(transport, page_status, reason):
+    clock = Clock()
+    calls = []
+
+    def collect(**kwargs):
+        calls.append(kwargs)
+        return source(transport, page_status)
+
+    report = run(enable_shfe=True, collector=collect, monotonic=clock.now, wait=clock.wait)
+    assert report.reason == reason and len(calls) == 1 and not clock.waits
+    assert report.source_status == (page_status or transport)
+
+
+def test_budget_and_retry_limit():
+    clock = Clock()
+    result = run(
+        enable_shfe=True,
+        collector=lambda **kw: source("NETWORK_TIMEOUT"),
+        monotonic=clock.now,
+        wait=clock.wait,
+        budget_seconds=30,
+    )
+    assert result.reason == "RETRY_BUDGET_EXHAUSTED" and len(result.attempts) == 1
+    assert clock.waits == []
+    result = run(
+        enable_shfe=True,
+        collector=lambda **kw: source("CHILD_TIMEOUT"),
+        monotonic=clock.now,
+        wait=clock.wait,
+        max_retries=0,
+    )
+    assert result.reason == "RETRY_LIMIT_REACHED" and len(result.attempts) == 1
+
+    def uncertain(**kwargs):
+        clock.value += 20
+        return source("CHILD_CLEANUP_UNCERTAIN")
+
+    result = run(
+        enable_shfe=True,
+        collector=uncertain,
+        monotonic=clock.now,
+        wait=clock.wait,
+        budget_seconds=3,
+    )
+    assert result.reason == "CHILD_CLEANUP_UNCERTAIN" and result.exit_code == 23
+
+
+@pytest.mark.parametrize(
+    "settings",
+    [
+        {"budget_seconds": 0},
+        {"budget_seconds": float("nan")},
+        {"budget_seconds": True},
+        {"max_retries": 3},
+        {"max_retries": True},
+        {"retry_interval_seconds": -1},
+        {"enable_shfe": 1},
+    ],
+)
+def test_bad_arguments_are_rejected(settings):
+    assert run(**settings).reason == "INVALID_ARGUMENTS"
+
+
+def test_collector_failures_and_protocol_errors_are_sanitized():
+    def bad(**kwargs):
+        raise RuntimeError("sensitive message")
+
+    report = run(enable_shfe=True, collector=bad)
+    assert report.source_status == "CHILD_CLEANUP_UNCERTAIN" and "sensitive" not in json.dumps(
+        report.to_dict()
+    )
+    report = run(enable_shfe=True, collector=lambda **kw: SimpleNamespace(status="private"))
+    assert report.source_status == "CHILD_CLEANUP_UNCERTAIN"
+    assert (
+        preview._parse_worker_result(b'{"secret": "private"}', 0).reason == "WORKER_PROTOCOL_ERROR"
+    )
+
+
+def test_supervisor_interrupt_preserves_progress_and_reports_cleanup_uncertainty(
+    monkeypatch, default_sigint_for_mock_supervisor
+):
+    pending = preview.Attempt(1, "IN_PROGRESS", "IN_PROGRESS", "UNVERIFIED", 0)
+    event = preview.PreviewReport(
+        "INCOMPLETE",
+        "IN_PROGRESS",
+        10,
+        input_status="CHECKED",
+        input_code="SUPPLEMENT_UNVERIFIED",
+        supplement_status="CANDIDATE",
+        source_status="IN_PROGRESS",
+        attempts=(pending,),
+    )
+    output = json.dumps(event.to_dict()).encode() + b"\n"
+
+    class Child:
+        pid = 32123
+        returncode = None
+
+        def communicate(self, input=None, timeout=None):
+            if input is not None:
+                raise subprocess.TimeoutExpired("fake", timeout)
+            return output, b""
+
+    times = iter([0, 0.1, 1.1])
+    kills = []
+    monkeypatch.setattr(preview.time, "monotonic", lambda: next(times))
+    monkeypatch.setattr(preview.subprocess, "Popen", lambda *a, **kw: Child())
+    monkeypatch.setattr(preview.os, "killpg", lambda pid, sig: kills.append((pid, sig)))
+    report = preview._supervise({"budget_seconds": 1})
+    assert report.reason == "WORKER_CLEANUP_UNCERTAIN" and report.exit_code == 23
+    assert report.input_status == "CHECKED" and report.attempts[0].source_status == "INTERRUPTED"
+    assert kills == [(32123, preview.signal.SIGKILL)]
+
+
+def test_real_cli_worker_checks_local_fixture_without_network(tmp_path):
+    root = tmp_path / "日历 数据"
+    root.mkdir()
+    config = tmp_path / "配置.yaml"
+    config.write_text("calendars:\n  root: '日历 数据'\nsecret: private-token\n", encoding="utf-8")
+    supplement = root / "补充.yaml"
+    supplement.write_text(
+        "sources:\n  - id: synthetic\n    description: private-source\n"
+        "trading_days:\n  - venue: SHFE\n    day: '2026-11-12'\n"
+        "    status: open\n    source_ids: [synthetic]\n"
+        "trading_hours: []\nexceptions: []\n",
+        encoding="utf-8",
+    )
+    current = root / "CURRENT.json"
+    current.write_bytes(b"sentinel")
+    before = {p.name: p.read_bytes() for p in root.iterdir()}
+    sdk = Path(__file__).resolve().parents[2]
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.pathsep.join((str(sdk), str(sdk / "bt_api/bt_api_ctp/src")))
+    cmd = [
+        sys.executable,
+        "-m",
+        "bt_api_py.trading_calendar_preview",
+        "--config",
+        str(config),
+        "--calendar-root",
+        str(root),
+        "--supplement",
+        str(supplement),
+        "--budget-seconds",
+        "20",
+    ]
+    completed = subprocess.run(
+        cmd, cwd=sdk, env=env, capture_output=True, text=True, timeout=30, check=False
+    )
+    report = json.loads(completed.stdout)
+    assert completed.returncode == 10 and report["reason"] == "SHFE_NOT_REQUESTED"
+    assert report["input_status"] == "CHECKED" and report["source_status"] == "NOT_REQUESTED"
+    assert report["completeness"] == "INCOMPLETE" and report["verification"] == "UNVERIFIED"
+    assert "private" not in completed.stdout and str(tmp_path) not in completed.stdout
+    assert {p.name: p.read_bytes() for p in root.iterdir()} == before
+    supplement.unlink()
+    completed = subprocess.run(
+        cmd + ["--enable-shfe"],
+        cwd=sdk,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert (
+        completed.returncode == 20
+        and json.loads(completed.stdout)["reason"] == "INPUT_CHECK_FAILED"
+    )
+
+
+def test_actual_input_check_and_shfe_collector_are_composed_offline(tmp_path, monkeypatch):
+    sdk = Path(__file__).resolve().parents[2]
+    monkeypatch.syspath_prepend(str(sdk / "bt_api/bt_api_ctp/src"))
+    from bt_api_ctp.calendar_shfe_fetch import (
+        _HOLIDAY_SOURCE,
+        _SOURCE,
+        collect_shfe_holiday,
+        collect_shfe_page,
+    )
+    from bt_api_ctp.calendar_shfe_holiday import HolidayCandidate
+    from bt_api_ctp.calendar_shfe_page import PageCandidate
+
+    root = tmp_path / "calendars"
+    root.mkdir()
+    config = tmp_path / "settings.yaml"
+    config.write_text("calendars:\n  root: calendars\n", encoding="utf-8")
+    supplement = root / "input.yaml"
+    supplement.write_text(
+        "sources:\n  - id: x\n    description: synthetic\n"
+        "trading_days:\n  - venue: SHFE\n    day: '2026-11-12'\n"
+        "    status: open\n    source_ids: [x]\ntrading_hours: []\nexceptions: []\n",
+        encoding="utf-8",
+    )
+    calls = []
+
+    def fake_runner(*args):
+        calls.append(args)
+        return "HTTP_OK", PageCandidate(status="NEEDS_REVIEW", source_id=_SOURCE)
+
+    def holiday_runner(*args):
+        calls.append(args)
+        return "HTTP_OK", HolidayCandidate(status="CANDIDATE", source_id=_HOLIDAY_SOURCE)
+
+    result = preview.run_preview(
+        config_file=config,
+        calendar_root=root,
+        supplement_file=supplement,
+        budget_seconds=30,
+        enable_shfe=True,
+        collector=lambda **kwargs: collect_shfe_page(**kwargs, runner=fake_runner),
+        holiday_collector=lambda **kwargs: collect_shfe_holiday(**kwargs, runner=holiday_runner),
+        holiday_converter=conversion,
+        merger=partial_merge,
+        normalizer=normalized,
+    )
+    assert result.input_status == "CHECKED" and result.source_status == "NEEDS_REVIEW"
+    assert result.reason == "SHFE_NOT_VERIFIED" and len(calls) == 2
+    assert result.holiday_status == "CANDIDATE" and result.holiday_coverage == "NOT_PROVEN"
+    assert result.completeness == "INCOMPLETE" and result.verification == "UNVERIFIED"
+
+
+def test_two_sources_have_independent_attempts_and_shared_budget():
+    clock = Clock()
+    starts = []
+    hour_replies = iter([source("NETWORK_TIMEOUT"), source("HTTP_OK")])
+    holiday_replies = iter([holiday("CHILD_TIMEOUT"), holiday()])
+
+    def hours(**kwargs):
+        starts.append(("hours", clock.value, kwargs["total_timeout"]))
+        clock.value += 2
+        return next(hour_replies)
+
+    def closures(**kwargs):
+        starts.append(("holiday", clock.value, kwargs["total_timeout"]))
+        clock.value += 2
+        return next(holiday_replies)
+
+    result = run(
+        enable_shfe=True,
+        collector=hours,
+        holiday_collector=closures,
+        monotonic=clock.now,
+        wait=clock.wait,
+    )
+    assert [(name, start) for name, start, _ in starts] == [
+        ("hours", 0),
+        ("hours", 602),
+        ("holiday", 604),
+        ("holiday", 1206),
+    ]
+    assert [a.transport_status for a in result.attempts] == ["NETWORK_TIMEOUT", "HTTP_OK"]
+    assert [a.transport_status for a in result.holiday_attempts] == ["CHILD_TIMEOUT", "HTTP_OK"]
+    assert [a.parse_status for a in result.attempts] == ["NOT_ATTEMPTED", "CANDIDATE"]
+    assert [a.parse_status for a in result.holiday_attempts] == ["UNKNOWN", "CANDIDATE"]
+    assert result.source_status == result.holiday_status == "CANDIDATE"
+    assert result.holiday_coverage == "NOT_PROVEN" and result.verification == "UNVERIFIED"
+    assert result.reason == "OTHER_VENUES_NOT_IMPLEMENTED" and result.completeness == "INCOMPLETE"
+    assert result.publication == "NOT_ATTEMPTED" and "private" not in json.dumps(result.to_dict())
+    assert preview._parse_worker_result(json.dumps(result.to_dict()).encode(), 10) == result
+
+
+def test_source_failure_does_not_hide_other_source_and_no_retry_for_structure():
+    calls = []
+
+    def closures(**kw):
+        calls.append(kw)
+        return holiday("HTTP_OK", "STRUCTURE_CHANGED")
+
+    result = run(
+        enable_shfe=True, collector=lambda **kw: source("HTTP_OK"), holiday_collector=closures
+    )
+    assert result.source_status == "CANDIDATE" and result.holiday_status == "STRUCTURE_CHANGED"
+    assert result.reason == "SHFE_NOT_VERIFIED" and len(calls) == 1
+    result = run(
+        enable_shfe=True,
+        collector=lambda **kw: source("TLS_ERROR"),
+        holiday_collector=lambda **kw: holiday(),
+    )
+    assert result.source_status == "TLS_ERROR" and result.holiday_status == "CANDIDATE"
+    assert result.source_reason == "SHFE_NOT_VERIFIED" and result.holiday_reason == "CANDIDATE"
+
+
+def test_holiday_budget_exhausted_and_coverage_is_not_claimed():
+    clock = Clock()
+
+    def hours(**kw):
+        clock.value += 4
+        return source("HTTP_OK")
+
+    result = run(
+        enable_shfe=True,
+        collector=hours,
+        holiday_collector=lambda **kw: holiday(),
+        budget_seconds=4,
+        monotonic=clock.now,
+        wait=clock.wait,
+    )
+    assert result.reason == "BUDGET_EXHAUSTED" and result.source_status == "CANDIDATE"
+    assert result.holiday_status == "NOT_ATTEMPTED" and not result.holiday_attempts
+    result = run(
+        enable_shfe=True,
+        collector=lambda **kw: source("HTTP_OK"),
+        holiday_collector=lambda **kw: SimpleNamespace(
+            status="CANDIDATE",
+            transport_status="HTTP_OK",
+            verification="UNVERIFIED",
+            coverage="COMPLETE",
+            page=None,
+        ),
+    )
+    assert (
+        result.holiday_status == "CHILD_CLEANUP_UNCERTAIN"
+        and result.holiday_coverage == "NOT_PROVEN"
+    )
+
+
+def test_holiday_interrupt_preserves_both_source_histories(
+    monkeypatch, default_sigint_for_mock_supervisor
+):
+    done = preview.Attempt(1, "HTTP_OK", "CANDIDATE", "UNVERIFIED", 2)
+    pending = preview.Attempt(1, "IN_PROGRESS", "IN_PROGRESS", "UNVERIFIED", 0)
+    event = preview.PreviewReport(
+        "INCOMPLETE",
+        "IN_PROGRESS",
+        10,
+        input_status="CHECKED",
+        input_code="SUPPLEMENT_UNVERIFIED",
+        supplement_status="CANDIDATE",
+        source_status="CANDIDATE",
+        attempts=(done,),
+        source_reason="CANDIDATE",
+        holiday_status="IN_PROGRESS",
+        holiday_attempts=(pending,),
+    )
+    output = json.dumps(event.to_dict()).encode() + b"\n"
+
+    class Child:
+        pid = 32123
+        returncode = None
+
+        def communicate(self, input=None, timeout=None):
+            if input is not None:
+                raise subprocess.TimeoutExpired("fake", timeout)
+            return output, b""
+
+    times = iter([0, 0.1, 1.1])
+    monkeypatch.setattr(preview.time, "monotonic", lambda: next(times))
+    monkeypatch.setattr(preview.subprocess, "Popen", lambda *a, **kw: Child())
+    monkeypatch.setattr(preview.os, "killpg", lambda pid, sig: None)
+    result = preview._supervise({"budget_seconds": 1})
+    assert result.reason == "WORKER_CLEANUP_UNCERTAIN" and result.source_status == "CANDIDATE"
+    assert (
+        result.holiday_status == "INTERRUPTED"
+        and result.holiday_attempts[0].source_status == "INTERRUPTED"
+    )
+    assert result.holiday_attempts[0].parse_status == "INTERRUPTED"
+
+
+def test_insufficient_retry_budget_still_checks_other_source_without_waiting():
+    clock = Clock()
+    calls = []
+    result = run(
+        enable_shfe=True,
+        collector=lambda **kw: source("NETWORK_TIMEOUT"),
+        holiday_collector=lambda **kw: (calls.append(kw), holiday())[1],
+        budget_seconds=30,
+        monotonic=clock.now,
+        wait=clock.wait,
+    )
+    assert result.source_reason == "RETRY_BUDGET_EXHAUSTED"
+    assert result.holiday_status == "CANDIDATE" and len(calls) == 1
+    assert result.reason == "RETRY_BUDGET_EXHAUSTED" and not clock.waits
+
+
+def test_holiday_cleanup_uncertain_stops_without_retry():
+    calls = []
+    result = run(
+        enable_shfe=True,
+        collector=lambda **kw: source("HTTP_OK"),
+        holiday_collector=lambda **kw: (calls.append(kw), holiday("CHILD_CLEANUP_UNCERTAIN"))[1],
+    )
+    assert (
+        result.source_status == "CANDIDATE" and result.holiday_status == "CHILD_CLEANUP_UNCERTAIN"
+    )
+    assert result.reason == "CHILD_CLEANUP_UNCERTAIN" and len(calls) == 1
+
+
+def test_two_sources_are_never_called_when_gate_closed():
+    def forbidden(**kwargs):
+        raise AssertionError("network port must not be called")
+
+    for options in (
+        {},
+        {
+            "enable_shfe": True,
+            "checker": lambda **kw: CalendarCheckReport("ERROR", "CONFIG_READ_FAILED", 2),
+        },
+    ):
+        result = run(collector=forbidden, holiday_collector=forbidden, **options)
+        assert result.reason in {"SHFE_NOT_REQUESTED", "INPUT_CHECK_FAILED"}
+        assert not result.attempts and not result.holiday_attempts
+
+
+@pytest.mark.parametrize(
+    "initial_day,after_day,expected,ambiguous",
+    [
+        ("2026-02-10", "2026-01-01", "PARTIAL", False),
+        ("2026-01-01", "2026-02-10", "CONFLICT", False),
+        ("2026-02-10", "2026-02-10", "PARTIAL", True),
+    ],
+)
+def test_real_holiday_parser_conversion_and_fake_fetch_runner(
+    monkeypatch, tmp_path, initial_day, after_day, expected, ambiguous
+):
+    sdk = Path(__file__).resolve().parents[2]
+    monkeypatch.syspath_prepend(str(sdk / "bt_api/bt_api_ctp/src"))
+    from copy import deepcopy
+    from dataclasses import replace
+
+    from bt_api_ctp.calendar_candidate_normalize import normalize_calendar_candidate
+    from bt_api_ctp.calendar_shfe_fetch import _HOLIDAY_SOURCE, collect_shfe_holiday
+    from bt_api_ctp.calendar_shfe_holiday import parse_shfe_holiday
+
+    rows = (
+        "一、元旦：1月1日（星期四）至1月3日（星期六）休市，1月5日（星期一）起照常开市。"
+        "1月3日（星期六）、1月4日（星期日）为周末休市。2025年12月31日（星期三）晚上不进行夜盘交易。",
+        "二、春节：2月15日（星期日）至2月23日（星期一）休市，2月24日（星期二）起照常开市。"
+        "2月14日（星期六）、2月28日（星期六）为周末休市。2月13日（星期五）晚上不进行夜盘交易。",
+        "三、清明节：4月4日（星期六）至4月6日（星期一）休市，4月7日（星期二）起照常开市。"
+        "4月3日（星期五）晚上不进行夜盘交易。",
+        "四、劳动节：5月1日（星期五）至5月5日（星期二）休市，5月6日（星期三）起照常开市。"
+        "5月9日（星期六）为周末休市。4月30日（星期四）晚上不进行夜盘交易。",
+        "五、端午节：6月19日（星期五）至6月21日（星期日）休市，6月22日（星期一）起照常开市。"
+        "6月18日（星期四）晚上不进行夜盘交易。",
+        "六、中秋节：9月25日（星期五）至9月27日（星期日）休市，9月28日（星期一）起照常开市。"
+        "9月24日（星期四）晚上不进行夜盘交易。",
+        "七、国庆节：10月1日（星期四）至10月7日（星期三）休市，10月8日（星期四）起照常开市。"
+        "9月20日（星期日）、10月10日（星期六）为周末休市。9月30日（星期三）晚上不进行夜盘交易。",
+    )
+    document = (
+        '<div class="article_title" id="no_article_empty">2026年休市安排</div>'
+        '<div class="article_content_item"><div class="TRS_Editor">'
+        + "".join(f"<div>{row}</div>" for row in rows)
+        + "</div></div>"
+    ).encode()
+    parsed = parse_shfe_holiday(source_id=_HOLIDAY_SOURCE, html=document)
+    assert parsed.status == "CANDIDATE"
+
+    root = tmp_path / "calendar"
+    root.mkdir()
+    config = tmp_path / "configuration.yaml"
+    config.write_text("calendars:\n  root: calendar\nsecret: confidential\n", encoding="utf-8")
+    supplement = root / "input.yaml"
+
+    def write_supplement(day):
+        exceptions = "exceptions: []\n"
+        if ambiguous:
+            row = (
+                "  - venue: SHFE\n    kind: future\n    product: rb\n    contract: null\n"
+                "    trading_day: '2026-02-10'\n    action: close_day\n"
+                "    window_id: null\n    source_ids: [synthetic]\n"
+            )
+            exceptions = "exceptions:\n" + row + row
+        supplement.write_text(
+            "sources:\n  - id: synthetic\n    description: private-source\n"
+            "trading_days:\n  - venue: SHFE\n"
+            f"    day: '{day}'\n"
+            "    status: open\n    source_ids: [synthetic]\n"
+            "trading_hours: []\n" + exceptions,
+            encoding="utf-8",
+        )
+
+    write_supplement(initial_day)
+
+    def collector(**kw):
+        write_supplement(after_day)  # Must not be re-read after the checked snapshot.
+        return collect_shfe_holiday(**kw, runner=lambda *args: ("HTTP_OK", parsed))
+
+    observed = []
+
+    def normalize(candidate):
+        result = normalize_calendar_candidate(candidate)
+        reordered = deepcopy(candidate.content)
+        for rows in reordered.values():
+            rows.reverse()
+        repeated = normalize_calendar_candidate(replace(candidate, content=reordered))
+        assert result.status == repeated.status
+        assert result.json_bytes == repeated.json_bytes and result.sha256 == repeated.sha256
+        observed.append(result.status)
+        return result
+
+    result = preview.run_preview(
+        config_file=config,
+        calendar_root=root,
+        supplement_file=supplement,
+        budget_seconds=30,
+        enable_shfe=True,
+        collector=lambda **kw: source("HTTP_OK"),
+        holiday_collector=collector,
+        normalizer=normalize,
+    )
+    assert result.holiday_status == result.holiday_conversion_status == "CANDIDATE"
+    assert result.holiday_closed_count == 39 and result.holiday_unresolved_night_count == 7
+    output = json.dumps(result.to_dict(), ensure_ascii=False)
+    assert all(part not in output for part in ("http", "元旦", "2026", "private"))
+    assert result.holiday_coverage == "NOT_PROVEN" and result.publication == "NOT_ATTEMPTED"
+    assert result.completeness == "INCOMPLETE" and result.verification == "UNVERIFIED"
+    assert result.merge_status == expected
+    assert (
+        result.merge_hour_conflicts,
+        result.merge_exception_conflicts,
+        result.merge_cross_layer_conflicts,
+    ) == ("NOT_CHECKED", "NOT_CHECKED", "NOT_CHECKED")
+    if expected == "PARTIAL":
+        assert result.merge_source_count == 2 and result.merge_day_count == 40
+        assert result.merge_hour_count == 0 and result.merge_exception_count == (
+            2 if ambiguous else 0
+        )
+        assert result.reason == (
+            "NORMALIZATION_FAILED" if ambiguous else "OTHER_VENUES_NOT_IMPLEMENTED"
+        )
+        assert result.normalization_status == ("INVALID_INPUT" if ambiguous else "NORMALIZED")
+        assert observed == [result.normalization_status]
+    else:
+        assert result.reason == "MERGE_CONFLICT" and result.merge_reason == "TRADING_DAY_CONFLICT"
+        assert result.merge_day_count is None and result.merge_source_count is None
+        assert result.normalization_status == "NOT_ATTEMPTED" and observed == []
+    assert (
+        str(tmp_path) not in output
+        and "confidential" not in output
+        and "private-source" not in output
+    )
+
+
+@pytest.mark.parametrize("status", ["NETWORK_TIMEOUT", "CHILD_TIMEOUT", "TLS_ERROR", "HTTP_ERROR"])
+def test_no_conversion_or_counts_for_fetch_failure(status):
+    called = []
+    result = run(
+        enable_shfe=True,
+        collector=lambda **kw: source("HTTP_OK"),
+        holiday_collector=lambda **kw: holiday(status),
+        holiday_converter=lambda obj: called.append(obj),
+        max_retries=0,
+    )
+    assert not called and result.holiday_conversion_status == "NOT_ATTEMPTED"
+    assert result.holiday_closed_count is result.holiday_unresolved_night_count is None
+
+
+def test_no_conversion_for_unrequested_or_structure_change():
+    called = []
+
+    def converter(obj):
+        called.append(obj)
+
+    result = run(holiday_converter=converter)
+    assert (
+        result.holiday_conversion_status == "NOT_ATTEMPTED" and result.holiday_closed_count is None
+    )
+    result = run(
+        enable_shfe=True,
+        collector=lambda **kw: source("HTTP_OK"),
+        holiday_collector=lambda **kw: holiday("HTTP_OK", "NEEDS_REVIEW"),
+        holiday_converter=converter,
+    )
+    assert not called and result.holiday_conversion_status == "NOT_ATTEMPTED"
+    assert result.holiday_unresolved_night_count is None
+
+
+def test_converter_failures_are_explicit_and_do_not_affect_hours():
+    def error(_):
+        raise RuntimeError("raw private source")
+
+    for converter, status in [
+        (error, "CONVERSION_ERROR"),
+        (lambda obj: SimpleNamespace(status="private"), "CONVERSION_PROTOCOL_ERROR"),
+    ]:
+        result = run(
+            enable_shfe=True, collector=lambda **kw: source("HTTP_OK"), holiday_converter=converter
+        )
+        assert result.source_status == "CANDIDATE" and result.holiday_status == "CANDIDATE"
+        assert result.holiday_conversion_status == status and result.holiday_closed_count is None
+        assert result.reason == "SHFE_NOT_VERIFIED" and "private" not in json.dumps(
+            result.to_dict()
+        )
+
+
+def test_invalid_candidate_and_missing_converter_are_explicit():
+    def unavailable(candidate):
+        raise ImportError("private import path")
+
+    invalid = SimpleNamespace(
+        status="INVALID_CANDIDATE",
+        verification="UNVERIFIED",
+        coverage="NOT_PROVEN",
+        publication="NOT_AUTHORIZED",
+        supplement=None,
+        unresolved_nights=(),
+    )
+    for converter, status in (
+        (lambda obj: invalid, "INVALID_CANDIDATE"),
+        (unavailable, "CONVERTER_UNAVAILABLE"),
+    ):
+        result = run(
+            enable_shfe=True, collector=lambda **kw: source("HTTP_OK"), holiday_converter=converter
+        )
+        assert result.holiday_conversion_status == status and result.holiday_closed_count is None
+        assert result.source_status == "CANDIDATE" and "private" not in json.dumps(result.to_dict())
+
+
+def test_conversion_protocol_rejects_counts_with_wrong_state_or_types():
+    result = run(enable_shfe=True, collector=lambda **kw: source("HTTP_OK"))
+    raw = result.to_dict()
+    assert preview._parse_worker_result(json.dumps(raw).encode(), 10) == result
+    for changes in (
+        {"holiday_closed_count": True},
+        {"holiday_closed_count": 0},
+        {"holiday_unresolved_night_count": 33},
+        {"holiday_conversion_status": "NOT_ATTEMPTED"},
+        {"holiday_conversion_status": "sensitive private"},
+    ):
+        bad = {**raw, **changes}
+        outcome = preview._parse_worker_result(json.dumps(bad).encode(), 10)
+        assert outcome.reason == "WORKER_PROTOCOL_ERROR"
+        assert "sensitive" not in json.dumps(outcome.to_dict())
+
+
+def test_conversion_is_in_shared_budget_and_progress_is_visible():
+    clock = Clock()
+    updates = []
+
+    def slow(candidate):
+        clock.value += 15
+        return conversion(candidate)
+
+    result = run(
+        enable_shfe=True,
+        collector=lambda **kw: source("HTTP_OK"),
+        holiday_converter=slow,
+        budget_seconds=10,
+        monotonic=clock.now,
+        wait=clock.wait,
+        progress=updates.append,
+    )
+    assert result.reason == "BUDGET_EXHAUSTED" and result.holiday_conversion_status == "CANDIDATE"
+    assert any(
+        x.holiday_conversion_status == "IN_PROGRESS" and x.holiday_closed_count is None
+        for x in updates
+    )
+    assert result.holiday_closed_count == 1 and result.holiday_unresolved_night_count == 1
+
+
+def test_supervisor_reports_interrupted_conversion_without_false_counts(
+    monkeypatch, default_sigint_for_mock_supervisor
+):
+    done = preview.Attempt(1, "HTTP_OK", "CANDIDATE", "UNVERIFIED", 0, "CANDIDATE")
+    event = preview.PreviewReport(
+        "INCOMPLETE",
+        "IN_PROGRESS",
+        10,
+        input_status="CHECKED",
+        input_code="SUPPLEMENT_UNVERIFIED",
+        supplement_status="CANDIDATE",
+        source_status="CANDIDATE",
+        holiday_status="CANDIDATE",
+        holiday_attempts=(done,),
+        holiday_conversion_status="IN_PROGRESS",
+    )
+    output = json.dumps(event.to_dict()).encode() + b"\n"
+
+    class Child:
+        pid = 32123
+        returncode = None
+
+        def communicate(self, input=None, timeout=None):
+            if input is not None:
+                raise subprocess.TimeoutExpired("fake", timeout)
+            return output, b""
+
+    times = iter([0, 0.1, 1.1])
+    monkeypatch.setattr(preview.time, "monotonic", lambda: next(times))
+    monkeypatch.setattr(preview.subprocess, "Popen", lambda *a, **kw: Child())
+    monkeypatch.setattr(preview.os, "killpg", lambda pid, sig: None)
+    result = preview._supervise({"budget_seconds": 1})
+    assert result.reason == "BUDGET_EXHAUSTED" and result.holiday_conversion_status == "INTERRUPTED"
+    assert result.holiday_closed_count is result.holiday_unresolved_night_count is None
+
+
+def test_report_only_fake_check_never_claims_merge_success():
+    calls = []
+    result = run(
+        enable_shfe=True,
+        collector=lambda **kw: source("HTTP_OK"),
+        checker=checked,
+        merger=lambda **kw: calls.append(kw),
+    )
+    assert not calls and result.merge_status == "INPUT_CANDIDATE_UNAVAILABLE"
+    assert result.reason == "MERGE_FAILED" and result.merge_day_count is None
+
+
+def test_merge_failure_and_conflict_have_no_counts_and_no_raw_error():
+    def failed(**kwargs):
+        raise RuntimeError("private-supplement-details")
+
+    def conflicted(**kwargs):
+        base = partial_merge(**kwargs)
+        base.status = "CONFLICT"
+        base.reason = "SOURCE_CONFLICT"
+        base.supplement = None
+        return base
+
+    for merger, expected, reason in [
+        (failed, "MERGE_ERROR", "MERGE_FAILED"),
+        (conflicted, "CONFLICT", "MERGE_CONFLICT"),
+    ]:
+        result = run(enable_shfe=True, collector=lambda **kw: source("HTTP_OK"), merger=merger)
+        assert result.merge_status == expected and result.reason == reason
+        assert (
+            result.merge_source_count is result.merge_day_count is result.merge_hour_count is None
+        )
+        assert result.merge_exception_count is None and "private" not in json.dumps(
+            result.to_dict()
+        )
+        assert result.source_status == result.holiday_status == "CANDIDATE"
+
+
+def test_merge_timeout_preserves_prior_states_and_marks_interrupted(
+    monkeypatch, default_sigint_for_mock_supervisor
+):
+    done = preview.Attempt(1, "HTTP_OK", "CANDIDATE", "UNVERIFIED", 0, "CANDIDATE")
+    event = preview.PreviewReport(
+        "INCOMPLETE",
+        "IN_PROGRESS",
+        10,
+        input_status="CHECKED",
+        input_code="SUPPLEMENT_UNVERIFIED",
+        supplement_status="CANDIDATE",
+        source_status="CANDIDATE",
+        holiday_status="CANDIDATE",
+        holiday_attempts=(done,),
+        holiday_conversion_status="CANDIDATE",
+        holiday_closed_count=39,
+        holiday_unresolved_night_count=7,
+        merge_status="IN_PROGRESS",
+    )
+    output = json.dumps(event.to_dict()).encode() + b"\n"
+
+    class Child:
+        pid = 32123
+        returncode = None
+
+        def communicate(self, input=None, timeout=None):
+            if input is not None:
+                raise subprocess.TimeoutExpired("fake", timeout)
+            return output, b""
+
+    times = iter([0, 0.1, 1.1])
+    monkeypatch.setattr(preview.time, "monotonic", lambda: next(times))
+    monkeypatch.setattr(preview.subprocess, "Popen", lambda *a, **kw: Child())
+    monkeypatch.setattr(preview.os, "killpg", lambda pid, sig: None)
+    result = preview._supervise({"budget_seconds": 1})
+    assert result.reason == "BUDGET_EXHAUSTED" and result.merge_status == "INTERRUPTED"
+    assert result.holiday_closed_count == 39 and result.merge_day_count is None
+
+
+def test_merge_output_protocol_rejects_fake_counts_and_unchecked_flags():
+    result = run(enable_shfe=True, collector=lambda **kw: source("HTTP_OK"))
+    raw = result.to_dict()
+    assert preview._parse_worker_result(json.dumps(raw).encode(), 10) == result
+    for changes in (
+        {"merge_day_count": True},
+        {"merge_day_count": 1001},
+        {"merge_status": "CONFLICT"},
+        {"merge_hour_conflicts": "CHECKED"},
+        {"merge_reason": "private-path"},
+    ):
+        outcome = preview._parse_worker_result(json.dumps({**raw, **changes}).encode(), 10)
+        assert outcome.reason == "WORKER_PROTOCOL_ERROR"
+        assert "private-path" not in json.dumps(outcome.to_dict())
+
+
+def test_normalization_states_are_finite_and_never_disclose_outputs():
+    def unavailable(_):
+        raise ImportError("private module path")
+
+    def failure(_):
+        raise RuntimeError("private original content")
+
+    invalid = SimpleNamespace(
+        status="INVALID_INPUT",
+        reason="INVALID_OR_AMBIGUOUS_INPUT",
+        verification="UNVERIFIED",
+        coverage="NOT_PROVEN",
+        publication="NOT_AUTHORIZED",
+        comparison="FOUR_LAYER_STRUCTURE_ONLY",
+        unresolved_nights="NOT_INCLUDED",
+        json_bytes=None,
+        sha256=None,
+    )
+    for converter, expected in (
+        (lambda _: invalid, "INVALID_INPUT"),
+        (unavailable, "NORMALIZER_UNAVAILABLE"),
+        (failure, "NORMALIZATION_ERROR"),
+        (lambda _: SimpleNamespace(status="private"), "NORMALIZATION_PROTOCOL_ERROR"),
+    ):
+        result = run(
+            enable_shfe=True, collector=lambda **kw: source("HTTP_OK"), normalizer=converter
+        )
+        assert result.merge_status == "PARTIAL" and result.normalization_status == expected
+        assert result.reason == "NORMALIZATION_FAILED" and "private" not in json.dumps(
+            result.to_dict()
+        )
+        assert result.publication == "NOT_ATTEMPTED" and result.verification == "UNVERIFIED"
+    result = run(enable_shfe=True, collector=lambda **kw: source("HTTP_OK"))
+    output = json.dumps(result.to_dict())
+    assert (
+        result.normalization_status == "NORMALIZED"
+        and "private" not in output
+        and "a" * 64 not in output
+    )
+    assert result.normalization_scope == "FOUR_LAYER_STRUCTURE_ONLY"
+    assert result.normalization_nights == "UNRESOLVED_NIGHTS_NOT_INCLUDED"
+    assert (
+        result.source_page_changes == "NOT_CHECKED" and result.substantive_change == "NOT_ASSESSED"
+    )
+
+
+def test_normalizer_not_called_for_conflict_or_missing_input():
+    calls = []
+
+    def fake(candidate):
+        calls.append(candidate)
+
+    def conflict(**kwargs):
+        result = partial_merge(**kwargs)
+        result.status, result.reason, result.supplement = "CONFLICT", "SOURCE_CONFLICT", None
+        return result
+
+    for kwargs in ({"merger": conflict}, {"checker": checked}):
+        result = run(
+            enable_shfe=True, collector=lambda **kw: source("HTTP_OK"), normalizer=fake, **kwargs
+        )
+        assert result.normalization_status == "NOT_ATTEMPTED" and not calls
+
+
+def test_normalizer_shares_deadline_and_progress():
+    clock = Clock()
+    events = []
+
+    def slow(candidate):
+        clock.value += 11
+        return normalized(candidate)
+
+    result = run(
+        enable_shfe=True,
+        collector=lambda **kw: source("HTTP_OK"),
+        normalizer=slow,
+        budget_seconds=10,
+        monotonic=clock.now,
+        wait=clock.wait,
+        progress=events.append,
+    )
+    assert result.reason == "BUDGET_EXHAUSTED" and result.normalization_status == "NORMALIZED"
+    assert any(
+        e.normalization_status == "IN_PROGRESS" and e.merge_status == "PARTIAL" for e in events
+    )
+
+
+def test_supervisor_interrupted_normalization_and_strict_protocol(
+    monkeypatch, default_sigint_for_mock_supervisor
+):
+    done = preview.Attempt(1, "HTTP_OK", "CANDIDATE", "UNVERIFIED", 0, "CANDIDATE")
+    event = preview.PreviewReport(
+        "INCOMPLETE",
+        "IN_PROGRESS",
+        10,
+        input_status="CHECKED",
+        input_code="SUPPLEMENT_UNVERIFIED",
+        supplement_status="CANDIDATE",
+        source_status="CANDIDATE",
+        holiday_status="CANDIDATE",
+        holiday_attempts=(done,),
+        holiday_conversion_status="CANDIDATE",
+        holiday_closed_count=39,
+        holiday_unresolved_night_count=7,
+        merge_status="PARTIAL",
+        merge_source_count=2,
+        merge_day_count=40,
+        merge_hour_count=0,
+        merge_exception_count=0,
+        normalization_status="IN_PROGRESS",
+    )
+    output = json.dumps(event.to_dict()).encode() + b"\n"
+
+    class Child:
+        pid = 32123
+        returncode = None
+
+        def communicate(self, input=None, timeout=None):
+            if input is not None:
+                raise subprocess.TimeoutExpired("fake", timeout)
+            return output, b""
+
+    times = iter([0, 0.1, 1.1])
+    monkeypatch.setattr(preview.time, "monotonic", lambda: next(times))
+    monkeypatch.setattr(preview.subprocess, "Popen", lambda *a, **kw: Child())
+    monkeypatch.setattr(preview.os, "killpg", lambda pid, sig: None)
+    result = preview._supervise({"budget_seconds": 1})
+    assert result.reason == "BUDGET_EXHAUSTED" and result.normalization_status == "INTERRUPTED"
+    assert result.merge_status == "PARTIAL" and result.merge_day_count == 40
+    for changes in (
+        {"normalization_scope": "FULL"},
+        {"normalization_nights": "INCLUDED"},
+        {"source_page_changes": "CHECKED"},
+        {"substantive_change": "UNCHANGED"},
+        {"normalization_status": "private"},
+        {"normalization_status": "NORMALIZED", "merge_status": "CONFLICT"},
+    ):
+        raw = {**event.to_dict(), **changes}
+        assert (
+            preview._parse_worker_result(json.dumps(raw).encode(), 10).reason
+            == "WORKER_PROTOCOL_ERROR"
+        )
+
+
+def test_real_cli_optional_retention_and_default_no_write(tmp_path):
+    base = tmp_path.resolve()
+    root = base / "calendar"
+    root.mkdir()
+    reports = base / "private-reports"
+    reports.mkdir()
+    config = base / "private-config.yaml"
+    config.write_text("calendars:\n  root: calendar\nsecret: private-token\n", encoding="utf-8")
+    supplement = root / "private-supplement.yaml"
+    supplement.write_text(
+        "sources:\n  - id: synthetic\n    description: private-source\n"
+        "trading_days:\n  - venue: SHFE\n    day: '2026-11-12'\n"
+        "    status: open\n    source_ids: [synthetic]\ntrading_hours: []\nexceptions: []\n",
+        encoding="utf-8",
+    )
+    current = root / "CURRENT.json"
+    current.write_bytes(b"sentinel")
+    sdk = Path(__file__).resolve().parents[2]
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.pathsep.join((str(sdk), str(sdk / "bt_api/bt_api_ctp/src")))
+    cmd = [
+        sys.executable,
+        "-m",
+        "bt_api_py.trading_calendar_preview",
+        "--config",
+        str(config),
+        "--calendar-root",
+        str(root),
+        "--supplement",
+        str(supplement),
+        "--budget-seconds",
+        "20",
+    ]
+    plain = subprocess.run(
+        cmd, cwd=sdk, env=env, capture_output=True, text=True, timeout=30, check=False
+    )
+    assert plain.returncode == 10 and json.loads(plain.stdout)["reason"] == "SHFE_NOT_REQUESTED"
+    assert not list(reports.iterdir())
+    result = subprocess.run(
+        cmd + ["--report-dir", str(reports), "--trusted-local-posix"],
+        cwd=sdk,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    envelope = json.loads(result.stdout)
+    assert result.returncode == 10 and set(envelope) == {"preview", "retention"}
+    assert envelope["preview"] == json.loads(plain.stdout)
+    saved = envelope["retention"]
+    assert (saved["status"], saved["visibility"], saved["reason"]) == ("COMMITTED", "VISIBLE", "")
+    assert saved["retention_budget"] == "OUTSIDE_PREVIEW_BUDGET"
+    assert saved["total_cli_time_bound"] == saved["filesystem_verification"] == "NOT_PROVEN"
+    assert len(saved["run_id"]) == 32
+    names = list(reports.iterdir())
+    assert len(names) == 1 and names[0].name == f"preview-{saved['run_id']}.json"
+    assert json.loads(names[0].read_text())["report"] == envelope["preview"]
+    assert current.read_bytes() == b"sentinel"
+    assert all(text not in result.stdout for text in (str(base), "private-token", "private-source"))
+    assert all(
+        text not in names[0].read_text() for text in (str(base), "private-token", "private-source")
+    )
+    missing = subprocess.run(
+        cmd + ["--report-dir", str(base / "missing-private"), "--trusted-local-posix"],
+        cwd=sdk,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    missing_output = json.loads(missing.stdout)
+    assert missing.returncode == 24 and missing_output["retention"]["status"] == "NOT_COMMITTED"
+    assert missing_output["retention"]["reason"] == "INVALID_DIRECTORY"
+    assert "missing-private" not in missing.stdout and len(list(reports.iterdir())) == 1
+
+
+@pytest.mark.parametrize(
+    "extra", [["--report-dir", "/private/report-dir"], ["--trusted-local-posix"]]
+)
+def test_retention_requires_both_options_before_preview(monkeypatch, capsys, extra):
+    called = []
+    monkeypatch.setattr(preview, "_supervise", lambda values: called.append(values))
+    args = [
+        "--config",
+        "/private/config",
+        "--calendar-root",
+        "/private/root",
+        "--supplement",
+        "/private/input",
+        "--budget-seconds",
+        "10",
+    ] + extra
+    assert preview.main(args) == 2
+    encoded = capsys.readouterr().out
+    value = json.loads(encoded)
+    assert value["retention"]["status"] == "NOT_ATTEMPTED"
+    assert value["retention"]["reason"] == "INCOMPLETE_OPTIONS" and not called
+    assert "private" not in encoded
+
+
+@pytest.mark.parametrize(
+    "result,expected",
+    [
+        (("NOT_COMMITTED", "NOT_OBSERVED", "INVALID_DIRECTORY"), 24),
+        (("COMMIT_UNKNOWN", "VISIBLE", "IO_OR_STATE_ERROR"), 25),
+        (("COMMIT_UNKNOWN", "NOT_OBSERVED", "IO_OR_STATE_ERROR"), 25),
+    ],
+)
+def test_retention_statuses_have_distinct_exit_codes(monkeypatch, capsys, result, expected):
+    from bt_api_py import trading_calendar_preview_reports as retention
+
+    report = preview.PreviewReport("INCOMPLETE", "SHFE_NOT_REQUESTED", 10)
+    monkeypatch.setattr(preview, "_supervise", lambda values: report)
+    seen = []
+
+    def fake(value, **kwargs):
+        seen.append((value, kwargs))
+        return retention.PreviewRetentionResult(
+            result[0], result[1], run_id="a" * 32, reason=result[2]
+        )
+
+    monkeypatch.setattr(retention, "retain_preview_report", fake)
+    args = [
+        "--config",
+        "/private/config",
+        "--calendar-root",
+        "/private/root",
+        "--supplement",
+        "/private/input",
+        "--budget-seconds",
+        "10",
+        "--report-dir",
+        "/private/reports",
+        "--trusted-local-posix",
+    ]
+    assert preview.main(args) == expected
+    encoded = capsys.readouterr().out
+    value = json.loads(encoded)
+    assert value["preview"]["reason"] == "SHFE_NOT_REQUESTED"
+    assert value["retention"]["status"] == result[0] and "private" not in encoded
+    assert type(seen[0][0]) is preview.PreviewReport
+    assert seen[0][1]["filesystem"] == retention.TRUSTED_LOCAL_POSIX
+
+
+def test_retention_exception_after_invocation_is_unknown_and_sanitized(monkeypatch, capsys):
+    from bt_api_py import trading_calendar_preview_reports as retention
+
+    monkeypatch.setattr(
+        preview,
+        "_supervise",
+        lambda values: preview.PreviewReport("ERROR", "WORKER_CLEANUP_UNCERTAIN", 23),
+    )
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("private credentials")
+
+    monkeypatch.setattr(retention, "retain_preview_report", fail)
+    args = [
+        "--config",
+        "/x",
+        "--calendar-root",
+        "/y",
+        "--supplement",
+        "/z",
+        "--budget-seconds",
+        "2",
+        "--report-dir",
+        "/private/reports",
+        "--trusted-local-posix",
+    ]
+    assert preview.main(args) == 25
+    output = capsys.readouterr().out
+    value = json.loads(output)
+    assert value["preview"]["reason"] == "WORKER_CLEANUP_UNCERTAIN"
+    assert value["retention"]["status"] == "COMMIT_UNKNOWN" and "private" not in output
+
+
+def test_malformed_retention_response_is_unknown_after_invocation(monkeypatch):
+    from bt_api_py import trading_calendar_preview_reports as retention
+
+    monkeypatch.setattr(
+        retention, "retain_preview_report", lambda *args, **kwargs: {"status": "COMMITTED"}
+    )
+    report = preview.PreviewReport("INCOMPLETE", "SHFE_NOT_REQUESTED", 10)
+    result = preview._retain_report(report, "/private")
+    assert result["status"] == "COMMIT_UNKNOWN" and result["run_id"] == ""
+    assert "private" not in json.dumps(result)

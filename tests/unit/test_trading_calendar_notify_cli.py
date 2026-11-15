@@ -1,0 +1,1234 @@
+"""Offline notification adapter tests using the actual persistent simulation store."""
+
+import fcntl
+import json
+import os
+import sqlite3
+import subprocess
+import sys
+from contextlib import contextmanager
+from datetime import UTC, datetime, timedelta
+
+import pytest
+
+from bt_api_py import trading_calendar_notify_cli as cli
+from bt_api_py.trading_calendar_notifications import BaseEmailReceipt, EmailConfig
+from tests.unit.test_trading_calendar_mock_cli_integration import SMALL_MOCK, command
+from tests.unit.test_trading_calendar_mock_persistent import operation, run_args, settings
+from tests.unit.test_trading_calendar_observation_run import env_without_network
+
+
+@pytest.fixture
+def setup_store(tmp_path):
+    def create(mode):
+        root, config = settings(tmp_path, mode)
+        env = env_without_network(tmp_path, SMALL_MOCK)
+        rc, lines, err = command(env, *run_args(root, config))
+        assert rc == (10 if mode == "manual" else 0), (lines, err)
+        run = next(row for row in lines if row.get("candidate_state") == "COMMITTED")
+        return root, config, env, run["run_id"], lines[-1]
+
+    return create
+
+
+def email():
+    return EmailConfig(
+        enabled=True,
+        host="smtp.invalid",
+        port=587,
+        timeout=2,
+        sender="sender@example.invalid",
+        recipients=("to@example.invalid",),
+    )
+
+
+def attempt(root, run_id, result, tmp_path, *, kind="manual", sender=None, **kwargs):
+    args = {
+        "root": str(root),
+        "run_id": run_id,
+        "kind": kind,
+        "event_id": result["review_id"] if kind == "manual" else result["publication_id"],
+        "review_sha256": result.get("review_payload_sha256"),
+        "config": email(),
+        "journal_path": tmp_path / "notification.sqlite",
+        "sender": sender or (lambda c: BaseEmailReceipt(c.recipients, {})),
+        "clock_instant": datetime(2026, 11, 13, 4, tzinfo=UTC),
+        "clock_error_bound": timedelta(seconds=1),
+        "clock_evidence": "PROVEN",
+    }
+    args.update(kwargs)
+    return cli.run(**args)
+
+
+def test_manual_pending_dedup_and_confirmed_invalid(setup_store, tmp_path):
+    root, config, env, run_id, pending = setup_store("manual")
+    called = []
+
+    def sender(config):
+        called.append(config.body)
+        return BaseEmailReceipt(config.recipients, {})
+
+    assert attempt(root, run_id, pending, tmp_path, sender=sender).status == "ACCEPTED"
+    assert attempt(root, run_id, pending, tmp_path, sender=sender).status == "DUPLICATE"
+    assert len(called) == 1 and "SIMULATION_ONLY" in called[0]
+    rc, lines, err = command(
+        env,
+        *operation(
+            root,
+            run_id,
+            "mock-confirm",
+            "--review-id",
+            pending["review_id"],
+            "--review-sha256",
+            pending["review_payload_sha256"],
+            "--reviewer",
+            "MOCK_reviewer",
+            "--confirmed-at",
+            "2026-11-13T00:00:00.000000Z",
+        ),
+    )
+    assert rc == 0, (lines, err)
+    assert attempt(root, run_id, pending, tmp_path).status == "NOT_SENT"
+
+
+def test_manual_digest_clock_dry_run_and_mode_change(setup_store, tmp_path):
+    root, config, env, run_id, pending = setup_store("manual")
+    assert attempt(root, run_id, pending, tmp_path, dry_run=True).reason == "DRY_RUN_ELIGIBLE"
+    assert not (tmp_path / "notification.sqlite").exists()
+    assert (
+        attempt(root, run_id, pending, tmp_path, clock_evidence="UNKNOWN").reason == "CLOCK_UNKNOWN"
+    )
+    assert not (tmp_path / "notification.sqlite").exists()
+    assert attempt(root, run_id, pending, tmp_path, review_sha256="a" * 64).status == "NOT_SENT"
+    config.write_text(json.dumps({"calendars": {"root": str(root), "review_mode": "auto"}}))
+    assert attempt(root, run_id, pending, tmp_path).status == "NOT_SENT"
+
+
+def test_auto_commit_dedup_and_no_change(setup_store, tmp_path):
+    root, config, env, run_id, first = setup_store("auto")
+    operator = cli.MockCalendarPublication(root=str(root), run_id=run_id)
+    cli._auto(operator, first["publication_id"])
+    outcome = attempt(root, run_id, first, tmp_path, kind="auto")
+    assert outcome.status == "ACCEPTED", outcome
+    assert attempt(root, run_id, first, tmp_path, kind="auto").status == "DUPLICATE"
+    (root / "PENDING.json").write_text("{}")
+    assert attempt(root, run_id, first, tmp_path, kind="auto").status == "NOT_SENT"
+    (root / "PENDING.json").unlink()
+    from tests.unit.test_trading_calendar_mock_persistent import create_baseline_supplement
+
+    create_baseline_supplement(root)
+    rc, lines, err = command(env, *operation(root, run_id, "mock-update", "--variant", "BASE"))
+    assert lines[-1]["status"] == "SAME", (lines, err)
+    assert attempt(root, lines[-1]["run_id"], lines[-1], tmp_path, kind="auto").status == "NOT_SENT"
+    rc, lines, err = command(
+        env, *operation(root, run_id, "mock-update", "--variant", "AFTERNOON_CHANGE")
+    )
+    assert lines[-1]["status"] == "COMMITTED", (lines, err)
+    changed = lines[-1]
+    assert attempt(root, changed["run_id"], changed, tmp_path, kind="auto").status == "ACCEPTED"
+    assert (
+        attempt(
+            root, run_id, first, tmp_path, kind="auto", journal_path=tmp_path / "historical.sqlite"
+        ).status
+        == "ACCEPTED"
+    )
+    from tests.unit.test_trading_calendar_mock_policy_transition import begin, policy, set_mode
+
+    rc, lines, err = begin(env, root, run_id, "manual", "MOCK_notify_policy")
+    assert rc == 10 and lines[-1]["status"] == "PENDING_CONFIG", (lines, err)
+    set_mode(config, root, "manual")
+    rc, lines, err = command(
+        env, *policy(root, run_id, "resume", "--operation-id", "MOCK_notify_policy")
+    )
+    assert rc == 0, (lines, err)
+    assert (
+        attempt(
+            root, run_id, first, tmp_path, kind="auto", journal_path=tmp_path / "after_mode.sqlite"
+        ).status
+        == "ACCEPTED"
+    )
+
+
+def test_manual_supplement_change_blocks_pending(setup_store, tmp_path):
+    root, _, _, run_id, pending = setup_store("manual")
+    (root / "supplement.yaml").write_text("{}")
+    assert attempt(root, run_id, pending, tmp_path).status == "NOT_SENT"
+    assert not (tmp_path / "notification.sqlite").exists()
+
+
+def test_legacy_review_without_input_binding_stays_unknown(setup_store, tmp_path):
+    root, _, _, run_id, pending = setup_store("manual")
+    operator = cli.MockCalendarPublication(root=str(root), run_id=run_id)
+    original = cli.mock_cli._read_pending(operator, pending["review_id"])["body"]
+    ids = cli.mock_cli.allocate(candidate_id=original["candidate_id"])
+    saved = cli.mock_cli._retain_pending(operator, ids, original["proposal"])
+    assert saved["status"] == "COMMITTED"
+    legacy = {**ids, "review_payload_sha256": saved["review_payload_sha256"]}
+    assert attempt(root, run_id, legacy, tmp_path).status == "NOT_SENT"
+    assert not (tmp_path / "notification.sqlite").exists()
+
+
+def test_private_journal_required(setup_store, tmp_path):
+    root, _, _, run_id, pending = setup_store("manual")
+    target = tmp_path / "target"
+    target.write_text("untouched")
+    target.chmod(0o600)
+    link = tmp_path / "link"
+    link.symlink_to(target)
+    hardlink = tmp_path / "hardlink"
+    os.link(target, hardlink)
+    public = tmp_path / "public"
+    public.mkdir(mode=0o755)
+    sent = []
+    for path in (link, hardlink, public / "events.sqlite"):
+        result = attempt(
+            root, run_id, pending, tmp_path, journal_path=path, sender=lambda c: sent.append(c)
+        )
+        assert result.status == "NOT_SENT"
+    assert (
+        not sent and target.read_text() == "untouched" and not (public / "events.sqlite").exists()
+    )
+
+
+@pytest.mark.parametrize("interleave", ["prepare", "supplement"])
+def test_confirmation_is_excluded_during_review_observation(
+    setup_store, tmp_path, monkeypatch, interleave
+):
+    root, _, env, run_id, pending = setup_store("manual")
+    count = []
+
+    def confirmation_attempt():
+        count.append(1)
+        if len(count) == (3 if interleave == "prepare" else 6):
+            supplement = root / "supplement.yaml"
+            supplement.write_text("{}")
+            rc, lines, err = command(
+                env,
+                *operation(
+                    root,
+                    run_id,
+                    "mock-confirm",
+                    "--review-id",
+                    pending["review_id"],
+                    "--review-sha256",
+                    pending["review_payload_sha256"],
+                    "--reviewer",
+                    "MOCK_reviewer",
+                    "--confirmed-at",
+                    "2026-11-13T00:00:00.000000Z",
+                ),
+            )
+            assert rc != 0 and lines[-1]["reason"] == "REVIEW_LOCK_UNAVAILABLE", (lines, err)
+            supplement.unlink()
+
+    if interleave == "prepare":
+        original = cli.MockCalendarPublication.prepare
+
+        def concurrent_confirmation(operator, **kwargs):
+            value = original(operator, **kwargs)
+            confirmation_attempt()
+            return value
+
+        monkeypatch.setattr(cli.MockCalendarPublication, "prepare", concurrent_confirmation)
+    else:
+        original = cli.mock_cli._verify_supplement
+
+        def concurrent_verification(*args):
+            value = original(*args)
+            confirmation_attempt()
+            return value
+
+        monkeypatch.setattr(cli.mock_cli, "_verify_supplement", concurrent_verification)
+
+    sent = []
+
+    def sender(config):
+        lock_path = root / "review-bundles" / f".mock-confirm-{pending['review_id']}.lock"
+        fd = os.open(lock_path, os.O_RDWR)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
+        sent.append(1)
+        return BaseEmailReceipt(config.recipients, {})
+
+    result = attempt(root, run_id, pending, tmp_path, sender=sender)
+    assert result.status == "ACCEPTED" and sent == [1]
+    assert len(count) == (3 if interleave == "prepare" else 6)
+
+
+def test_review_lock_unavailable_fails_closed(setup_store, tmp_path):
+    root, _, _, run_id, pending = setup_store("manual")
+    path = root / "review-bundles" / f".mock-confirm-{pending['review_id']}.lock"
+    fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        sent = []
+        result = attempt(root, run_id, pending, tmp_path, sender=lambda value: sent.append(value))
+        assert result.status == "NOT_SENT" and not sent
+        assert not (tmp_path / "notification.sqlite").exists()
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+
+
+def test_state_change_and_unknown_intent_do_not_send(setup_store, tmp_path, monkeypatch):
+    root, config, env, run_id, pending = setup_store("manual")
+    original = cli._manual
+    reads = []
+
+    def changed(*args):
+        reads.append(1)
+        if len(reads) == 3:
+            raise ValueError("sensitive path")
+        return original(*args)
+
+    monkeypatch.setattr(cli, "_manual", changed)
+    sent = []
+    result = attempt(root, run_id, pending, tmp_path, sender=lambda c: sent.append(c))
+    assert result.status == "NOT_SENT" and not sent
+    monkeypatch.setattr(cli, "_manual", original)
+    connection = sqlite3.connect(tmp_path / "notification.sqlite")
+    connection.execute("UPDATE notifications SET status='IN_FLIGHT'")
+    connection.commit()
+    connection.close()
+    result = attempt(root, run_id, pending, tmp_path, sender=lambda c: sent.append(c))
+    assert result.status == "DUPLICATE" and result.journal_status == "UNKNOWN" and not sent
+
+
+def test_cli_private_errors_and_default_no_smtp(setup_store, tmp_path, capsys):
+    root, config, env, run_id, pending = setup_store("manual")
+    private = tmp_path / "secret_smtp_path"
+    private.write_text("secret password")
+    os.chmod(private, 0o644)
+    args = [
+        "--calendar-root",
+        str(root),
+        "--run-id",
+        run_id,
+        "--review-id",
+        pending["review_id"],
+        "--review-sha256",
+        pending["review_payload_sha256"],
+        "--trusted-local-posix",
+    ]
+    assert cli.main(args + ["--smtp-config", str(private)]) == 1
+    output = capsys.readouterr().out
+    assert "secret" not in output and str(root) not in output
+    assert cli.main(args) == 1
+    assert json.loads(capsys.readouterr().out)["reason"] == "DISABLED"
+    assert cli.main(args + ["--dry-run", "--smtp-config", str(private)]) == 0
+    assert json.loads(capsys.readouterr().out)["reason"] == "DRY_RUN_ELIGIBLE"
+
+
+def test_sender_exception_is_sanitized(setup_store, tmp_path):
+    root, _, _, run_id, pending = setup_store("manual")
+
+    def sender(_):
+        raise ValueError("password recipient@example.invalid /sensitive/path")
+
+    result = attempt(root, run_id, pending, tmp_path, sender=sender)
+    assert result.status == "UNKNOWN" and result.reason == "SMTP_OUTCOME"
+    journal = (tmp_path / "notification.sqlite").read_bytes()
+    assert b"password" not in journal and b"recipient@example.invalid" not in journal
+    assert b"/sensitive/path" not in journal
+
+
+@pytest.mark.parametrize("failure", ["journal_close", "sqlite_close"])
+def test_cleanup_failure_after_sender_is_unknown(setup_store, tmp_path, monkeypatch, failure):
+    root, _, _, run_id, pending = setup_store("manual")
+    if failure == "journal_close":
+        original_journal = cli._protected_journal
+
+        @contextmanager
+        def failing_journal(path):
+            with original_journal(path) as verify:
+                yield verify
+            raise OSError("private cleanup detail")
+
+        monkeypatch.setattr(cli, "_protected_journal", failing_journal)
+    else:
+        original_connect = sqlite3.connect
+
+        class CloseFailure:
+            def __init__(self, connection):
+                self.connection = connection
+
+            def __getattr__(self, name):
+                return getattr(self.connection, name)
+
+            def close(self):
+                self.connection.close()
+                raise OSError("private cleanup detail")
+
+        monkeypatch.setattr(
+            sqlite3,
+            "connect",
+            lambda *args, **kwargs: CloseFailure(original_connect(*args, **kwargs)),
+        )
+    sent = []
+
+    def sender(value):
+        sent.append(1)
+        return BaseEmailReceipt(value.recipients, {})
+
+    result = attempt(root, run_id, pending, tmp_path, sender=sender)
+    assert sent == [1] and result.status == "UNKNOWN"
+    assert result.reason == "POST_SEND_OUTCOME_UNKNOWN" and result.journal_status == "UNKNOWN"
+
+
+def test_cli_explicit_clock_declaration_and_rechecked_day(
+    setup_store, tmp_path, monkeypatch, capsys
+):
+    root, _, _, run_id, pending = setup_store("manual")
+    config = tmp_path / "smtp.json"
+    config.write_text(
+        json.dumps(
+            {
+                "enabled": True,
+                "host": "smtp.invalid",
+                "port": 587,
+                "timeout": 2,
+                "sender": "sender@example.invalid",
+                "recipients": ["to@example.invalid"],
+            }
+        )
+    )
+    clock = tmp_path / "clock.json"
+    clock.write_text(
+        json.dumps(
+            {
+                "environment": "SIMULATION_ONLY",
+                "evidence": "CALLER_DECLARED",
+                "error_bound_seconds": 1,
+            }
+        )
+    )
+    config.chmod(0o600)
+    clock.chmod(0o600)
+    sent = []
+
+    def fake_sender(value):
+        sent.append(value)
+        return BaseEmailReceipt(value.recipients, {})
+
+    monkeypatch.setattr(cli, "send_via_base", fake_sender)
+    args = [
+        "--calendar-root",
+        str(root),
+        "--run-id",
+        run_id,
+        "--review-id",
+        pending["review_id"],
+        "--review-sha256",
+        pending["review_payload_sha256"],
+        "--trusted-local-posix",
+        "--smtp-config",
+        str(config),
+        "--journal-path",
+        str(tmp_path / "cli.sqlite"),
+        "--simulation-clock-config",
+        str(clock),
+    ]
+    assert cli.main(args) == 0
+    output = json.loads(capsys.readouterr().out)
+    assert (
+        output["status"] == "ACCEPTED"
+        and output["clock_evidence"] == "CALLER_DECLARED_NOT_AUTHENTICATED"
+    )
+    assert len(sent) == 1
+    times = iter(
+        [
+            datetime(2026, 11, 13, 15, 59, 57, tzinfo=UTC),
+            datetime(2026, 11, 13, 15, 59, 58, tzinfo=UTC),
+            datetime(2026, 11, 13, 16, 0, 0, tzinfo=UTC),
+        ]
+    )
+    result = attempt(
+        root, run_id, pending, tmp_path, sender=fake_sender, clock_source=lambda: next(times)
+    )
+    assert result.status == "NOT_SENT" and len(sent) == 1
+
+
+@pytest.mark.parametrize("kind", ["smtp", "clock"])
+def test_config_replacement_before_send_blocks(setup_store, tmp_path, monkeypatch, capsys, kind):
+    root, _, _, run_id, pending = setup_store("manual")
+    config = tmp_path / "smtp.json"
+    config.write_text(
+        json.dumps(
+            {
+                "enabled": True,
+                "host": "smtp.invalid",
+                "port": 587,
+                "timeout": 2,
+                "sender": "sender@example.invalid",
+                "recipients": ["to@example.invalid"],
+            }
+        )
+    )
+    clock = tmp_path / "clock.json"
+    clock.write_text(
+        json.dumps(
+            {
+                "environment": "SIMULATION_ONLY",
+                "evidence": "CALLER_DECLARED",
+                "error_bound_seconds": 1,
+            }
+        )
+    )
+    config.chmod(0o600)
+    clock.chmod(0o600)
+    name, path = ("_read_config", config) if kind == "smtp" else ("_read_clock_declaration", clock)
+    original = getattr(cli, name)
+    calls = []
+
+    def changing(pathname):
+        calls.append(1)
+        if len(calls) == 3:
+            replacement = tmp_path / "replacement"
+            replacement.write_bytes(path.read_bytes())
+            replacement.chmod(0o600)
+            os.replace(replacement, path)
+        return original(pathname)
+
+    monkeypatch.setattr(cli, name, changing)
+    sent = []
+    monkeypatch.setattr(cli, "send_via_base", lambda value: sent.append(value))
+    args = [
+        "--calendar-root",
+        str(root),
+        "--run-id",
+        run_id,
+        "--review-id",
+        pending["review_id"],
+        "--review-sha256",
+        pending["review_payload_sha256"],
+        "--trusted-local-posix",
+        "--smtp-config",
+        str(config),
+        "--journal-path",
+        str(tmp_path / "cli.sqlite"),
+        "--simulation-clock-config",
+        str(clock),
+    ]
+    assert cli.main(args) == 1 and not sent
+    assert json.loads(capsys.readouterr().out)["status"] == "NOT_SENT"
+
+
+def test_config_changed_during_read_is_rejected(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    path.write_text('{"enabled":true}')
+    path.chmod(0o600)
+    original = os.read
+
+    def changing(fd, length):
+        value = original(fd, length)
+        replacement = tmp_path / "replacement"
+        replacement.write_text('{"enabled":false}')
+        replacement.chmod(0o600)
+        os.replace(replacement, path)
+        return value
+
+    monkeypatch.setattr(cli.os, "read", changing)
+    with pytest.raises(ValueError):
+        cli._read_protected_json(str(path))
+
+
+def test_duplicate_unknown_exit_is_nonzero(monkeypatch, capsys):
+    monkeypatch.setattr(
+        cli, "run", lambda **_: cli.NotificationResult("DUPLICATE", "ALREADY_RESERVED", "UNKNOWN")
+    )
+    assert (
+        cli.main(
+            [
+                "--calendar-root",
+                "/ignored",
+                "--run-id",
+                "id",
+                "--review-id",
+                "id",
+                "--trusted-local-posix",
+            ]
+        )
+        == 1
+    )
+    assert json.loads(capsys.readouterr().out)["journal_status"] == "UNKNOWN"
+
+
+@pytest.mark.parametrize("mode", ["auto", "manual"])
+def test_mixed_notification_original_association_and_semantic_change(tmp_path, mode):
+    from datetime import date
+
+    from bt_api_ctp.calendar_akshare_fetch import collect_akshare_contract
+
+    from bt_api_py import trading_calendar_akshare_observation as observation
+    from bt_api_py import trading_calendar_detail_collection as storage
+    from bt_api_py.trading_calendar_mock import SOURCE
+    from tests.unit.test_trading_calendar_mixed_simulation_version import capture, template_fixture
+
+    root = tmp_path / "root"
+    root.mkdir(mode=0o700)
+    config = tmp_path / "config.json"
+    config.write_text(json.dumps({"calendars": {"root": str(root), "review_mode": mode}}))
+    env = env_without_network(
+        tmp_path,
+        """
+from tests.unit.test_trading_calendar_mixed_simulation_version import template_fixture
+from bt_api_py import trading_calendar_mock as mock
+mock.build = lambda year: (template_fixture(), {'sources': [mock.SOURCE], 'trading_days': [template_fixture()['shards'][0]['layers']['trading_days'][0]], 'trading_hours': [], 'exceptions': []})
+""",
+    )
+    code = """
+import json, sys
+from bt_api_py import trading_calendar_observation_run as runs
+result = runs.run_once(root=sys.argv[1], config=sys.argv[2], supplement=None, budget_seconds=30,
+ enable_shfe=False, filesystem='TRUSTED_LOCAL_POSIX', run_id='a'*32, capture_id='b'*32,
+ parent_id='c'*32, derived_id='d'*32, mock_year=2026, emit=lambda _:None)
+print(json.dumps(result))
+"""
+    process = subprocess.run(
+        [sys.executable, "-c", code, str(root), str(config)],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert process.returncode == 0 and json.loads(process.stdout)["candidate_state"] == "COMMITTED"
+    operator = cli.MockCalendarPublication(root=str(root), run_id="a" * 32)
+    assert operator.initialize(mode=mode)["status"] == "INITIALIZED"
+    supplement = {
+        "sources": [SOURCE],
+        "trading_days": [template_fixture()["shards"][0]["layers"]["trading_days"][0]],
+        "trading_hours": [],
+        "exceptions": [],
+    }
+    (root / "supplement.yaml").write_text(json.dumps(supplement))
+    capture(root, "e" * 32, "a" * 32, "日盘 09:00-10:00")
+    flags = (
+        "--mixed-observation-id",
+        "e" * 32,
+        "--mixed-observation-run-id",
+        "a" * 32,
+        "--mixed-venue",
+        "SHFE",
+        "--mixed-product",
+        "pfuture",
+        "--mixed-contract",
+        "mock_shfe_future_contract",
+        "--mixed-valid-from",
+        "2026-12-31",
+        "--mixed-valid-to",
+        "2027-01-04",
+        "--mixed-day-phase",
+        "continuous",
+        "--mixed-night-phase",
+        "continuous",
+        "--mixed-timezone",
+        "Asia/Shanghai",
+        "--mixed-alignment",
+        "REPEAT_OVER_MOCK_OWNER_DAY_MAPPING",
+    )
+    rc, rows, err = command(env, *operation(root, "a" * 32, "mock-update", *flags))
+    assert rc == (0 if mode == "auto" else 10), (rows, err)
+    first = rows[-1]
+    assert first["status"] == ("COMMITTED" if mode == "auto" else "PENDING_REVIEW")
+    sent = []
+
+    def sender(value):
+        sent.append(value.body)
+        return BaseEmailReceipt(value.recipients, {})
+
+    assert (
+        attempt(root, first["run_id"], first, tmp_path, kind=mode, dry_run=True).reason
+        == "DRY_RUN_ELIGIBLE"
+    )
+    assert (
+        attempt(root, first["run_id"], first, tmp_path, kind=mode, sender=sender).status
+        == "ACCEPTED"
+    )
+    assert "SIMULATION_ONLY / AKSHARE_MOCK" in sent[-1]
+    assert "=AKSHARE" in sent[-1] and "=MOCK" in sent[-1] and "Date alignment UNKNOWN" in sent[-1]
+    if mode == "manual":
+        rc, rows, err = command(
+            env,
+            *operation(
+                root,
+                first["run_id"],
+                "mock-confirm",
+                "--review-id",
+                first["review_id"],
+                "--review-sha256",
+                first["review_payload_sha256"],
+                "--reviewer",
+                "MOCK_reviewer",
+                "--confirmed-at",
+                "2026-11-13T00:00:00.000000Z",
+            ),
+        )
+        assert rc == 0, (rows, err)
+
+    def collector(**kwargs):
+        return collect_akshare_contract(
+            **kwargs,
+            _runner=lambda *_: (
+                "CHILD_OK",
+                {"status": "OK", "rows": [["交易时间", "日盘 09:00-10:00"]]},
+            ),
+        )
+
+    observed = observation.observe(
+        root=str(root),
+        observation_id="9" * 32,
+        run_id="a" * 32,
+        venue="SHFE",
+        contract="RB2702",
+        requested_date=date(2026, 11, 13),
+        timeout=1,
+        filesystem="TRUSTED_LOCAL_POSIX",
+        _collector=collector,
+    )
+    assert observed["record_state"] == "COMMITTED"
+    next_flags = (flags[0], "9" * 32, *flags[2:])
+    rc, rows, err = command(env, *operation(root, "a" * 32, "mock-update", *next_flags))
+    assert rc == (0 if mode == "auto" else 10), (rows, err)
+    changed = rows[-1]
+    if mode == "manual":
+        difference = changed["proposal"]["difference"]
+    else:
+        difference = cli.MockCalendarPublication(
+            root=str(root), run_id=changed["run_id"]
+        )._store.read_publication_policy_readonly(changed["publication_id"], budget=cli._BUDGET)[
+            "difference"
+        ]
+    assert difference["schema"] == "bt_api.calendar-full-declaration-difference/2"
+    assert not any(difference["changes"].values())
+    assert (
+        difference["simulation"]["before"]["semantic_sha256"]
+        != difference["simulation"]["after"]["semantic_sha256"]
+    )
+    evidence_path = root / "review-bundles" / f"mock-mixed-{changed['candidate_id']}.json"
+    raw = evidence_path.read_bytes()
+    body, _ = storage._unwrap(raw)
+    body["provenance"]["evidence_locator"]["parent_candidate_id"] = "0" * 32
+    evidence_path.write_bytes(storage._envelope(body))
+    assert (
+        attempt(root, changed["run_id"], changed, tmp_path, kind=mode, sender=sender).status
+        == "NOT_SENT"
+    )
+    evidence_path.write_bytes(raw)
+    assert (
+        attempt(root, changed["run_id"], changed, tmp_path, kind=mode, sender=sender).status
+        == "ACCEPTED"
+    )
+    assert "Simulation semantics: CHANGED" in sent[-1] and "SHFE" in sent[-1]
+
+
+@pytest.mark.parametrize("mode", ["auto", "manual"])
+def test_multi_scope_notification_replays_all_scopes_and_original_history(tmp_path, mode):
+    from bt_api_py.trading_calendar_mock import SOURCE
+    from tests.unit.test_trading_calendar_mixed_simulation_version import template_fixture
+    from tests.unit.test_trading_calendar_mock_fresh_observation import FAKE, confirm
+    from tests.unit.test_trading_calendar_multi_scope import selected
+
+    root, config = settings(tmp_path, mode)
+    env = env_without_network(tmp_path, FAKE)
+    env["FAKE_CALLS"] = str(tmp_path / "calls")
+    rc, rows, err = command(env, *run_args(root, config))
+    assert rc == (0 if mode == "auto" else 10), (rows, err)
+    original_run = next(row["run_id"] for row in rows if row.get("candidate_state") == "COMMITTED")
+    if mode == "manual":
+        assert confirm(env, root, rows[-1])["status"] == "COMMITTED"
+    supplement = {
+        "sources": [SOURCE],
+        "trading_days": [template_fixture()["shards"][0]["layers"]["trading_days"][0]],
+        "trading_hours": [],
+        "exceptions": [],
+    }
+    (root / "supplement.yaml").write_text(json.dumps(supplement))
+
+    def update(venue):
+        return command(env, *operation(root, original_run, "mock-update", *selected(venue)))
+
+    rc, rows, err = update("SHFE")
+    assert rc == (0 if mode == "auto" else 10), (rows, err)
+    first = rows[-1]
+    if mode == "manual":
+        assert confirm(env, root, first)["status"] == "COMMITTED"
+    rc, rows, err = update("DCE")
+    assert rc == (0 if mode == "auto" else 10), (rows, err)
+    second = rows[-1]
+    assert (
+        attempt(root, second["run_id"], second, tmp_path, kind=mode, dry_run=True).reason
+        == "DRY_RUN_ELIGIBLE"
+    )
+    sent = []
+
+    def sender(value):
+        sent.append(value.body)
+        return BaseEmailReceipt(value.recipients, {})
+
+    retained = root / "review-bundles" / f"mock-mixed-{first['candidate_id']}.json"
+    saved = retained.read_bytes()
+    retained.write_bytes(b"damaged")
+    assert (
+        attempt(root, second["run_id"], second, tmp_path, kind=mode, sender=sender).status
+        == "NOT_SENT"
+    )
+    assert not sent
+    retained.write_bytes(saved)
+    result = attempt(root, second["run_id"], second, tmp_path, kind=mode, sender=sender)
+    assert result.status == "ACCEPTED", result
+    assert "SIMULATION_ONLY / AKSHARE_MOCK" in sent[-1]
+    assert "Scope SHFE/future/pfuture" in sent[-1] and ": UNCHANGED;" in sent[-1]
+    assert "Scope DCE/future/pfuture" in sent[-1] and ": ADDED;" in sent[-1]
+    assert "=AKSHARE" in sent[-1] and "=MOCK" in sent[-1]
+    if mode == "manual":
+        assert confirm(env, root, second)["status"] == "COMMITTED"
+        assert (
+            attempt(root, second["run_id"], second, tmp_path, kind=mode, sender=sender).status
+            == "NOT_SENT"
+        )
+    else:
+        rc, same, err = update("DCE")
+        assert rc == 10 and same[-1]["status"] == "SAME", (same, err)
+        assert (
+            attempt(root, same[-1]["run_id"], same[-1], tmp_path, kind="auto", sender=sender).status
+            == "NOT_SENT"
+        )
+        env["FAKE_AK_END"] = "10:30"
+        rc, later, err = update("SHFE")
+        assert rc == 0 and later[-1]["status"] == "COMMITTED", (later, err)
+        result = attempt(
+            root,
+            second["run_id"],
+            second,
+            tmp_path,
+            kind="auto",
+            sender=sender,
+            journal_path=tmp_path / "historical.sqlite",
+        )
+        assert result.status == "ACCEPTED", result
+        assert "Scope SHFE/future/pfuture" in sent[-1] and "Scope DCE/future/pfuture" in sent[-1]
+
+
+@pytest.mark.parametrize("mode", ["auto", "manual"])
+def test_batch_notification_replays_each_scope_once_and_history(tmp_path, mode, monkeypatch):
+    from bt_api_py.trading_calendar_mock import SOURCE
+    from tests.unit.test_trading_calendar_daily_batch import FAKE_BATCH, scope
+    from tests.unit.test_trading_calendar_mixed_simulation_version import template_fixture
+    from tests.unit.test_trading_calendar_mock_fresh_observation import confirm
+
+    root, config = settings(tmp_path, mode)
+    env = env_without_network(tmp_path, FAKE_BATCH)
+    env["FAKE_CALLS"] = str(tmp_path / "calls")
+    rc, rows, err = command(env, *run_args(root, config))
+    assert rc == (0 if mode == "auto" else 10), (rows, err)
+    original_run = next(row["run_id"] for row in rows if row.get("candidate_state") == "COMMITTED")
+    if mode == "manual":
+        assert confirm(env, root, rows[-1])["status"] == "COMMITTED"
+    supplement = {
+        "sources": [SOURCE],
+        "trading_days": [template_fixture()["shards"][0]["layers"]["trading_days"][0]],
+        "trading_hours": [],
+        "exceptions": [],
+    }
+    (root / "supplement.yaml").write_text(json.dumps(supplement))
+    args = operation(
+        root,
+        original_run,
+        "mock-batch",
+        "--scope-json",
+        json.dumps(scope("SHFE")),
+        "--scope-json",
+        json.dumps(scope("DCE")),
+    )
+    rc, rows, err = command(env, *args)
+    assert rc == (0 if mode == "auto" else 10), (rows, err)
+    batch = rows[-1]
+    assert batch["status"] == ("COMMITTED" if mode == "auto" else "PENDING_REVIEW")
+    assert len(batch["observations"]) == 2
+    sent = []
+
+    def sender(value):
+        sent.append(value.body)
+        return BaseEmailReceipt(value.recipients, {})
+
+    assert (
+        attempt(root, batch["run_id"], batch, tmp_path, kind=mode, dry_run=True).reason
+        == "DRY_RUN_ELIGIBLE"
+    )
+    evidence_path = root / "observation-runs" / f"mock-daily-batch-{batch['batch_id']}.json"
+    original = evidence_path.read_bytes()
+    evidence_path.write_bytes(b"damaged")
+    assert (
+        attempt(root, batch["run_id"], batch, tmp_path, kind=mode, sender=sender).status
+        == "NOT_SENT"
+    )
+    evidence_path.write_bytes(original)
+    observation_id = batch["observations"][1]["observation_id"]
+    observation_path = root / "akshare-observations" / f"result-{observation_id}.json"
+    observation_raw = observation_path.read_bytes()
+    observation_path.write_bytes(b"damaged")
+    assert (
+        attempt(root, batch["run_id"], batch, tmp_path, kind=mode, sender=sender).status
+        == "NOT_SENT"
+    )
+    observation_path.write_bytes(observation_raw)
+    intent_path = root / "observation-runs" / f"mock-daily-batch-intent-{batch['batch_id']}.json"
+    intent_raw = intent_path.read_bytes()
+    intent_path.write_bytes(b"damaged")
+    assert (
+        attempt(root, batch["run_id"], batch, tmp_path, kind=mode, sender=sender).status
+        == "NOT_SENT"
+    )
+    intent_path.write_bytes(intent_raw)
+    assert not sent
+    if mode == "auto":
+        original_identity = cli.MockCalendarPublication._batch_identity
+        for field in ("publication_id", "version_id"):
+
+            def wrong_identity(operator, candidate_id, field=field):
+                return {**original_identity(operator, candidate_id), field: "MOCK_wrong"}
+
+            monkeypatch.setattr(cli.MockCalendarPublication, "_batch_identity", wrong_identity)
+            assert (
+                attempt(root, batch["run_id"], batch, tmp_path, kind=mode, sender=sender).status
+                == "NOT_SENT"
+            )
+            assert not sent
+        monkeypatch.setattr(cli.MockCalendarPublication, "_batch_identity", original_identity)
+    result = attempt(root, batch["run_id"], batch, tmp_path, kind=mode, sender=sender)
+    assert result.status == "ACCEPTED", result
+    assert len(sent) == 1
+    assert "SIMULATION_ONLY / AKSHARE_MOCK" in sent[0]
+    assert "Scope SHFE/future/pfuture" in sent[0] and "Scope DCE/future/pfuture" in sent[0]
+    assert sent[0].count(": ADDED;") == 2 and "=AKSHARE" in sent[0] and "=MOCK" in sent[0]
+    assert (
+        attempt(root, batch["run_id"], batch, tmp_path, kind=mode, sender=sender).status
+        == "DUPLICATE"
+    )
+    assert len(sent) == 1
+    if mode == "manual":
+        assert confirm(env, root, batch)["status"] == "COMMITTED"
+        assert (
+            attempt(root, batch["run_id"], batch, tmp_path, kind=mode, sender=sender).status
+            == "NOT_SENT"
+        )
+    rc, same, err = command(env, *args)
+    assert rc == 10 and same[-1]["status"] == "SAME", (same, err)
+    assert len(sent) == 1
+    if mode == "auto":
+        env["FAKE_AK_END"] = "10:30"
+        rc, later, err = command(env, *args)
+        assert rc == 0 and later[-1]["status"] == "COMMITTED", (later, err)
+        historic = attempt(
+            root,
+            batch["run_id"],
+            batch,
+            tmp_path,
+            kind="auto",
+            sender=sender,
+            journal_path=tmp_path / "historical.sqlite",
+        )
+        assert historic.status == "ACCEPTED", historic
+        assert (
+            len(sent) == 2
+            and "Scope DCE/future/pfuture" in sent[-1]
+            and "Scope SHFE/future/pfuture" in sent[-1]
+        )
+
+
+def test_batch_forged_pending_identity_cannot_bypass_original_stale(tmp_path):
+    from bt_api_py import trading_calendar_detail_collection as storage
+    from bt_api_py.trading_calendar_mock import SOURCE
+    from tests.unit.test_trading_calendar_daily_batch import FAKE_BATCH, scope
+    from tests.unit.test_trading_calendar_mixed_simulation_version import template_fixture
+    from tests.unit.test_trading_calendar_mock_fresh_observation import confirm
+
+    root, config = settings(tmp_path, "manual")
+    env = env_without_network(tmp_path, FAKE_BATCH)
+    env["FAKE_CALLS"] = str(tmp_path / "calls")
+    rc, rows, err = command(env, *run_args(root, config))
+    assert rc == 10, (rows, err)
+    original_run = next(row["run_id"] for row in rows if row.get("candidate_state") == "COMMITTED")
+    assert confirm(env, root, rows[-1])["status"] == "COMMITTED"
+    supplement_path = root / "supplement.yaml"
+    supplement_path.write_text(
+        json.dumps(
+            {
+                "sources": [SOURCE],
+                "trading_days": [template_fixture()["shards"][0]["layers"]["trading_days"][0]],
+                "trading_hours": [],
+                "exceptions": [],
+            }
+        )
+    )
+    rc, rows, err = command(
+        env,
+        *operation(
+            root,
+            original_run,
+            "mock-batch",
+            "--scope-json",
+            json.dumps(scope("SHFE")),
+            "--scope-json",
+            json.dumps(scope("DCE")),
+        ),
+    )
+    assert rc == 10 and rows[-1]["status"] == "PENDING_REVIEW", (rows, err)
+    pending = rows[-1]
+    original_path = root / "review-bundles" / f"mock-review-{pending['review_id']}.json"
+    original_raw = original_path.read_bytes()
+    body, _ = storage._unwrap(original_raw)
+    assert (
+        attempt(root, pending["run_id"], pending, tmp_path, dry_run=True).reason
+        == "DRY_RUN_ELIGIBLE"
+    )
+    sent = []
+    changes = [
+        {"review_id": "a" * 32},
+        {"publication_id": "MOCK_wrong_publication"},
+        {"version_id": "MOCK_wrong_version"},
+        {
+            "review_id": "b" * 32,
+            "publication_id": "MOCK_wrong_publication",
+            "version_id": "MOCK_wrong_version",
+        },
+    ]
+    forged_review = None
+    for change in changes:
+        modified = {**body, **change}
+        encoded = storage._envelope(modified)
+        _, digest = storage._unwrap(encoded)
+        target = root / "review-bundles" / f"mock-review-{modified['review_id']}.json"
+        target.write_bytes(encoded)
+        target.chmod(0o600)
+        forged = {**pending, "review_id": modified["review_id"], "review_payload_sha256": digest}
+        assert (
+            attempt(
+                root, pending["run_id"], forged, tmp_path, sender=lambda value: sent.append(value)
+            ).status
+            == "NOT_SENT"
+        )
+        if modified["review_id"] == pending["review_id"]:
+            original_path.write_bytes(original_raw)
+        elif change == changes[0]:
+            forged_review = forged
+    original_supplement = supplement_path.read_bytes()
+    changed_supplement = json.loads(original_supplement)
+    changed_supplement["exceptions"] = [
+        {
+            "venue": "GFEX",
+            "kind": "option",
+            "product": "poption",
+            "contract": "mock_gfex_option_contract",
+            "trading_day": "2027-01-04",
+            "action": "close_day",
+            "window_id": None,
+            "source_ids": [SOURCE["id"]],
+        }
+    ]
+    supplement_path.write_text(json.dumps(changed_supplement))
+    rc, rows, err = command(
+        env,
+        *operation(
+            root,
+            pending["run_id"],
+            "mock-confirm",
+            "--review-id",
+            pending["review_id"],
+            "--review-sha256",
+            pending["review_payload_sha256"],
+            "--reviewer",
+            "MOCK_reviewer",
+            "--confirmed-at",
+            "2026-11-13T00:00:00.000000Z",
+        ),
+    )
+    assert rc != 0 and rows[-1]["reason"] == "REVIEW_STALE", (rows, err)
+    supplement_path.write_bytes(original_supplement)
+    assert (
+        attempt(
+            root,
+            pending["run_id"],
+            forged_review,
+            tmp_path,
+            sender=lambda value: sent.append(value),
+        ).status
+        == "NOT_SENT"
+    )
+    assert not sent and not (tmp_path / "notification.sqlite").exists()
+
+
+@pytest.mark.parametrize("mode", ["auto", "manual"])
+@pytest.mark.parametrize("retained", [False, True])
+def test_partial_batch_notification_distinguishes_failure_sources(
+    tmp_path, mode, retained, monkeypatch
+):
+    from bt_api_py import trading_calendar_detail_collection as storage
+    from bt_api_py import trading_calendar_mock as mock
+    from tests.unit.test_trading_calendar_daily_batch import _initialized_batch_root, scope
+    from tests.unit.test_trading_calendar_mixed_simulation_version import template_fixture
+    from tests.unit.test_trading_calendar_mock_fresh_observation import confirm
+
+    monkeypatch.setattr(
+        mock,
+        "build",
+        lambda year: (
+            template_fixture(),
+            {
+                "sources": [mock.SOURCE],
+                "trading_days": [template_fixture()["shards"][0]["layers"]["trading_days"][0]],
+                "trading_hours": [],
+                "exceptions": [],
+            },
+        ),
+    )
+    root, env, run_id = _initialized_batch_root(tmp_path, mode)
+    args = operation(
+        root,
+        run_id,
+        "mock-batch",
+        "--scope-json",
+        json.dumps(scope("SHFE")),
+        "--scope-json",
+        json.dumps(scope("DCE")),
+    )
+    if retained:
+        rc, first, err = command(env, *args)
+        assert rc == (0 if mode == "auto" else 10), (first, err)
+        if mode == "manual":
+            assert confirm(env, root, first[-1])["status"] == "COMMITTED"
+        env["FAKE_AK_END"] = "10:30"
+    env["FAIL_DCE"] = "1"
+    rc, rows, err = command(env, *args)
+    assert rc == (0 if mode == "auto" else 10), (rows, err)
+    result = rows[-1]
+    assert result["batch_status"] == "PARTIAL"
+    assert [item["disposition"] for item in result["observations"]] == [
+        "UPDATED_AKSHARE",
+        "RETAINED_AKSHARE" if retained else "MOCK_FALLBACK",
+    ]
+    sent = []
+
+    def sender(value):
+        sent.append(value.body)
+        return BaseEmailReceipt(value.recipients, {})
+
+    assert (
+        attempt(root, result["run_id"], result, tmp_path, kind=mode, dry_run=True).reason
+        == "DRY_RUN_ELIGIBLE"
+    )
+    oid = result["observations"][1]["observation_id"]
+    failed_path = root / "akshare-observations" / f"result-{oid}.json"
+    original = failed_path.read_bytes()
+    failed_path.unlink()
+    assert (
+        attempt(root, result["run_id"], result, tmp_path, kind=mode, sender=sender).status
+        == "NOT_SENT"
+    )
+    failed_path.write_bytes(original)
+    failed_path.chmod(0o600)
+    altered, _ = storage._unwrap(original)
+    altered["captured_at"] = "2020-01-01T00:00:00+00:00"
+    failed_path.write_bytes(storage._envelope(altered))
+    assert (
+        attempt(root, result["run_id"], result, tmp_path, kind=mode, sender=sender).status
+        == "NOT_SENT"
+    )
+    failed_path.write_bytes(original)
+    assert not sent
+    if mode == "manual":
+        pending = root / "review-bundles" / f"mock-review-{result['review_id']}.json"
+        body, _ = storage._unwrap(pending.read_bytes())
+        body["review_id"] = "f" * 32
+        raw = storage._envelope(body)
+        forged_path = root / "review-bundles" / f"mock-review-{body['review_id']}.json"
+        forged_path.write_bytes(raw)
+        forged_path.chmod(0o600)
+        forged = {
+            **result,
+            "review_id": body["review_id"],
+            "review_payload_sha256": storage._unwrap(raw)[1],
+        }
+        assert (
+            attempt(root, result["run_id"], forged, tmp_path, kind=mode, sender=sender).status
+            == "NOT_SENT"
+        )
+    delivered = attempt(root, result["run_id"], result, tmp_path, kind=mode, sender=sender)
+    assert delivered.status == "ACCEPTED", delivered
+    assert len(sent) == 1 and "Batch result: PARTIAL" in sent[0]
+    assert "check=SUCCESS; observation=SUCCESS; disposition=UPDATED_AKSHARE" in sent[0]
+    expected = "RETAINED_AKSHARE" if retained else "MOCK_FALLBACK"
+    assert f"check=FAILED; observation=FETCH_ERROR; disposition={expected}" in sent[0]
+    assert "Scope SHFE/future/pfuture" in sent[0] and "Scope DCE/future/pfuture" in sent[0]
+    assert "=AKSHARE" in sent[0] and ("=MOCK" if retained else "source=MOCK") in sent[0]
+    assert (
+        attempt(root, result["run_id"], result, tmp_path, kind=mode, sender=sender).status
+        == "DUPLICATE"
+    )
+    assert len(sent) == 1
+    if mode == "manual":
+        assert confirm(env, root, result)["status"] == "COMMITTED"
+        assert (
+            attempt(root, result["run_id"], result, tmp_path, kind=mode, sender=sender).status
+            == "NOT_SENT"
+        )
+    else:
+        del env["FAIL_DCE"]
+        env["FAKE_AK_END"] = "11:00"
+        rc, later, err = command(env, *args)
+        assert rc == 0 and later[-1]["status"] == "COMMITTED", (later, err)
+        history = attempt(
+            root,
+            result["run_id"],
+            result,
+            tmp_path,
+            kind="auto",
+            sender=sender,
+            journal_path=tmp_path / "historical.sqlite",
+        )
+        assert history.status == "ACCEPTED" and "Batch result: PARTIAL" in sent[-1], history
+
+
+@pytest.mark.parametrize("mode", ["auto", "manual"])
+def test_unknown_partial_observation_does_not_notify(tmp_path, mode):
+    from tests.unit.test_trading_calendar_daily_batch import (
+        _UNKNOWN_FAILURES,
+        _initialized_batch_root,
+        scope,
+    )
+
+    root, env, run_id = _initialized_batch_root(tmp_path, mode, _UNKNOWN_FAILURES)
+    env["DCE_FAULT"] = "CLEANUP"
+    rc, rows, err = command(
+        env,
+        *operation(
+            root,
+            run_id,
+            "mock-batch",
+            "--scope-json",
+            json.dumps(scope("SHFE")),
+            "--scope-json",
+            json.dumps(scope("DCE")),
+        ),
+    )
+    assert rc != 0 and rows[-1]["status"] == "UNKNOWN", (rows, err)
+    assert rows[-1]["observations"][1]["check_status"] == "UNKNOWN"
+    allocated = next(row for row in rows if row.get("event") == "MOCK_BATCH_IDS_ALLOCATED")
+    sent = []
+    result = cli.run(
+        root=str(root),
+        run_id=allocated["run_id"],
+        kind=mode,
+        event_id=allocated["review_id"] if mode == "manual" else allocated["publication_id"],
+        review_sha256="0" * 64 if mode == "manual" else None,
+        config=email(),
+        journal_path=tmp_path / "notification.sqlite",
+        sender=lambda value: sent.append(value),
+        clock_instant=datetime(2026, 11, 13, 4, tzinfo=UTC),
+        clock_error_bound=timedelta(seconds=1),
+        clock_evidence="PROVEN",
+    )
+    assert result.status == "NOT_SENT" and not sent

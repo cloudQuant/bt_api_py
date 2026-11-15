@@ -1,0 +1,1383 @@
+"""Isolated local-filesystem checks; inputs are synthetic, not venue data."""
+
+import json
+import multiprocessing
+import os
+from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
+
+import pytest
+
+from bt_api_py import trading_calendar_store as module
+from bt_api_py.trading_calendar_store import (
+    CalendarStoreError,
+    CurrentPrecondition,
+)
+from tests.calendar_test_store import FixtureCalendarStore as TradingCalendarStore
+
+
+def content(n=0):
+    return {
+        "trading_days": [{"day": n}],
+        "trading_hours": [{"session": n}],
+        "exceptions": [{"exception": n}],
+        "sources": [{"source": n}],
+    }
+
+
+def publish(store, n, pub=None, version=None):
+    return store.publish(content(n), publication_id=pub or f"pub{n}", version_id=version or f"v{n}")
+
+
+def canonical(value):
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+
+
+def _cas_publish(store, n, expected):
+    return store.publish(
+        content(n), publication_id=f"cas{n}", version_id=f"casv{n}", expected_current=expected
+    )
+
+
+def _condition(snapshot):
+    return CurrentPrecondition.matching(snapshot.publication_id, snapshot.publication_sha256)
+
+
+def _store_files(root):
+    return {str(p.relative_to(root)): p.read_bytes() for p in root.rglob("*") if p.is_file()}
+
+
+def test_cas_absent_matching_and_stale_do_not_create_artifacts(tmp_path):
+    store = TradingCalendarStore(tmp_path)
+    assert _cas_publish(store, 0, CurrentPrecondition.absent()).visibility == "COMMITTED"
+    first = store.read_current()
+    assert len(first.publication_sha256) == 64
+    before = _store_files(tmp_path)
+    for stale in (
+        CurrentPrecondition.absent(),
+        CurrentPrecondition.matching(first.publication_id, "0" * 64),
+        CurrentPrecondition.matching("other", first.publication_sha256),
+    ):
+        result = _cas_publish(store, 1, stale)
+        assert (result.visibility, result.detail) == (
+            "NOT_COMMITTED",
+            "current precondition mismatch",
+        )
+        assert _store_files(tmp_path) == before
+    assert _cas_publish(store, 1, _condition(first)).visibility == "COMMITTED"
+    before = _store_files(tmp_path)
+    assert _cas_publish(store, 2, _condition(first)).visibility == "NOT_COMMITTED"
+    # A stale condition cannot be masked by the current content being unchanged.
+    assert (
+        store.publish(
+            content(1), publication_id="noop", version_id="noop", expected_current=_condition(first)
+        ).visibility
+        == "NOT_COMMITTED"
+    )
+    assert _store_files(tmp_path) == before
+
+
+def test_cas_same_id_replay_and_conflict_keep_original_semantics(tmp_path):
+    store = TradingCalendarStore(tmp_path)
+    absent = CurrentPrecondition.absent()
+    assert _cas_publish(store, 0, absent).visibility == "COMMITTED"
+    assert _cas_publish(store, 0, absent).visibility == "COMMITTED"
+    assert _cas_publish(store, 1, _condition(store.read_current())).visibility == "COMMITTED"
+    before = _store_files(tmp_path)
+    assert _cas_publish(store, 0, absent).visibility == "HISTORICAL_COMMITTED"
+    assert (
+        store.publish(
+            content(9), publication_id="cas0", version_id="casv0", expected_current=absent
+        ).visibility
+        == "ID_CONFLICT"
+    )
+    assert _store_files(tmp_path) == before
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        CurrentPrecondition("ABSENT", "a"),
+        CurrentPrecondition("MATCH", "a", "bad"),
+        CurrentPrecondition("OTHER"),
+        "ABSENT",
+    ],
+)
+def test_cas_invalid_condition_is_rejected_without_artifacts(tmp_path, bad):
+    store = TradingCalendarStore(tmp_path)
+    assert _cas_publish(store, 0, bad).visibility == "NOT_COMMITTED"
+    assert not (tmp_path / "CURRENT.json").exists()
+    assert all(
+        not list((tmp_path / name).iterdir()) for name in ("versions", "publications", "receipts")
+    )
+
+
+@pytest.mark.parametrize("damage", ["current", "chain", "missing_current", "orphan"])
+def test_cas_never_treats_dirty_or_corrupt_state_as_absent(tmp_path, damage):
+    store = TradingCalendarStore(tmp_path)
+    assert _cas_publish(store, 0, CurrentPrecondition.absent()).visibility == "COMMITTED"
+    if damage == "current":
+        (tmp_path / "CURRENT.json").write_bytes(b"{}")
+    elif damage == "chain":
+        (tmp_path / "versions" / "casv0.json").write_bytes(b"{}")
+    elif damage == "missing_current":
+        (tmp_path / "CURRENT.json").unlink()
+    else:
+        (tmp_path / "CURRENT.json").unlink()
+        (tmp_path / "versions" / "orphan.json").write_bytes(b"{}")
+    before = _store_files(tmp_path)
+    result = _cas_publish(store, 1, CurrentPrecondition.absent())
+    assert result.visibility == "NOT_COMMITTED"
+    assert result.detail != "current precondition mismatch"
+    assert _store_files(tmp_path) == before
+
+
+@pytest.mark.parametrize(
+    "damage", ["missing_current_receipt", "missing_old_receipt", "bad_receipt"]
+)
+def test_cas_requires_complete_chain_receipt_bindings(tmp_path, damage):
+    store = TradingCalendarStore(tmp_path)
+    assert _cas_publish(store, 0, CurrentPrecondition.absent()).visibility == "COMMITTED"
+    assert _cas_publish(store, 1, _condition(store.read_current())).visibility == "COMMITTED"
+    expected = _condition(store.read_current())
+    path = tmp_path / "receipts" / ("cas0.json" if damage == "missing_old_receipt" else "cas1.json")
+    if damage == "bad_receipt":
+        path.write_bytes(b"{}")
+    else:
+        path.unlink()
+    before = _store_files(tmp_path)
+    result = _cas_publish(store, 2, expected)
+    assert result.visibility == "NOT_COMMITTED"
+    assert result.detail != "current precondition mismatch"
+    assert _store_files(tmp_path) == before
+
+
+def test_cas_pending_preserves_unknown_original_attempt(tmp_path, monkeypatch):
+    store = TradingCalendarStore(tmp_path)
+    assert _cas_publish(store, 0, CurrentPrecondition.absent()).visibility == "COMMITTED"
+    old = _condition(store.read_current())
+    original = module.os.replace
+
+    def interrupted(src, dst):
+        original(src, dst)
+        raise OSError("after replace")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(module.os, "replace", interrupted)
+        assert _cas_publish(store, 1, old).visibility == "COMMIT_UNKNOWN"
+    before = _store_files(tmp_path)
+    assert _cas_publish(store, 1, old).visibility == "COMMIT_UNKNOWN"
+    blocked = _cas_publish(store, 2, old)
+    assert (blocked.visibility, blocked.fence) == ("NOT_COMMITTED", "PRESENT")
+    assert _store_files(tmp_path) == before
+    assert store.reconcile_publication("cas1").visibility == "COMMITTED"
+    assert _cas_publish(store, 1, old).visibility == "COMMITTED"
+
+
+def _cas_process(root, n, expected, start, results):
+    store = TradingCalendarStore(root)
+    start.wait(10)
+    result = _cas_publish(store, n, expected)
+    results.put((n, result.visibility))
+
+
+def test_cas_actual_process_race_has_one_winner(tmp_path):
+    store = TradingCalendarStore(tmp_path)
+    assert _cas_publish(store, 0, CurrentPrecondition.absent()).visibility == "COMMITTED"
+    old = _condition(store.read_current())
+    ctx = multiprocessing.get_context("spawn")
+    start, results = ctx.Event(), ctx.Queue()
+    processes = [
+        ctx.Process(target=_cas_process, args=(tmp_path, n, old, start, results)) for n in (1, 2)
+    ]
+    for process in processes:
+        process.start()
+    start.set()
+    outcomes = [results.get(timeout=15) for _ in processes]
+    for process in processes:
+        process.join(15)
+        assert process.exitcode == 0
+    assert sorted(status for _, status in outcomes).count("COMMITTED") == 1
+    loser, status = next(item for item in outcomes if item[1] != "COMMITTED")
+    assert status in {"NOT_COMMITTED", "COMMIT_UNKNOWN"}
+    before = _store_files(tmp_path)
+    assert _cas_publish(store, loser, old).visibility == "NOT_COMMITTED"
+    assert _store_files(tmp_path) == before
+    assert store.read_current().sequence == 2
+
+
+def test_publish_unchanged_and_full_snapshot(tmp_path):
+    store = TradingCalendarStore(tmp_path)
+    first = publish(store, 0)
+    assert (first.visibility, first.durability) == ("COMMITTED", "UNCONFIRMED")
+    assert store.read_current().content == content(0)
+    result = publish(store, 0, "other", "other")
+    assert result.visibility == "UNCHANGED"
+    assert len(list((tmp_path / "versions").iterdir())) == 1
+    assert len(list((tmp_path / "publications").iterdir())) == 1
+    assert publish(store, 1).visibility == "COMMITTED"
+    assert store.read_current().sequence == 2
+    assert store.verify_publication("pub0") == "UNKNOWN"
+    assert store.verify_publication("pub1") == "VISIBLE"
+
+
+def test_reused_publication_id_requires_same_content_and_proven_receipt(tmp_path):
+    store = TradingCalendarStore(tmp_path)
+    assert publish(store, 0).visibility == "COMMITTED"
+    assert publish(store, 0).visibility == "COMMITTED"
+    conflict = publish(store, 1, pub="pub0", version="v0")
+    assert conflict.visibility == "ID_CONFLICT"
+    assert "conflicts" in conflict.detail
+    assert publish(store, 0, pub="pub0", version="different").visibility == "ID_CONFLICT"
+    assert publish(store, 1).visibility == "COMMITTED"
+    assert publish(store, 0).visibility == "HISTORICAL_COMMITTED"
+    assert publish(store, 1, pub="pub0", version="v0").visibility == "ID_CONFLICT"
+    (tmp_path / "receipts" / "pub0.json").unlink()
+    result = publish(store, 1, pub="pub0", version="v0")
+    assert result.visibility == "COMMIT_UNKNOWN"
+    assert "without a proven receipt" in result.detail
+    assert len(list((tmp_path / "versions").iterdir())) == 2
+
+
+def test_verify_holds_writer_lock_across_read(tmp_path, monkeypatch):
+    reader = TradingCalendarStore(tmp_path)
+    writer = TradingCalendarStore(tmp_path)
+    assert publish(writer, 0).visibility == "COMMITTED"
+    read = reader.read_current
+    blocked = []
+
+    def attempt_concurrent_publish():
+        snapshot = read()
+        blocked.append(publish(writer, 1).visibility)
+        return snapshot
+
+    monkeypatch.setattr(reader, "read_current", attempt_concurrent_publish)
+    assert reader.verify_publication("pub0") == "VISIBLE"
+    assert blocked == ["COMMIT_UNKNOWN"]
+    assert publish(writer, 1, pub="new1", version="new1").visibility == "COMMITTED"
+    assert reader.verify_publication("pub0") == "UNKNOWN"
+
+
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        {},
+        {**content(), "extra": []},
+        {**content(), "sources": None},
+        {**content(), "sources": [float("nan")]},
+        {**content(), "sources": [{1: "bad"}]},
+    ],
+)
+def test_invalid_input(tmp_path, invalid):
+    result = TradingCalendarStore(tmp_path).publish(invalid, publication_id="p", version_id="v")
+    assert result.visibility == "NOT_COMMITTED"
+    assert not (tmp_path / "CURRENT.json").exists()
+
+
+def test_identifiers_and_root(tmp_path):
+    store = TradingCalendarStore(tmp_path)
+    for bad in ("../escape", "", ".", "x/y", "a" * 129, 42):
+        assert (
+            store.publish(content(), publication_id=bad, version_id="v").visibility
+            == "NOT_COMMITTED"
+        )
+    with pytest.raises(CalendarStoreError):
+        TradingCalendarStore(Path("relative"))
+    with pytest.raises(CalendarStoreError):
+        TradingCalendarStore(tmp_path / ".." / "unsafe")
+
+
+@pytest.mark.parametrize(
+    "target", ["pointer", "event", "snapshot", "missing", "unknown_schema", "duplicate_key"]
+)
+def test_corruption_is_rejected(tmp_path, target):
+    store = TradingCalendarStore(tmp_path)
+    assert publish(store, 0).visibility == "COMMITTED"
+    pointer = tmp_path / "CURRENT.json"
+    event = tmp_path / "publications" / "pub0.json"
+    snapshot = tmp_path / "versions" / "v0.json"
+    if target == "pointer":
+        pointer.write_bytes(b"{}")
+    elif target == "event":
+        event.write_bytes(event.read_bytes() + b" ")
+    elif target == "snapshot":
+        value = json.loads(snapshot.read_bytes())
+        value["content"]["trading_days"] = []
+        snapshot.write_bytes(canonical(value))
+    elif target == "missing":
+        snapshot.unlink()
+    elif target == "unknown_schema":
+        value = json.loads(snapshot.read_bytes())
+        value["schema"] = "unknown"
+        snapshot.write_bytes(canonical(value))
+    else:
+        pointer.write_bytes(b'{"schema":"x","schema":"y"}')
+    with pytest.raises(CalendarStoreError):
+        store.read_current()
+    assert store.verify_publication("pub0") == "UNKNOWN"
+    assert publish(store, 1).visibility == "NOT_COMMITTED"
+
+
+def test_missing_current_does_not_select_orphans(tmp_path):
+    store = TradingCalendarStore(tmp_path)
+    assert publish(store, 0).visibility == "COMMITTED"
+    (tmp_path / "CURRENT.json").unlink()
+    assert publish(store, 1).visibility == "NOT_COMMITTED"
+    with pytest.raises(CalendarStoreError):
+        store.read_current()
+
+
+def test_symlinked_current_is_rejected(tmp_path):
+    store = TradingCalendarStore(tmp_path)
+    assert publish(store, 0).visibility == "COMMITTED"
+    pointer = tmp_path / "CURRENT.json"
+    copied_pointer = tmp_path / "copy.json"
+    copied_pointer.write_bytes(pointer.read_bytes())
+    pointer.unlink()
+    pointer.symlink_to(copied_pointer)
+    with pytest.raises(CalendarStoreError):
+        store.read_current()
+    assert publish(store, 1).visibility == "NOT_COMMITTED"
+
+
+def test_version_and_event_never_overwritten(tmp_path):
+    store = TradingCalendarStore(tmp_path)
+    assert publish(store, 0).visibility == "COMMITTED"
+    version = tmp_path / "versions" / "v0.json"
+    event = tmp_path / "publications" / "pub0.json"
+    original_version, original_event = version.read_bytes(), event.read_bytes()
+    assert publish(store, 1, version="v0").visibility == "NOT_COMMITTED"
+    assert publish(store, 2, pub="pub0").visibility == "ID_CONFLICT"
+    assert version.read_bytes() == original_version
+    assert event.read_bytes() == original_event
+    assert store.read_current().content == content(0)
+
+
+def test_failed_before_replace_preserves_old_snapshot(tmp_path, monkeypatch):
+    store = TradingCalendarStore(tmp_path)
+    assert publish(store, 0).visibility == "COMMITTED"
+    original = store._write_new
+
+    def fail_event(path, data):
+        if path.parent.name == "publications":
+            raise OSError("injected")
+        original(path, data)
+
+    monkeypatch.setattr(store, "_write_new", fail_event)
+    assert publish(store, 1).visibility == "NOT_COMMITTED"
+    assert store.read_current().content == content(0)
+
+
+def test_replace_can_commit_then_raise(tmp_path, monkeypatch):
+    store = TradingCalendarStore(tmp_path)
+    assert publish(store, 0).visibility == "COMMITTED"
+    replace = module.os.replace
+
+    def uncertain(source, target):
+        replace(source, target)
+        raise OSError("injected after replace")
+
+    monkeypatch.setattr(module.os, "replace", uncertain)
+    result = publish(store, 1)
+    assert result.visibility == "COMMIT_UNKNOWN"
+    assert store.verify_publication(result.publication_id) == "UNKNOWN"
+    assert store.read_current().content == content(1)
+
+
+def test_post_replace_readback_failure_is_unknown(tmp_path, monkeypatch):
+    store = TradingCalendarStore(tmp_path)
+    assert publish(store, 0).visibility == "COMMITTED"
+    original = store._read
+    calls = 0
+
+    def fail_readback(path):
+        nonlocal calls
+        if path.name == "CURRENT.json":
+            calls += 1
+            if calls == 2:
+                raise OSError("injected readback")
+        return original(path)
+
+    monkeypatch.setattr(store, "_read", fail_readback)
+    assert publish(store, 1).visibility == "COMMIT_UNKNOWN"
+    assert store.verify_publication("pub1") == "UNKNOWN"
+
+
+def _interrupted_publisher(root, stage, results):
+    store = TradingCalendarStore(root)
+    replace = module.os.replace
+
+    def interrupt(source, target):
+        if stage == "before":
+            os._exit(72)
+        replace(source, target)
+        if stage == "crash":
+            os._exit(73)
+        raise OSError("injected after replacement")
+
+    module.os.replace = interrupt
+    results.put(publish(store, 1).visibility)
+
+
+def _crash_at_intent_cleanup(root, remove):
+    store = TradingCalendarStore(root)
+    clear = store._clear_pending
+
+    def crash():
+        if remove:
+            clear()
+        os._exit(74 if remove else 75)
+
+    store._clear_pending = crash
+    publish(store, 1)
+
+
+@pytest.mark.parametrize("remove", [False, True])
+def test_crash_after_receipt_supports_same_id_reconciliation(tmp_path, remove):
+    assert publish(TradingCalendarStore(tmp_path), 0).visibility == "COMMITTED"
+    ctx = multiprocessing.get_context("spawn")
+    proc = ctx.Process(target=_crash_at_intent_cleanup, args=(tmp_path, remove))
+    proc.start()
+    proc.join(15)
+    assert proc.exitcode == (74 if remove else 75)
+    assert (tmp_path / "receipts" / "pub1.json").exists()
+    restarted = TradingCalendarStore(tmp_path)
+    if remove:
+        # The writer died after deleting PENDING but before returning to its caller.
+        assert publish(restarted, 2).visibility == "COMMITTED"
+        proof = restarted.reconcile_publication("pub1")
+        assert proof.visibility == "HISTORICAL_COMMITTED"
+    else:
+        assert publish(restarted, 2).fence == "PRESENT"
+        proof = restarted.reconcile_publication("pub1")
+        assert proof.visibility == "COMMITTED"
+        assert proof.fence == "CLEAR"
+        assert publish(restarted, 2).visibility == "COMMITTED"
+        assert restarted.reconcile_publication("pub1").visibility == "HISTORICAL_COMMITTED"
+    assert proof.durability == "UNCONFIRMED"
+
+
+@pytest.mark.parametrize("damage", ["corrupt", "chain", "orphan"])
+def test_invalid_receipt_or_chain_never_proves_or_clears_intent(tmp_path, monkeypatch, damage):
+    store = TradingCalendarStore(tmp_path)
+    assert publish(store, 0).visibility == "COMMITTED"
+    monkeypatch.setattr(store, "_clear_pending", lambda: (_ for _ in ()).throw(OSError("stop")))
+    assert publish(store, 1).visibility == "COMMITTED"
+    receipt = tmp_path / "receipts" / "pub1.json"
+    if damage == "corrupt":
+        receipt.write_bytes(b"{}")
+    elif damage == "chain":
+        (tmp_path / "publications" / "pub0.json").unlink()
+    else:
+        # An intact receipt and prewritten event cannot establish an orphan committed.
+        prior = json.loads((tmp_path / "publications" / "pub0.json").read_bytes())
+        prior_event = (tmp_path / "publications" / "pub0.json").read_bytes()
+        import hashlib
+
+        (tmp_path / "CURRENT.json").write_bytes(
+            canonical(
+                {
+                    "schema": module._POINTER,
+                    "publication_id": prior["publication_id"],
+                    "publication_sha256": hashlib.sha256(prior_event).hexdigest(),
+                }
+            )
+        )
+    restarted = TradingCalendarStore(tmp_path)
+    assert restarted.reconcile_publication("pub1").visibility == "COMMIT_UNKNOWN"
+    assert (tmp_path / "PENDING.json").exists()
+    assert publish(restarted, 2).fence == "PRESENT"
+
+
+@pytest.mark.parametrize("stage", ["raise", "crash"])
+def test_process_interrupted_after_replace_recovers_visible_receipt(tmp_path, stage):
+    assert publish(TradingCalendarStore(tmp_path), 0).visibility == "COMMITTED"
+    ctx = multiprocessing.get_context("spawn")
+    results = ctx.Queue()
+    proc = ctx.Process(target=_interrupted_publisher, args=(tmp_path, stage, results))
+    proc.start()
+    proc.join(15)
+    assert proc.exitcode == (73 if stage == "crash" else 0)
+    if stage == "raise":
+        assert results.get(timeout=5) == "COMMIT_UNKNOWN"
+    restarted = TradingCalendarStore(tmp_path)
+    repeated = publish(restarted, 1)
+    assert (repeated.visibility, repeated.fence) == ("COMMIT_UNKNOWN", "PRESENT")
+    invalid_repeat = restarted.publish({}, publication_id="pub1", version_id="v1")
+    assert (invalid_repeat.visibility, invalid_repeat.fence) == ("COMMIT_UNKNOWN", "PRESENT")
+    blocked = publish(restarted, 1, "different", "different")
+    assert (blocked.visibility, blocked.fence) == ("NOT_COMMITTED", "PRESENT")
+    assert restarted.reconcile_publication("different").visibility == "COMMIT_UNKNOWN"
+    assert (tmp_path / "PENDING.json").exists()
+    proof = restarted.reconcile_publication("pub1")
+    assert (proof.visibility, proof.fence) == ("COMMITTED", "CLEAR")
+    receipt = json.loads((tmp_path / "receipts" / "pub1.json").read_bytes())
+    assert receipt["observation"] == "RECOVERY_CURRENT_READBACK"
+    assert publish(restarted, 2).visibility == "COMMITTED"
+    assert restarted.reconcile_publication("pub1").visibility == "HISTORICAL_COMMITTED"
+
+
+def test_process_crash_before_replace_remains_blocked(tmp_path):
+    assert publish(TradingCalendarStore(tmp_path), 0).visibility == "COMMITTED"
+    ctx = multiprocessing.get_context("spawn")
+    results = ctx.Queue()
+    proc = ctx.Process(target=_interrupted_publisher, args=(tmp_path, "before", results))
+    proc.start()
+    proc.join(15)
+    assert proc.exitcode == 72
+    restarted = TradingCalendarStore(tmp_path)
+    assert restarted.read_current().content == content(0)
+    assert restarted.reconcile_publication("pub1").visibility == "COMMIT_UNKNOWN"
+    # Neither identical current content nor a different ID may bypass the fence.
+    assert publish(restarted, 0, "other", "other").fence == "PRESENT"
+    assert publish(restarted, 2).fence == "PRESENT"
+
+
+def test_recovery_receipt_write_failure_keeps_intent(tmp_path, monkeypatch):
+    assert publish(TradingCalendarStore(tmp_path), 0).visibility == "COMMITTED"
+    ctx = multiprocessing.get_context("spawn")
+    results = ctx.Queue()
+    proc = ctx.Process(target=_interrupted_publisher, args=(tmp_path, "crash", results))
+    proc.start()
+    proc.join(15)
+    assert proc.exitcode == 73
+    store = TradingCalendarStore(tmp_path)
+
+    def fail_write(path, data):
+        raise OSError("injected receipt write failure")
+
+    monkeypatch.setattr(store, "_write_new", fail_write)
+    assert store.reconcile_publication("pub1").visibility == "COMMIT_UNKNOWN"
+    assert (tmp_path / "PENDING.json").exists()
+    assert TradingCalendarStore(tmp_path).reconcile_publication("pub1").visibility == "COMMITTED"
+
+
+def test_missing_receipt_without_intent_cannot_prove_history(tmp_path):
+    store = TradingCalendarStore(tmp_path)
+    assert publish(store, 0).visibility == "COMMITTED"
+    assert publish(store, 1).visibility == "COMMITTED"
+    (tmp_path / "receipts" / "pub0.json").unlink()
+    assert store.reconcile_publication("pub0").visibility == "COMMIT_UNKNOWN"
+
+
+def test_partial_intent_blocks_without_guessing(tmp_path, monkeypatch):
+    store = TradingCalendarStore(tmp_path)
+    assert publish(store, 0).visibility == "COMMITTED"
+    write = store._write_new
+
+    def fail_partial(path, data):
+        if path.name == "PENDING.json":
+            write(path, b"{")
+            raise OSError("partial intent")
+        write(path, data)
+
+    monkeypatch.setattr(store, "_write_new", fail_partial)
+    assert publish(store, 1).visibility == "NOT_COMMITTED"
+    restarted = TradingCalendarStore(tmp_path)
+    assert restarted.reconcile_publication("pub1").visibility == "COMMIT_UNKNOWN"
+    blocked = publish(restarted, 0, "other", "other")
+    assert (blocked.visibility, blocked.fence) == ("COMMIT_UNKNOWN", "PRESENT")
+
+
+@pytest.mark.parametrize("pending", [b'{"publication_id":"another"}', b"{}", b"[]", b"{"])
+def test_malformed_pending_does_not_identify_owner(tmp_path, pending):
+    store = TradingCalendarStore(tmp_path)
+    assert publish(store, 0).visibility == "COMMITTED"
+    (tmp_path / "PENDING.json").write_bytes(pending)
+    for publication_id in ("pub0", "another", "new"):
+        result = store.publish({}, publication_id=publication_id, version_id="v")
+        assert (result.visibility, result.fence) == ("COMMIT_UNKNOWN", "PRESENT")
+
+
+def test_delete_failure_reports_visible_post_commit_incomplete(tmp_path, monkeypatch):
+    store = TradingCalendarStore(tmp_path)
+    assert publish(store, 0).visibility == "COMMITTED"
+
+    def fail_delete():
+        raise OSError("injected unlink failure")
+
+    monkeypatch.setattr(store, "_clear_pending", fail_delete)
+    result = publish(store, 1)
+    assert (result.visibility, result.post_commit, result.fence) == (
+        "COMMITTED",
+        "INCOMPLETE",
+        "UNKNOWN",
+    )
+    assert store.reconcile_publication("pub1").post_commit == "INCOMPLETE"
+    restarted = TradingCalendarStore(tmp_path)
+    assert publish(restarted, 2).fence == "PRESENT"
+    assert restarted.reconcile_publication("pub1").fence == "CLEAR"
+    assert publish(restarted, 2).visibility == "COMMITTED"
+
+
+def test_error_after_delete_is_committed_but_cleanup_uncertain(tmp_path, monkeypatch):
+    store = TradingCalendarStore(tmp_path)
+    assert publish(store, 0).visibility == "COMMITTED"
+    clear = store._clear_pending
+
+    def delete_then_fail():
+        clear()
+        raise OSError("after unlink")
+
+    monkeypatch.setattr(store, "_clear_pending", delete_then_fail)
+    result = publish(store, 1)
+    assert (result.visibility, result.post_commit, result.fence) == (
+        "COMMITTED",
+        "INCOMPLETE",
+        "UNKNOWN",
+    )
+    restarted = TradingCalendarStore(tmp_path)
+    assert restarted.reconcile_publication("pub1").visibility == "COMMITTED"
+    assert publish(restarted, 2).visibility == "COMMITTED"
+
+
+def test_corrupt_pending_target_remains_blocked(tmp_path, monkeypatch):
+    store = TradingCalendarStore(tmp_path)
+    assert publish(store, 0).visibility == "COMMITTED"
+    monkeypatch.setattr(store, "_clear_pending", lambda: (_ for _ in ()).throw(OSError("stop")))
+    assert publish(store, 1).visibility == "COMMITTED"
+    (tmp_path / "versions" / "v1.json").write_bytes(b"{}")
+    restarted = TradingCalendarStore(tmp_path)
+    assert restarted.reconcile_publication("pub1").visibility == "COMMIT_UNKNOWN"
+    assert publish(restarted, 2).fence == "PRESENT"
+
+
+def test_reader_keeps_pointer_across_concurrent_publication(tmp_path, monkeypatch):
+    reader = TradingCalendarStore(tmp_path)
+    writer = TradingCalendarStore(tmp_path)
+    assert publish(writer, 0).visibility == "COMMITTED"
+    original = reader._read
+    published = False
+
+    def switch_after_pointer(path):
+        nonlocal published
+        data = original(path)
+        if path.name == "CURRENT.json" and not published:
+            published = True
+            assert publish(writer, 1).visibility == "COMMITTED"
+        return data
+
+    monkeypatch.setattr(reader, "_read", switch_after_pointer)
+    snapshot = reader.read_current()
+    assert (snapshot.version_id, snapshot.content) == ("v0", content(0))
+    assert writer.read_current().version_id == "v1"
+
+
+def _hold_lock(root, ready, release):
+    store = TradingCalendarStore(root)
+    with store._writer_lock():
+        ready.set()
+        if not release.wait(10):
+            raise RuntimeError("test timed out")
+
+
+def test_actual_process_lock(tmp_path):
+    ctx = multiprocessing.get_context("spawn")
+    ready, release = ctx.Event(), ctx.Event()
+    proc = ctx.Process(target=_hold_lock, args=(tmp_path, ready, release))
+    proc.start()
+    try:
+        assert ready.wait(10)
+        assert publish(TradingCalendarStore(tmp_path), 0).visibility == "COMMIT_UNKNOWN"
+        assert (
+            TradingCalendarStore(tmp_path).reconcile_publication("pub0").visibility
+            == "COMMIT_UNKNOWN"
+        )
+    finally:
+        release.set()
+        proc.join(10)
+    assert proc.exitcode == 0
+    assert publish(TradingCalendarStore(tmp_path), 0).visibility == "COMMITTED"
+
+
+def _read_loop(root, start, done, ready, results):
+    store = TradingCalendarStore(root)
+    store.read_current()
+    ready.put(True)
+    start.wait(10)
+    try:
+        count = 0
+        while not done.is_set() or count < 30:
+            snap = store.read_current()
+            number = snap.content["trading_days"][0]["day"]
+            if snap.content != content(number) or snap.version_id != f"v{number}":
+                raise AssertionError("mixed generations")
+            count += 1
+        results.put((True, count))
+    except Exception as exc:
+        results.put((False, repr(exc)))
+
+
+def test_concurrent_process_readers_observe_complete_versions(tmp_path):
+    store = TradingCalendarStore(tmp_path)
+    assert publish(store, 0).visibility == "COMMITTED"
+    ctx = multiprocessing.get_context("spawn")
+    start, done, ready, results = ctx.Event(), ctx.Event(), ctx.Queue(), ctx.Queue()
+    readers = [
+        ctx.Process(target=_read_loop, args=(tmp_path, start, done, ready, results))
+        for _ in range(4)
+    ]
+    for reader in readers:
+        reader.start()
+    try:
+        assert all(ready.get(timeout=15) for _ in readers)
+        start.set()
+        for n in range(1, 16):
+            assert publish(store, n).visibility == "COMMITTED"
+    finally:
+        done.set()
+        for reader in readers:
+            reader.join(20)
+            if reader.is_alive():
+                reader.terminate()
+                reader.join()
+    assert all(reader.exitcode == 0 for reader in readers)
+    assert all(results.get(timeout=5)[0] for _ in readers)
+
+
+class _ManualClock:
+    def __init__(self, wall, monotonic=1_000_000_000_000):
+        self.value = wall
+        self.counter = monotonic
+
+    def wall(self):
+        return self.value
+
+    def mono(self):
+        return self.counter
+
+    def advance(self, seconds):
+        self.value += timedelta(seconds=seconds)
+        self.counter += seconds * 1_000_000_000
+
+
+def _timed_store(tmp_path):
+    clock = _ManualClock(datetime(2026, 1, 1, tzinfo=UTC))
+    return TradingCalendarStore(
+        tmp_path,
+        clock_utc=clock.wall,
+        monotonic_ns=clock.mono,
+        utc_error_bound=timedelta(seconds=1),
+    ), clock
+
+
+def test_history_proves_only_between_complete_bounded_intervals(tmp_path, monkeypatch):
+    store, clock = _timed_store(tmp_path)
+    start = clock.value
+    replace = module.os.replace
+
+    def delayed_replace(source, target):
+        replace(source, target)
+        clock.advance(2)
+
+    monkeypatch.setattr(module.os, "replace", delayed_replace)
+    assert publish(store, 0).visibility == "COMMITTED"
+    clock.advance(8)
+    assert publish(store, 1).visibility == "COMMITTED"
+    clock.advance(8)
+    for seconds in (-1, 0, 1, 2, 3, 9, 10, 11, 12, 13, 20, 21):
+        result = store.history_at(start + timedelta(seconds=seconds))
+        assert result.status == "HISTORY_UNCERTAIN", seconds
+        assert result.snapshot is None
+    for seconds, version in ((4, "v0"), (8, "v0"), (14, "v1"), (19, "v1")):
+        result = store.history_at(start + timedelta(seconds=seconds))
+        assert (result.status, result.snapshot.version_id) == ("FOUND", version)
+
+
+def test_republish_old_version_creates_new_event_without_new_version(tmp_path):
+    store, clock = _timed_store(tmp_path)
+    start = clock.value
+    assert publish(store, 0).visibility == "COMMITTED"
+    clock.advance(10)
+    assert publish(store, 1).visibility == "COMMITTED"
+    clock.advance(10)
+    versions_before = {p.name: p.read_bytes() for p in (tmp_path / "versions").iterdir()}
+    result = store.publish(content(0), publication_id="rollback", version_id="v0", republish=True)
+    assert result.visibility == "COMMITTED"
+    assert {p.name: p.read_bytes() for p in (tmp_path / "versions").iterdir()} == versions_before
+    assert store.read_current().sequence == 3
+    clock.advance(10)
+    assert store.history_at(start + timedelta(seconds=15)).snapshot.version_id == "v1"
+    after = store.history_at(start + timedelta(seconds=25))
+    assert (after.status, after.snapshot.publication_id, after.snapshot.version_id) == (
+        "FOUND",
+        "rollback",
+        "v0",
+    )
+    assert (
+        store.publish(content(0), publication_id="daily", version_id="daily").visibility
+        == "UNCHANGED"
+    )
+    assert len(list((tmp_path / "versions").iterdir())) == 2
+    assert len(list((tmp_path / "publications").iterdir())) == 3
+    assert (
+        store.publish(content(1), publication_id="bad", version_id="v0", republish=True).visibility
+        == "NOT_COMMITTED"
+    )
+    assert (
+        store.publish(
+            content(0), publication_id="missing", version_id="absent", republish=True
+        ).visibility
+        == "NOT_COMMITTED"
+    )
+
+
+def test_history_rejects_wall_backward_and_unsampled_forward_jumps(tmp_path):
+    store, clock = _timed_store(tmp_path)
+    start = clock.value
+    assert publish(store, 0).visibility == "COMMITTED"
+    clock.value -= timedelta(seconds=1)
+    assert store.history_at(start).status == "HISTORY_UNCERTAIN"
+    clock.value += timedelta(seconds=100)
+    clock.counter += 1_000_000_000
+    assert publish(store, 1).visibility == "COMMITTED"
+    clock.advance(5)
+    assert store.history_at(start + timedelta(seconds=3)).status == "HISTORY_UNCERTAIN"
+
+
+def test_history_detects_clock_jump_inside_publication(tmp_path, monkeypatch):
+    store, clock = _timed_store(tmp_path)
+    start = clock.value
+    replace = module.os.replace
+
+    def jump(source, target):
+        replace(source, target)
+        clock.value += timedelta(seconds=10)
+        clock.counter += 1_000_000_000
+
+    monkeypatch.setattr(module.os, "replace", jump)
+    assert publish(store, 0).visibility == "COMMITTED"
+    clock.advance(3)
+    assert store.history_at(start + timedelta(seconds=11)).status == "HISTORY_UNCERTAIN"
+
+
+def test_history_missing_receipt_or_old_schema_is_uncertain(tmp_path):
+    store, clock = _timed_store(tmp_path)
+    start = clock.value
+    assert publish(store, 0).visibility == "COMMITTED"
+    clock.advance(3)
+    receipt_path = tmp_path / "receipts" / "pub0.json"
+    receipt = json.loads(receipt_path.read_bytes())
+    receipt_path.unlink()
+    assert store.history_at(start + timedelta(seconds=1)).status == "HISTORY_UNCERTAIN"
+    # Restore a legitimate v1 envelope for the same event; v1 has no time proof.
+    event_path = tmp_path / "publications" / "pub0.json"
+    event = json.loads(event_path.read_bytes())
+    event["schema"] = module._EVENT
+    event.pop("review_policy")
+    event.pop("lower_utc")
+    event.pop("monotonic_ns")
+    event.pop("boot_id")
+    event.pop("utc_bound_us")
+    event_bytes = canonical(event)
+    event_path.write_bytes(event_bytes)
+    pointer = {
+        "schema": module._POINTER,
+        "publication_id": "pub0",
+        "publication_sha256": module._sha(event_bytes),
+    }
+    (tmp_path / "CURRENT.json").write_bytes(canonical(pointer))
+    receipt["schema"] = module._RECEIPT
+    receipt["pointer"] = pointer
+    for key in ("observed_utc", "monotonic_ns", "boot_id", "utc_bound_us", "clock_valid"):
+        receipt.pop(key)
+    receipt_path.write_bytes(canonical(receipt))
+    assert store.read_current().version_id == "v0"
+    assert store.reconcile_publication("pub0").visibility == "COMMITTED"
+    assert store.history_at(start + timedelta(seconds=1)).status == "HISTORY_UNCERTAIN"
+
+
+def _timed_crash_after_replace(root, utc_value, monotonic):
+    clock = _ManualClock(datetime.fromisoformat(utc_value), monotonic)
+    store = TradingCalendarStore(
+        root, clock_utc=clock.wall, monotonic_ns=clock.mono, utc_error_bound=timedelta(seconds=1)
+    )
+    replace = module.os.replace
+
+    def crash(source, target):
+        replace(source, target)
+        os._exit(76)
+
+    module.os.replace = crash
+    publish(store, 1)
+
+
+def test_history_process_crash_recovery_uses_observation_upper_bound(tmp_path):
+    store, clock = _timed_store(tmp_path)
+    start = clock.value
+    assert publish(store, 0).visibility == "COMMITTED"
+    clock.advance(10)
+    ctx = multiprocessing.get_context("spawn")
+    proc = ctx.Process(
+        target=_timed_crash_after_replace, args=(tmp_path, clock.value.isoformat(), clock.counter)
+    )
+    proc.start()
+    proc.join(15)
+    assert proc.exitcode == 76
+    assert store.history_at(start + timedelta(seconds=5)).status == "HISTORY_UNCERTAIN"
+    clock.advance(4)
+    assert store.reconcile_publication("pub1").visibility == "COMMITTED"
+    receipt = json.loads((tmp_path / "receipts" / "pub1.json").read_bytes())
+    assert receipt["observation"] == "RECOVERY_CURRENT_READBACK"
+    assert receipt["observed_utc"] == "2026-01-01T00:00:14.000000Z"
+    clock.advance(6)
+    assert store.history_at(start + timedelta(seconds=5)).snapshot.version_id == "v0"
+    assert store.history_at(start + timedelta(seconds=12)).status == "HISTORY_UNCERTAIN"
+    assert store.history_at(start + timedelta(seconds=16)).snapshot.version_id == "v1"
+
+
+def test_history_defaults_to_untrusted_utc_without_explicit_error_bound(tmp_path):
+    clock = _ManualClock(datetime(2026, 1, 1, tzinfo=UTC))
+    store = TradingCalendarStore(tmp_path, clock_utc=clock.wall, monotonic_ns=clock.mono)
+    assert publish(store, 0).visibility == "COMMITTED"
+    clock.advance(10)
+    assert store.history_at(clock.value - timedelta(seconds=5)).status == "HISTORY_UNCERTAIN"
+    # Declaring a bound later cannot make earlier unbounded observations trusted.
+    trusted_reader = TradingCalendarStore(
+        tmp_path,
+        clock_utc=clock.wall,
+        monotonic_ns=clock.mono,
+        utc_error_bound=timedelta(seconds=1),
+    )
+    assert (
+        trusted_reader.history_at(clock.value - timedelta(seconds=5)).status == "HISTORY_UNCERTAIN"
+    )
+
+
+def test_history_validates_observed_boot_identity(tmp_path, monkeypatch):
+    store, clock = _timed_store(tmp_path)
+    assert publish(store, 0).visibility == "COMMITTED"
+    clock.advance(10)
+    assert store.history_at(clock.value - timedelta(seconds=5)).status == "FOUND"
+    monkeypatch.setattr(
+        module, "_system_boot_identity", lambda: "darwin:00000000-0000-0000-0000-000000000001"
+    )
+    assert store.history_at(clock.value - timedelta(seconds=5)).status == "HISTORY_UNCERTAIN"
+    monkeypatch.setattr(module, "_system_boot_identity", lambda: None)
+    assert store.history_at(clock.value - timedelta(seconds=5)).status == "HISTORY_UNCERTAIN"
+
+
+def test_history_uses_attested_bound_per_observation(tmp_path):
+    clock = _ManualClock(datetime(2026, 1, 1, tzinfo=UTC))
+    store = TradingCalendarStore(
+        tmp_path,
+        clock_utc=clock.wall,
+        monotonic_ns=clock.mono,
+        utc_error_bound=timedelta(seconds=5),
+    )
+    start = clock.value
+    assert publish(store, 0).visibility == "COMMITTED"
+    clock.advance(20)
+    assert store.history_at(start + timedelta(seconds=5)).status == "HISTORY_UNCERTAIN"
+    assert store.history_at(start + timedelta(seconds=6)).status == "FOUND"
+    assert store.history_at(start + timedelta(seconds=16)).status == "HISTORY_UNCERTAIN"
+    with pytest.raises(CalendarStoreError):
+        TradingCalendarStore(tmp_path, utc_error_bound=timedelta(seconds=-1))
+
+
+def test_recovery_across_different_boot_is_visible_but_history_uncertain(tmp_path, monkeypatch):
+    store, clock = _timed_store(tmp_path)
+    start = clock.value
+    assert publish(store, 0).visibility == "COMMITTED"
+    clock.advance(10)
+    ctx = multiprocessing.get_context("spawn")
+    proc = ctx.Process(
+        target=_timed_crash_after_replace,
+        args=(tmp_path, clock.value.isoformat(), clock.counter),
+    )
+    proc.start()
+    proc.join(15)
+    assert proc.exitcode == 76
+    clock.advance(4)
+    monkeypatch.setattr(
+        module,
+        "_system_boot_identity",
+        lambda: "darwin:00000000-0000-0000-0000-000000000001",
+    )
+    assert store.reconcile_publication("pub1").visibility == "COMMITTED"
+    receipt = json.loads((tmp_path / "receipts" / "pub1.json").read_bytes())
+    assert not receipt["clock_valid"]
+    clock.advance(6)
+    assert store.history_at(start + timedelta(seconds=16)).status == "HISTORY_UNCERTAIN"
+
+
+def test_history_rejects_monotonic_clock_regression_inside_publish(tmp_path, monkeypatch):
+    store, clock = _timed_store(tmp_path)
+    start = clock.value
+    replace = module.os.replace
+
+    def regress(source, target):
+        replace(source, target)
+        clock.counter -= 1
+
+    monkeypatch.setattr(module.os, "replace", regress)
+    assert publish(store, 0).visibility == "COMMITTED"
+    clock.advance(10)
+    assert store.history_at(start + timedelta(seconds=5)).status == "HISTORY_UNCERTAIN"
+
+
+@pytest.mark.parametrize("separation_seconds", [1, 2])
+def test_history_rejects_overlapping_or_touching_bounds_even_outside_them(
+    tmp_path, separation_seconds
+):
+    store, clock = _timed_store(tmp_path)
+    start = clock.value
+    assert publish(store, 0).visibility == "COMMITTED"
+    clock.advance(separation_seconds)
+    assert publish(store, 1).visibility == "COMMITTED"
+    clock.advance(10)
+    # Query is strictly after both expanded publication intervals.
+    result = store.history_at(start + timedelta(seconds=separation_seconds + 5))
+    assert result.status == "HISTORY_UNCERTAIN"
+    assert result.snapshot is None
+    assert "overlap or touch" in result.reason
+
+
+def test_linux_style_suspend_wall_elapsed_without_monotonic_is_uncertain(tmp_path):
+    store, clock = _timed_store(tmp_path)
+    start = clock.value
+    assert publish(store, 0).visibility == "COMMITTED"
+    clock.advance(10)
+    # CLOCK_MONOTONIC may stop during Linux suspend while wall UTC advances.
+    clock.value += timedelta(seconds=120)
+    assert store.history_at(start + timedelta(seconds=5)).status == "HISTORY_UNCERTAIN"
+
+
+def _composite_fixture(marker=0, end=date(2026, 1, 31)):
+    from bt_api_py.trading_calendar_composite import compose_simulated
+    from bt_api_py.trading_calendar_update_simulation import VenueContent
+
+    class SyntheticProvider:
+        def query(self, **kwargs):
+            return None
+
+    data = {
+        "sources": [{"id": "src", "description": "synthetic"}],
+        "trading_days": [{"venue": "A", "day": "2026-01-01", "source_ids": ["src"]}],
+        "trading_hours": [
+            {
+                "venue": "A",
+                "kind": "future",
+                "product": "x",
+                "contracts": ["x1"],
+                "valid_from": "2026-01-01",
+                "valid_to": "2026-12-31",
+                "marker": marker,
+                "source_ids": ["src"],
+                "night_mappings": [],
+            }
+        ],
+        "exceptions": [],
+    }
+    venue = VenueContent.from_layers("A", date(2026, 1, 1), end, data)
+    result = compose_simulated(
+        mode="SIMULATION_ONLY",
+        venues=(venue,),
+        snapshot_factory=lambda *a, **kw: SyntheticProvider(),
+    )
+    assert result.status == "READY_SIMULATED"
+    return result
+
+
+def _covered_publish(store, bundle, pub, version, *, republish=False):
+    return store.publish(
+        json.loads(bundle.snapshot_bytes),
+        publication_id=pub,
+        version_id=version,
+        republish=republish,
+        coverage_manifest_bytes=bundle.manifest_bytes,
+        coverage_manifest_sha256=bundle.manifest_sha256,
+        binding_bytes=bundle.binding_bytes,
+        binding_sha256=bundle.binding_sha256,
+    )
+
+
+def test_covered_version_stores_complete_bundle_and_coverage_only_change(tmp_path):
+    store = TradingCalendarStore(tmp_path)
+    first = _composite_fixture(end=date(2026, 1, 31))
+    second = _composite_fixture(end=date(2026, 1, 30))
+    assert first.snapshot_sha256 == second.snapshot_sha256
+    assert first.manifest_sha256 != second.manifest_sha256
+    assert _covered_publish(store, first, "p1", "v1").visibility == "COMMITTED"
+    before = store.read_current()
+    assert before.coverage_status == "DECLARED_UNVERIFIED"
+    assert before.content_sha256 == first.snapshot_sha256
+    assert before.coverage_manifest_bytes == first.manifest_bytes
+    assert before.coverage_manifest_sha256 == first.manifest_sha256
+    assert before.binding_bytes == first.binding_bytes
+    assert before.binding_sha256 == first.binding_sha256
+    assert _covered_publish(store, first, "noop", "new").visibility == "UNCHANGED"
+    assert _covered_publish(store, second, "p2", "v2").visibility == "COMMITTED"
+    after = store.read_current()
+    assert after.content_sha256 == before.content_sha256
+    assert after.coverage_manifest_bytes == second.manifest_bytes
+    assert after.version_sha256 != before.version_sha256
+    assert len(list((tmp_path / "versions").iterdir())) == 2
+    assert _covered_publish(store, second, "p1", "v1").visibility == "ID_CONFLICT"
+    assert (
+        store.publish(
+            json.loads(second.snapshot_bytes), publication_id="legacy", version_id="v3"
+        ).visibility
+        == "NOT_COMMITTED"
+    )
+
+
+@pytest.mark.parametrize(
+    "variant",
+    [
+        "manifest_bytes",
+        "manifest_digest",
+        "binding_bytes",
+        "binding_digest",
+        "mixed_manifest",
+        "mixed_binding",
+        "missing",
+    ],
+)
+def test_covered_input_mismatch_never_commits(tmp_path, variant):
+    store = TradingCalendarStore(tmp_path)
+    a, b = _composite_fixture(0), _composite_fixture(1)
+    kw = {
+        "coverage_manifest_bytes": a.manifest_bytes,
+        "coverage_manifest_sha256": a.manifest_sha256,
+        "binding_bytes": a.binding_bytes,
+        "binding_sha256": a.binding_sha256,
+    }
+    if variant == "manifest_bytes":
+        kw["coverage_manifest_bytes"] += b" "
+    elif variant == "manifest_digest":
+        kw["coverage_manifest_sha256"] = "0" * 64
+    elif variant == "binding_bytes":
+        kw["binding_bytes"] += b" "
+    elif variant == "binding_digest":
+        kw["binding_sha256"] = "0" * 64
+    elif variant == "mixed_manifest":
+        kw["coverage_manifest_bytes"], kw["coverage_manifest_sha256"] = (
+            b.manifest_bytes,
+            b.manifest_sha256,
+        )
+    elif variant == "mixed_binding":
+        kw["binding_bytes"], kw["binding_sha256"] = b.binding_bytes, b.binding_sha256
+    else:
+        kw["binding_bytes"] = None
+    result = store.publish(json.loads(a.snapshot_bytes), publication_id="p", version_id="v", **kw)
+    assert result.visibility == "NOT_COMMITTED"
+    assert not (tmp_path / "CURRENT.json").exists()
+
+
+def _rewrite_outer_chain_for_snapshot_test(root, version):
+    snapshot_bytes = (root / "versions" / f"{version}.json").read_bytes()
+    pointer_path = root / "CURRENT.json"
+    pointer = json.loads(pointer_path.read_bytes())
+    event_path = root / "publications" / f"{pointer['publication_id']}.json"
+    event = json.loads(event_path.read_bytes())
+    event["version_sha256"] = module._sha(snapshot_bytes)
+    event_bytes = canonical(event)
+    event_path.write_bytes(event_bytes)
+    pointer["publication_sha256"] = module._sha(event_bytes)
+    pointer_path.write_bytes(canonical(pointer))
+
+
+@pytest.mark.parametrize("variant", ["manifest", "binding", "content", "missing", "forged_event"])
+def test_covered_tamper_or_mixed_artifacts_fail_closed(tmp_path, variant):
+    store = TradingCalendarStore(tmp_path)
+    bundle = _composite_fixture()
+    assert _covered_publish(store, bundle, "p1", "v1").visibility == "COMMITTED"
+    path = tmp_path / "versions" / "v1.json"
+    raw = json.loads(path.read_bytes())
+    if variant == "manifest":
+        raw["manifest"]["coverage"][0]["coverage_end"] = "2026-01-30"
+    elif variant == "binding":
+        raw["binding"]["snapshot_sha256"] = "0" * 64
+        raw["binding_sha256"] = module._sha(canonical(raw["binding"]))
+    elif variant == "content":
+        raw["content"]["sources"][0]["description"] = "different"
+    elif variant == "missing":
+        del raw["manifest"]
+    else:
+        raw["manifest"]["coverage"][0]["coverage_end"] = "2026-01-30"
+    path.write_bytes(canonical(raw))
+    if variant != "forged_event":
+        # Even a recomputed outer event/pointer cannot hide internal digest mismatch.
+        _rewrite_outer_chain_for_snapshot_test(tmp_path, "v1")
+    with pytest.raises(CalendarStoreError):
+        store.read_current()
+    assert store.verify_publication("p1") == "UNKNOWN"
+
+
+@pytest.mark.parametrize(
+    "mismatch", ["covered_event_legacy_version", "legacy_event_covered_version"]
+)
+def test_event_and_version_schema_cannot_be_crossed(tmp_path, mismatch):
+    store = TradingCalendarStore(tmp_path)
+    bundle = _composite_fixture()
+    assert _covered_publish(store, bundle, "p1", "v1").visibility == "COMMITTED"
+    version_path = tmp_path / "versions" / "v1.json"
+    event_path = tmp_path / "publications" / "p1.json"
+    pointer_path = tmp_path / "CURRENT.json"
+    pointer = json.loads(pointer_path.read_bytes())
+    event = json.loads(event_path.read_bytes())
+    if mismatch == "covered_event_legacy_version":
+        version_path.write_bytes(
+            canonical({"schema": module._SNAPSHOT, "content": json.loads(bundle.snapshot_bytes)})
+        )
+        event["version_sha256"] = module._sha(version_path.read_bytes())
+    else:
+        event["schema"] = module._EVENT_TIMED
+        event.pop("version_sha256")
+    event_bytes = canonical(event)
+    event_path.write_bytes(event_bytes)
+    pointer["publication_sha256"] = module._sha(event_bytes)
+    pointer_path.write_bytes(canonical(pointer))
+    with pytest.raises(CalendarStoreError):
+        store.read_current()
+
+
+def test_covered_history_and_rollback_return_same_version_manifest(tmp_path):
+    store, clock = _timed_store(tmp_path)
+    first = _composite_fixture(end=date(2026, 1, 31))
+    second = _composite_fixture(end=date(2026, 1, 30))
+    start = clock.value
+    assert _covered_publish(store, first, "p1", "v1").visibility == "COMMITTED"
+    clock.advance(10)
+    assert _covered_publish(store, second, "p2", "v2").visibility == "COMMITTED"
+    clock.advance(10)
+    assert (
+        _covered_publish(store, first, "rollback", "v1", republish=True).visibility == "COMMITTED"
+    )
+    clock.advance(10)
+    for seconds, expected, pub in ((5, first, "p1"), (15, second, "p2"), (25, first, "rollback")):
+        got = store.history_at(start + timedelta(seconds=seconds))
+        assert got.status == "FOUND" and got.snapshot.publication_id == pub
+        assert got.snapshot.coverage_manifest_bytes == expected.manifest_bytes
+        assert got.snapshot.binding_bytes == expected.binding_bytes
+        assert got.snapshot.coverage_status == "DECLARED_UNVERIFIED"
+    assert store.read_current().coverage_manifest_bytes == first.manifest_bytes
+    assert (
+        _covered_publish(store, second, "bad", "v1", republish=True).visibility == "NOT_COMMITTED"
+    )
+
+
+def test_legacy_snapshot_read_history_and_explicit_rollback_show_absent_coverage(tmp_path):
+    store, clock = _timed_store(tmp_path)
+    start = clock.value
+    assert publish(store, 0).visibility == "COMMITTED"
+    legacy = store.read_current()
+    assert (legacy.coverage_status, legacy.coverage_manifest_bytes, legacy.version_sha256) == (
+        "NOT_PRESENT",
+        None,
+        None,
+    )
+    clock.advance(10)
+    bundle = _composite_fixture()
+    assert _covered_publish(store, bundle, "covered", "covered").visibility == "COMMITTED"
+    clock.advance(10)
+    assert (
+        store.publish(
+            content(0), publication_id="rollback", version_id="v0", republish=True
+        ).visibility
+        == "COMMITTED"
+    )
+    assert store.read_current().coverage_status == "NOT_PRESENT"
+    clock.advance(10)
+    assert store.history_at(start + timedelta(seconds=5)).snapshot.coverage_status == "NOT_PRESENT"
+    assert (
+        store.history_at(start + timedelta(seconds=15)).snapshot.coverage_status
+        == "DECLARED_UNVERIFIED"
+    )
+    assert store.history_at(start + timedelta(seconds=25)).snapshot.coverage_status == "NOT_PRESENT"
+
+
+def test_covered_unknown_after_replace_recovers_same_bundle(tmp_path, monkeypatch):
+    store = TradingCalendarStore(tmp_path)
+    bundle = _composite_fixture()
+    replace = module.os.replace
+
+    def uncertain(source, target):
+        replace(source, target)
+        raise OSError("injected after replace")
+
+    monkeypatch.setattr(module.os, "replace", uncertain)
+    assert _covered_publish(store, bundle, "p1", "v1").visibility == "COMMIT_UNKNOWN"
+    assert store.reconcile_publication("p1").visibility == "COMMITTED"
+    got = store.read_current()
+    assert got.coverage_manifest_bytes == bundle.manifest_bytes
+    assert got.binding_bytes == bundle.binding_bytes
+
+
+def test_covered_unknown_does_not_recover_a_corrupt_bundle(tmp_path, monkeypatch):
+    store = TradingCalendarStore(tmp_path)
+    bundle = _composite_fixture()
+    replace = module.os.replace
+
+    def uncertain(source, target):
+        replace(source, target)
+        raise OSError("injected after replace")
+
+    monkeypatch.setattr(module.os, "replace", uncertain)
+    assert _covered_publish(store, bundle, "p1", "v1").visibility == "COMMIT_UNKNOWN"
+    version_path = tmp_path / "versions" / "v1.json"
+    damaged = json.loads(version_path.read_bytes())
+    damaged["manifest"]["coverage"][0]["coverage_end"] = "2026-01-30"
+    version_path.write_bytes(canonical(damaged))
+    assert store.reconcile_publication("p1").visibility == "COMMIT_UNKNOWN"
+    assert (tmp_path / "PENDING.json").exists()
+
+
+def _covered_read_loop(root, start, first_published, done, ready, observed, results):
+    store = TradingCalendarStore(root)
+    ready.put(True)
+    start.wait(10)
+    try:
+        if not first_published.wait(10):
+            raise RuntimeError("writer did not publish")
+        count = 0
+        while not done.is_set() or count < 20:
+            current = store.read_current()
+            marker = current.content["trading_hours"][0]["marker"]
+            manifest = json.loads(current.coverage_manifest_bytes)
+            end = manifest["coverage"][0]["coverage_end"]
+            if current.version_id != f"v{marker}" or end != f"2026-01-{marker + 1:02d}":
+                raise AssertionError("mixed coverage and content")
+            count += 1
+            if count == 1:
+                observed.put(True)
+        results.put((True, count))
+    except Exception as exc:
+        results.put((False, repr(exc)))
+
+
+def test_covered_concurrent_process_readers_never_mix_generations(tmp_path):
+    store = TradingCalendarStore(tmp_path)
+    first = _composite_fixture(0, end=date(2026, 1, 1))
+    assert _covered_publish(store, first, "p0", "v0").visibility == "COMMITTED"
+    ctx = multiprocessing.get_context("spawn")
+    start, first_published, done = ctx.Event(), ctx.Event(), ctx.Event()
+    ready, observed, results = ctx.Queue(), ctx.Queue(), ctx.Queue()
+    readers = [
+        ctx.Process(
+            target=_covered_read_loop,
+            args=(tmp_path, start, first_published, done, ready, observed, results),
+        )
+        for _ in range(4)
+    ]
+    for reader in readers:
+        reader.start()
+    try:
+        assert all(ready.get(timeout=15) for _ in readers)
+        start.set()
+        for n in range(1, 10):
+            bundle = _composite_fixture(n, end=date(2026, 1, n + 1))
+            assert _covered_publish(store, bundle, f"p{n}", f"v{n}").visibility == "COMMITTED"
+            if n == 1:
+                first_published.set()
+                assert all(observed.get(timeout=15) for _ in readers)
+    finally:
+        done.set()
+        for reader in readers:
+            reader.join(20)
+            if reader.is_alive():
+                reader.terminate()
+                reader.join()
+    assert all(reader.exitcode == 0 for reader in readers)
+    assert all(results.get(timeout=5)[0] for _ in readers)

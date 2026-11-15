@@ -890,6 +890,9 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         # copied mapping prevents later caller mutation from rebinding a route.
         self._provider_execution_contexts = MappingProxyType(execution_contexts)
         self._sdk_capability_lock = threading.RLock()
+        from .trading_calendar_runtime_status import TradingCalendarStatusReader
+
+        self._trading_calendar_status_reader = TradingCalendarStatusReader()
         # Iteration 62: environment-neutral write admission (default: all
         # routes disabled) and the lazily created direct write coordinator.
         from .write_admission import WriteAdmission
@@ -4338,6 +4341,49 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                 schedule = factory(self.exchange_feeds.get(exchange_name))
                 self._trading_session_schedules[exchange_name] = schedule
             return schedule
+
+    def configure_trading_calendar_status(self, *, route_roots: Mapping[str, str]) -> None:
+        """Configure exact routes for read-only published-calendar observations.
+
+        This does not bind a calendar to any running strategy or authorize trading.
+        Each call atomically replaces the instance's route map; an empty map disables it.
+        """
+        self._trading_calendar_status_reader.configure(route_roots)
+
+    def trading_calendar_status(self, exchange_name: str) -> Any:
+        """Observe local CURRENT for an explicitly configured route, without binding it."""
+        return self._trading_calendar_status_reader.status(exchange_name)
+
+    def trading_calendar_configuration_token(self) -> object:
+        """Observe this facade's calendar configuration without granting authority."""
+        from bt_api_py.trading_calendar_runtime_status import TradingCalendarStatusReader
+
+        if type(self._trading_calendar_status_reader) is not TradingCalendarStatusReader:
+            raise ValueError("calendar configuration unavailable")
+        return self._trading_calendar_status_reader.configuration_token()
+
+    def trading_calendar_configuration_is_current(self, token: object) -> bool:
+        """Check an instance-local configuration observation; this is not a binding."""
+        from bt_api_py.trading_calendar_runtime_status import TradingCalendarStatusReader
+
+        if type(self._trading_calendar_status_reader) is not TradingCalendarStatusReader:
+            return False
+        return self._trading_calendar_status_reader.configuration_is_current(token)
+
+    def trading_calendar_query(
+        self, exchange_name: str, *, venue: str, kind: str, product: str,
+        contract: str, trading_day: Any, mode: str | None = None,
+    ) -> Any:
+        """Read a CTP simulation snapshot from local CURRENT without source proof."""
+        return self._trading_calendar_status_reader.query(
+            exchange_name,
+            venue=venue,
+            kind=kind,
+            product=product,
+            contract=contract,
+            trading_day=trading_day,
+            mode=mode,
+        )
 
     @property
     def market_clock_verifier(self) -> Any:
