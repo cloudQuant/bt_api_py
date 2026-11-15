@@ -9,6 +9,7 @@ import json
 import math
 import os
 import threading
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -194,6 +195,7 @@ class GatewayDelegateServiceClient:
         self._execution_one_shot = execution_one_shot
         self._pid, self._thread, self._lock = os.getpid(), threading.current_thread(), threading.Lock()
         self._actor_observations = {}
+        self._actor_observation_intents = {}
         # request_key -> dispatch marker of an attempt this client proved never left
         # (TRANSPORT_NOT_STARTED). In memory only: a restarted host cannot tell that its
         # predecessor's attempt never left, so its durable marker stays unresolved.
@@ -442,11 +444,24 @@ class GatewayDelegateServiceClient:
             raise ValueError('INVALID_DELEGATE_REQUEST')
         with self._lock:
             self._actor_observations.pop(request_key, None)
+            self._actor_observation_intents.pop(request_key, None)
+            execution_actor = self._execution_one_shot
             try:
-                intent = self._host.load_delegate_intent(request_key)
+                intent = deepcopy(self._host.load_delegate_intent(request_key))
+                execution_actor = execution_actor or (type(intent) is GatewayDelegateIntent
+                    and type(intent.command) is GatewayDelegatedCommand and intent.command.actor_kind == 'execution')
                 payload = self._validate(intent)
             except Exception:
-                return GatewayDelegateActorResult('TRANSPORT_NOT_STARTED', code='INTENT_UNAVAILABLE')
+                return GatewayDelegateActorResult('UNKNOWN', code='INTENT_UNAVAILABLE')
+            if execution_actor:
+                # A route snapshot cannot prove the source or continuity of
+                # this reply. Do not persist or expose any trading fact from it.
+                try:
+                    self._actor_call('direct.delegate_actor_status', intent,
+                        {'command': intent.command.to_mapping(), 'payload': payload}, timeout_seconds)
+                except Exception:
+                    pass
+                return GatewayDelegateActorResult('UNKNOWN', code='ACTOR_STATUS_UNVERIFIED')
             raw, error = self._actor_call('direct.delegate_actor_status', intent,
                 {'command': intent.command.to_mapping(), 'payload': payload}, timeout_seconds)
             if error is not None:
@@ -471,17 +486,38 @@ class GatewayDelegateServiceClient:
                             or any(c not in '0123456789abcdef' for c in native_digest)))
                         or (observation.state in {'DISPATCHING', 'SENT', 'NOT_SENT', 'UNKNOWN'} and native_digest is None)):
                     raise ValueError
+                if self._host.load_delegate_intent(request_key) != intent:
+                    raise ValueError
                 if (self._host.save_delegate_observation(request_key, observation) != observation
                         or self._host.load_delegate_observation(request_key) != observation):
                     raise ValueError
                 result = GatewayDelegateActorObservation(observation, native_digest)
                 self._actor_observations[request_key] = result
+                self._actor_observation_intents[request_key] = intent
                 return GatewayDelegateActorResult('OBSERVED', observation=result)
             except Exception:
                 return GatewayDelegateActorResult('UNKNOWN', code='INVALID_OR_UNAVAILABLE_REPLY')
 
     def _cancel_actor_result(self, operation, intent, plan, timeout_seconds):
-        payload = self._validate(intent)
+        # The ordinary actor RPC does not bind Execution replies to a verified
+        # source or continuity, and cannot authorize an Execution cancel.
+        if (self._execution_one_shot or type(intent) is not GatewayDelegateIntent
+                or type(intent.command) is not GatewayDelegatedCommand
+                or intent.command.actor_kind != 'risk'):
+            return GatewayDelegateActorResult('UNKNOWN', code='CANCEL_SOURCE_UNVERIFIED')
+        try:
+            payload = self._validate(intent)
+            cmd = intent.command
+            if (type(plan) is not GatewayDelegateActorCancelIntent
+                    or plan.request_key != cmd.request_key or plan.command_digest != cmd.digest
+                    or plan.payload_digest != cmd.payload_digest or plan.actor_principal != cmd.actor_principal
+                    or any(type(value) is not str or not value or value != value.strip() or len(value) > 256
+                           for value in (plan.operation_id, plan.reservation_id))
+                    or type(plan.native_identity_digest) is not str or len(plan.native_identity_digest) != 64
+                    or any(c not in '0123456789abcdef' for c in plan.native_identity_digest)):
+                raise ValueError
+        except Exception:
+            return GatewayDelegateActorResult('UNKNOWN', code='CANCEL_PLAN_MISMATCH')
         args = {'command': intent.command.to_mapping(), 'payload': payload, 'operation_id': plan.operation_id}
         if operation == 'direct.delegate_actor_cancel':
             args['reservation_id'] = plan.reservation_id
@@ -521,13 +557,23 @@ class GatewayDelegateServiceClient:
                 or not 0 < timeout_seconds <= threading.TIMEOUT_MAX):
             raise ValueError('INVALID_DELEGATE_REQUEST')
         with self._lock:
+            execution_actor = self._execution_one_shot
+            identity_known = False
             try:
                 row = observation.command
                 if (self._actor_observations.get(row.request_key) is not observation
                         or row.state not in {'DISPATCHING', 'SENT', 'UNKNOWN'} or observation.native_identity_digest is None):
                     raise ValueError
                 intent = self._host.load_delegate_intent(row.request_key)
+                if (row.request_key not in self._actor_observation_intents
+                        or self._actor_observation_intents[row.request_key] != intent):
+                    return GatewayDelegateActorResult('UNKNOWN', code='ACTOR_IDENTITY_CHANGED')
+                if type(intent) is GatewayDelegateIntent and type(intent.command) is GatewayDelegatedCommand:
+                    execution_actor = execution_actor or intent.command.actor_kind == 'execution'
                 self._validate(intent)
+                identity_known = intent.command.actor_kind in {'risk', 'execution'}
+                if execution_actor or not identity_known:
+                    return GatewayDelegateActorResult('UNKNOWN', code='CANCEL_SOURCE_UNVERIFIED')
                 plan = GatewayDelegateActorCancelIntent(row.request_key, operation_id, intent.command.digest,
                     row.reservation_id, row.digest, row.actor_principal, observation.native_identity_digest)
                 existing = self._host.load_delegate_cancel_intent(operation_id)
@@ -543,6 +589,8 @@ class GatewayDelegateServiceClient:
                         or self._host.load_delegate_cancel_marker(operation_id) != marker):
                     raise ValueError
             except Exception:
+                if execution_actor or not identity_known:
+                    return GatewayDelegateActorResult('UNKNOWN', code='CANCEL_PLAN_UNAVAILABLE')
                 return GatewayDelegateActorResult('TRANSPORT_NOT_STARTED', code='CANCEL_NOT_DURABLE')
             return self._cancel_actor_result('direct.delegate_actor_cancel', intent, plan, timeout_seconds)
 
@@ -552,17 +600,38 @@ class GatewayDelegateServiceClient:
                 or not math.isfinite(timeout_seconds) or not 0 < timeout_seconds <= threading.TIMEOUT_MAX):
             raise ValueError('INVALID_DELEGATE_REQUEST')
         with self._lock:
+            execution_actor = self._execution_one_shot
+            identity_known = False
             try:
                 plan = self._host.load_delegate_cancel_intent(operation_id)
                 if type(plan) is not GatewayDelegateActorCancelIntent or plan.operation_id != operation_id:
                     raise ValueError
                 intent = self._host.load_delegate_intent(plan.request_key)
+                if type(intent) is GatewayDelegateIntent and type(intent.command) is GatewayDelegatedCommand:
+                    execution_actor = execution_actor or intent.command.actor_kind == 'execution'
                 self._validate(intent)
+                identity_known = intent.command.actor_kind in {'risk', 'execution'}
             except Exception:
+                if execution_actor or not identity_known:
+                    return GatewayDelegateActorResult('UNKNOWN', code='CANCEL_PLAN_UNAVAILABLE')
                 return GatewayDelegateActorResult('TRANSPORT_NOT_STARTED', code='CANCEL_PLAN_UNAVAILABLE')
             return self._cancel_actor_result('direct.delegate_actor_cancel_status', intent, plan, timeout_seconds)
 
     def _release_query(self, intent, plan, timeout_seconds):
+        try:
+            self._validate(intent)
+            cmd = intent.command
+            if (type(plan) is not GatewayDelegateActorReleaseIntent
+                    or plan.request_key != cmd.request_key or plan.command_digest != cmd.digest
+                    or plan.payload_digest != cmd.payload_digest or plan.actor_principal != cmd.actor_principal
+                    or type(plan.expected_version) is not int or plan.expected_version != 1
+                    or any(type(value) is not str or not value or value != value.strip() or len(value) > 256
+                           for value in (plan.operation_id, plan.reservation_id))):
+                raise ValueError
+        except Exception:
+            return GatewayDelegateActorReleaseResult('UNKNOWN', code='RELEASE_PLAN_MISMATCH')
+        if self._execution_one_shot or intent.command.actor_kind == 'execution':
+            return GatewayDelegateActorReleaseResult('UNKNOWN', code='RELEASE_SOURCE_UNVERIFIED')
         payload = self._validate(intent)
         raw, error = self._actor_call('direct.delegate_actor_release_status', intent,
             {'command': intent.command.to_mapping(), 'payload': payload, 'operation_id': plan.operation_id}, timeout_seconds)
@@ -599,12 +668,22 @@ class GatewayDelegateServiceClient:
                 or not 0 < timeout_seconds <= threading.TIMEOUT_MAX):
             raise ValueError('INVALID_DELEGATE_REQUEST')
         with self._lock:
+            execution_actor = self._execution_one_shot
+            identity_verified = False
             try:
                 row = observation.command
                 if self._actor_observations.get(row.request_key) is not observation or row.state != 'RESERVED':
                     raise ValueError
                 intent = self._host.load_delegate_intent(row.request_key)
+                if (row.request_key not in self._actor_observation_intents
+                        or self._actor_observation_intents[row.request_key] != intent):
+                    return GatewayDelegateActorReleaseResult('UNKNOWN', code='ACTOR_IDENTITY_CHANGED')
+                identity_verified = True
+                execution_actor = execution_actor or (type(intent) is GatewayDelegateIntent
+                    and type(intent.command) is GatewayDelegatedCommand and intent.command.actor_kind == 'execution')
                 payload = self._validate(intent)
+                if execution_actor:
+                    return GatewayDelegateActorReleaseResult('UNKNOWN', code='RELEASE_SOURCE_UNVERIFIED')
                 plan = GatewayDelegateActorReleaseIntent(row.request_key, operation_id, intent.command.digest,
                     row.reservation_id, row.digest, row.actor_principal, row.version)
                 existing = self._host.load_delegate_release_intent(operation_id)
@@ -620,6 +699,8 @@ class GatewayDelegateServiceClient:
                         or self._host.load_delegate_release_marker(operation_id) != marker):
                     raise ValueError
             except Exception:
+                if execution_actor or not identity_verified:
+                    return GatewayDelegateActorReleaseResult('UNKNOWN', code='RELEASE_CLAIM_UNKNOWN')
                 return GatewayDelegateActorReleaseResult('TRANSPORT_NOT_STARTED', code='RELEASE_NOT_DURABLE')
             _raw, error = self._actor_call('direct.delegate_actor_release', intent,
                 {'command': intent.command.to_mapping(), 'payload': payload, 'reservation_id': plan.reservation_id,
@@ -640,5 +721,5 @@ class GatewayDelegateServiceClient:
                 intent = self._host.load_delegate_intent(plan.request_key)
                 self._validate(intent)
             except Exception:
-                return GatewayDelegateActorReleaseResult('TRANSPORT_NOT_STARTED', code='RELEASE_PLAN_UNAVAILABLE')
+                return GatewayDelegateActorReleaseResult('UNKNOWN', code='RELEASE_PLAN_UNAVAILABLE')
             return self._release_query(intent, plan, timeout_seconds)
