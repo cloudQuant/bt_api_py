@@ -22,8 +22,10 @@ from __future__ import annotations
 
 import inspect
 import math
+import os
 import re
 import sqlite3
+import stat
 import uuid
 from collections.abc import Callable, Mapping
 from contextlib import suppress
@@ -286,6 +288,102 @@ def _set_outcome(
         with suppress(sqlite3.Error):
             connection.rollback()
         return False
+
+
+def read_notification_outcome(*, journal_path, kind, event_id, period=None):
+    """Read one journal outcome without reserving, repairing or sending.
+
+    Used by the explicit missed-notification scan. ``ABSENT`` means no row was
+    ever reserved; ``JOURNAL_INVALID`` and ``JOURNAL_UNAVAILABLE`` mean the
+    dedupe key cannot be trusted, so the caller must not send. ``IN_FLIGHT`` is
+    reported as ``UNKNOWN`` and is never treated as sent.
+    """
+    if (
+        kind not in ("manual", "auto", "simulation_coverage")
+        or type(event_id) is not str
+        or _ID.fullmatch(event_id) is None
+        or (period is not None and type(period) is not str)
+    ):
+        return {"status": "INVALID_INPUT", "journal_status": None, "period": None}
+    try:
+        path = Path(journal_path)
+        if not path.is_absolute() or not path.name or str(path) != os.path.realpath(path):
+            return {"status": "INVALID_INPUT", "journal_status": None, "period": None}
+        directory = path.parent.stat()
+        if (
+            not stat.S_ISDIR(directory.st_mode)
+            or directory.st_uid != os.geteuid()
+            or stat.S_IMODE(directory.st_mode) != 0o700
+        ):
+            return {"status": "INVALID_INPUT", "journal_status": None, "period": None}
+        try:
+            info = path.stat()
+        except FileNotFoundError:
+            return {"status": "ABSENT", "journal_status": None, "period": None}
+        if (
+            not stat.S_ISREG(info.st_mode)
+            or info.st_uid != os.geteuid()
+            or stat.S_IMODE(info.st_mode) != 0o600
+            or info.st_nlink != 1
+        ):
+            return {"status": "INVALID_INPUT", "journal_status": None, "period": None}
+        connection = sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=1.0)
+    except (OSError, sqlite3.Error):
+        return {"status": "JOURNAL_UNAVAILABLE", "journal_status": None, "period": None}
+    try:
+        connection.execute("PRAGMA query_only=ON")
+        if (
+            connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='notifications'"
+            ).fetchone()
+            is None
+        ):
+            return {"status": "ABSENT", "journal_status": None, "period": None}
+        schema = connection.execute("PRAGMA table_info(notifications)").fetchall()
+        expected = [
+            ("kind", 1),
+            ("scope_id", 2),
+            ("event_id", 3),
+            ("period", 4),
+            ("owner", 0),
+            ("status", 0),
+        ]
+        if (
+            len(schema) != len(expected)
+            or [(row[1], row[5]) for row in schema] != expected
+            or any(row[2].upper() != "TEXT" or row[3] != 1 for row in schema)
+            or connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='trigger' AND "
+                "tbl_name='notifications' LIMIT 1"
+            ).fetchone()
+        ):
+            return {"status": "JOURNAL_INVALID", "journal_status": None, "period": None}
+        if period is None:
+            rows = connection.execute(
+                "SELECT period,status FROM notifications WHERE kind=? AND event_id=?",
+                (kind, event_id),
+            ).fetchall()
+        else:
+            rows = connection.execute(
+                "SELECT period,status FROM notifications WHERE kind=? AND event_id=? "
+                "AND period=?",
+                (kind, event_id, period),
+            ).fetchall()
+    except sqlite3.Error:
+        return {"status": "JOURNAL_UNAVAILABLE", "journal_status": None, "period": None}
+    finally:
+        connection.close()
+    if not rows:
+        return {"status": "ABSENT", "journal_status": None, "period": None}
+    if len(rows) != 1 or type(rows[0][1]) is not str or rows[0][1] not in _OUTCOMES:
+        return {"status": "JOURNAL_INVALID", "journal_status": None, "period": None}
+    outcome = "UNKNOWN" if rows[0][1] == "IN_FLIGHT" else rows[0][1]
+    return {
+        "status": "AVAILABLE",
+        "journal_status": rows[0][1],
+        "outcome": outcome,
+        "period": rows[0][0],
+    }
 
 
 def notify_calendar_event(

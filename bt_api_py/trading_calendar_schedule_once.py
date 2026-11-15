@@ -3,6 +3,11 @@
 Local records, IDs and clocks are unauthenticated. This module requires a trusted,
 cooperating local POSIX filesystem; hostile replacement, whole-root rollback and
 power-loss durability are not established. It never retries an uncertain batch.
+
+Read-only actions reuse the same evidence: ``inspect-active`` finds one pending
+review, ``scan-publications`` enumerates effective terminal committed
+publications, and ``check-health`` compares the two most recent store trading
+days with successful update-check records. None of them authorizes trading.
 """
 
 from __future__ import annotations
@@ -94,6 +99,11 @@ _LEDGER_DDL = (
 _LEDGER_SCHEMAS = {_LEDGER_SCHEMA_V1: _LEDGER_DDL_V1, _LEDGER_SCHEMA: _LEDGER_DDL}
 _DISPOSITION = "bt_api.calendar-schedule-once-disposition/1"
 _STALE_OUTCOME = "STALE_REVIEW_CLOSED"
+_HEALTH_VENUES = frozenset({"SHFE", "INE", "CZCE", "DCE", "CFFEX", "GFEX"})
+_HEALTH_THRESHOLD = 2
+_HEALTH_MAX_TRADING_DAYS = 40000
+_HEALTH_SUCCESS_OUTCOMES = frozenset({"COMMITTED", "SAME"})
+_PUBLICATION_SCAN_LIMIT = 64
 
 
 def _now_utc():
@@ -2365,13 +2375,13 @@ def inspect_active(*, root, filesystem):
                     raise ValueError("active review result unavailable")
                 policy_changed = False
                 if expected_proof is not None:
+                    if not _review_not_started(root, pending["identity_bundle"]["review_id"]):
+                        raise ValueError("original review already started")
                     if (
                         _batch_proof(pending, returned[0], allow_review=True, locked=(fd, chain))
                         != expected_proof
                     ):
                         raise ValueError("original review proof changed")
-                    if not _review_not_started(root, pending["identity_bundle"]["review_id"]):
-                        raise ValueError("original review already started")
                     policy_changed = _check_review_policy_locked(store, pending, returned[0])
                 return row, returned, policy_changed
 
@@ -2386,13 +2396,36 @@ def inspect_active(*, root, filesystem):
             }
         row, returned, _ = original
         original_operation_id = row[0]["operation_id"]
-        proof = _batch_proof(row[0], returned[0], allow_review=True)
+
+        def review_started():
+            return {
+                **LABEL,
+                "status": "UNKNOWN",
+                "reason": "ORIGINAL_REVIEW_STARTED_OR_COMPLETED",
+                "operation_id": row[0]["operation_id"],
+                "identity_bundle": row[0]["identity_bundle"],
+                "notification_authorization": "NOT_PROVEN",
+                "state_freshness": "NOT_GUARANTEED_AFTER_LOCK_RELEASE",
+            }
+
+        try:
+            proof = _batch_proof(row[0], returned[0], allow_review=True)
+        except ValueError:
+            if not _review_not_started(root, row[0]["identity_bundle"]["review_id"]):
+                return review_started()
+            raise
         if (
             proof.get("kind") != "PENDING_REVIEW"
             or proof.get("review_payload_sha256") != returned[0]["review_payload_sha256"]
         ):
             raise ValueError("original review evidence unavailable")
-        verified = snapshot(expected_proof=proof)
+        verified = None
+        try:
+            verified = snapshot(expected_proof=proof)
+        except ValueError as exc:
+            if str(exc) != "original review already started":
+                raise
+            return review_started()
         if verified is None or verified[:2] != original[:2]:
             raise ValueError("original active operation changed")
         if verified[2]:
@@ -2497,6 +2530,267 @@ def reconcile(*, root, operation_id, filesystem):
         }
 
 
+def scan_publications(*, root, filesystem, limit=_PUBLICATION_SCAN_LIMIT):
+    """Read-only enumeration of effective terminal COMMITTED publications.
+
+    ``SAME`` operations are excluded because no new summary was produced. The
+    scan is bounded; reaching the bound or failing to revalidate any row is
+    reported as INCOMPLETE so missed notifications are never silently dropped.
+    """
+    if not _SUPPORTED_PLATFORM:
+        return {**LABEL, "status": "UNKNOWN", "reason": "UNSUPPORTED_FILESYSTEM"}
+    if (
+        filesystem != FS
+        or type(limit) is not int
+        or not 1 <= limit <= 256
+    ):
+        return {**LABEL, "status": "UNKNOWN", "reason": "INVALID_INPUT"}
+    operations = []
+    unverified = 0
+    truncated = False
+    try:
+        with _store_lock(root, readonly=True) as (_, fd, chain, _):  # noqa: SIM117
+            with _ledger(root, fd, chain, readonly=True) as db:
+                rows = db.execute(
+                    "SELECT operation_id FROM operations WHERE state='TERMINAL' "
+                    "AND effective=1 ORDER BY requested_date, operation_id LIMIT ?",
+                    (limit + 1,),
+                ).fetchall()
+                if len(rows) > limit:
+                    truncated = True
+                    rows = rows[:limit]
+                for (operation_id,) in rows:
+                    try:
+                        row = _ledger_row(db, operation_id, root)
+                        if row[2] != "TERMINAL" or row[5] != 1:
+                            raise ValueError("publication not effective terminal")
+                        _, completed = _verify_terminal_files(
+                            db, fd, chain, root, operation_id
+                        )
+                        if completed is None:
+                            raise ValueError("publication has no date index")
+                        terminal = completed[0]
+                        if terminal["outcome"] != "COMMITTED":
+                            continue
+                        ids = row[0]["identity_bundle"]
+                        operations.append(
+                            {
+                                "operation_id": operation_id,
+                                "requested_date": row[0]["requested_date"],
+                                "run_id": ids["run_id"],
+                                "candidate_id": ids["candidate_id"],
+                                "publication_id": ids["publication_id"],
+                                "terminal_sha256": row[4],
+                                "batch_status": terminal["batch_status"],
+                            }
+                        )
+                    except Exception:
+                        unverified += 1
+    except Exception:
+        return {**LABEL, "status": "UNKNOWN", "reason": "PUBLICATION_SCAN_UNAVAILABLE"}
+    complete = not truncated and unverified == 0
+    return {
+        **LABEL,
+        "status": "VISIBLE_UNAUTHENTICATED" if complete else "INCOMPLETE",
+        "reason": "PUBLICATION_SCAN_COMPLETE"
+        if complete
+        else "PUBLICATION_SCAN_LIMIT_REACHED"
+        if truncated
+        else "PUBLICATION_EVIDENCE_UNAVAILABLE",
+        "operations": operations,
+        "unverified": unverified,
+        "scan_limit": limit,
+        "state_freshness": "NOT_GUARANTEED_AFTER_LOCK_RELEASE",
+    }
+
+
+def _store_trading_days(content, venue):
+    """Return ordered open days for one venue from the store snapshot only."""
+    layer = content.get("trading_days") if type(content) is dict else None
+    if (
+        type(layer) is not list
+        or not layer
+        or len(layer) > _HEALTH_MAX_TRADING_DAYS
+    ):
+        raise ValueError("unsupported trading-day layer")
+    days = []
+    seen = set()
+    for row in layer:
+        if (
+            type(row) is not dict
+            or set(row) != {"venue", "day", "status", "source_ids"}
+            or row["venue"] not in _HEALTH_VENUES
+            or row["status"] not in {"open", "closed"}
+            or type(row["day"]) is not str
+        ):
+            raise ValueError("unsupported trading-day row")
+        try:
+            day = date.fromisoformat(row["day"])
+        except ValueError:
+            raise ValueError("invalid trading day") from None
+        if day.isoformat() != row["day"] or (row["venue"], row["day"]) in seen:
+            raise ValueError("invalid trading day")
+        seen.add((row["venue"], row["day"]))
+        if row["venue"] == venue and row["status"] == "open":
+            days.append(day)
+    return tuple(sorted(days))
+
+
+def _health_operation(db, fd, chain, root, operation_id):
+    """Classify one effective operation as a successful or failed update check."""
+    row = _ledger_row(db, operation_id, root)
+    if row[2] != "TERMINAL":
+        return "NO_SUCCESS", "CHECK_NOT_TERMINAL", {"operation_state": row[2]}
+    if row[5] != 1:
+        return "NO_SUCCESS", "NON_EFFECTIVE_OPERATION", {"operation_state": row[2]}
+    _, completed = _verify_terminal_files(db, fd, chain, root, operation_id)
+    if completed is None:
+        return "NO_SUCCESS", "NON_EFFECTIVE_OPERATION", {"operation_state": row[2]}
+    terminal = completed[0]
+    detail = {
+        "operation_state": row[2],
+        "outcome": terminal["outcome"],
+        "batch_status": terminal["batch_status"],
+    }
+    if (
+        terminal["outcome"] in _HEALTH_SUCCESS_OUTCOMES
+        and terminal["batch_status"] == "COMPLETE"
+    ):
+        return "SUCCESS", "CHECK_SUCCEEDED", detail
+    if terminal["batch_status"] == "PARTIAL":
+        return "NO_SUCCESS", "PARTIAL_CHECK", detail
+    return "NO_SUCCESS", "CHECK_NO_SUCCESS", detail
+
+
+def _health_day(db, fd, chain, root, day):
+    listed = db.execute(
+        "SELECT operation_id FROM operations WHERE requested_date=? AND effective=1 "
+        "ORDER BY operation_id",
+        (day.isoformat(),),
+    ).fetchall()
+    if not listed:
+        return {
+            "day": day.isoformat(),
+            "status": "NO_SUCCESS",
+            "reason_codes": ["NO_CHECK_RECORD"],
+            "operations": [],
+        }
+    statuses = []
+    reasons = []
+    operations = []
+    for (operation_id,) in listed:
+        try:
+            status, reason, detail = _health_operation(db, fd, chain, root, operation_id)
+        except Exception:
+            status, reason, detail = "UNKNOWN", "CHECK_EVIDENCE_UNAVAILABLE", {}
+        statuses.append(status)
+        reasons.append(reason)
+        operations.append({"operation_id": operation_id, "status": status, **detail})
+    if "SUCCESS" in statuses:
+        status, reason_codes = "SUCCESS", ["CHECK_SUCCEEDED"]
+    elif "UNKNOWN" in statuses:
+        status, reason_codes = "UNKNOWN", sorted(set(reasons))
+    else:
+        status, reason_codes = "NO_SUCCESS", sorted(set(reasons))
+    return {
+        "day": day.isoformat(),
+        "status": status,
+        "reason_codes": reason_codes,
+        "operations": operations,
+    }
+
+
+def inspect_check_health(
+    *, root, venue, as_of_date=None, filesystem, threshold=_HEALTH_THRESHOLD
+):
+    """Report whether the last two trading days lacked a successful update check.
+
+    Trading days come from the calendar store's CURRENT snapshot, not wall-clock
+    weekdays; the caller-declared date or the unverified local clock bounds the
+    window. Read-only, unauthenticated local evidence; a warning is not a
+    trading prohibition.
+    """
+    if not _SUPPORTED_PLATFORM:
+        return {**LABEL, "status": "UNKNOWN", "reason": "UNSUPPORTED_FILESYSTEM"}
+    if (
+        filesystem != FS
+        or venue not in _HEALTH_VENUES
+        or threshold != _HEALTH_THRESHOLD
+        or (as_of_date is not None and type(as_of_date) is not date)
+    ):
+        return {**LABEL, "status": "UNKNOWN", "reason": "INVALID_INPUT"}
+    as_of_source = "CALLER_DECLARED"
+    try:
+        if as_of_date is None:
+            instant = _now_utc()
+            if (
+                type(instant) is not datetime
+                or instant.tzinfo is None
+                or instant.utcoffset() != UTC.utcoffset(instant)
+            ):
+                raise ValueError("clock declaration unavailable")
+            as_of_date = instant.astimezone(ZoneInfo("Asia/Shanghai")).date()
+            as_of_source = "LOCAL_CLOCK_UNVERIFIED"
+        current = TradingCalendarStore(root).read_current()
+        trading_days = _store_trading_days(current.content, venue)
+    except Exception:
+        return {
+            **LABEL,
+            "status": "UNKNOWN",
+            "reason": "CHECK_HISTORY_UNAVAILABLE",
+            "venue": venue,
+            "as_of_date": as_of_date.isoformat() if type(as_of_date) is date else None,
+        }
+    window = tuple(day for day in trading_days if day <= as_of_date)
+    if len(window) < threshold:
+        return {
+            **LABEL,
+            "status": "UNKNOWN",
+            "reason": "INSUFFICIENT_TRADING_DAYS",
+            "venue": venue,
+            "as_of_date": as_of_date.isoformat(),
+            "as_of_source": as_of_source,
+            "threshold": threshold,
+            "trading_days": [day.isoformat() for day in window],
+            "days": [],
+        }
+    window = window[-threshold:]
+    try:
+        with _store_lock(root, readonly=True) as (_, fd, chain, _):  # noqa: SIM117
+            with _ledger(root, fd, chain, readonly=True) as db:
+                days = [_health_day(db, fd, chain, root, day) for day in window]
+    except Exception:
+        return {
+            **LABEL,
+            "status": "UNKNOWN",
+            "reason": "CHECK_HISTORY_UNAVAILABLE",
+            "venue": venue,
+            "as_of_date": as_of_date.isoformat(),
+            "as_of_source": as_of_source,
+            "threshold": threshold,
+            "trading_days": [day.isoformat() for day in window],
+            "days": [],
+        }
+    if any(row["status"] == "UNKNOWN" for row in days):
+        status, reason = "UNKNOWN", "CHECK_HISTORY_UNCERTAIN"
+    elif all(row["status"] == "NO_SUCCESS" for row in days):
+        status, reason = "WARNING", "TWO_CONSECUTIVE_TRADING_DAYS_NO_SUCCESS"
+    else:
+        status, reason = "OK", "WITHIN_THRESHOLD"
+    return {
+        **LABEL,
+        "status": status,
+        "reason": reason,
+        "venue": venue,
+        "as_of_date": as_of_date.isoformat(),
+        "as_of_source": as_of_source,
+        "threshold": threshold,
+        "trading_days": [day.isoformat() for day in window],
+        "days": days,
+        "state_freshness": "NOT_GUARANTEED_AFTER_LOCK_RELEASE",
+    }
+
+
 class _Parser(argparse.ArgumentParser):
     def error(self, message):
         raise ValueError("invalid arguments")
@@ -2505,21 +2799,65 @@ class _Parser(argparse.ArgumentParser):
 def main(argv=None):
     parser = _Parser(description=__doc__)
     parser.add_argument(
-        "--action", choices=("run", "inspect", "inspect-active", "reconcile"), default="run"
+        "--action",
+        choices=(
+            "run",
+            "inspect",
+            "inspect-active",
+            "reconcile",
+            "scan-publications",
+            "check-health",
+        ),
+        default="run",
     )
     parser.add_argument("--config")
     parser.add_argument("--root")
     parser.add_argument("--operation-id")
+    parser.add_argument("--venue")
+    parser.add_argument("--as-of-date")
     parser.add_argument("--trusted-local-posix", action="store_true", required=True)
     try:
         args = parser.parse_args(argv)
         if args.action == "run":
-            if not args.config or args.root or args.operation_id:
+            if (
+                not args.config
+                or args.root
+                or args.operation_id
+                or args.venue
+                or args.as_of_date
+            ):
                 parser.error("invalid arguments")
-        elif args.action == "inspect-active":
-            if not args.root or args.config is not None or args.operation_id is not None:
+        elif args.action in ("inspect-active", "scan-publications"):
+            if (
+                not args.root
+                or args.config is not None
+                or args.operation_id is not None
+                or args.venue
+                or args.as_of_date
+            ):
                 parser.error("invalid arguments")
-        elif args.config or not args.root or not args.operation_id:
+        elif args.action == "check-health":
+            if (
+                not args.root
+                or args.venue not in _HEALTH_VENUES
+                or args.config is not None
+                or args.operation_id is not None
+            ):
+                parser.error("invalid arguments")
+            if args.as_of_date is not None:
+                try:
+                    parsed = date.fromisoformat(args.as_of_date)
+                except ValueError:
+                    parser.error("invalid arguments")
+                if parsed.isoformat() != args.as_of_date:
+                    parser.error("invalid arguments")
+        elif (
+            args.config
+            or not args.root
+            or not args.operation_id
+            or args.venue
+            or args.as_of_date
+        ):
             parser.error("invalid arguments")
     except ValueError:
         parser.exit(2, "invalid arguments\n")
@@ -2528,6 +2866,17 @@ def main(argv=None):
             result = run_once(config_file=args.config, filesystem=FS)
         elif args.action == "inspect-active":
             result = inspect_active(root=args.root, filesystem=FS)
+        elif args.action == "scan-publications":
+            result = scan_publications(root=args.root, filesystem=FS)
+        elif args.action == "check-health":
+            result = inspect_check_health(
+                root=args.root,
+                venue=args.venue,
+                as_of_date=(
+                    None if args.as_of_date is None else date.fromisoformat(args.as_of_date)
+                ),
+                filesystem=FS,
+            )
         else:
             operation = inspect if args.action == "inspect" else reconcile
             result = operation(root=args.root, operation_id=args.operation_id, filesystem=FS)
@@ -2538,6 +2887,12 @@ def main(argv=None):
         print(json.dumps(outcome, sort_keys=True, ensure_ascii=True), flush=True)
         return 130
     print(json.dumps(result, sort_keys=True, ensure_ascii=True), flush=True)
+    if args.action == "scan-publications":
+        return 0 if result.get("status") == "VISIBLE_UNAUTHENTICATED" else (
+            10 if result.get("status") == "INCOMPLETE" else 25
+        )
+    if args.action == "check-health":
+        return {"OK": 0, "WARNING": 10}.get(result.get("status"), 25)
     return (
         0
         if result.get("status")

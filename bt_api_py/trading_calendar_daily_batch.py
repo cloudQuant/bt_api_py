@@ -13,7 +13,7 @@ import re
 import time
 import uuid
 from dataclasses import asdict
-from datetime import date
+from datetime import UTC, date, datetime
 
 from bt_api_py import trading_calendar_detail_collection as storage
 from bt_api_py import trading_calendar_mixed_publication as mixed_publication
@@ -26,12 +26,194 @@ from bt_api_py.trading_calendar_store import TradingCalendarStore, _scope_key
 
 FS = runs.TRUSTED_LOCAL_POSIX
 LABEL = {"environment": "SIMULATION_ONLY", "source_authentication": "NOT_PROVEN"}
+_FETCH_RETRY_LIMIT = 3
+# A refused claim left no descriptor, intent or result; retrying the same
+# observation ID is safe only after a read-back proves that nothing was written.
+_TRANSIENT_FETCH_REASONS = frozenset({"CLAIM_UNCERTAIN"})
+_TRANSIENT_FETCH_EXCEPTIONS = (TimeoutError, ConnectionError)
+_UNKNOWN_FETCH_STATES = frozenset({"UNKNOWN", "ATTEMPT_UNKNOWN", "COMMIT_UNKNOWN"})
+_ATTEMPT_LABEL = {
+    "attempt": 0,
+    "at": "",
+    "outcome": "",
+    "reason": "",
+}
 
 
 class ScopeIndexPendingError(ValueError):
     def __init__(self, batch_id):
         super().__init__("scope index reconciliation pending")
         self.batch_id = batch_id
+
+
+def _now_utc():
+    return datetime.now(UTC)
+
+
+def _retry_policy(value):
+    """Return the bounded attempt count; ``None`` selects the documented default."""
+    if value is None:
+        return 2
+    if type(value) is not int or not 1 <= value <= _FETCH_RETRY_LIMIT:
+        raise ValueError("invalid fetch retry policy")
+    return value
+
+
+def _unknown_fetch_result(reason):
+    """Closed-shape result for an attempt that never produced a classifier input."""
+    return {
+        "observation_state": "UNKNOWN",
+        "observation_status": "UNKNOWN",
+        "projection_state": "UNKNOWN",
+        "reason": reason,
+    }
+
+
+def _classify_fetch(value, unused):
+    """Classify one AKShare observation attempt for retry safety.
+
+    Only a documented transient that provably left no local record may be
+    repeated; unknown or committed outcomes are never retried.
+    """
+    if type(value) is not dict:
+        return "UNKNOWN_OUTCOME", "NON_RESULT"
+    if (
+        value.get("descriptor_state") == "NOT_ATTEMPTED"
+        and value.get("observation_state") == "NOT_ATTEMPTED"
+        and value.get("reason") in _TRANSIENT_FETCH_REASONS
+    ):
+        if unused():
+            return "TRANSIENT_PRECOMMIT", value["reason"]
+        return "NOT_RETRIABLE", "PRECOMMIT_NOT_PROVEN"
+    if (
+        value.get("observation_state") in _UNKNOWN_FETCH_STATES
+        or value.get("descriptor_state") in _UNKNOWN_FETCH_STATES
+    ):
+        return "UNKNOWN_OUTCOME", "OUTCOME_UNKNOWN"
+    return "NOT_RETRIABLE", "DEFINITE_OR_UNCLASSIFIED"
+
+
+def _fetch_with_retry(*, fetch, max_attempts, unused):
+    """Run the source fetch at most ``max_attempts`` times; fail closed.
+
+    Returns ``(value, attempts, outcome)``. Every attempt records an attempt
+    number, a local unverified-clock timestamp, an outcome and a reason code.
+    Unknown outcomes and committed records are returned untouched.
+    """
+    if type(max_attempts) is not int or not 1 <= max_attempts <= _FETCH_RETRY_LIMIT:
+        raise ValueError("invalid fetch retry policy")
+    attempts = []
+    value = None
+    while len(attempts) < max_attempts:
+        attempt = len(attempts) + 1
+        stamp = _now_utc().isoformat(timespec="microseconds").replace("+00:00", "Z")
+        try:
+            value = fetch()
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except BaseException as exc:
+            proven = isinstance(exc, _TRANSIENT_FETCH_EXCEPTIONS) and bool(unused())
+            attempts.append(
+                {
+                    **_ATTEMPT_LABEL,
+                    "attempt": attempt,
+                    "at": stamp,
+                    "outcome": "TRANSIENT_PRECOMMIT" if proven else "UNKNOWN_OUTCOME",
+                    "reason": (
+                        type(exc).__name__ if proven else "UNEXPECTED_EXCEPTION"
+                    ),
+                }
+            )
+            if proven and attempt < max_attempts:
+                continue
+            return (
+                _unknown_fetch_result("FETCH_OUTCOME_UNKNOWN"),
+                attempts,
+                "TRANSIENT_EXHAUSTED" if proven else "UNKNOWN_OUTCOME",
+            )
+        outcome, reason = _classify_fetch(value, unused)
+        attempts.append(
+            {
+                **_ATTEMPT_LABEL,
+                "attempt": attempt,
+                "at": stamp,
+                "outcome": outcome,
+                "reason": reason,
+            }
+        )
+        if outcome == "TRANSIENT_PRECOMMIT":
+            if attempt < max_attempts:
+                continue
+            return value, attempts, "TRANSIENT_EXHAUSTED"
+        return value, attempts, outcome
+    return (_unknown_fetch_result("FETCH_OUTCOME_UNKNOWN"), attempts, "UNKNOWN_OUTCOME")
+
+
+def _retry_summary(records, max_attempts):
+    """Aggregate per-scope attempt metadata for the caller-facing result."""
+    return {
+        "max_attempts": max_attempts,
+        "retried": sum(1 for item in records if len(item["attempts"]) > 1),
+        "outcome_unknown": sum(1 for item in records if item["outcome"] == "UNKNOWN_OUTCOME"),
+        "exhausted": sum(1 for item in records if item["outcome"] == "TRANSIENT_EXHAUSTED"),
+        "attempts": records,
+        "clock": "LOCAL_CLOCK_UNVERIFIED",
+    }
+
+
+def _record_fetch_retry(root, batch_id, records, max_attempts):
+    """Persist attempt count, reason codes and timestamps outside the fixed evidence schema.
+
+    The batch evidence row shape is a frozen contract; attempts live in their own
+    unauthenticated local record. A failed write is reported, never assumed.
+    """
+    body = {
+        "schema": "bt_api.calendar-daily-batch-fetch-retry/1",
+        **LABEL,
+        "batch_id": batch_id,
+        "max_attempts": max_attempts,
+        "scopes": records,
+        "clock": "LOCAL_CLOCK_UNVERIFIED",
+    }
+    name = f"mock-daily-batch-fetch-retry-{batch_id}.json"
+    try:
+        state, _ = _write(root, name, body)
+    except Exception:
+        try:
+            existing = _read(root, name)
+        except Exception:
+            return "UNKNOWN"
+        if existing is None or existing[0] != body:
+            return "UNKNOWN"
+        return "VISIBLE_UNAUTHENTICATED"
+    return "VISIBLE_UNAUTHENTICATED" if state == "COMMITTED" else "UNKNOWN"
+
+
+def _observation_id_unused(root, observation_id):
+    """Prove that no descriptor, intent or result exists for this attempt ID."""
+    from bt_api_py import trading_calendar_akshare_observation as observation
+
+    try:
+        if _read(root, f"mock-akshare-{observation_id}.json") is not None:
+            return False
+        try:
+            fds, chain = observation._open(root, False)
+        except FileNotFoundError:
+            # No observation directory means no intent or result can be present.
+            return True
+        except Exception:
+            return False
+        try:
+            return all(
+                storage._read(fds[-1], chain, name, observation._LIMIT) is None
+                for name in (f"intent-{observation_id}.json", f"result-{observation_id}.json")
+            )
+        except Exception:
+            return False
+        finally:
+            runs._close(fds)
+    except Exception:
+        return False
 
 
 def scope_sha256(scope):
@@ -162,6 +344,7 @@ def run(
     budget_seconds=600,
     identity_bundle=None,
     requested_date=None,
+    fetch_retry=None,
 ):
     """Capture scopes once; an explicit date is caller-declared Asia/Shanghai, not effective date.
 
@@ -172,7 +355,16 @@ def run(
     ``(venue, kind, product, mock_contract, valid_from, valid_to)`` target key.
     Pass the caller's already captured local date as ``requested_date``. A
     committed identity reserves observation IDs only; it authenticates no source.
+
+    ``fetch_retry`` bounds the per-scope AKShare attempt count (1-3; ``None``
+    keeps the default of two). Only a documented transient that a read-back
+    proves left no descriptor, intent or result is repeated; unknown or
+    committed outcomes are never retried and stay UNKNOWN.
     """
+    try:
+        fetch_attempts = _retry_policy(fetch_retry)
+    except ValueError:
+        return {**LABEL, "status": "NOT_COMMITTED", "reason": "INVALID_FETCH_RETRY"}
     explicit = identity_bundle is not None or requested_date is not None
     if explicit:
         try:
@@ -503,7 +695,22 @@ def run(
             raise
 
     def work(*, operator, derived_id, binding, ids, result):
-        records, templates, captures = [], [], []
+        records, templates, captures, retry_records = [], [], [], []
+
+        def retry_report():
+            summary = _retry_summary(retry_records, fetch_attempts)
+            if any(
+                len(item["attempts"]) > 1
+                or item["outcome"] in {"UNKNOWN_OUTCOME", "TRANSIENT_EXHAUSTED"}
+                for item in retry_records
+            ):
+                summary["record"] = _record_fetch_retry(
+                    root, batch_id, retry_records, fetch_attempts
+                )
+            else:
+                summary["record"] = "NOT_NECESSARY"
+            return summary
+
         try:
             if _baseline(operator) != (baseline, policy):
                 return {
@@ -540,17 +747,18 @@ def run(
                     "kind": "future",
                     "timeout": scope["timeout"],
                 }
-                try:
-                    mixed_publication._batch_intent(root, batch_id, intent_sha)
-                except Exception:
-                    fetched = {
-                        "observation_state": "NOT_ATTEMPTED",
-                        "observation_status": "NOT_ATTEMPTED",
-                        "projection_state": "NOT_ATTEMPTED",
-                        "reason": "BATCH_INTENT_UNAVAILABLE",
-                    }
-                else:
-                    fetched = akshare.observe_once(
+
+                def fetch_once(oid=oid, request=request, index=index):
+                    try:
+                        mixed_publication._batch_intent(root, batch_id, intent_sha)
+                    except Exception:
+                        return {
+                            "observation_state": "NOT_ATTEMPTED",
+                            "observation_status": "NOT_ATTEMPTED",
+                            "projection_state": "NOT_ATTEMPTED",
+                            "reason": "BATCH_INTENT_UNAVAILABLE",
+                        }
+                    return akshare.observe_once(
                         root=root,
                         run_id=new_run,
                         observation_id=oid,
@@ -572,6 +780,12 @@ def run(
                             else {}
                         ),
                     )
+
+                fetched, retry_attempts, retry_outcome = _fetch_with_retry(
+                    fetch=fetch_once,
+                    max_attempts=fetch_attempts,
+                    unused=lambda oid=oid: _observation_id_unused(root, oid),
+                )
                 row = {
                     "observation_id": oid,
                     "source_type": "AKSHARE",
@@ -588,6 +802,16 @@ def run(
                     "projection_state": fetched.get("projection_state", "UNKNOWN"),
                     "reason": fetched.get("reason", "NONE"),
                 }
+                retry_records.append(
+                    {
+                        "observation_id": oid,
+                        "venue": scope["target"]["venue"],
+                        "contract": scope["contract"],
+                        "max_attempts": fetch_attempts,
+                        "attempts": retry_attempts,
+                        "outcome": retry_outcome,
+                    }
+                )
                 records.append(row)
                 captures.append(fetched.get("observation_result", {}))
                 if explicit and (
@@ -604,6 +828,7 @@ def run(
                         "batch_id": batch_id,
                         "observations": records,
                         "publication": "NOT_ATTEMPTED",
+                        "fetch_retry": retry_report(),
                     }
                 if (
                     row["observation_state"] != "COMMITTED"
@@ -783,6 +1008,7 @@ def run(
                     "publication": "NOT_ATTEMPTED",
                     "fallback": "EXISTING_CURRENT_NOT_REPLACED_BY_THIS_RUN",
                     "scope_checks": checks,
+                    "fetch_retry": retry_report(),
                 }
             if _baseline(operator) != (baseline, policy):
                 return {
@@ -826,6 +1052,7 @@ def run(
                 "batch_status": "PARTIAL" if partial else "COMPLETE",
                 "scope_checks": checks,
                 "date_role": "REQUEST_DATE_NOT_EFFECTIVE_DATE",
+                "fetch_retry": retry_report(),
             }
         except (KeyboardInterrupt, SystemExit):
             raise

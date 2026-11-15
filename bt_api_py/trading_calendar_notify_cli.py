@@ -13,7 +13,11 @@ or authenticated clock proof; without it the clock remains UNKNOWN. SMTP server
 acceptance is never represented as mailbox delivery.
 
 An explicitly supplied schedule operation ID can select its original automatic
-publication. This does not scan history or discover missed notifications.
+publication. ``--scan-missed`` is the explicit idempotent alternative: it scans
+the schedule-owned pending review and effective terminal automatic publications,
+dedupes by original review/publication ID and Beijing natural day through the
+journal, and reports send failures and unknown results separately. It never
+marks an unknown outcome as sent and does not resend one.
 """
 
 from __future__ import annotations
@@ -25,6 +29,7 @@ import math
 import os
 import re
 import stat
+import sys
 from contextlib import contextmanager
 from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
@@ -37,6 +42,7 @@ from bt_api_py.trading_calendar_notifications import (
     _config_complete,
     _period,
     notify_calendar_event,
+    read_notification_outcome,
     send_via_base,
 )
 
@@ -1110,10 +1116,343 @@ class _Parser(argparse.ArgumentParser):
         raise ValueError("invalid arguments")
 
 
+_SENT_OUTCOMES = frozenset({"ACCEPTED"})
+_FAILED_OUTCOMES = frozenset({"PARTIAL_REFUSAL", "REFUSED"})
+
+
+def _scan_classify(probe):
+    """Map one read-only journal probe to a scan decision."""
+    if probe["status"] == "ABSENT":
+        return "DUE", None
+    if probe["status"] != "AVAILABLE":
+        return "RESULT_UNKNOWN", probe["status"]
+    outcome = probe["outcome"]
+    if outcome in _SENT_OUTCOMES:
+        return "ALREADY_SENT", outcome
+    if outcome in _FAILED_OUTCOMES:
+        return "SEND_FAILED", outcome
+    if outcome == "UNKNOWN":
+        return "RESULT_UNKNOWN", outcome
+    if outcome == "NOT_SENT":
+        return "DUE", outcome
+    return "RESULT_UNKNOWN", probe["status"]
+
+
+def _scan_send_classify(result):
+    """Map one explicit send result without ever treating UNKNOWN as sent."""
+    if result.status == "ACCEPTED" or (
+        result.status == "DUPLICATE" and result.journal_status == "ACCEPTED"
+    ):
+        return "SENT", result.reason
+    if result.status in _FAILED_OUTCOMES:
+        return "SEND_FAILED", result.status
+    if result.status in ("UNKNOWN", "DUPLICATE"):
+        return "RESULT_UNKNOWN", result.journal_status or result.status
+    if result.status == "NOT_SENT":
+        return "SKIPPED", result.reason
+    if result.status == "DRY_RUN_ELIGIBLE":
+        return "DUE", result.reason
+    return "RESULT_UNKNOWN", result.status
+
+
+def scan_missed(
+    *,
+    root,
+    config=None,
+    journal_path=None,
+    dry_run=False,
+    sender=None,
+    clock_instant=None,
+    clock_error_bound=None,
+    clock_evidence="UNKNOWN",
+    clock_source=None,
+    config_guard=None,
+    limit=64,
+):
+    """Scan durable state and explicitly resend unconfirmed notifications.
+
+    The scan is read-only apart from the explicit send it performs. It enumerates
+    the schedule-owned pending review (a reminder keyed by review ID and Beijing
+    day) and effective terminal automatic publications (a summary keyed by
+    publication ID). Completion, candidate invalidation or a switch away from the
+    manual policy suppresses a pending reminder. Send failures and unknown results
+    are reported in separate buckets; an unknown journal outcome is never resent
+    and never reported as sent. All evidence is unauthenticated local state.
+    """
+    report = {
+        "environment": "SIMULATION_ONLY",
+        "source_authentication": "NOT_PROVEN",
+        "delivery": "NOT_PROVEN",
+        "clock_evidence": clock_evidence,
+        "dedupe": "ORIGINAL_ID_AND_BEIJING_DAY",
+        "pending_review": None,
+        "publications": [],
+        "publication_scan": {"status": "NOT_RUN", "reason": "NOT_RUN"},
+        "send_failures": [],
+        "result_unknown": [],
+        "counts": {
+            "due": 0,
+            "sent": 0,
+            "already_sent": 0,
+            "skipped": 0,
+            "send_failed": 0,
+            "result_unknown": 0,
+        },
+        "status": "UNKNOWN",
+        "reason": "SCAN_UNAVAILABLE",
+    }
+    if not _SUPPORTED_PLATFORM:
+        return {
+            **report,
+            "status": "UNKNOWN",
+            "reason": "UNSUPPORTED_FILESYSTEM",
+        }
+    if type(limit) is not int or not 1 <= limit <= 256:
+        return {**report, "status": "UNKNOWN", "reason": "INVALID_INPUT"}
+    from bt_api_py import trading_calendar_schedule_once as schedule
+
+    if clock_source is not None:
+        clock_instant = clock_source()
+    period = _period(clock_instant, clock_error_bound)
+    manual_ready = clock_evidence == "PROVEN" and period is not None
+    constants = {
+        "root": root,
+        "config": config,
+        "journal_path": journal_path,
+        "sender": sender,
+        "clock_instant": clock_instant,
+        "clock_error_bound": clock_error_bound,
+        "clock_evidence": clock_evidence,
+        "clock_source": clock_source,
+        "config_guard": config_guard,
+    }
+
+    def journal(kind, event_id, row_period):
+        if journal_path is None:
+            absent = {"status": "ABSENT", "journal_status": None, "period": None}
+            return absent if dry_run else {**absent, "status": "JOURNAL_UNAVAILABLE"}
+        try:
+            return read_notification_outcome(
+                journal_path=journal_path, kind=kind, event_id=event_id, period=row_period
+            )
+        except Exception:
+            return {"status": "JOURNAL_UNAVAILABLE", "journal_status": None, "period": None}
+
+    def account(
+        kind, operation_id, event_id, dedupe_key, status, reason, outcome, candidate_id=None
+    ):
+        counts = report["counts"]
+        if status == "DUE":
+            counts["due"] += 1
+        elif status == "SENT":
+            counts["sent"] += 1
+        elif status == "ALREADY_SENT":
+            counts["already_sent"] += 1
+        elif status == "SEND_FAILED":
+            counts["send_failed"] += 1
+        elif status == "RESULT_UNKNOWN":
+            counts["result_unknown"] += 1
+        else:
+            counts["skipped"] += 1
+        entry = {
+            "kind": kind,
+            "operation_id": operation_id,
+            "candidate_id": candidate_id,
+            "event_id": event_id,
+            "dedupe_key": dedupe_key,
+            "journal_outcome": outcome,
+            "status": status,
+            "reason": reason,
+        }
+        if status == "SEND_FAILED":
+            report["send_failures"].append(entry)
+        elif status == "RESULT_UNKNOWN":
+            report["result_unknown"].append(entry)
+        return entry
+
+    def send_manual():
+        if dry_run:
+            return "DUE", "DRY_RUN_ELIGIBLE"
+        if config is None or not config.enabled:
+            return "SKIPPED", "DISABLED"
+        if not manual_ready:
+            return "SKIPPED", "CLOCK_UNKNOWN"
+        result = run_scheduled(dry_run=False, **constants)
+        return _scan_send_classify(result)
+
+    def send_publication(operation_id):
+        if dry_run:
+            return "DUE", "DRY_RUN_ELIGIBLE"
+        if config is None or not config.enabled:
+            return "SKIPPED", "DISABLED"
+        result = run_scheduled_publication(dry_run=False, operation_id=operation_id, **constants)
+        return _scan_send_classify(result)
+
+    try:
+        active = schedule.inspect_active(root=root, filesystem=runs.TRUSTED_LOCAL_POSIX)
+    except Exception:
+        active = {"status": "UNKNOWN", "reason": "ACTIVE_OPERATION_UNAVAILABLE"}
+    if active.get("status") == "PENDING_REVIEW":
+        ids = (
+            active.get("operation_id"),
+            active.get("run_id"),
+            active.get("review_id"),
+            active.get("review_payload_sha256"),
+        )
+        if (
+            not all(runs._id(value) for value in ids[:3])
+            or type(ids[3]) is not str
+            or _SHA.fullmatch(ids[3]) is None
+        ):
+            report["pending_review"] = {
+                "status": "REVIEW_STATE_UNKNOWN",
+                "reason": "REVIEW_IDENTITY_INVALID",
+            }
+        elif not manual_ready:
+            report["pending_review"] = account(
+                "manual",
+                ids[0],
+                ids[2],
+                f"{ids[2]}:CLOCK_UNKNOWN",
+                "SKIPPED",
+                "CLOCK_UNKNOWN",
+                None,
+                candidate_id=(active.get("identity_bundle") or {}).get("candidate_id"),
+            )
+        else:
+            decision, outcome = _scan_classify(journal("manual", ids[2], period))
+            if decision == "DUE":
+                decision, reason = send_manual()
+            else:
+                reason = outcome
+            report["pending_review"] = account(
+                "manual",
+                ids[0],
+                ids[2],
+                f"{ids[2]}:{period}",
+                decision,
+                reason,
+                outcome,
+                candidate_id=(active.get("identity_bundle") or {}).get("candidate_id"),
+            )
+    elif active.get("status") == "NONE":
+        report["pending_review"] = {"status": "NO_PENDING_REVIEW", "reason": "NO_ACTIVE_OPERATION"}
+    elif active.get("status") == "UNKNOWN" and active.get("reason") in {
+        "POLICY_CHANGED_REQUIRES_FRESH_UPDATE",
+        "ORIGINAL_REVIEW_STARTED_OR_COMPLETED",
+    }:
+        report["pending_review"] = {
+            "status": "SUPPRESSED",
+            "reason": active["reason"],
+        }
+    else:
+        report["pending_review"] = {
+            "status": "REVIEW_STATE_UNKNOWN",
+            "reason": active.get("reason", "ACTIVE_OPERATION_UNAVAILABLE"),
+        }
+
+    try:
+        scanned = schedule.scan_publications(
+            root=root, filesystem=runs.TRUSTED_LOCAL_POSIX, limit=limit
+        )
+    except Exception:
+        scanned = {"status": "UNKNOWN", "reason": "PUBLICATION_SCAN_UNAVAILABLE"}
+    report["publication_scan"] = {
+        "status": scanned.get("status", "UNKNOWN"),
+        "reason": scanned.get("reason", "PUBLICATION_SCAN_UNAVAILABLE"),
+        "unverified": scanned.get("unverified"),
+        "scan_limit": scanned.get("scan_limit"),
+    }
+    for item in scanned.get("operations", []) if type(scanned.get("operations")) is list else []:
+        operation_id = item.get("operation_id") if type(item) is dict else None
+        event_id = item.get("publication_id") if type(item) is dict else None
+        if not runs._id(operation_id) or not _publication_id(event_id):
+            report["publications"].append(
+                {
+                    "operation_id": operation_id,
+                    "event_id": event_id,
+                    "status": "RESULT_UNKNOWN",
+                    "reason": "PUBLICATION_IDENTITY_INVALID",
+                }
+            )
+            report["counts"]["result_unknown"] += 1
+            report["result_unknown"].append(
+                {
+                    "kind": "auto",
+                    "operation_id": operation_id,
+                    "event_id": event_id,
+                    "dedupe_key": str(event_id),
+                    "journal_outcome": None,
+                    "status": "RESULT_UNKNOWN",
+                    "reason": "PUBLICATION_IDENTITY_INVALID",
+                }
+            )
+            continue
+        decision, outcome = _scan_classify(journal("auto", event_id, ""))
+        if decision == "DUE":
+            decision, reason = send_publication(operation_id)
+        else:
+            reason = outcome
+        report["publications"].append(
+            account(
+                "auto",
+                operation_id,
+                event_id,
+                event_id,
+                decision,
+                reason,
+                outcome,
+                candidate_id=item.get("candidate_id"),
+            )
+        )
+
+    skipped = [
+        entry
+        for entry in [report["pending_review"], *report["publications"]]
+        if type(entry) is dict and entry.get("status") == "SKIPPED"
+    ]
+    scan_status = report["publication_scan"]["status"]
+    if (
+        report["result_unknown"]
+        or scan_status == "UNKNOWN"
+        or scan_status == "INCOMPLETE"
+    ):
+        report["status"] = "UNKNOWN"
+        report["reason"] = (
+            "RESULT_UNKNOWN"
+            if report["result_unknown"]
+            else "PUBLICATION_SCAN_UNAVAILABLE"
+            if scan_status == "UNKNOWN"
+            else "PUBLICATION_SCAN_INCOMPLETE"
+        )
+    elif report["send_failures"] or report["pending_review"].get("status") in {
+        "REVIEW_STATE_UNKNOWN",
+        "REVIEW_IDENTITY_INVALID",
+    }:
+        report["status"] = "INCOMPLETE"
+        report["reason"] = (
+            "SEND_FAILED" if report["send_failures"] else "REVIEW_STATE_UNKNOWN"
+        )
+    elif report["counts"]["due"]:
+        report["status"] = "DUE"
+        report["reason"] = "DRY_RUN_ELIGIBLE"
+    elif skipped:
+        report["status"] = "INCOMPLETE"
+        report["reason"] = "SEND_SKIPPED"
+    else:
+        report["status"] = "COMPLETE"
+        report["reason"] = "SCAN_COMPLETE"
+    return report
+
+
 def main(argv=None):
     clock_status = "UNKNOWN"
     if not _SUPPORTED_PLATFORM:
         return _output_result(NotificationResult("NOT_SENT", "UNSUPPORTED_FILESYSTEM"), clock_status)
+    arguments = sys.argv[1:] if argv is None else argv
+    scan_requested = "--scan-missed" in arguments
+    report = None
+    result = None
     try:
         parser = _Parser(add_help=False)
         parser.add_argument("--calendar-root", required=True)
@@ -1123,6 +1462,7 @@ def main(argv=None):
         ids.add_argument("--publication-id")
         ids.add_argument("--schedule-active", action="store_true")
         ids.add_argument("--schedule-operation-id")
+        ids.add_argument("--scan-missed", action="store_true")
         parser.add_argument("--review-sha256")
         parser.add_argument("--smtp-config")
         parser.add_argument("--journal-path")
@@ -1134,7 +1474,13 @@ def main(argv=None):
             (args.publication_id and args.review_sha256)
             or (args.schedule_active and (args.run_id or args.review_sha256))
             or (args.schedule_operation_id and (args.run_id or args.review_sha256))
-            or (not args.schedule_active and not args.schedule_operation_id and not args.run_id)
+            or (args.scan_missed and (args.run_id or args.review_sha256))
+            or (
+                not args.schedule_active
+                and not args.schedule_operation_id
+                and not args.scan_missed
+                and not args.run_id
+            )
         ):
             raise ValueError("invalid arguments")
         config = None
@@ -1144,7 +1490,7 @@ def main(argv=None):
         clock_bound = None
         clock_version = None
         if not args.dry_run and args.simulation_clock_config:
-            if not (args.review_id or args.schedule_active):
+            if not (args.review_id or args.schedule_active or args.scan_missed):
                 raise ValueError("clock declaration is for manual reminders")
             clock_bound, clock_version = _read_clock_declaration(args.simulation_clock_config)
             clock_status = "CALLER_DECLARED_NOT_AUTHENTICATED"
@@ -1167,7 +1513,9 @@ def main(argv=None):
             "clock_source": (lambda: datetime.now(UTC)) if clock_bound is not None else None,
             "config_guard": config_guard,
         }
-        if args.schedule_active:
+        if args.scan_missed:
+            report = scan_missed(**common)
+        elif args.schedule_active:
             result = run_scheduled(**common)
         elif args.schedule_operation_id:
             result = run_scheduled_publication(**common, operation_id=args.schedule_operation_id)
@@ -1180,8 +1528,25 @@ def main(argv=None):
                 review_sha256=args.review_sha256,
             )
     except Exception:
-        result = NotificationResult("NOT_SENT", "ARGUMENT_OR_CONFIG_UNAVAILABLE")
+        if scan_requested:
+            report = {
+                "environment": "SIMULATION_ONLY",
+                "source_authentication": "NOT_PROVEN",
+                "delivery": "NOT_PROVEN",
+                "clock_evidence": clock_status,
+                "status": "UNKNOWN",
+                "reason": "ARGUMENT_OR_CONFIG_UNAVAILABLE",
+            }
+        else:
+            result = NotificationResult("NOT_SENT", "ARGUMENT_OR_CONFIG_UNAVAILABLE")
+    if report is not None:
+        return _output_scan(report)
     return _output_result(result, clock_status)
+
+
+def _output_scan(report):
+    print(json.dumps(report, sort_keys=True))
+    return 0 if report.get("status") in {"COMPLETE", "DUE"} else 1
 
 
 def _output_result(result, clock_status):
