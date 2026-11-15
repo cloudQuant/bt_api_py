@@ -561,6 +561,8 @@ class RiskServiceHost:
     ) -> None:
         if type(config) is not RiskServiceConfig:
             raise TypeError("RISK_SERVICE_CONFIG_REQUIRED")
+        if type(config.strict_admin_cancel) is not bool:
+            raise RiskServiceStartError("RISK_SERVICE_CONFIG_STRICT_ADMIN_CANCEL_INVALID")
         self.config = config
         self._now_ns, self._monotonic = now_ns, monotonic
         self._stack = ExitStack()
@@ -1002,6 +1004,8 @@ class RiskServiceHost:
         return self._started and self.pump is not None and self.pump.verified_epoch is not None
 
     def start_service_host(self) -> None:
+        if type(self.config.strict_admin_cancel) is not bool:
+            _fail("RISK_SERVICE_CONFIG_STRICT_ADMIN_CANCEL_INVALID")
         from bt_api_py.risk_service_component import RiskOrderService
         from bt_api_py.service_components import ComponentResources
         from bt_api_py.service_config import parse_service_config
@@ -1019,6 +1023,7 @@ class RiskServiceHost:
             ready=self.ready,
             note_run=self.order_port.note_run,
             cancel_status=self.control.cancel_scope_status,
+            strict_admin_cancel=config.strict_admin_cancel,
         )
         component = self.component
         try:
@@ -1027,6 +1032,7 @@ class RiskServiceHost:
                 build_authority(config),
                 config.registry_database,
                 lambda *_: ComponentResources.borrowed({"service": component}, ready=lambda: True),
+                risk_admin_cancel_service=component if config.strict_admin_cancel else None,
             )
             self.service_host.start()
         except ServiceHostError as error:

@@ -30,6 +30,16 @@ corresponding operation and Gateway authorization. Strategy-scope Gateway
 dispatch and source-bound status remain under development; an authorized
 strategy request does not establish that any cancellation was sent or completed.
 
+The Risk service setting `service.strict_admin_cancel` is optional and defaults
+to `false`. Set it to `true` to require Registry admission around the local
+operator-cancel claim and its commit-time grant recheck. This mode records a
+local `UNKNOWN` intent only and does not send a cancellation to Gateway; a
+repeat or uncertain commit does not authorize a retry. With `false`, the
+existing operator-cancel path remains in use: it can call the Gateway control
+adapter for supported scopes, but strategy scope is currently refused locally
+and remote status remains `UNKNOWN` without original journal/generation binding.
+Neither mode proves that a venue cancellation occurred.
+
 Risk clients require a runtime that proves strict unregister acknowledgement. The SDK `compose()` path constructs its own lazy runtime and is the only path that installs an automatic reconnect factory. A publicly injected `runtime_factory` is accepted for compatibility but is not invoked; an injected initial runtime is a trusted in-process extension, not a sandbox against arbitrary Python side effects. Unconfirmed registrations or cleanup retain the original resources and block replacement; this can make automatic recovery unavailable. Explicit ACK does not by itself prove an earlier handler has drained or resolve an UNKNOWN command.
 
 CTP front selection uses `bt_api_ctp.ctp_env_selector`; the old SDK facade and its YAML configuration are removed. The provider selects its own defaults, which differ from the old facade, and automatic set1 selection requires verified trading-day evidence. This source change has not been behavior- or account-accepted.

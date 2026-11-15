@@ -478,6 +478,7 @@ class RiskServiceConfig:
     account_snapshot_max_age_seconds: float | None
     strategy_financial_seconds: float | None = None
     strategy_financial_max_age_seconds: float | None = None
+    strict_admin_cancel: bool = False
 
     def __repr__(self) -> str:
         return f"RiskServiceConfig(service_id={self.service_id!r})"
@@ -804,7 +805,11 @@ def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceCon
             "public_key_file",
             "secret_key_file",
         ),
+        optional=("strict_admin_cancel",),
     )
+    strict_admin_cancel = service.get("strict_admin_cancel", False)
+    if type(strict_admin_cancel) is not bool:
+        _fail("RISK_SERVICE_CONFIG_STRICT_ADMIN_CANCEL_INVALID")
     account = _mapping(
         top["account"],
         required=(
@@ -933,6 +938,7 @@ def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceCon
         strategy_financial_max_age_seconds=None
         if financial_age is None
         else _nanosecond_seconds(financial_age, maximum=Decimal(86400)),
+        strict_admin_cancel=strict_admin_cancel,
     )
 
 

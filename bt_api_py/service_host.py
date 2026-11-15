@@ -468,6 +468,7 @@ class ServiceHost:
         service_directory: Mapping[str, ServiceConfig] | None = None,
         trusted_clients: TrustedServiceClients | None = None,
         migration_deployment_epoch: str | None = None,
+        risk_admin_cancel_service: object | None = None,
     ) -> None:
         if type(config) is not ServiceConfig:
             raise ServiceHostError("PARSED_SERVICE_CONFIG_REQUIRED")
@@ -503,6 +504,16 @@ class ServiceHost:
             self._specs = component_specs(config.components)
         except ServiceComponentError as exc:
             raise ServiceHostError(exc.code) from None
+        if risk_admin_cancel_service is not None:
+            from bt_api_py.risk_service_component import RiskOrderService
+
+            risk_specs = [spec for spec in self._specs if spec.component == "risk"
+                          and spec.options.get("role") == "order_service"]
+            if (type(risk_admin_cancel_service) is not RiskOrderService
+                    or getattr(risk_admin_cancel_service, "_strict_admin_cancel", None) is not True
+                    or len(risk_specs) != 1 or config.clients):
+                raise ServiceHostError("RISK_ADMIN_CANCEL_COMPOSITION_INVALID")
+        self._risk_admin_cancel_service = risk_admin_cancel_service
         self._state = "new"
         self._owner_thread: int | None = None
         self._prepared: tuple[PreparedComponent, ...] = ()
@@ -831,6 +842,7 @@ class ServiceHost:
             gateway_heartbeat_resources: list[tuple[str, object]] = []
             gateway_claim_resources: list[ComponentResources] = []
             gateway_owner_guard_resources: list[tuple[PreparedComponent, ServiceComponent, ComponentResources]] = []
+            risk_admin_component = None
             for item in self._prepared:
                 dependency_ref = (
                     item.options.get("provider_session_ref")
@@ -901,6 +913,18 @@ class ServiceHost:
                 ):
                     raise ServiceHostError("RESOURCE_TRACKING_FAILED")
                 pending_resources = self._pending_resources[-1][2]
+                if item.spec.component == "risk" and item.spec.options.get("role") == "order_service":
+                    from bt_api_py.risk_service_component import RiskOrderService
+
+                    adapter = pending_resources.values.get("service")
+                    if (type(adapter) is not RiskOrderService
+                            or type(getattr(adapter, "_strict_admin_cancel", None)) is not bool
+                            or adapter._strict_admin_cancel is not (self._risk_admin_cancel_service is not None)
+                            or (self._risk_admin_cancel_service is not None
+                                and adapter is not self._risk_admin_cancel_service)):
+                        raise ServiceHostError("RISK_ADMIN_CANCEL_COMPOSITION_INVALID")
+                    if self._risk_admin_cancel_service is not None:
+                        risk_admin_component = component
                 if (item.spec.component == "gateway"
                         and item.spec.options.get("role") == "trading_owner"
                         and "owner_guard_binding" in pending_resources.values):
@@ -1190,6 +1214,16 @@ class ServiceHost:
             )
 
             try:
+                if self._risk_admin_cancel_service is not None:
+                    handler = None if risk_admin_component is None else risk_admin_component.handlers.get(
+                        "risk.cancel.request"
+                    )
+                    defaults = getattr(handler, "__kwdefaults__", None)
+                    if (self._risk_admin_cancel_service._strict_admin_cancel is not True
+                            or type(handler) is not FunctionType or type(defaults) is not dict
+                            or defaults.get("_adapter") is not self._risk_admin_cancel_service
+                            or defaults.get("_operation") != "risk.cancel.request"):
+                        raise ServiceHostError("RISK_ADMIN_CANCEL_COMPOSITION_INVALID")
                 self._registry = ServiceRegistry(
                     self._registry_path,
                     service_id=self._config.service_id,
@@ -1220,6 +1254,7 @@ class ServiceHost:
                     ),
                     migration_deployment_epoch=self._migration_deployment_epoch,
                     migration_start_guard=migration_start_snapshot,
+                    enable_risk_admin_cancel_admission=self._risk_admin_cancel_service is not None,
                 )
             except ServiceRegistryStartupCleanupError as exc:
                 self._registry = exc.registry
