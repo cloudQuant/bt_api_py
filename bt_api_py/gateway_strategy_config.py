@@ -45,6 +45,53 @@ class _RiskSelectionError(ValueError):
 
 # D64-01: the tree must say explicitly whether PLACE goes through Risk.
 RISK_SELECTION_NONE = "none"
+_RETAINED_FAILED_COMPOSITIONS = []
+
+
+class GatewayCompositionError(ValueError):
+    """Composition failed; cleanup_owner retains every constructed client."""
+    def __init__(self, cleanup_owner):
+        self.cleanup_owner = cleanup_owner
+        super().__init__("EXECUTION_COMPOSITION_FAILED")
+
+
+class _CompositionCleanupOwner:
+    def __init__(self):
+        self._entries = []
+
+    def add(self, kind, value):
+        self._entries.append([kind, value, False])
+
+    @property
+    def cleanup_confirmed(self):
+        return all(entry[2] for entry in self._entries)
+
+    def close(self, *, timeout_seconds=5.0):
+        from bt_api_py.service_runtime_cleanup import runtime_cleanup_confirmed
+        from bt_api_py.service_runtime_thread import RuntimeSnapshot
+        for entry in reversed(self._entries):
+            if entry[2]:
+                continue
+            kind, owned, _ = entry
+            try:
+                result = owned.close(timeout_seconds=timeout_seconds)
+                if kind == "execution":
+                    entry[2] = owned.cleanup_confirmed is True
+                elif kind == "risk":
+                    entry[2] = (type(result) is RuntimeSnapshot
+                                and type(result.bindings) is tuple and not result.bindings
+                                and type(result.cleanup_failures) is int and result.cleanup_failures == 0
+                                and runtime_cleanup_confirmed(result))
+                else:
+                    entry[2] = (type(result) is RuntimeSnapshot
+                                and result.state in ("closed", "failed")
+                                and result.thread_alive is False)
+            except BaseException:
+                pass
+        if not self.cleanup_confirmed:
+            raise RuntimeError("CLEANUP_FAILED")
+        if self in _RETAINED_FAILED_COMPOSITIONS:
+            _RETAINED_FAILED_COMPOSITIONS.remove(self)
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +107,28 @@ class GatewayRiskSelection:
     def security_profile_ref(self):
         profile = next(iter(self.client_config.communication["profiles"].values()))
         return profile["security_profile_ref"]
+
+
+@dataclass(frozen=True, slots=True)
+class GatewayExecutionSelection:
+    client_config: object
+    route: object
+    peer: WireIdentity
+    requested_operations: frozenset
+    routing: object
+    transport_ref: str
+    security_profile_ref: str
+    endpoint: str
+
+
+@dataclass(frozen=True, slots=True)
+class _ExecutionRoute:
+    mount: str
+    service_id: str
+    instance_id: str
+    scope_ref: str
+    scope: WireScope
+    identity: WireIdentity
 
 
 def _mapping(value, required, optional=()):
@@ -303,6 +372,60 @@ def _route_fields(value):
     )
 
 
+def _execution(value, client, route, risk, instruments):
+    if value == "none" and type(value) is str:
+        return None
+    from bt_api_py.execution_parent_grant import OPERATIONS
+    from bt_api_py.execution_routing import parse_execution_routing
+
+    value = _mapping(value, {"client_config", "route", "peer", "requested_operations", "routing"})
+    joint = parse_client_config(value["client_config"])
+    execution_route = _ExecutionRoute(*_route_fields(value["route"]))
+    peer = _identity(value["peer"])
+    operations = _operations(value["requested_operations"])
+    routing = parse_execution_routing(value["routing"])
+    plain = joint.to_public_dict()
+    if set(plain["clients"]) != {"gateway", "execution"}:
+        raise ValueError
+    execution = plain["clients"].pop("execution")
+    bindings = execution["settings"]["bindings"]
+    if len(bindings) != 1:
+        raise ValueError
+    binding = bindings[0]
+    transport = binding["transport_ref"]
+    profiles = plain["communication"]["profiles"]
+    gateway_transports = set(client.communication["profiles"])
+    if transport in gateway_transports or set(profiles) != gateway_transports | {transport}:
+        raise ValueError
+    profile = profiles.pop(transport)
+    option = execution["settings"].get("options", {})
+    if (set(option) - {"request_timeout_ms", "execution_routing"} or
+            ("execution_routing" in option and
+             parse_execution_routing(option["execution_routing"]) != routing)):
+        raise ValueError
+    if (plain != client.to_public_dict() or binding["required"] is not True
+            or execution_route.mount != "broker.execution_parent"
+            or any(binding[name] != getattr(execution_route, name) for name in
+                   ("mount", "service_id", "instance_id", "scope_ref"))
+            or binding["account_ref"] != route.scope.account_ref
+            or execution_route.scope != route.scope or execution_route.identity != route.identity
+            or peer.role is not WireRole.SERVICE or peer.actor_ref != execution_route.service_id
+            or peer.delegate_ref is not None or operations != OPERATIONS
+            or profile["backend"] != "zmq" or set(profile["endpoints"]) != {"rpc_connect"}
+            or profile["security_profile_ref"] in {
+                next(iter(client.communication["profiles"].values()))["security_profile_ref"],
+                risk.security_profile_ref if risk is not None else None}
+            or routing.schema_version != 2 or routing.component != execution_route.instance_id
+            or routing.account_ref != route.scope.account_ref
+            or routing.strategy_ref != route.scope.strategy_ref
+            or routing.execution_domain_ref != route.scope.execution_domain_ref
+            or not set(routing.instruments) <= set(instruments.values())):
+        raise ValueError
+    return GatewayExecutionSelection(joint, execution_route, peer, operations, routing,
+                                     transport, profile["security_profile_ref"],
+                                     profile["endpoints"]["rpc_connect"])
+
+
 def _decode(raw):
     if type(raw) is dict and "risk" not in raw:
         raise _RiskSelectionError("risk_selection_missing")
@@ -320,7 +443,7 @@ def _decode(raw):
             "instruments_by_ref",
             "risk",
         },
-        {"account_settings", "market_settings", "instrument_settings", "calendar_settings", "strategy_finance_currency"},
+        {"account_settings", "market_settings", "instrument_settings", "calendar_settings", "strategy_finance_currency", "execution"},
     )
     if type(raw["schema_version"]) is not int or raw["schema_version"] != 1:
         raise ValueError
@@ -369,6 +492,7 @@ def _decode(raw):
     ):
         raise ValueError
     risk = _risk(raw["risk"], client, route, operations)
+    execution = _execution(raw.get("execution", "none"), client, route, risk, instruments)
     return {
         "exchange_name": exchange,
         "client_config": client,
@@ -384,6 +508,7 @@ def _decode(raw):
         "calendar_settings": calendar,
         "strategy_finance_currency": currency,
         "risk": risk,
+        "execution": execution,
     }
 
 
@@ -457,31 +582,35 @@ class GatewayStrategyConfig:
         """The selected Risk client (D64-01), or None for an explicit ``"none"``."""
         return self._values()["risk"]
 
+    @property
+    def execution_selection(self):
+        return self._values()["execution"]
+
     @staticmethod
     def _split_security_profiles(values, security_profiles):
         """With Risk selected, the caller supplies both profiles under distinct names."""
-        risk = values["risk"]
-        if risk is None:
-            return security_profiles, None
+        risk, execution = values["risk"], values["execution"]
+        if risk is None and execution is None:
+            return security_profiles, None, None
         gateway_ref = next(iter(values["client_config"].communication["profiles"].values()))[
             "security_profile_ref"
         ]
-        risk_ref = risk.security_profile_ref
-        if not isinstance(security_profiles, Mapping) or set(security_profiles) != {
-            gateway_ref,
-            risk_ref,
-        }:
+        risk_ref = risk.security_profile_ref if risk else None
+        execution_ref = execution.security_profile_ref if execution else None
+        refs = {ref for ref in (gateway_ref, risk_ref, execution_ref) if ref is not None}
+        if not isinstance(security_profiles, Mapping) or set(security_profiles) != refs:
             raise ValueError("INVALID_CLIENT_CONFIGURATION")
         return (
             {gateway_ref: security_profiles[gateway_ref]},
-            {risk_ref: security_profiles[risk_ref]},
+            {risk_ref: security_profiles[risk_ref]} if risk else None,
+            {execution_ref: security_profiles[execution_ref]} if execution else None,
         )
 
     def create_session(
         self, *, host, security_profiles, cancel_host=None, delegated_cancel_host=None
     ):
         values = self._values()
-        gateway_profiles, _ = self._split_security_profiles(values, security_profiles)
+        gateway_profiles, _, _ = self._split_security_profiles(values, security_profiles)
         return GatewayStrategyClientSession(
             values["client_config"],
             binding=values["binding"],
@@ -506,25 +635,53 @@ class GatewayStrategyConfig:
         cancel_host=None,
         owns_session=True,
         delegated_cancel_host=None,
+        execution_db=None,
     ):
+        selected = self._values()["execution"] is not None
+        owner = _CompositionCleanupOwner() if selected else None
+        try:
+            return self._create_api(host=host, security_profiles=security_profiles,
+                cancel_host=cancel_host, owns_session=owns_session,
+                delegated_cancel_host=delegated_cancel_host, execution_db=execution_db,
+                cleanup_owner=owner)
+        except BaseException as error:
+            if owner is None:
+                raise
+            try:
+                owner.close()
+            except BaseException:
+                _RETAINED_FAILED_COMPOSITIONS.append(owner)
+            if not isinstance(error, Exception):
+                raise
+            raise GatewayCompositionError(owner) from None
+
+    def _create_api(self, *, host, security_profiles, cancel_host, owns_session,
+                    delegated_cancel_host, execution_db, cleanup_owner):
         if type(owns_session) is not bool:
             raise TypeError("INVALID_SESSION_OWNERSHIP")
         if not owns_session:
             raise ValueError("CREATED_SESSION_REQUIRES_OWNERSHIP")
         values = self._values()
-        _, risk_profiles = self._split_security_profiles(values, security_profiles)
+        _, risk_profiles, execution_profiles = self._split_security_profiles(values, security_profiles)
+        if (values["execution"] is None) != (execution_db is None):
+            raise ValueError("INVALID_EXECUTION_DATABASE")
+        if execution_db is not None:
+            from bt_api_py.gateway_strategy_execution import validate_database
+            validate_database(execution_db)
         session = self.create_session(
             host=host,
             security_profiles=security_profiles,
             cancel_host=cancel_host,
             delegated_cancel_host=delegated_cancel_host,
         )
+        if cleanup_owner is not None:
+            cleanup_owner.add("gateway", session)
         risk_client = None
-        if values["risk"] is not None:
-            from bt_api_py.risk_service_client import RiskServiceClient
-
-            risk = values["risk"]
-            try:
+        execution_session = router = None
+        try:
+            if values["risk"] is not None:
+                from bt_api_py.risk_service_client import RiskServiceClient
+                risk = values["risk"]
                 risk_client = RiskServiceClient.compose(
                     risk.client_config,
                     route=risk.route,
@@ -532,15 +689,38 @@ class GatewayStrategyConfig:
                     security_profiles=risk_profiles,
                     requested_operations=risk.requested_operations,
                 )
-            except BaseException:
-                session.close()  # never started: releases nothing remote
+                if cleanup_owner is not None:
+                    cleanup_owner.add("risk", risk_client)
+            if values["execution"] is not None:
+                from bt_api_py.gateway_strategy_execution import compose_execution
+                execution_session, router = compose_execution(
+                    values["execution"], execution_profiles, execution_db,
+                    risk_selected=risk_client is not None,
+                    on_session=lambda obj: cleanup_owner.add("execution", obj))
+            return GatewayBtApi(
+                session, exchange_name=values["exchange_name"], owns_session=owns_session,
+                risk_client=risk_client, execution_session=execution_session,
+                execution_router=router)
+        except BaseException:
+            if cleanup_owner is not None:
                 raise
-        return GatewayBtApi(
-            session,
-            exchange_name=self.exchange_name,
-            owns_session=owns_session,
-            risk_client=risk_client,
-        )
+            unconfirmed = []
+            for owned in (execution_session, risk_client, session):
+                if owned is None:
+                    continue
+                try:
+                    result = owned.close()
+                    if owned is execution_session and not owned.cleanup_confirmed:
+                        unconfirmed.append(owned)
+                    elif owned is risk_client:
+                        from bt_api_py.service_runtime_cleanup import runtime_cleanup_confirmed
+                        if not runtime_cleanup_confirmed(result):
+                            unconfirmed.append(owned)
+                except BaseException:
+                    unconfirmed.append(owned)
+            if unconfirmed:
+                _RETAINED_FAILED_COMPOSITIONS.extend(unconfirmed)
+            raise
 
 
 def parse_gateway_strategy_config(raw):

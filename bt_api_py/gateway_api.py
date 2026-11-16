@@ -14,7 +14,8 @@ from __future__ import annotations
 
 import os
 import threading
-from dataclasses import dataclass
+from copy import deepcopy
+from dataclasses import dataclass, replace
 from types import MethodType
 from typing import TYPE_CHECKING
 
@@ -67,7 +68,8 @@ class GatewayBtApi:
     """Expose selected Gateway operations without constructing a provider."""
 
     def __init__(
-        self, session, *, exchange_name: str, owns_session: bool = False, risk_client=None
+        self, session, *, exchange_name: str, owns_session: bool = False, risk_client=None,
+        execution_session=None, execution_router=None
     ):
         if type(session) is not GatewayStrategyClientSession:
             raise TypeError("INVALID_GATEWAY_SESSION")
@@ -129,6 +131,35 @@ class GatewayBtApi:
         self._risk_start_code = None
         self._risk_close_failures = 0
         self._risk_cleanup_confirmed = risk_client is None
+        if (execution_session is None) != (execution_router is None):
+            raise ValueError("INVALID_EXECUTION_CONFIGURATION")
+        if execution_session is not None:
+            from bt_api_py.execution_parent_strategy_session import ExecutionParentStrategySession
+            from bt_api_py.execution_routing import ExecutionOrderRouter
+            if (type(execution_session) is not ExecutionParentStrategySession
+                    or type(execution_router) is not ExecutionOrderRouter
+                    or execution_router._port is not execution_session.client
+                    or execution_session.target.scope != self._route.scope
+                    or execution_session.target.identity != self._route.identity
+                    or execution_router._config.account_ref != self._route.scope.account_ref
+                    or execution_router._config.strategy_ref != self._route.scope.strategy_ref
+                    or execution_router._config.execution_domain_ref != self._route.scope.execution_domain_ref
+                    or execution_router._config.component != execution_session.target.instance_id
+                    or execution_router._risk_selected is not (risk_client is not None)):
+                raise ValueError("INVALID_EXECUTION_CONFIGURATION")
+        self._execution = self._original_execution = execution_session
+        self._execution_router = self._original_execution_router = execution_router
+        self._execution_client = execution_session.client if execution_session else None
+        self._execution_runtime = execution_session.runtime if execution_session else None
+        self._execution_target = execution_session.target if execution_session else None
+        self._execution_config = execution_router._config if execution_router else None
+        self._execution_config_snapshot = (
+            deepcopy(self._execution_config.to_plain()) if self._execution_config is not None else None)
+        self._execution_db = execution_router._db if execution_router else None
+        self._execution_clock = execution_router._clock if execution_router else None
+        self._execution_risk = risk_client
+        self._execution_start_failed = False
+        self._execution_cleanup_confirmed = execution_session is None
         self._gateway_close_snapshot = None
         self._check_binding()
 
@@ -241,6 +272,14 @@ class GatewayBtApi:
                 except Exception as error:
                     code = getattr(error, "code", None)
                     self._risk_start_code = code if type(code) is str else type(error).__name__
+            self._check()
+            if self._execution is not None and not self._execution_start_failed:
+                try:
+                    self._check_execution_binding()
+                    self._execution.start(timeout_seconds=timeout_seconds)
+                except Exception:
+                    self._execution_start_failed = True
+            self._check()
             return snapshot
         finally:
             self._close_lock.release()
@@ -249,6 +288,160 @@ class GatewayBtApi:
     def risk_selected(self):
         """Whether this strategy's configuration routes PLACE through Risk."""
         return self._risk is not None
+
+    def _check_execution_binding(self):
+        session, router = self._original_execution, self._original_execution_router
+        if (session is None or self._execution is not session
+                or self._execution_router is not router or router is None
+                or session.client is not self._execution_client
+                or session.runtime is not self._execution_runtime
+                or session.target != self._execution_target
+                or router._port is not self._execution_client
+                or router._config is not self._execution_config
+                or router._config.to_plain() != self._execution_config_snapshot
+                or router._db is not self._execution_db
+                or router._clock is not self._execution_clock
+                or self._risk is not self._execution_risk
+                or router._risk_selected is not (self._risk is not None)
+                or self._execution_client._runtime is not self._execution_runtime
+                or self._execution_client._target != self._execution_target):
+            raise RuntimeError("EXECUTION_BINDING_CHANGED")
+
+    @property
+    def execution_selected(self):
+        return self._original_execution is not None
+
+    @property
+    def execution_configuration_id(self):
+        self._check_process()
+        if not self.execution_selected:
+            return None
+        self._check_binding()
+        self._check_execution_binding()
+        return self._execution_config.configuration_id
+
+    @property
+    def execution_available(self):
+        self._check_process()
+        if not self.execution_selected:
+            return None
+        try:
+            self._check_execution_binding()
+            if self._execution_start_failed or self.lifecycle_state != "open":
+                return False
+            from bt_api_py.execution_parent_client import ExecutionParentClient
+            from bt_api_py.execution_parent_grant import SUBMIT, QUERY
+            return all(ExecutionParentClient._registration(self._execution_client, op) for op in (SUBMIT, QUERY))
+        except Exception:
+            return False
+
+    def execution_route_status(self):
+        """Return a finite local observation; it grants no order authority."""
+        available = self.execution_available
+        return None if available is None else {"available": available}
+
+    def _execution_intent(self, exchange_name, intent, *, allow_historical_run=False):
+        self._check(exchange_name)
+        self._check_execution_binding()
+        from bt_api_py.gateway_direct_client import _check_intent
+        try:
+            intent = _check_intent(intent)
+            candidate_route = intent.route
+            if allow_historical_run:
+                candidate_route = replace(candidate_route, scope=replace(
+                    candidate_route.scope, run_id=self._route.scope.run_id))
+            if intent.binding != self._binding or candidate_route != self._route:
+                raise ValueError
+        except Exception:
+            raise ValueError("EXECUTION_INTENT_MISMATCH") from None
+        return intent
+
+    def _require_execution_direct_route(self, request_key, *, request=None, ttl_seconds=10.0):
+        """Check both locally persisted selections before a direct write."""
+        if not self.execution_selected:
+            return
+        try:
+            from bt_api_py.execution_routing import verify_execution_direct_route
+            from bt_api_py.gateway_direct_client import _check_intent, build_gateway_order_intent
+
+            self._check_execution_binding()
+            if type(request_key) is not str or not request_key:
+                raise ValueError
+            stored = _check_intent(self._host.load_intent(request_key))
+            route = self._host.load_execution_route(request_key)
+            if (stored.request_key != request_key or stored.binding != self._binding
+                    or stored.route != self._route
+                    or route is None or route.kind != ("RISK" if self._risk is not None else "GATEWAY")
+                    or route.account != self._binding.account_scope
+                    or route.strategy != self._binding.strategy_scope
+                    or route.request_key != request_key or route.intent_digest != stored.digest
+                    or route.configuration_id != self._execution_config.configuration_id
+                    or route.execution_domain_ref != self._route.scope.execution_domain_ref
+                    or any(getattr(route, name) is not None for name in
+                           ("request_id", "request_sha256", "parent_ref"))):
+                raise ValueError
+            if request is not None:
+                candidate = build_gateway_order_intent(self._binding_object, self._route_object,
+                                                       request, ttl_seconds=ttl_seconds)
+                if candidate != stored:
+                    raise ValueError
+            self._check_execution_binding()
+            if verify_execution_direct_route(self._execution_router, intent=stored,
+                                             configuration_id=self._execution_config.configuration_id) is not True:
+                raise ValueError
+            self._check_execution_binding()
+        except Exception:
+            raise RuntimeError("EXECUTION_DIRECT_ROUTE_REQUIRED") from None
+
+    def route_execution_order(self, exchange_name, intent, *, before_submit):
+        """Explicitly route an order; ordinary reserve does not call this method."""
+        if not callable(before_submit):
+            raise ValueError("INVALID_EXECUTION_PERSISTENCE_BARRIER")
+        intent = self._execution_intent(exchange_name, intent)
+        def barrier(prepared):
+            if not self.execution_available:
+                return False
+            if before_submit(prepared) is not True:
+                return False
+            return self.execution_available is True
+        return self._execution_router.route(intent, before_submit=barrier)
+
+    def execution_order_status(self, exchange_name, intent):
+        intent = self._execution_intent(exchange_name, intent, allow_historical_run=True)
+        if intent.route.scope.run_id != self._route.scope.run_id:
+            # A new registration is only a query transport. The old complete
+            # intent and parent identity must still match both durable stores.
+            from bt_api_py.execution_routing import ExecutionPreparedRoute
+            try:
+                if self._host.load_intent(intent.request_key) != intent:
+                    raise ValueError
+                saved = self._host.load_execution_route(intent.request_key)
+                if saved is None or saved.kind != "EXECUTION_PARENT":
+                    raise ValueError
+                prepared = ExecutionPreparedRoute(
+                    account=saved.account, strategy=saved.strategy, request_key=saved.request_key,
+                    intent_digest=saved.intent_digest, request_id=saved.request_id,
+                    request_sha256=saved.request_sha256, configuration_id=saved.configuration_id,
+                    execution_domain_ref=saved.execution_domain_ref, parent_ref=saved.parent_ref)
+                if not self.verify_execution_parent_route(intent, prepared):
+                    raise ValueError
+            except Exception:
+                raise ValueError("EXECUTION_PARENT_ROUTE_UNAVAILABLE") from None
+        return self._execution_router.status(intent)
+
+    def verify_execution_parent_route(self, intent, prepared):
+        """Check a local parent binding without starting a session or issuing RPC."""
+        try:
+            from bt_api_py.execution_routing import verify_execution_parent_route
+            intent = self._execution_intent(self._exchange_name, intent, allow_historical_run=True)
+            return verify_execution_parent_route(self._original_execution_router,
+                                                 intent=intent, prepared=prepared) is True
+        except Exception:
+            return False
+
+    def cancel_execution_order(self, exchange_name, intent):
+        intent = self._execution_intent(exchange_name, intent)
+        return self._execution_router.cancel(intent)
 
     @property
     def risk_available(self):
@@ -298,7 +491,11 @@ class GatewayBtApi:
         """
         self._check_process()
         with self._lock:
-            return self._state == "closed" and (
+            return self._state == "closed" and self._risk_cleanup_confirmed and (
+                not self.execution_selected or (self._execution_cleanup_confirmed
+                    and self._execution is self._original_execution
+                    and self._original_execution.cleanup_confirmed)
+            ) and (
                 not self._owns_session or not self._gateway_strict_cleanup
                 or (self._strict_gateway_binding_current()
                     and self._gateway_session._closed_snapshot is self._gateway_close_snapshot
@@ -332,6 +529,16 @@ class GatewayBtApi:
         if not self._close_lock.acquire(blocking=False):
             raise ThreadedRuntimeError("CLEANUP_FAILED")
         try:
+            if not self._execution_cleanup_confirmed:
+                try:
+                    self._original_execution.close(timeout_seconds=timeout_seconds)
+                    self._execution_cleanup_confirmed = (
+                        self._execution is self._original_execution
+                        and self._original_execution.client is self._execution_client
+                        and self._original_execution.runtime is self._execution_runtime
+                        and self._original_execution.cleanup_confirmed is True)
+                except Exception:
+                    self._execution_cleanup_confirmed = False
             if not self._risk_cleanup_confirmed:
                 try:
                     risk_result = self._risk.close(timeout_seconds=timeout_seconds)
@@ -384,10 +591,10 @@ class GatewayBtApi:
                 )
                 if gateway_done:
                     self._gateway_close_snapshot = result
-            if gateway_done and self._risk_cleanup_confirmed:
+            if gateway_done and self._risk_cleanup_confirmed and self._execution_cleanup_confirmed:
                 with self._lock:
                     self._state = "closed"
-            if not self._risk_cleanup_confirmed:
+            if not self._risk_cleanup_confirmed or not self._execution_cleanup_confirmed:
                 raise ThreadedRuntimeError("CLEANUP_FAILED") from None
             return result
         finally:
@@ -437,9 +644,15 @@ class GatewayBtApi:
             # ordinary reserve_order direct-Gateway branch.
             self._check(exchange_name)
             guard()
+            self._require_execution_direct_route(getattr(request, "idempotency_key", None),
+                                                 request=request, ttl_seconds=ttl_seconds)
+            def guarded_route():
+                guard()
+                self._require_execution_direct_route(getattr(request, "idempotency_key", None),
+                                                     request=request, ttl_seconds=ttl_seconds)
             result = _TICKET_RISK_RESERVE_IMPLEMENTATION(
                 self, request, ttl_seconds, timeout_seconds, first_send_ticket,
-                _ticket_host_contract=host_contract, _ticket_guard=guard,
+                _ticket_host_contract=host_contract, _ticket_guard=guarded_route,
             )
             guard()
             return result
@@ -462,6 +675,8 @@ class GatewayBtApi:
             if risk is None:
                 raise RuntimeError("RISK_SELECTION_CHANGED")
             return GatewayRiskRoutedResult("UNKNOWN", code="RISK_OUTCOME_UNKNOWN")
+        self._require_execution_direct_route(getattr(request, "idempotency_key", None),
+                                             request=request, ttl_seconds=ttl_seconds)
         if risk is None:
             if first_send_ticket is not None:
                 raise ValueError("RISK_TICKET_NOT_APPLICABLE")
@@ -481,6 +696,7 @@ class GatewayBtApi:
 
     def dispatch_order(self, exchange_name, request_key, *, market_ref=None, timeout_seconds=5.0):
         self._check(exchange_name)
+        self._require_execution_direct_route(request_key)
         if self._risk is not None:
             return self._risk_dispatch(request_key, market_ref, timeout_seconds)
         if market_ref is None:
