@@ -969,7 +969,16 @@ remain UNKNOWN. The `package_seed` root may be declared only without bootstrap;
 this process never installs a seed. Responses describe simulation only, with
 source authentication not proven and no trade authorization.
 
-### Atomic Execution parent listener (currently unready)
+The formal mock publisher binds `SYNTHETIC_MOCK` into the coverage manifest for
+its exact generated BASE and AFTERNOON_CHANGE schedules. The manifest and
+binding digests travel with the published snapshot, so direct and Gateway day
+and UTC-range reads retain the label. A matching source name or metadata field
+alone cannot add it. Mixed observations retain their own provenance, and old
+snapshots without a declaration remain `UNSPECIFIED`. This classification is
+still simulation, not exchange-source authentication. Range policies must cover
+the published owner-day mappings, including the mock weekend night sessions.
+
+### Atomic Execution parent listener (quarantined by default)
 
 The SDK entry point `python -m bt_api_py.execution_parent_service_host --config /absolute/path/parent.json` starts the selected `atomic_intake` ServiceHost with its AccountJournalHost, atomic intake, explicit strategy grants and separate service action grant. The JSON file and CURVE key files must be private, owner-controlled regular files (mode `0600` on POSIX, no symlinks or hard links); the journal directory and the separate registry directory must already exist, be private, and not overlap. The listener accepts a loopback IPv4 TCP endpoint only. The stable storage UUID and exact account/strategy/run binding must be supplied by the operator; they do not authenticate an account or establish an old-writer fence. A local lease is not such a fence. The default quarantined Atomic service reports **UNREADY** and refuses registration. The explicit cooperative mode below supports local parent intake; neither mode establishes provider or trading capability.
 

@@ -935,6 +935,8 @@ class MockCalendarPublication:
         if type(composite) is not dict:
             raise ValueError("composite unavailable")
         _require_legacy_exceptions(composite["snapshot"])
+        if self._candidate_provenance(candidate_id, shown) is None:
+            composite = mock.declared_publication_composite(composite, self._audit["year"])
         return shown, composite
 
     def _candidate_provenance(self, candidate_id, shown):
@@ -1066,6 +1068,14 @@ class MockCalendarPublication:
                 if compared.get("status") not in {"SAME", "CHANGED"}:
                     raise ValueError("comparison unavailable")
                 kind, difference = compared["status"], compared["difference"]
+                # The review bundle contains the generic /1 composite. Bind the
+                # operator's exact code-generated /2 declaration to the reviewed
+                # result before hashing and confirming the publication.
+                difference["after"].update(
+                    store_snapshot_sha256=snapshot_hash,
+                    manifest_sha256=composite["manifest_sha256"],
+                    binding_sha256=composite["binding_sha256"],
+                )
             proposal = _labeled(
                 status=kind,
                 candidate_id=candidate_id,
