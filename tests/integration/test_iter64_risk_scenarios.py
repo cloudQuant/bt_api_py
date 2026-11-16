@@ -62,13 +62,6 @@ ROUTE_RECOVERY_GAP = pytest.mark.xfail(
            "replace it and the route never recovers within the wait; the "
            "sibling unconfirmed-unregister test asserts that refusal (D64-02)",
 )
-BYPASS_ATTRIBUTION_GAP = pytest.mark.xfail(
-    strict=True,
-    reason="bypass order attribution: this scenario now reaches the Risk "
-           "projection, but bt_api_risk.pretrade.engine stores strategy_ref=NULL "
-           "for an observed order without a Risk permit (and adds no position "
-           "row), so the Gateway-attributed strategy C is not recorded",
-)
 
 
 @pytest.fixture
@@ -366,7 +359,6 @@ def test_d64_02_unconfirmed_unregister_retains_original_runtime_and_refuses(env)
     assert env.call("a", "risk_runtime_status") == snapshot
 
 
-@BYPASS_ATTRIBUTION_GAP
 def test_inv64_10_bypass_order_is_accepted_by_the_gateway_and_observed_by_risk(env):
     import json
     import sqlite3
