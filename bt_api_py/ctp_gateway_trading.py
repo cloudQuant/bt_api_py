@@ -2343,7 +2343,54 @@ def build_ctp_gateway_trading_profile(
                         raise CtpGatewayTradingError('RECOVERY_SOURCE_CHANGED')
                     return provider.read_recovery_observations(after_sequence=after_sequence, limit=limit)
 
-                recorder = GatewayRecoveryObservationRecorder(owner, capture_recovery, recovery_observation_settings)
+                capture = capture_recovery
+                if recovery_observation_settings.qualification_mode == 'local_clock_v1':
+                    bound_clock_refresher = holder.get('clock_refresher')
+                    qualified_capture = [None]
+
+                    def capture_qualified_recovery(after_sequence, limit):
+                        # All construction, observations and rechecks execute on the owner.
+                        def check_originals():
+                            if (holder.get('session') is not bound_session
+                                    or holder.get('recovery_observation_provider') is not bound_provider
+                                    or holder.get('clock_refresher') is not bound_clock_refresher
+                                    or bound_session.market_provider is not bound_provider):
+                                raise CtpGatewayTradingError('RECOVERY_SOURCE_CHANGED')
+
+                        check_originals()
+                        if qualified_capture[0] is None:
+                            from bt_api_py.gateway_recovery_clock_qualification import (
+                                GatewayRecoveryClockQualifier,
+                            )
+                            from bt_api_py.gateway_recovery_qualified_capture import (
+                                GatewayQualifiedRecoveryCapture,
+                            )
+                            from bt_api_py.gateway_server_clock_refresh import (
+                                GatewayServerClockRefresher,
+                            )
+
+                            if bound_clock_refresher is None:
+                                helper = GatewayQualifiedRecoveryCapture(capture_recovery, qualifier=None)
+                            else:
+                                if (type(bound_clock_refresher) is not GatewayServerClockRefresher
+                                        or bound_clock_refresher._pid != os.getpid()
+                                        or bound_clock_refresher._owner is not threading.current_thread()):
+                                    raise CtpGatewayTradingError('RECOVERY_SOURCE_CHANGED')
+                                try:
+                                    qualifier = GatewayRecoveryClockQualifier(bound_clock_refresher,
+                                        max_interval_ns=recovery_observation_settings.clock_max_interval_ns)
+                                    helper = GatewayQualifiedRecoveryCapture(capture_recovery, qualifier=qualifier)
+                                except (ValueError, TypeError, AttributeError):
+                                    # One conservative choice for this owner lifetime; no later upgrade.
+                                    helper = GatewayQualifiedRecoveryCapture(capture_recovery, qualifier=None)
+                            qualified_capture[0] = helper
+                        result = qualified_capture[0].capture(after_sequence, limit)
+                        check_originals()
+                        return result
+
+                    capture = capture_qualified_recovery
+
+                recorder = GatewayRecoveryObservationRecorder(owner, capture, recovery_observation_settings)
                 holder['recovery_observation_recorder'] = recorder
                 recorder.start()
             journal = holder["journal"]

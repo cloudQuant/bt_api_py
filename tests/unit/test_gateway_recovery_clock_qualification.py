@@ -397,3 +397,49 @@ def test_lost_prefix_explicit_reset_and_new_sample_clear_old_constraints(live, m
     result = qualifier(source).qualify(base + 300, base + 350)
     assert result.status == 'QUALIFIED'
     assert result.first_sample_sequence == result.last_sample_sequence == 3
+
+
+def test_progressive_expiring_calibration_drift_cannot_reverse_time(live, monkeypatch):
+    source, _, _ = live
+    base = time.monotonic_ns() - 10_000_000_000
+    records = [point(base, index + 1, (index + 1) * 100, offset=4000 - index * 1000,
+                     error=500, expiry=300 + index * 100 if index < 4 else 1000)
+               for index in range(5)]
+    fake_history(monkeypatch, source, records)
+    result = qualifier(source).qualify(base + 150, base + 550)
+    assert result.status == 'UNKNOWN' and result.reason == 'CLOCK_DISCONTINUITY'
+    assert all(value is None for value in (
+        result.start_utc_lower_ns, result.start_utc_upper_ns,
+        result.end_utc_lower_ns, result.end_utc_upper_ns,
+        result.source_epoch, result.first_sample_sequence, result.last_sample_sequence))
+    from bt_api_py.gateway_recovery_qualified_capture import GatewayQualifiedRecoveryCapture
+    from tests.unit.test_gateway_recovery_qualified_capture import observation, page
+
+    raw = page([observation(1, base, start=150, through=550)])
+    paired = GatewayQualifiedRecoveryCapture(lambda *_: raw, qualifier=qualifier(source)).capture(0, 1)
+    assert paired.page is raw
+    assert paired.qualifications[0].observation is raw.observations[0]
+    assert paired.qualifications[0].reason == 'CLOCK_DISCONTINUITY'
+    assert paired.qualifications[0].start_utc_lower_ns is None
+
+
+@pytest.mark.parametrize('offsets, expected', [
+    ((1400, 1050, 700, 350, 0), 'QUALIFIED'),
+    ((1401, 1051, 701, 351, 0), 'UNKNOWN'),
+    ((400, 300, 200, 100, 0), 'QUALIFIED'),
+])
+def test_utc_endpoint_order_allows_feasible_uncertainty(live, monkeypatch, offsets, expected):
+    source, _, _ = live
+    base = time.monotonic_ns() - 10_000_000_000
+    records = [point(base, index + 1, (index + 1) * 100, offset=offset,
+                     error=500, expiry=300 + index * 100 if index < 4 else 1000)
+               for index, offset in enumerate(offsets)]
+    fake_history(monkeypatch, source, records)
+    result = qualifier(source).qualify(base + 150, base + 550)
+    assert result.status == expected
+    if expected == 'QUALIFIED':
+        assert result.start_utc_lower_ns <= result.end_utc_upper_ns
+        if offsets[0] == 1400:
+            assert result.start_utc_lower_ns == result.end_utc_upper_ns
+    else:
+        assert result.reason == 'CLOCK_DISCONTINUITY'

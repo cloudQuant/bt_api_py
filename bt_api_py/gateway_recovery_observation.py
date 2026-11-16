@@ -42,6 +42,8 @@ class GatewayRecoveryObservationSettings:
     poll_interval_seconds: float
     owner_wait_seconds: float
     close_timeout_seconds: float
+    qualification_mode: str = 'disabled'
+    clock_max_interval_ns: int | None = None
 
     def __post_init__(self):
         try:
@@ -57,7 +59,13 @@ class GatewayRecoveryObservationSettings:
                 or not _duration(self.sqlite_timeout_seconds, 5)
                 or not _duration(self.poll_interval_seconds, 60)
                 or not _duration(self.owner_wait_seconds, 5)
-                or not _duration(self.close_timeout_seconds, 30)):
+                or not _duration(self.close_timeout_seconds, 30)
+                or type(self.qualification_mode) is not str
+                or self.qualification_mode not in ('disabled', 'local_clock_v1')
+                or (self.qualification_mode == 'disabled' and self.clock_max_interval_ns is not None)
+                or (self.qualification_mode == 'local_clock_v1' and (
+                    type(self.clock_max_interval_ns) is not int
+                    or not 1 <= self.clock_max_interval_ns <= (1 << 63) - 1))):
             raise ValueError('INVALID_RECOVERY_OBSERVATION_SETTINGS')
 
 
@@ -141,10 +149,14 @@ class GatewayRecoveryObservationRecorder:
 
     def _work(self):
         try:
+            qualification_options = (
+                {'qualification_mode': 'local_clock_v1'}
+                if self._settings.qualification_mode == 'local_clock_v1' else {}
+            )
             journal = RecoveryObservationJournal(
                 self._settings.journal_path, scope_ref=self._settings.scope_ref,
                 max_events=self._settings.max_events, max_bytes=self._settings.max_bytes,
-                timeout_seconds=self._settings.sqlite_timeout_seconds)
+                timeout_seconds=self._settings.sqlite_timeout_seconds, **qualification_options)
         except Exception:
             self._set('failed', 'JOURNAL_START_FAILED')
             self._started.set()
@@ -156,14 +168,20 @@ class GatewayRecoveryObservationRecorder:
                 handle, page = self._handle, self._page
             if page is not None:
                 try:
-                    previous = journal.checkpoint(self._settings.source_ref, page.source_epoch)
-                    if previous is not None and previous > page.last_sequence:
+                    qualified = self._settings.qualification_mode == 'local_clock_v1'
+                    raw = page.page if qualified else page
+                    previous = journal.checkpoint(self._settings.source_ref, raw.source_epoch)
+                    if previous is not None and previous > raw.last_sequence:
                         raise ValueError
-                    checkpoint = journal.append_page(self._settings.source_ref, page)
-                    expected = (page.observations[-1].sequence if page.observations else
-                                max(self._cursor, page.first_available_sequence - 1))
+                    if qualified:
+                        checkpoint = journal.append_page(
+                            self._settings.source_ref, raw, qualifications=page.qualifications)
+                    else:
+                        checkpoint = journal.append_page(self._settings.source_ref, raw)
+                    expected = (raw.observations[-1].sequence if raw.observations else
+                                max(self._cursor, raw.first_available_sequence - 1))
                     if (type(checkpoint) is not int or checkpoint != max(previous or 0, expected)
-                            or checkpoint > page.last_sequence):
+                            or checkpoint > raw.last_sequence):
                         raise ValueError
                     with self._lock:
                         self._cursor = checkpoint
@@ -196,13 +214,23 @@ class GatewayRecoveryObservationRecorder:
                     self._pause()
                     continue
                 try:
-                    if (type(page) is not RecoveryObservationPage or page.owner_pid != os.getpid()
-                            or page.after_sequence != self._cursor
-                            or (self._epoch is not None and page.source_epoch != self._epoch)):
+                    if self._settings.qualification_mode == 'local_clock_v1':
+                        from bt_api_py.gateway_recovery_qualified_capture import (
+                            GatewayQualifiedRecoveryPage,
+                        )
+                        if type(page) is not GatewayQualifiedRecoveryPage:
+                            raise ValueError
+                        page.__post_init__()
+                        raw = page.page
+                    else:
+                        raw = page
+                    if (type(raw) is not RecoveryObservationPage or raw.owner_pid != os.getpid()
+                            or raw.after_sequence != self._cursor
+                            or (self._epoch is not None and raw.source_epoch != self._epoch)):
                         raise ValueError
-                    page.__post_init__()
+                    raw.__post_init__()
                     with self._lock:
-                        self._epoch = page.source_epoch
+                        self._epoch = raw.source_epoch
                         self._handle = None
                         self._page = page
                 except Exception:

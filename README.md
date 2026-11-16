@@ -579,9 +579,28 @@ later coverage unknown; it does not claim the provider's remaining buffer was
 drained or that the source recovered.
 `binding.recovery_observation_status()` exposes finite local worker status;
 ready is not proof of network health. The default remains disabled. The normal
-operator configuration loader, UTC qualification, calendar accumulation and
-Monitor transport/evaluator are not yet connected to this source-recording
-option; its local source timestamps must not be sent as a cross-process clock.
+operator configuration loader, calendar accumulation and Monitor
+transport/evaluator are not yet connected to this source-recording option;
+its local monotonic timestamps must not be sent as a cross-process clock.
+
+An explicitly enabled recorder may select `qualification_mode="local_clock_v1"`
+and an explicit positive `clock_max_interval_ns`. The default `disabled` mode
+requires that interval setting to remain `None`. On the original account owner,
+a capture helper pairs every raw observation with its first local clock result;
+missing, expired or inconsistent clock history produces UNKNOWN with no UTC
+bounds. Unknown source observations remain SOURCE_UNKNOWN. Qualification checks
+publication history, valid intervals, overlapping calibration constraints and
+feasible UTC endpoint ordering; it neither authenticates SNTP nor proves recovery.
+
+The paired page is written by the recorder thread to an explicit schema-v2
+Gateway source log, atomically with raw records and checkpoint. Qualification
+rows count toward storage limits. Exact raw replays retain the first persisted
+qualification even when later clock calculations differ. The default v1 log
+and the opt-in v2 log reject each other's format; there is no automatic migration
+or repair of an existing log. Queued/running owner calls, pending pairs and the
+capture-stop marker retain their existing close/retry semantics. A clock that
+cannot be bound at initial helper construction stays unavailable for that helper;
+a later replacement is not silently adopted.
 
 The trusted factory's `GatewayServerClockRefreshSettings` can separately select
 `history_capacity` (2–4096, default 0). The original background clock records
@@ -591,7 +610,10 @@ restart has a new history epoch. An observed configuration change or recorder
 failure leaves history unavailable for that epoch, without changing the
 existing clock/dispatch behavior. Availability does not mean a sample is valid,
 and SNTP remains unauthenticated. This history has no disk, wire or operator
-configuration interface and does not yet qualify recovery intervals as UTC.
+configuration interface. The local qualifier can derive UTC endpoint bounds
+for eligible past intervals, and the explicit recorder option above persists
+those results. This is not cross-process monotonic comparison, a continuous
+market-health assertion, or a Monitor duration-rule implementation.
 
 The session's account reader owns the sole TD client. Direct orders and daily
 settlement borrow that client; the MD provider is lazy and shared across symbols.

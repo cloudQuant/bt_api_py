@@ -299,5 +299,7 @@ class GatewayRecoveryClockQualifier:
         if end >= current.snapshot.evidence.valid_until_monotonic_ns:
             return _unknown('SAMPLE_EXPIRED')
         end_bounds = self._bounds(current.snapshot, end)
+        if start_bounds[0] > end_bounds[1]:
+            return _unknown('CLOCK_DISCONTINUITY')
         return GatewayRecoveryClockQualification('QUALIFIED', 'OK', *start_bounds, *end_bounds,
                                                   epoch, start_sequence, current.sequence)
