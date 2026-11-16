@@ -81,12 +81,21 @@ def test_authorized_admin_handle_returns_explicit_unavailable(setup):
     service, ledger = setup
     reply = service.handle("risk.admin.status", context=context(), arguments={})
     assert reply["status"] == "OBSERVED"
-    assert reply["summary"]["threshold_utilization"] == {
-        "available": False, "status": "INCOMPLETE",
-        "reasons": ["policy_snapshot_unverified", "account_source_coverage_unverified",
-                    "complete_instrument_identity_unavailable", "trading_day_binding_unverified"],
-    }
+    utilization = reply["summary"]["threshold_utilization"]
+    assert utilization["available"] is False
+    assert utilization["status"] == "INCOMPLETE"
+    assert utilization["scope"] == "local_ledger"
+    # Each reason is a finite (code, status) pair derived from actual checks.
+    assert utilization["reasons"] == [
+        {"code": "policy_snapshot_unavailable", "status": "UNAVAILABLE"},
+        {"code": "trading_day_binding_unverified", "status": "UNVERIFIED"},
+        {"code": "account_source_coverage_unverified", "status": "UNVERIFIED"},
+        {"code": "instrument_identity_incomplete", "status": "UNVERIFIED"},
+    ]
+    assert all(reason["status"] in ("UNAVAILABLE", "UNVERIFIED")
+               for reason in utilization["reasons"])
     assert reply["summary"]["counts_coverage"] == {"scope": "local_ledger", "status": "INCOMPLETE"}
+    assert reply["summary"]["operator_refusal_counts"] == {}
     assert ledger.reads == 1
     assert_no_sensitive_output(reply)
 

@@ -262,7 +262,13 @@ def test_actual_host_registry_admission_to_memory_commit(monkeypatch, config, co
     assert response["ok"]
     if scenario == "ungranted":
         assert response["result"] == {"status": "REQUEST_REJECTED", "code": "risk_unauthorized"}
-        assert row(c.db) is None and not fence_calls
+        # No cancel state is created, but the refusal itself is appended.
+        assert row(c.db) is None
+        audits = c.db.execute(
+            "SELECT kind, code, detail_json FROM risk_pretrade_audit ORDER BY seq").fetchall()
+        assert len(audits) == 1
+        assert tuple(audits[0][:2]) == ("admin_refused", "risk_unauthorized")
+        assert "strategy-b" in audits[0][2]
     elif scenario == "authorized":
         assert response["result"] == {"status": "OBSERVED", "operation_id": "operation-a", "state": "UNKNOWN"}
         assert tuple(row(c.db)) == ("UNKNOWN", 1, 2)

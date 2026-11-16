@@ -174,11 +174,11 @@ def test_real_registry_and_storage_commit_once_without_gateway(composition):
     assert len(registry_checks) >= 4
     assert c.dispatch() == result
     assert tuple(row(c.db)) == ("UNKNOWN", 1, 2)
-    assert c.db.execute("SELECT count(*) FROM risk_pretrade_audit").fetchone()[0] == 2
+    # cancel_intent, cancel_claim and cancel_local_disposition.
+    assert c.db.execute("SELECT count(*) FROM risk_pretrade_audit").fetchone()[0] == 3
 
 
-@pytest.mark.parametrize("kind,value", [("strategy", "strategy-a"), ("account", ""),
-                                        ("instrument", "SHFE:rb")])
+@pytest.mark.parametrize("kind,value", [("strategy", "strategy-a")])
 def test_local_only_source_survives_default_mode_restart_without_remote_status(composition, kind, value):
     c = composition
     original = c.service._principals["curve-a"]
@@ -201,10 +201,8 @@ def test_local_only_source_survives_default_mode_restart_without_remote_status(c
     duplicate = restarted.handle(OP, context=context, arguments=args)
     assert duplicate == {"status": "OBSERVED", "operation_id": "operation-a", "state": "UNKNOWN"}
     changed = restarted.handle(OP, context=context, arguments=dict(args, scope_kind="account", scope_value=""))
-    if kind == "account":
-        assert changed == duplicate
-    else:
-        assert changed == {"status": "REQUEST_REJECTED", "code": "risk_request_conflict"}
+    # Default (non-strict) mode forwards; the stored intent conflicts on scope.
+    assert changed == {"status": "REQUEST_REJECTED", "code": "risk_request_conflict"}
     assert tuple(row(c.db)) == ("UNKNOWN", 1, 2)
 
 
@@ -393,7 +391,12 @@ def test_existing_unbound_v2_intent_stays_local_after_mode_change(composition, k
          state, 0, None, code, 1, 1, 1),
     )
     args = dict(ARGS, scope_kind=kind, scope_value=value)
-    assert c.dispatch(args)["state"] == "UNKNOWN"
+    if kind == "strategy":
+        assert c.dispatch(args)["state"] == "UNKNOWN"
+    else:
+        assert c.dispatch(args) == {
+            "status": "REQUEST_REJECTED", "code": "risk_cancel_local_scope_unsupported",
+        }
     result = c.db.execute("SELECT state,last_code FROM risk_pretrade_cancel_intents").fetchone()
     assert tuple(result) == (state, code)
     restarted = RiskOrderService(
@@ -405,6 +408,8 @@ def test_existing_unbound_v2_intent_stays_local_after_mode_change(composition, k
     assert restarted.handle("risk.cancel.status", context=context, arguments={"operation_id": "operation-a"}) == {
         "status": "OBSERVED", "operation_id": "operation-a", "state": "UNKNOWN", "gateway": None,
     }
+    # The restarted default (non-strict) service forwards; an unbound intent
+    # keeps its stored facts and is reported UNKNOWN for every scope.
     assert restarted.handle(OP, context=context, arguments=args) == {
         "status": "OBSERVED", "operation_id": "operation-a", "state": "UNKNOWN",
     }

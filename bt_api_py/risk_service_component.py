@@ -185,6 +185,8 @@ class RiskOrderService:
         self._strict_admin_cancel = strict_admin_cancel
         # Refusal counts since this process started, per represented strategy (risk.status).
         self._refusals: dict[str, Counter] = {}
+        # Admin/operator refusals since this process started, per finite code.
+        self._operator_refusals: Counter = Counter()
 
     # ------------------------------------------------------------------ identity
 
@@ -333,26 +335,28 @@ class RiskOrderService:
         if operation not in SUPPORTED_OPERATIONS:
             return _rejected("risk_request_invalid")
         if not isinstance(arguments, Mapping):
-            if operation == "risk.audit.read":
-                caller, _ = self.caller(context, operation)
-                if caller is not None and not self._audit_read_rejected(caller):
-                    return _rejected("risk_audit_unavailable")
-            return _rejected("risk_request_invalid")
+            return self._refuse_admin_arguments(operation, context)
         try:
             # The Registry hands frozen wire containers; work on bounded plain copies.
             arguments = _detach_wire(arguments)
             if type(arguments) is not dict:
                 raise ValueError
         except Exception:
-            if operation == "risk.audit.read":
-                caller, _ = self.caller(context, operation)
-                if caller is not None and not self._audit_read_rejected(caller):
-                    return _rejected("risk_audit_unavailable")
-            return _rejected("risk_request_invalid")
+            return self._refuse_admin_arguments(operation, context)
         caller, code = self.caller(context, operation)
         if operation in RISK_ADMIN_OPERATIONS:
             if caller is None:
-                return _rejected(code or "risk_unauthorized")
+                refusal = code or "risk_unauthorized"
+                self._count_operator_refusal(refusal)
+                if operation == "risk.cancel.request":
+                    self._record_admin_refusal(
+                        operation, None, refusal, context,
+                        scope_kind=arguments.get("scope_kind"),
+                        scope_value=arguments.get("scope_value"),
+                    )
+                else:
+                    self._record_admin_refusal(operation, None, refusal, context)
+                return _rejected(refusal)
             try:
                 result = self._admin(operation, caller, arguments, context=context)
             except Exception:
@@ -361,6 +365,8 @@ class RiskOrderService:
                 result = _rejected("risk_audit_unavailable")
             if operation == "risk.audit.read" and result.get("status") != "OBSERVED":
                 if not self._audit_read_rejected(caller):
+                    self._record_admin_refusal(
+                        operation, caller, "risk_audit_unavailable", context)
                     return _rejected("risk_audit_unavailable")
             return result
         if operation == "risk.status":
@@ -376,6 +382,55 @@ class RiskOrderService:
             return
         for strategy in caller.strategy_refs:
             self._refusals.setdefault(strategy, Counter())[result.code] += 1
+
+    # ------------------------------------------------------------- admin audit
+
+    def _count_operator_refusal(self, code: Any) -> None:
+        if type(code) is str and code:
+            self._operator_refusals[code] += 1
+
+    def _record_admin_refusal(
+        self, operation: str, caller: Any, code: Any, context: Any,
+        *, scope_kind: Any = None, scope_value: Any = None,
+    ) -> None:
+        """Append one engine-owned audit row; the refusal reply is already fixed."""
+        try:
+            record = getattr(self._engine, "record_admin_refusal", None)
+            if not callable(record):
+                return
+            subject = caller
+            if subject is None:
+                subject = getattr(context, "identity", None)
+            record(operation, subject, code, scope_kind=scope_kind, scope_value=scope_value)
+        except Exception:
+            # A storage failure cannot upgrade a refusal into a success.
+            return
+
+    def _refuse_admin(
+        self, operation: str, caller: Any, code: str, context: Any,
+        *, scope_kind: Any = None, scope_value: Any = None,
+    ) -> Mapping:
+        self._count_operator_refusal(code)
+        if operation != "risk.audit.read":
+            self._record_admin_refusal(
+                operation, caller, code, context,
+                scope_kind=scope_kind, scope_value=scope_value,
+            )
+        return _rejected(code)
+
+    def _refuse_admin_arguments(self, operation: str, context: Any) -> Mapping:
+        """Refuse malformed admin arguments while preserving the audit.read writer."""
+        if operation not in RISK_ADMIN_OPERATIONS:
+            return _rejected("risk_request_invalid")
+        caller, _ = self.caller(context, operation)
+        if operation == "risk.audit.read":
+            if caller is not None and self._audit_read_rejected(caller):
+                self._count_operator_refusal("risk_request_invalid")
+                return _rejected("risk_request_invalid")
+            reply = self._refuse_admin(operation, caller, "risk_request_invalid", context)
+            self._record_admin_refusal(operation, caller, "risk_request_invalid", context)
+            return reply
+        return self._refuse_admin(operation, caller, "risk_request_invalid", context)
 
     def _order(self, operation: str, caller: Any, code: str | None, arguments: dict) -> Mapping:
         from bt_api_risk.pretrade import RiskOrderLookupKind, RiskRequestError
@@ -603,7 +658,7 @@ class RiskOrderService:
         This is a trusted in-process composition, not a hostile-code sandbox.
         A committed local claim does not authorize Gateway I/O or a later retry.
         """
-        from bt_api_risk.pretrade.engine import PretradeEngine
+        from bt_api_risk.pretrade.engine import PretradeEngine, RiskAdminError
         from bt_api_risk.pretrade.ledger import PretradeLedger
 
         from bt_api_py.risk_service_config import RiskPrincipal
@@ -617,17 +672,29 @@ class RiskOrderService:
             principal_table = self._principals
             principal = principal_table.get(context.principal_ref)
             engine, ledger = self._engine, self._ledger
+            # A replaced transaction manager is not used even for the refusal
+            # audit: nothing about this request may touch untrusted storage.
+            ledger_trusted = (
+                type(ledger) is PretradeLedger
+                and getattr(ledger.transaction, "__func__", None) is PretradeLedger.transaction
+            )
             if (type(context) is not ServiceCallContext or type(admission) is not RiskAdminCancelAdmission
                     or type(principal) is not RiskPrincipal
-                    or type(engine) is not PretradeEngine or type(ledger) is not PretradeLedger
+                    or type(engine) is not PretradeEngine or not ledger_trusted
                     or engine._ledger is not ledger
-                    or getattr(ledger.transaction, "__func__", None) is not PretradeLedger.transaction
                     or getattr(engine._accept_operator_cancel_local, "__func__", None)
                     is not PretradeEngine._accept_operator_cancel_local
                     or not admission.matches_context(context) or not admission.matches_operation(operation)
                     or not admission.matches(arguments) or not caller.allows_cancel_scope(kind, value)):
+                self._count_operator_refusal("risk_unauthorized")
+                if ledger_trusted:
+                    self._record_admin_refusal(
+                        operation, caller, "risk_unauthorized", context,
+                        scope_kind=kind, scope_value=value,
+                    )
                 return _rejected("risk_unauthorized")
         except Exception:
+            self._count_operator_refusal("risk_unauthorized")
             return _rejected("risk_unauthorized")
 
         try:
@@ -658,6 +725,17 @@ class RiskOrderService:
                 engine._accept_operator_cancel_local(
                     caller, operation_id, kind, value, _before_commit=before_commit,
                 )
+        except RiskAdminError as error:
+            if error.code == "risk_cancel_local_scope_unsupported":
+                # Raised before the ledger transaction opens: a definite refusal
+                # with no committed state and no later send.
+                return self._refuse_admin(
+                    operation, caller, error.code, context,
+                    scope_kind=kind, scope_value=value,
+                )
+            # A transaction or scope close may have committed before failing;
+            # never send or retry based on the missing response.
+            return {"status": "OBSERVED", "operation_id": operation_id, "state": "UNKNOWN"}
         except Exception:
             # A transaction or scope close may have committed before failing;
             # never send or retry based on the missing response.
@@ -684,13 +762,22 @@ class RiskOrderService:
         else:
             fields_valid = set(arguments) == expected
         if not fields_valid:
-            return _rejected("risk_request_invalid")
+            return self._refuse_admin(operation, caller, "risk_request_invalid", context)
         engine = self._engine
         try:
             if operation == "risk.admin.status":
-                return {"status": "OBSERVED", "summary": json_safe(engine.status_summary())}
+                summary = engine.status_summary()
+                summary = dict(summary) if isinstance(summary, Mapping) else {}
+                # Process-local operator refusal counts; never order data.
+                summary["operator_refusal_counts"] = {
+                    code: int(count) for code, count in sorted(self._operator_refusals.items())
+                }
+                return {"status": "OBSERVED", "summary": json_safe(summary)}
             if operation == "risk.policy.read":
-                return self._policy_read()
+                reply = self._policy_read()
+                if reply.get("status") == "REQUEST_REJECTED":
+                    return self._refuse_admin(operation, caller, reply["code"], context)
+                return reply
             if operation == "risk.policy.publish":
                 if (
                     type(arguments["expected_version"]) is not int
@@ -701,7 +788,7 @@ class RiskOrderService:
                         and type(arguments["exchange_rules_text"]) is not str
                     )
                 ):
-                    return _rejected("risk_request_invalid")
+                    return self._refuse_admin(operation, caller, "risk_request_invalid", context)
                 published = engine.publish_policy(
                     caller,
                     arguments["document"],
@@ -718,7 +805,7 @@ class RiskOrderService:
                 }
             if operation == "risk.latch.list":
                 if type(arguments["active_only"]) is not bool:
-                    return _rejected("risk_request_invalid")
+                    return self._refuse_admin(operation, caller, "risk_request_invalid", context)
                 rows = engine.list_latches(active_only=arguments["active_only"])
                 return {"status": "OBSERVED", "latches": [_latch(row) for row in rows]}
             if operation == "risk.latch.release":
@@ -727,7 +814,7 @@ class RiskOrderService:
                     or type(arguments["expected_version"]) is not int
                     or type(arguments["reason"]) is not str
                 ):
-                    return _rejected("risk_request_invalid")
+                    return self._refuse_admin(operation, caller, "risk_request_invalid", context)
                 row = engine.release_latch(
                     caller, arguments["latch_id"], arguments["expected_version"], arguments["reason"]
                 )
@@ -739,9 +826,9 @@ class RiskOrderService:
                     result_fits = context.result_fits
                     read_bounded = getattr(engine, "list_unknown_bounded", None)
                 except Exception:
-                    return _rejected("risk_unknown_list_unavailable")
+                    return self._refuse_admin(operation, caller, "risk_unknown_list_unavailable", context)
                 if not callable(result_fits) or not callable(read_bounded):
-                    return _rejected("risk_unknown_list_unavailable")
+                    return self._refuse_admin(operation, caller, "risk_unknown_list_unavailable", context)
                 try:
                     rows = read_bounded()
                 except RiskAdminError as error:
@@ -749,13 +836,13 @@ class RiskOrderService:
                         "risk_unknown_list_too_large", "risk_unknown_list_corrupt",
                         "risk_unknown_list_unavailable",
                     } else "risk_unknown_list_unavailable"
-                    return _rejected(code)
+                    return self._refuse_admin(operation, caller, code, context)
                 except Exception:
-                    return _rejected("risk_unknown_list_unavailable")
+                    return self._refuse_admin(operation, caller, "risk_unknown_list_unavailable", context)
                 if type(rows) is not list:
-                    return _rejected("risk_unknown_list_unavailable")
+                    return self._refuse_admin(operation, caller, "risk_unknown_list_unavailable", context)
                 if len(rows) > 10_000:
-                    return _rejected("risk_unknown_list_too_large")
+                    return self._refuse_admin(operation, caller, "risk_unknown_list_too_large", context)
                 try:
                     permits = []
                     permit_ids = set()
@@ -782,12 +869,12 @@ class RiskOrderService:
                                 raise OverflowError("unknown list too large")
                         permits.append(permit)
                 except OverflowError:
-                    return _rejected("risk_unknown_list_too_large")
+                    return self._refuse_admin(operation, caller, "risk_unknown_list_too_large", context)
                 except Exception:
-                    return _rejected("risk_unknown_list_corrupt")
+                    return self._refuse_admin(operation, caller, "risk_unknown_list_corrupt", context)
                 response = {"status": "OBSERVED", "permits": permits}
                 if not _audit_nodes_fit(response):
-                    return _rejected("risk_unknown_list_too_large")
+                    return self._refuse_admin(operation, caller, "risk_unknown_list_too_large", context)
                 # Registry checks its 900 KiB result limit; only a configured
                 # frame checker additionally proves the complete envelope.
                 # Never give a callback the result that will be returned.
@@ -797,13 +884,13 @@ class RiskOrderService:
                     try:
                         accepted = result_fits(snapshot)
                         if type(accepted) is not bool or snapshot != response:
-                            return _rejected("risk_unknown_list_unavailable")
+                            return self._refuse_admin(operation, caller, "risk_unknown_list_unavailable", context)
                     except Exception:
-                        return _rejected("risk_unknown_list_unavailable")
+                        return self._refuse_admin(operation, caller, "risk_unknown_list_unavailable", context)
                     checks.append(accepted)
                 if checks[0] != checks[1]:
-                    return _rejected("risk_unknown_list_unavailable")
-                return response if checks[0] else _rejected("risk_unknown_list_too_large")
+                    return self._refuse_admin(operation, caller, "risk_unknown_list_unavailable", context)
+                return response if checks[0] else self._refuse_admin(operation, caller, "risk_unknown_list_too_large", context)
             if operation == "risk.counts.export":
                 content = engine.export_counts(arguments["trading_day"], arguments["format"])
                 return {"status": "OBSERVED", "format": arguments["format"], "content": content}
@@ -821,24 +908,24 @@ class RiskOrderService:
                         or type(snapshot) is not int or not 1 <= snapshot <= 2**63 - 1
                     ))
                 ):
-                    return _rejected("risk_request_invalid")
+                    return self._refuse_admin(operation, caller, "risk_request_invalid", context)
                 # The Registry enforces its result budget here. A configured
                 # ServiceHost frame checker also measures the sealed envelope;
                 # a bare Registry without one cannot prove a transport bound.
                 try:
                     result_fits = context.result_fits
                 except Exception:
-                    return _rejected("risk_audit_size_unavailable")
+                    return self._refuse_admin(operation, caller, "risk_audit_size_unavailable", context)
                 if not callable(result_fits):
-                    return _rejected("risk_audit_size_unavailable")
+                    return self._refuse_admin(operation, caller, "risk_audit_size_unavailable", context)
                 # The old reader may allocate unbounded audit details before
                 # any transport-size check; never silently fall back to it.
                 try:
                     read_bounded = getattr(engine, "read_audit_page", None)
                 except Exception:
-                    return _rejected("risk_audit_size_unavailable")
+                    return self._refuse_admin(operation, caller, "risk_audit_size_unavailable", context)
                 if not callable(read_bounded):
-                    return _rejected("risk_audit_size_unavailable")
+                    return self._refuse_admin(operation, caller, "risk_audit_size_unavailable", context)
                 raw_page = read_bounded(caller, after, limit, through, snapshot)
                 if (type(raw_page) is not dict
                         or set(raw_page) != {"records", "next_after", "through", "snapshot", "has_more"}
@@ -849,24 +936,24 @@ class RiskOrderService:
                         or type(raw_page["has_more"]) is not bool
                         or (through is not None and (raw_page["through"] != through
                             or raw_page["snapshot"] != snapshot))):
-                    return _rejected("risk_audit_size_unavailable")
+                    return self._refuse_admin(operation, caller, "risk_audit_size_unavailable", context)
                 try:
                     records = _audit_json_copy(raw_page["records"])
                 except (ValueError, TypeError, RecursionError, UnicodeError, OverflowError):
-                    return _rejected("risk_audit_corrupt")
+                    return self._refuse_admin(operation, caller, "risk_audit_corrupt", context)
                 if type(records) is not list or len(records) > limit:
-                    return _rejected("risk_audit_size_unavailable")
+                    return self._refuse_admin(operation, caller, "risk_audit_size_unavailable", context)
                 previous = after
                 for record in records:
                     if (type(record) is not dict or type(record.get("seq")) is not int
                             or not previous < record["seq"] <= raw_page["through"]):
-                        return _rejected("risk_audit_size_unavailable")
+                        return self._refuse_admin(operation, caller, "risk_audit_size_unavailable", context)
                     previous = record["seq"]
                 expected_more = len(records) == limit and previous < raw_page["through"]
                 expected_after = previous if expected_more else raw_page["through"]
                 if (type(raw_page["next_after"]) is not int or raw_page["next_after"] != expected_after
                         or raw_page["has_more"] != expected_more):
-                    return _rejected("risk_audit_size_unavailable")
+                    return self._refuse_admin(operation, caller, "risk_audit_size_unavailable", context)
 
                 def candidate(count: int) -> dict:
                     truncated = count < len(records)
@@ -894,22 +981,22 @@ class RiskOrderService:
                 total = len(records)
                 full = fits(total)
                 if full is None:
-                    return _rejected("risk_audit_size_unavailable")
+                    return self._refuse_admin(operation, caller, "risk_audit_size_unavailable", context)
                 if full:
                     return candidate(total)
                 if total == 0:
-                    return _rejected("risk_audit_size_unavailable")
+                    return self._refuse_admin(operation, caller, "risk_audit_size_unavailable", context)
                 first = fits(1)
                 if first is None:
-                    return _rejected("risk_audit_size_unavailable")
+                    return self._refuse_admin(operation, caller, "risk_audit_size_unavailable", context)
                 if not first:
                     # The caller's cursor remains unchanged, so this record is
                     # never silently skipped or reported as a completed page.
-                    return _rejected("risk_audit_record_too_large")
+                    return self._refuse_admin(operation, caller, "risk_audit_record_too_large", context)
                 # Existing clients interpret len(records) < limit as EOF.
                 # Never return a truncated success: let the caller retry the
                 # same cursor with a smaller limit instead.
-                return _rejected("risk_audit_page_too_large")
+                return self._refuse_admin(operation, caller, "risk_audit_page_too_large", context)
             if operation == "risk.cancel.request":
                 kind, value = arguments["scope_kind"], arguments["scope_value"]
                 if (
@@ -920,7 +1007,10 @@ class RiskOrderService:
                     or (kind == "strategy" and not _ref(value))
                     or (kind == "instrument" and (not _ref(value) or value.count(":") != 1))
                 ):
-                    return _rejected("risk_request_invalid")
+                    return self._refuse_admin(
+                        operation, caller, "risk_request_invalid", context,
+                        scope_kind=kind, scope_value=value,
+                    )
                 if getattr(self, "_strict_admin_cancel", False) is True:
                     return self._admit_cancel_locally(caller, context, arguments)
                 row = engine.request_cancel(caller, arguments["operation_id"], kind, value)
@@ -934,7 +1024,7 @@ class RiskOrderService:
             after, limit = arguments.get("after", ""), arguments.get("limit", 256)
             if (not _ref(operation_id) or type(after) is not str or (after and not _ref(after))
                     or type(limit) is not int or not 1 <= limit <= 256):
-                return _rejected("risk_request_invalid")
+                return self._refuse_admin(operation, caller, "risk_request_invalid", context)
             if not (caller.cancel_account_allowed or caller.cancel_strategy_refs
                     or caller.cancel_instrument_refs):
                 return {"status": "NOT_FOUND", "operation_id": operation_id}
@@ -956,7 +1046,17 @@ class RiskOrderService:
             return {"status": "OBSERVED", "operation_id": operation_id,
                     "state": "UNKNOWN", "gateway": None}
         except RiskAdminError as error:
-            return _rejected(error.code)
+            if getattr(error, "audited", False):
+                # The engine already appended exactly one refusal record.
+                self._count_operator_refusal(error.code)
+                return _rejected(error.code)
+            if operation == "risk.cancel.request":
+                return self._refuse_admin(
+                    operation, caller, error.code, context,
+                    scope_kind=arguments.get("scope_kind"),
+                    scope_value=arguments.get("scope_value"),
+                )
+            return self._refuse_admin(operation, caller, error.code, context)
 
     def _policy_read(self) -> Mapping:
         summary = self._engine.status_summary()
