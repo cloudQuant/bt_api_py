@@ -204,6 +204,7 @@ class ExecutionManagementReadHost:
         return self.status()
 
     def _run(self):
+        import zmq
         from bt_api_transport_zmq.service_v2 import ZmqServiceServer
 
         selected = self._selection
@@ -231,11 +232,25 @@ class ExecutionManagementReadHost:
                     ZmqServiceServer.__init__(self._server, selected.endpoint, selected.service_identity,
                                               selected.principals, self._service.handle,
                                               credentials=selected.credentials)
-                except BaseException:
+                except BaseException as error:
                     # Before the transport's context field exists, its exact
                     # constructor has done validation only, with no resources.
                     if not hasattr(self._server, '_context'):
                         self._server = None
+                        self._server_startup_uncertain = False
+                    elif (type(error) is zmq.ZMQError and error.errno == zmq.EADDRINUSE
+                          and type(self._server) is ZmqServiceServer
+                          and ZmqServiceServer.__module__ == 'bt_api_transport_zmq.service_v2'
+                          and ZmqServiceServer.__qualname__ == 'ZmqServiceServer'
+                          and getattr(self._server, '_closed', None) is True
+                          and getattr(self._server, '_close_pending', None) is False
+                          and self._server._context is None
+                          and getattr(self._server, '_socket', object()) is None
+                          and getattr(self._server, '_authenticator', object()) is None):
+                        # Bind happens after allocation. The exact constructor
+                        # returned its EADDRINUSE only after its owner-thread
+                        # close completed; arbitrary startup failures remain
+                        # uncertain even if some fields happen to be empty.
                         self._server_startup_uncertain = False
                     raise
                 self._server_startup_uncertain = False

@@ -1,0 +1,15 @@
+{
+  "schema": "bt_api_execution.management_read_service.v1",
+  "mode": "management_read_only",
+  "execution_scope": {"provider": "example", "environment": "paper", "account_ref": "account-example", "strategy_id": "strategy-example"},
+  "wire_scope": {"domain": "example-domain", "account_ref": "account-example", "strategy_ref": "strategy-example", "run_id": null},
+  "storage": {"journal_root": "/private/execution-journal", "audit_root": "/private/execution-audit", "storage_id": "c8ba2323-93dc-4a31-a0e5-e93098cd4544"},
+  "service_identity": {"role": "service", "principal_ref": "execution-read-service", "actor_ref": "execution-read-host"},
+  "client_identity": {"role": "application_client", "principal_ref": "management-client", "actor_ref": "operator-client"},
+  "grant": {
+    "service_id": "execution-read-service", "instance_id": "execution-read-instance", "scope_ref": "management-scope", "revision": "policy-v1",
+    "instruments": [{"provider": "example", "venue": "EXAMPLE", "environment": "paper", "product_type": "future", "instrument_id": "EXAMPLE:TEST", "native_symbol": "TEST"}],
+    "operations": ["execution.management.parent.read.v1", "execution.management.parent.plan.read.v1", "execution.management.parent.by_request.read.v1"]
+  },
+  "listener": {"endpoint": "tcp://127.0.0.1:17869", "server_public_key_file": "/private/keys/server.public", "server_secret_key_file": "/private/keys/server.secret", "client_public_key_file": "/private/keys/client.public"}
+}
