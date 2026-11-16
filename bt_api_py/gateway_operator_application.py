@@ -34,6 +34,14 @@ _SAFE_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _PROFILE_ROLES = frozenset({"account_session_worker", "market_hub", "trading_owner"})
 _OPERATION_STATES = frozenset({"idle", "running", "succeeded", "failed", "outcome_uncertain"})
 _ERROR_CODE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
+_READINESS_FAILURES = frozenset({
+    "component_maintenance", "component_delay", "gateway_lease", "host_delay", "paper_monitor",
+    "concurrent_fault", "intake_fence", "intake_fence_exception", "upstream_unhealthy",
+    "upstream_exception", "execution_parent_gateway", "component_false", "component_invalid",
+    "component_exception", "hard_unready_generation", "atomic_lease_failed",
+    "atomic_recheck_exception", "registry_update_exception",
+})
+_READINESS_RETRIES = frozenset({"component_retry", "atomic_lease_retry"})
 
 
 class GatewayOperatorApplicationError(RuntimeError):
@@ -320,6 +328,7 @@ class GatewayOperatorApplication:
             "operation": {"name": None, "state": "idle", "error_code": None},
             "account_session": None,
             "cleanup": {"unclaimed_provider_count": 0, "last_cleanup_code": None},
+            "readiness_observation": _readiness_unobserved(),
         }
 
     @classmethod
@@ -763,6 +772,7 @@ class GatewayOperatorApplication:
             "last_cleanup_code": None,
         }
         ready = False
+        readiness_observation = _readiness_unobserved()
         deployment_status_unavailable = False
         if deployment is not None:
             try:
@@ -778,6 +788,13 @@ class GatewayOperatorApplication:
             except BaseException:
                 ready = False
                 deployment_status_unavailable = True
+            try:
+                readiness_observation = _copy_readiness_observation(deployment.readiness_diagnostics)
+            except AttributeError:
+                if self._profile.role == "trading_owner":
+                    readiness_observation = _readiness_unavailable()
+            except BaseException:
+                readiness_observation = _readiness_unavailable()
             if self._profile.role == "account_session_worker":
                 try:
                     account_session = _copy_account_status(deployment.account_session_status)
@@ -814,6 +831,7 @@ class GatewayOperatorApplication:
             self._status["ready"] = ready
             self._status["account_session"] = account_session
             self._status["cleanup"] = cleanup
+            self._status["readiness_observation"] = readiness_observation
             if operation is not None:
                 self._set_operation_locked(*operation)
 
@@ -910,6 +928,39 @@ def _copy_cleanup_status(value: Mapping[str, object]) -> dict[str, object]:
     return {"unclaimed_provider_count": count, "last_cleanup_code": code}
 
 
+def _readiness_unobserved() -> dict[str, object]:
+    return {"state": "not_observed", "reason": None, "last_failure": None}
+
+
+def _readiness_unavailable() -> dict[str, object]:
+    return {"state": "unavailable", "reason": None, "last_failure": None}
+
+
+def _copy_readiness_observation(value: object) -> dict[str, object]:
+    """Copy only the fixed recent-observation vocabulary, without source data."""
+    try:
+        if not isinstance(value, Mapping) or set(value) != {"state", "reason", "last_failure"}:
+            return _readiness_unavailable()
+        state, reason, last = value["state"], value["reason"], value["last_failure"]
+        if type(state) is not str or (reason is not None and type(reason) is not str):
+            return _readiness_unavailable()
+        if last is not None and (type(last) is not str or last not in _READINESS_FAILURES):
+            return _readiness_unavailable()
+        if state in {"unknown", "not_observed"}:
+            return _readiness_unobserved() if reason is None and last is None else _readiness_unavailable()
+        if state == "unavailable":
+            return _readiness_unavailable()
+        if state == "valid" and reason is None:
+            return {"state": state, "reason": None, "last_failure": last}
+        if state == "retry" and reason in _READINESS_RETRIES:
+            return {"state": state, "reason": reason, "last_failure": last}
+        if state == "failed" and reason in _READINESS_FAILURES and last == reason:
+            return {"state": state, "reason": reason, "last_failure": last}
+    except BaseException:
+        return _readiness_unavailable()
+    return _readiness_unavailable()
+
+
 def _copy_status(value: Mapping[str, object]) -> Mapping[str, object]:
     account = value.get("account_session")
     operation = value.get("operation")
@@ -927,6 +978,9 @@ def _copy_status(value: Mapping[str, object]) -> Mapping[str, object]:
                 MappingProxyType(dict(account)) if isinstance(account, Mapping) else None
             ),
             "cleanup": MappingProxyType(dict(cleanup)) if isinstance(cleanup, Mapping) else None,
+            "readiness_observation": MappingProxyType(
+                _copy_readiness_observation(value.get("readiness_observation"))
+            ),
             # Present only for a cancel-only start (D63-58).
             **({"cancel_only": MappingProxyType(dict(value["cancel_only"]))}
                if isinstance(value.get("cancel_only"), Mapping) else {}),

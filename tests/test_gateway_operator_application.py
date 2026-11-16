@@ -322,3 +322,129 @@ def test_launch_config_only_selects_a_registered_code_profile(tmp_path: Path) ->
             GatewayOperatorLaunchConfig("client-selected-profile"), registry
         )
     assert missing.value.code == "PROFILE_NOT_REGISTERED"
+
+
+class _ObservationDeployment:
+    def __init__(self, diagnostic):
+        self.diagnostic = diagnostic
+        self.healthy_calls = 0
+        self.observation_calls = 0
+
+    @property
+    def state(self):
+        return "started"
+
+    @property
+    def healthy(self):
+        self.healthy_calls += 1
+        return True
+
+    @property
+    def readiness_diagnostics(self):
+        self.observation_calls += 1
+        if isinstance(self.diagnostic, BaseException):
+            raise self.diagnostic
+        return self.diagnostic
+
+    @property
+    def cleanup_status(self):
+        return {"unclaimed_provider_count": 0, "last_cleanup_code": None}
+
+    @property
+    def cancel_only_status(self):
+        return None
+
+    @property
+    def summary(self):
+        raise AssertionError("raw summary must never be accessed")
+
+
+def _observation_app(deployment, *, role="trading_owner"):
+    profile = GatewayOperatorProfile("observation-test", role, lambda: deployment)
+    app = GatewayOperatorApplication(profile)
+    app._deployment = deployment
+    return app
+
+
+def test_readiness_observation_tracks_recovery_without_reprobing_or_mutable_snapshots():
+    deployment = _ObservationDeployment({"state": "failed", "reason": "upstream_exception",
+                                         "last_failure": "upstream_exception"})
+    app = _observation_app(deployment)
+    app._refresh_deployment_status(state="running")
+    failed = app.status
+    assert failed["ready"] is True  # This change does not alter existing admission decisions.
+    assert dict(failed["readiness_observation"]) == deployment.diagnostic
+    assert deployment.healthy_calls == deployment.observation_calls == 1
+    with pytest.raises(TypeError):
+        failed["readiness_observation"]["reason"] = "changed"
+    deployment.diagnostic = {"state": "valid", "reason": None, "last_failure": "upstream_exception"}
+    app._refresh_deployment_status(state="running")
+    recovered = app.status
+    assert recovered["readiness_observation"]["state"] == "valid"
+    assert recovered["readiness_observation"]["reason"] is None
+    assert recovered["readiness_observation"]["last_failure"] == "upstream_exception"
+    assert failed["readiness_observation"]["state"] == "failed"
+    assert deployment.healthy_calls == deployment.observation_calls == 2
+    deployment.diagnostic["last_failure"] = "changed-after-copy"
+    assert app.status["readiness_observation"]["last_failure"] == "upstream_exception"
+
+
+@pytest.mark.parametrize("reason", [
+    "component_maintenance", "component_delay", "gateway_lease", "host_delay", "paper_monitor",
+    "concurrent_fault", "intake_fence", "intake_fence_exception", "upstream_unhealthy",
+    "upstream_exception", "execution_parent_gateway", "component_false", "component_invalid",
+    "component_exception", "hard_unready_generation", "atomic_lease_failed",
+    "atomic_recheck_exception", "registry_update_exception",
+])
+def test_readiness_observation_allows_each_documented_failure(reason):
+    observation = {"state": "failed", "reason": reason, "last_failure": reason}
+    assert application_module._copy_readiness_observation(observation) == observation
+
+
+@pytest.mark.parametrize("reason", ["component_retry", "atomic_lease_retry"])
+def test_readiness_observation_retains_last_failure_during_retry(reason):
+    observation = {"state": "retry", "reason": reason, "last_failure": "upstream_exception"}
+    assert application_module._copy_readiness_observation(observation) == observation
+
+
+@pytest.mark.parametrize("diagnostic", [
+    {"state": "failed", "reason": "private-secret", "last_failure": "private-secret"},
+    {"state": "private-secret", "reason": None, "last_failure": None},
+    {"state": "valid", "reason": None, "last_failure": "private-secret"},
+    {"state": "valid", "reason": None, "last_failure": None, "path": "private-secret"},
+    RuntimeError("private-secret"),
+])
+def test_readiness_observation_refuses_unknown_values_and_exceptions(diagnostic):
+    deployment = _ObservationDeployment(diagnostic)
+    app = _observation_app(deployment)
+    app._refresh_deployment_status(state="running")
+    status = app.status
+    assert dict(status["readiness_observation"]) == {
+        "state": "unavailable", "reason": None, "last_failure": None}
+    assert status["ready"] is True and status["error_code"] is None
+    assert "private-secret" not in repr(status)
+    assert deployment.healthy_calls == deployment.observation_calls == 1
+
+
+@pytest.mark.parametrize("role", ["account_session_worker", "market_hub"])
+def test_unobserved_readiness_is_explicit_for_non_trading_roles(role):
+    deployment = _ObservationDeployment({"state": "unknown", "reason": None, "last_failure": None})
+    if role == "account_session_worker":
+        deployment.account_session_status = {"state": "ready", "session_generation": None,
+                                             "ready": True, "fresh_for_seconds": 0}
+    app = _observation_app(deployment, role=role)
+    app._refresh_deployment_status(state="running")
+    assert dict(app.status["readiness_observation"]) == {
+        "state": "not_observed", "reason": None, "last_failure": None}
+    assert deployment.healthy_calls == 0 and deployment.observation_calls == 1
+
+
+def test_deployment_readiness_property_copies_only_cached_host_value():
+    host = SimpleNamespace(readiness_diagnostics={"state": "valid", "reason": None, "last_failure": None})
+    deployment = object.__new__(GatewayOperatorDeployment)
+    deployment._host = host
+    snapshot = deployment.readiness_diagnostics
+    host.readiness_diagnostics["state"] = "failed"
+    assert snapshot["state"] == "valid"
+    with pytest.raises(TypeError):
+        snapshot["state"] = "failed"

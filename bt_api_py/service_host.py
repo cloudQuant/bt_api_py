@@ -467,6 +467,8 @@ class ServiceHost:
     _gateway_parent_services: tuple = ()
     _gateway_lease_faults: frozenset = frozenset()
     _trusted_atomic_monitors: tuple = ()
+    _readiness_diagnostic_lock = threading.Lock()
+    _readiness_diagnostic = ("unknown", None, None)
 
     def __init__(
         self,
@@ -586,6 +588,8 @@ class ServiceHost:
         self._component_maintenance_faults: set[str] = set()
         self._component_delay_faults: set[str] = set()
         self._host_delay_faulted = False
+        self._readiness_diagnostic_lock = threading.Lock()
+        self._readiness_diagnostic = ("unknown", None, None)
         self._endpoint: str | None = None
         self._start_failure: str | None = None
         self._last_cleanup_failures: tuple[str, ...] = ()
@@ -608,6 +612,21 @@ class ServiceHost:
         return self._state
 
     @property
+    def readiness_diagnostics(self) -> Mapping[str, str | None]:
+        """Return the last readiness observation and most recent hard failure.
+
+        Values are finite internal codes. This snapshot does not probe a
+        component or assert current Registry admission or account authority.
+        """
+        with self._readiness_diagnostic_lock:
+            state, reason, last_failure = self._readiness_diagnostic
+        return MappingProxyType({
+            "state": state,
+            "reason": reason,
+            "last_failure": last_failure,
+        })
+
+    @property
     def summary(self) -> Mapping[str, Any]:
         """Return selected instance and capability metadata without secrets."""
 
@@ -626,6 +645,8 @@ class ServiceHost:
                 "cleanup_history": tuple(self._cleanup_history),
                 "upstream": self._upstream_summary(),
                 "last_upstream_cleanup": self._last_upstream_cleanup,
+                # Last completed observation, not an additional readiness probe.
+                "readiness": self.readiness_diagnostics,
                 "atomic_monitor": MappingProxyType({
                     "selected": len(self._trusted_atomic_monitors),
                     "owners": len(self._atomic_monitor_owners),
@@ -2906,30 +2927,52 @@ class ServiceHost:
     def _all_components_ready(self) -> bool:
         return self._components_readiness_state() == 'valid'
 
+    def _record_readiness(self, state: str, reason: str | None = None) -> str:
+        # Only fixed internal codes are recorded; never retain callback data.
+        with self._readiness_diagnostic_lock:
+            last_failure = self._readiness_diagnostic[2]
+            if state == 'failed':
+                last_failure = reason
+            self._readiness_diagnostic = (state, reason, last_failure)
+        return state
+
+    def _readiness_fault_reason(self) -> str | None:
+        if self._component_maintenance_faults:
+            return 'component_maintenance'
+        if self._component_delay_faults:
+            return 'component_delay'
+        if self._gateway_lease_faults:
+            return 'gateway_lease'
+        if getattr(self, '_host_delay_faulted', False):
+            return 'host_delay'
+        if self._paper_monitor_faults:
+            return 'paper_monitor'
+        return None
+
     def _components_readiness_state(self) -> str:
         # local_intake_available is solely the independent writer-fence
         # decision; lease readiness is checked by its component separately.
         # Any false or exceptional fence is hard, even during lease retry.
         try:
             if any(service.local_intake_available is not True for service in self._atomic_intake_services):
-                return 'failed'
+                return self._record_readiness('failed', 'intake_fence')
         except Exception:
-            return 'failed'
+            return self._record_readiness('failed', 'intake_fence_exception')
         if (self._component_maintenance_faults or self._component_delay_faults or self._gateway_lease_faults
                 or getattr(self, '_host_delay_faulted', False)):
-            return 'failed'
+            return self._record_readiness('failed', self._readiness_fault_reason() or 'concurrent_fault')
         if self._paper_monitor_faults:
-            return 'failed'
+            return self._record_readiness('failed', 'paper_monitor')
         if self._upstream is not None:
             try:
                 if self._upstream_faulted or self._upstream.healthy is not True:
-                    return 'failed'
+                    return self._record_readiness('failed', 'upstream_unhealthy')
             except Exception:
-                return 'failed'
+                return self._record_readiness('failed', 'upstream_exception')
         if self._execution_parent_active and not self._execution_parent_gateway_ready(
             tuple(self._execution_parent_active.values())
         ):
-            return 'failed'
+            return self._record_readiness('failed', 'execution_parent_gateway')
         retry = False
         for component in self._components:
             try:
@@ -2939,14 +2982,16 @@ class ServiceHost:
                         for service in self._atomic_intake_services):
                     retry = True
                 elif status is not True:
-                    return 'failed'
+                    return self._record_readiness(
+                        'failed', 'component_false' if status is False else 'component_invalid'
+                    )
             except Exception:
-                return 'failed'
+                return self._record_readiness('failed', 'component_exception')
         if (self._component_maintenance_faults or self._component_delay_faults
                 or getattr(self, '_host_delay_faulted', False)
                 or self._gateway_lease_faults or self._paper_monitor_faults):
-            return 'failed'
-        return 'retry' if retry else 'valid'
+            return self._record_readiness('failed', self._readiness_fault_reason() or 'concurrent_fault')
+        return self._record_readiness('retry', 'component_retry') if retry else self._record_readiness('valid')
 
     def _restricted_operation_ready(
         self,
@@ -3370,23 +3415,29 @@ class ServiceHost:
                     try:
                         if hard_generation != registry._hard_unready_generation:
                             observed = 'failed'
+                            self._record_readiness('failed', 'hard_unready_generation')
                         if observed != 'failed' and any(service.local_intake_available is not True
                                                         for service in self._atomic_intake_services):
                             observed = 'failed'
+                            self._record_readiness('failed', 'intake_fence')
                         if (self._component_maintenance_faults or self._component_delay_faults
                                 or getattr(self, '_host_delay_faulted', False)
                                 or self._gateway_lease_faults or self._paper_monitor_faults):
                             observed = 'failed'
+                            self._record_readiness('failed', self._readiness_fault_reason() or 'concurrent_fault')
                         if observed != 'failed':
                             for service in self._atomic_intake_services:
                                 lease_state = service._lease_readiness_status()
                                 if lease_state == 'failed':
                                     observed = 'failed'
+                                    self._record_readiness('failed', 'atomic_lease_failed')
                                     break
                                 if lease_state == 'retry':
                                     observed = 'retry'
+                                    self._record_readiness('retry', 'atomic_lease_retry')
                     except Exception:
                         observed = 'failed'
+                        self._record_readiness('failed', 'atomic_recheck_exception')
                     if observed == 'retry':
                         registry._set_parent_retry_unready()
                     elif observed == 'failed':
@@ -3399,6 +3450,7 @@ class ServiceHost:
                 if registry.ready is not ready:
                     registry.set_ready(ready)
         except Exception:
+            self._record_readiness('failed', 'registry_update_exception')
             raise ServiceHostError("READINESS_UPDATE_FAILED") from None
 
     def _maintain_components(self, *, registrations_only: bool = False) -> None:

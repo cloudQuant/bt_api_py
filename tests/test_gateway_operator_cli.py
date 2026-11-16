@@ -168,3 +168,36 @@ def test_log_level_shows_the_gateway_packages_confirmations_only_when_asked(caps
     # The option is validated by the parser before anything is loaded.
     with pytest.raises(SystemExit):
         operator_cli.main(["--config", "missing.yaml", "--log-level", "VERBOSE"])
+
+
+def test_cli_reports_readiness_observation_changes(monkeypatch, tmp_path, capsys):
+    import json
+
+    class ChangingApp(_LifecycleApp):
+        def __init__(self):
+            super().__init__({}, start_state="running")
+            self.reads = 0
+
+        @property
+        def status(self):
+            result = dict(super().status)
+            if self.state == "running":
+                self.reads += 1
+                if self.reads == 1:
+                    result["readiness_observation"] = {"state": "failed", "reason": "component_false",
+                                                       "last_failure": "component_false"}
+                else:
+                    result["readiness_observation"] = {"state": "valid", "reason": None,
+                                                       "last_failure": "component_false"}
+                    self.handlers[signal.SIGTERM](signal.SIGTERM, None)
+            return result
+
+    app = ChangingApp()
+    _wire_cli(monkeypatch, app)
+    assert operator_cli.main(["--config", str(tmp_path / "profile.yaml")]) == 0
+    rows = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    observations = [row["readiness_observation"] for row in rows if "readiness_observation" in row]
+    assert observations == [
+        {"state": "failed", "reason": "component_false", "last_failure": "component_false"},
+        {"state": "valid", "reason": None, "last_failure": "component_false"},
+    ]

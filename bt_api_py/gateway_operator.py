@@ -415,6 +415,12 @@ class GatewayOperatorDeployment:
         return self._host.healthy
 
     @property
+    def readiness_diagnostics(self) -> Mapping[str, object]:
+        """Detached cached Host observation; does not probe readiness."""
+
+        return MappingProxyType(dict(self._host.readiness_diagnostics))
+
+    @property
     def summary(self) -> Mapping[str, Any]:
         return self._host.summary
 
