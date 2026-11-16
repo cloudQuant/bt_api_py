@@ -1064,6 +1064,7 @@ class ServiceClientRuntime:
         client_session_id: str | None = None,
         run_id: str | None = None,
         requested_operations: Mapping[str, frozenset[str]] | None = None,
+        registration_mounts: frozenset[str] | None = None,
         monotonic_clock: Callable[[], float] = time.monotonic,
         require_unregister_ack: bool = False,
         cleanup_unknown: Callable[[], bool] | None = None,
@@ -1073,6 +1074,15 @@ class ServiceClientRuntime:
         if type(config) not in (ClientConfig, ServiceConfig):
             raise ServiceRuntimeError("INVALID_CONFIG")
         self._config = config.to_public_dict()
+        if registration_mounts is not None:
+            if (type(config) is not ClientConfig or type(registration_mounts) is not frozenset
+                    or not registration_mounts or any(type(mount) is not str for mount in registration_mounts)):
+                raise ServiceRuntimeError("INVALID_REGISTRATION_MOUNTS")
+            mounts = [binding["mount"] for client in self._config.get("clients", {}).values()
+                      for binding in client["settings"]["bindings"]]
+            if any(mount not in MOUNT_PORTS or mounts.count(mount) != 1 for mount in registration_mounts):
+                raise ServiceRuntimeError("INVALID_REGISTRATION_MOUNTS")
+        self._registration_mounts = registration_mounts
         expected_role = self._config.get("process_role")
         if expected_role is not None and identity.role.value != expected_role:
             raise ServiceRuntimeError("ROLE_MISMATCH")
@@ -1116,6 +1126,8 @@ class ServiceClientRuntime:
         self._observation_owner_thread = threading.current_thread()
         self._requested_operations = dict(requested_operations or {})
         for mount, operations in self._requested_operations.items():
+            if registration_mounts is not None and mount not in registration_mounts:
+                raise ServiceRuntimeError("INVALID_ACTION_REQUEST")
             if mount not in MOUNT_PORTS or type(operations) is not frozenset or not operations:
                 raise ServiceRuntimeError("INVALID_ACTION_REQUEST")
             if mount == "broker.group_monitor" and not operations <= _GROUP_MONITOR_OPERATIONS:
@@ -1615,6 +1627,9 @@ class ServiceClientRuntime:
         try:
             for client in self._config.get("clients", {}).values():
                 for binding in client["settings"]["bindings"]:
+                    if (self._registration_mounts is not None
+                            and binding["mount"] not in self._registration_mounts):
+                        continue
                     first_binding = len(self._bindings)
                     try:
                         options = client["settings"].get("options", {})
