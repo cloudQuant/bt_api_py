@@ -19,7 +19,10 @@ from dataclasses import dataclass, replace
 from types import MethodType
 from typing import TYPE_CHECKING
 
-from bt_api_py.gateway_strategy_client import GatewayStrategyClientSession
+from bt_api_py.gateway_strategy_client import (
+    GatewayStrategyClientSession,
+    _release_scope_rejected_custody,
+)
 from bt_api_py.service_runtime_cleanup import runtime_cleanup_confirmed
 from bt_api_py.service_runtime_thread import RuntimeSnapshot, ThreadedRuntimeError, _timeout
 
@@ -591,6 +594,10 @@ class GatewayBtApi:
                 )
                 if gateway_done:
                     self._gateway_close_snapshot = result
+                    if (self._session is self._gateway_session
+                            and self._runtime is self._gateway_runtime):
+                        _release_scope_rejected_custody(
+                            self._gateway_session, self._gateway_runtime, result)
             if gateway_done and self._risk_cleanup_confirmed and self._execution_cleanup_confirmed:
                 with self._lock:
                     self._state = "closed"

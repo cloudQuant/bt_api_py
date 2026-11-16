@@ -99,6 +99,7 @@ class ExecutionParentStrategySession:
         self._target = target_copy
         self._lock = threading.Lock()
         self._close_requested = self._start_uncertain = self._cleanup_uncertain = False
+        self._start_scope_rejected = False
         self._closed_snapshot = None
 
     @property
@@ -129,6 +130,7 @@ class ExecutionParentStrategySession:
             raise ThreadedRuntimeError('CLEANUP_FAILED')
         try:
             if (self._close_requested or self._cleanup_uncertain or self._start_uncertain
+                    or self._start_scope_rejected
                     or self._runtime is not self._original_runtime
                     or type(self._runtime) is not ThreadedServiceClientRuntime
                     or self._runtime.strict_cleanup_required is not True):
@@ -141,9 +143,19 @@ class ExecutionParentStrategySession:
                         or snapshot.thread_alive is not True or snapshot.identity != self._target.identity
                         or snapshot.run_id != self._target.run_id or self._close_requested):
                     raise ThreadedRuntimeError('CLEANUP_POLICY_UNPROVEN')
+                active = [binding for binding in snapshot.bindings if binding.active is True]
+                if (not active or any(binding.scope != self._target.scope for binding in active)
+                        or len(active) != 1 or active[0].mount != self._target.mount
+                        or active[0].service_id != self._target.service_id
+                        or active[0].instance_id != self._target.instance_id
+                        or active[0].scope_ref != self._target.scope_ref
+                        or active[0].required is not True):
+                    self._start_scope_rejected = True
+                    raise ThreadedRuntimeError('REGISTRATION_SCOPE_MISMATCH')
                 return snapshot
             except BaseException:
-                self._start_uncertain = True
+                if not self._start_scope_rejected:
+                    self._start_uncertain = True
                 raise
         finally:
             self._lock.release()

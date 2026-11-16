@@ -7,6 +7,7 @@ import pytest
 import bt_api_py.gateway_strategy_client as gateway
 from bt_api_py.service_runtime import ServiceClientRuntime
 from bt_api_py.service_runtime_thread import (
+    BindingSnapshot,
     RuntimeSnapshot,
     ThreadedRuntimeError,
     ThreadedServiceClientRuntime,
@@ -21,10 +22,13 @@ def harness(monkeypatch):
     session = gateway.GatewayStrategyClientSession(**parts(), strict_cleanup=True)
     runtime = session.runtime
     running = RuntimeSnapshot(
-        "running", True, True, None, (), 0, 0, session.route.identity,
+        "running", True, True, None, (BindingSnapshot(
+            "registration", "epoch", True, session.route.mount, session.route.service_id,
+            session.route.instance_id, session.route.scope_ref, session.route.scope,
+            frozenset({"direct.events.progress"}), True),), 0, 0, session.route.identity,
         session.route.scope.run_id, 0, 0, True,
     )
-    closed = replace(running, state="closed", thread_alive=False, healthy=False)
+    closed = replace(running, state="closed", thread_alive=False, healthy=False, bindings=())
     observations = {"snapshot": running, "thread": True}
     calls = []
 

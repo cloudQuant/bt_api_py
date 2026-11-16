@@ -302,10 +302,10 @@ def test_public_yaml_bt_host_cancel_recovery_stream_and_lease(tmp_path, monkeypa
             def close(self):
                 self.wrapped.close()
 
-        def make_transport(self, *args):
+        def make_transport(self, *args, **kwargs):
             transport_starts.append(True)
             return DropResponse(
-                factory_call(self, *args), self._profiles["security-a"].public_key == a_keys[0]
+                factory_call(self, *args, **kwargs), self._profiles["security-a"].public_key == a_keys[0]
             )
 
         monkeypatch.setattr(ZmqTransportFactory, "__call__", make_transport)

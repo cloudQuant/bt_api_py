@@ -57,6 +57,36 @@ class _CleanupNotStarted(Exception):
     """The strict close call was not issued and may be explicitly retried."""
 
 
+def _strategy_registration_scope_matches(snapshot, route):
+    if (type(snapshot) is not RuntimeSnapshot or snapshot.identity != route.identity
+            or snapshot.run_id != route.scope.run_id or type(snapshot.bindings) is not tuple):
+        return False
+    active = [binding for binding in snapshot.bindings if binding.active is True]
+    return (bool(active) and all(binding.scope == route.scope for binding in active)
+            and any(binding.mount == route.mount and binding.service_id == route.service_id
+                    and binding.instance_id == route.instance_id and binding.scope_ref == route.scope_ref
+                    and binding.required is True for binding in active))
+
+
+def _release_scope_rejected_custody(session, runtime, snapshot):
+    """Release only this original owner's locally closed non-strict session.
+
+    The non-strict close contract does not prove remote unregister.
+    """
+    if (type(session) is not GatewayStrategyClientSession
+            or session._strict_cleanup is not False or session._start_scope_rejected is not True
+            or session._runtime is not runtime or session._original_runtime is not runtime
+            or type(snapshot) is not RuntimeSnapshot or snapshot.state not in ("closed", "failed")
+            or snapshot.thread_alive is not False
+            or _RETAINED_STRATEGY_SESSIONS.get(id(session)) is not session):
+        return
+    try:
+        if runtime.status() == snapshot:
+            _RETAINED_STRATEGY_SESSIONS.pop(id(session), None)
+    except Exception:
+        pass
+
+
 def _strict_close_snapshot(runtime, timeout_seconds, *, allow_close, identity, run_id):
     """Observe a strict cleanup once; None means the original owner is unknown."""
     if (type(runtime) is not ThreadedServiceClientRuntime
@@ -654,6 +684,7 @@ class GatewayStrategyClientSession:
         self._lifecycle_lock = threading.Lock()
         self._close_requested = False
         self._start_uncertain = False
+        self._start_scope_rejected = False
         self._cleanup_uncertain = False
         self._closed_snapshot = None
         self._command_client = command_client
@@ -735,11 +766,19 @@ class GatewayStrategyClientSession:
 
     def start(self, *, timeout_seconds: float = 5.0) -> RuntimeSnapshot:
         if not self._strict_cleanup:
-            return self._runtime.start(timeout_seconds=timeout_seconds)
+            if self._start_scope_rejected:
+                raise ThreadedRuntimeError("REGISTRATION_SCOPE_MISMATCH")
+            snapshot = self._runtime.start(timeout_seconds=timeout_seconds)
+            if not _strategy_registration_scope_matches(snapshot, self._route):
+                self._start_scope_rejected = True
+                _RETAINED_STRATEGY_SESSIONS[id(self)] = self
+                raise ThreadedRuntimeError("REGISTRATION_SCOPE_MISMATCH")
+            return snapshot
         if not self._lifecycle_lock.acquire(blocking=False):
             raise ThreadedRuntimeError("CLEANUP_FAILED")
         try:
             if (self._close_requested or self._cleanup_uncertain or self._start_uncertain
+                    or self._start_scope_rejected
                     or self._runtime is not self._original_runtime
                     or type(self._runtime) is not ThreadedServiceClientRuntime
                     or self._runtime.strict_cleanup_required is not True):
@@ -755,16 +794,22 @@ class GatewayStrategyClientSession:
                         or snapshot.run_id != self._route.scope.run_id
                         or self._close_requested):
                     raise ThreadedRuntimeError("CLEANUP_POLICY_UNPROVEN")
+                if not _strategy_registration_scope_matches(snapshot, self._route):
+                    self._start_scope_rejected = True
+                    raise ThreadedRuntimeError("REGISTRATION_SCOPE_MISMATCH")
                 return snapshot
             except BaseException:
-                self._start_uncertain = True
+                if not self._start_scope_rejected:
+                    self._start_uncertain = True
                 raise
         finally:
             self._lifecycle_lock.release()
 
     def close(self, *, timeout_seconds: float = 5.0) -> RuntimeSnapshot:
         if not self._strict_cleanup:
-            return self._runtime.close(timeout_seconds=timeout_seconds)
+            snapshot = self._runtime.close(timeout_seconds=timeout_seconds)
+            _release_scope_rejected_custody(self, self._original_runtime, snapshot)
+            return snapshot
         self._close_requested = True
         if not self._lifecycle_lock.acquire(blocking=False):
             raise ThreadedRuntimeError("CLEANUP_FAILED")

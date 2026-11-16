@@ -344,7 +344,13 @@ def test_close_timeout_keeps_handle_until_worker_finishes(monkeypatch):
     class SlowCloseRuntime:
         def __init__(self, _config, **kwargs):
             self.identity, self.run_id = kwargs["identity"], kwargs["run_id"]
-            self.bindings = ()
+            self.bindings = (SimpleNamespace(
+                registration_id="registration", service_epoch="epoch", active=True,
+                mount="broker.direct_write", service_id="gateway", instance_id="instance",
+                scope_ref="scope", scope=kwargs["scope_resolver"]("scope"),
+                operations=frozenset({"direct.events.progress"}), required=True,
+                lease_deadline=time.monotonic() + 60),)
+            self.bindings[0].scope = replace(self.bindings[0].scope, strategy_ref="strategy", run_id=self.run_id)
             self.healthy = True
             self.cleanup_failures = self.unregister_uncertainties = 0
 
@@ -385,7 +391,13 @@ def test_cleanup_failure_retains_handle_and_explicit_close_retries(monkeypatch):
     class RetryCloseRuntime:
         def __init__(self, _config, **kwargs):
             self.identity, self.run_id = kwargs["identity"], kwargs["run_id"]
-            self.bindings = ()
+            self.bindings = (SimpleNamespace(
+                registration_id="registration", service_epoch="epoch", active=True,
+                mount="broker.direct_write", service_id="gateway", instance_id="instance",
+                scope_ref="scope", scope=kwargs["scope_resolver"]("scope"),
+                operations=frozenset({"direct.events.progress"}), required=True,
+                lease_deadline=time.monotonic() + 60),)
+            self.bindings[0].scope = replace(self.bindings[0].scope, strategy_ref="strategy", run_id=self.run_id)
             self.healthy = True
             self.cleanup_failures = self.unregister_uncertainties = 0
 
