@@ -118,6 +118,7 @@ class CtpGatewayTrustedResources:
     upgrade_control_release_audit: bool = False
     calendar_settings: object | None = field(default=None, repr=False)
     recovery_observation_settings: object | None = field(default=None, repr=False)
+    instrument_status_read: object | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         from bt_api_py.gateway_parent_acceptance_service import GatewayParentAcceptanceGrant
@@ -198,6 +199,7 @@ def create_ctp_gateway_profile_factory(
             upgrade_control_release_audit=resources.upgrade_control_release_audit,
             calendar_settings=resources.calendar_settings,
             recovery_observation_settings=resources.recovery_observation_settings,
+            instrument_status_read=resources.instrument_status_read,
             cancel_only=cancel_only,
         )
         return profile.deployment_factory()

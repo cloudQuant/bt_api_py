@@ -50,6 +50,7 @@ from bt_api_py.gateway_direct_service import (
     CANCEL_OPERATIONS,
     CONTROL_OPERATIONS,
     STRATEGY_POSITION_OPERATIONS,
+    INSTRUMENT_STATUS_OPERATIONS,
     ACCOUNT_COMPARISON_OPERATIONS,
     ACCOUNT_STRATEGY_READ_OPERATIONS,
     ACCOUNT_OBSERVER_OPERATIONS,
@@ -408,6 +409,7 @@ def _validate_config(
     parent_settings: object | None,
     acceptance_grants: tuple,
     calendar_settings: object | None,
+    instrument_status_read: object | None,
 ) -> str:
     if type(config) is not ServiceConfig or type(authority) is not TrustedServiceAuthority:
         raise CtpGatewayTradingError("INVALID_TRADING_CONFIGURATION")
@@ -625,7 +627,7 @@ def _validate_config(
                             or entry.identity.role is not WireRole.STRATEGY_CLIENT
                             or entry.identity.actor_ref != grant.strategy_ref
                             or scope.strategy_ref != grant.strategy_ref
-                            or not resource.operations
+                            or not (resource.operations - INSTRUMENT_STATUS_OPERATIONS)
                             <= ((_OPERATIONS | (CANCEL_OPERATIONS if cancel_enabled else frozenset()))
                                 | (STRATEGY_POSITION_OPERATIONS if ledger_enabled else frozenset()))
                                 | (STRATEGY_FINANCIAL_OPERATIONS if facts_financial_enabled else frozenset())
@@ -633,6 +635,9 @@ def _validate_config(
                                 | ((DELEGATED_STRATEGY_CANCEL_OPERATIONS | {'direct.delegated_cancel_status'}) if extensions_enabled and cancel_enabled else frozenset())
                                 | (frozenset().union(*(item.operations for item in parent_grants
                                     if item.identity == entry.identity and item.strategy_scope == scope.strategy_ref)) if parent_enabled else frozenset())
+                            or (bool(resource.operations & INSTRUMENT_STATUS_OPERATIONS)
+                                and (instrument_status_read is None or
+                                     principal not in instrument_status_read.principal_instruments))
                             or (scope.strategy_ref in risk_only_submit
                                 and resource.operations & {"direct.reserve", "direct.dispatch"})
                         ):
@@ -823,6 +828,7 @@ def build_ctp_gateway_trading_profile(
     account_read_principals: frozenset[str] = frozenset(),
     market_settings: CtpGatewayMarketSettings | None = None,
     recovery_observation_settings=None,
+    instrument_status_read=None,
     control_grants: Mapping[str, GatewayControlGrant] | None = None,
     upgrade_controls_from_v9: bool = False,
     upgrade_strategy_ledger_from_v10: bool = False,
@@ -898,6 +904,18 @@ def build_ctp_gateway_trading_profile(
     control_grants = {} if control_grants is None else dict(control_grants)
     if type(settings) is not CtpGatewayTradingSettings or not _absolute(registry_path):
         raise CtpGatewayTradingError("INVALID_TRADING_SETTINGS")
+    if instrument_status_read is not None:
+        from bt_api_py.gateway_instrument_status_service import GatewayInstrumentStatusReadSettings
+        if (type(instrument_status_read) is not GatewayInstrumentStatusReadSettings
+                or not isinstance(grants, Mapping)
+                or any(principal not in grants or type(grants[principal]) is not GatewayDirectGrant or any(
+                    key.provider != settings.account_key.provider
+                    or key.environment != settings.account_key.environment
+                    or key.product_type != 'future'
+                    or not account_venue_contains_instrument_venue(settings.account_key, key.venue)
+                    or key.native_symbol not in grants[principal].symbols
+                    for key in keys) for principal, keys in instrument_status_read.principal_instruments.items())):
+            raise CtpGatewayTradingError('INVALID_INSTRUMENT_STATUS_SETTINGS')
     if recovery_observation_settings is not None:
         from bt_api_py.gateway_recovery_observation import GatewayRecoveryObservationSettings
         if (type(recovery_observation_settings) is not GatewayRecoveryObservationSettings
@@ -1085,7 +1103,15 @@ def build_ctp_gateway_trading_profile(
         parent_settings,
         acceptance_grants,
         calendar_settings,
+        instrument_status_read,
     )
+    if instrument_status_read is not None:
+        for principal in instrument_status_read.principal_instruments:
+            if not any(resource.port == 'service.direct_write'
+                       and resource.instance_id == instance
+                       and 'direct.instrument_status' in resource.operations
+                       for entry in authority.grants.get(principal, ()) for resource in entry.resources):
+                raise CtpGatewayTradingError('INVALID_INSTRUMENT_STATUS_SETTINGS')
     cancel_enabled = config.components["gateway"]["settings"]["options"].get(
         "cancel_enabled", False
     )
@@ -1705,6 +1731,8 @@ def build_ctp_gateway_trading_profile(
                     except Exception:
                         holder["clock_source"] = None
                 provider = session.direct_provider
+                if instrument_status_read is not None:
+                    holder['instrument_status_provider'] = provider
                 account_binding = session.account_binding
                 if type(provider) is not provider_type or not _ref(account_binding):
                     raise CtpGatewayTradingError("CTP_SESSION_BINDING_INVALID")
@@ -2402,6 +2430,15 @@ def build_ctp_gateway_trading_profile(
                     raise CtpGatewayTradingError("MONITOR_INCOMPATIBLE")
             returns = holder.get("returns")
             strategy_ledger = holder.get("strategy_ledger")
+            instrument_status_service = None
+            if instrument_status_read is not None:
+                from bt_api_py.gateway_instrument_status_service import GatewayInstrumentStatusService
+                status_session = holder['session']
+                status_provider = holder['instrument_status_provider']
+                instrument_status_service = GatewayInstrumentStatusService(
+                    owner, status_session, status_provider, journal, instrument_status_read,
+                    session_is_original=lambda: (holder.get('session') is status_session
+                        and holder.get('instrument_status_provider') is status_provider))
             binding = GatewayDirectServiceBinding(
                 journal,
                 static_grants,
@@ -2423,6 +2460,8 @@ def build_ctp_gateway_trading_profile(
                 market_gate_simnow_relaxed=gate_latency > 2.0,
                 risk_only_submit_strategies=(frozenset() if delegation_settings is None
                                              else delegation_settings.risk_only_submit_strategies),
+                instrument_status_service=(None if instrument_status_read is None else
+                    instrument_status_service),
             )
             if calendar_settings is not None and calendar_settings.day_switch is not None:
                 from bt_api_ctp.calendar_snapshot import CalendarSnapshot

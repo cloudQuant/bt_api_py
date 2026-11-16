@@ -190,18 +190,25 @@ class _StrategyOwnerExtension:
         security_profiles,
         route,
         peer,
+        instrument_status_enabled=False,
     ):
         self._route, self._peer = route, peer
+        self._instrument_status_enabled = instrument_status_enabled
         self._calendar_settings = calendar_settings
         self._account_settings = account_settings
         self._market_settings = market_settings
         self._instrument_settings = instrument_settings
         self._account_ref, self._scope_ref = account_ref, scope_ref
         self._stream_scope, self._security_profiles = stream_scope, security_profiles
-        self._account = self._market = self._instrument = self._calendar = None
-        self._uncertainties = {"account": 0, "market": 0, "instrument": 0, "calendar": 0}
+        self._account = self._market = self._instrument = self._calendar = self._instrument_status = None
+        self._uncertainties = {"account": 0, "market": 0, "instrument": 0, "calendar": 0, "instrument_status": 0}
 
     def start(self, runtime):
+        if self._instrument_status_enabled:
+            from bt_api_py.gateway_strategy_instrument_status import GatewayInstrumentStatusOwner
+            self._instrument_status = GatewayInstrumentStatusOwner(
+                account_ref=self._account_ref, scope_ref=self._scope_ref, route=self._route, peer=self._peer)
+            self._instrument_status.start(runtime)
         if self._calendar_settings is not None:
             from bt_api_py.gateway_strategy_calendar import GatewayCalendarOwner
             self._calendar = GatewayCalendarOwner(self._calendar_settings, account_ref=self._account_ref, scope_ref=self._scope_ref, route=self._route, peer=self._peer)
@@ -238,6 +245,8 @@ class _StrategyOwnerExtension:
             self._market.start(runtime)
 
     def invoke(self, operation, arguments):
+        if operation.startswith('instrument_status.') and self._instrument_status is not None:
+            return self._instrument_status.invoke(operation.removeprefix('instrument_status.'), arguments)
         if operation in {
             "account.refresh",
             "account.snapshot",
@@ -259,7 +268,7 @@ class _StrategyOwnerExtension:
 
     @property
     def cleanup_uncertainties(self):
-        for name in ("account", "market", "instrument", "calendar"):
+        for name in ("account", "market", "instrument", "calendar", "instrument_status"):
             owner = getattr(self, "_" + name)
             if owner is not None:
                 count = owner.cleanup_uncertainties
@@ -273,7 +282,7 @@ class _StrategyOwnerExtension:
 
     def close(self):
         failed = False
-        for name in ("calendar", "market", "instrument", "account"):
+        for name in ("instrument_status", "calendar", "market", "instrument", "account"):
             owner = getattr(self, "_" + name)
             if owner is None:
                 continue
@@ -606,6 +615,7 @@ class GatewayStrategyClientSession:
             or frozen_market is not None
             or frozen_instrument is not None
             or frozen_calendar is not None
+            or 'direct.instrument_status' in requested_operations
         ):
             runtime_options["owner_extension_factory"] = (
                 lambda: _StrategyOwnerExtension(
@@ -618,6 +628,7 @@ class GatewayStrategyClientSession:
                     stream_scope=WireScope(scope.execution_domain_ref),
                     security_profiles=frozen_security,
                     route=route_copy, peer=peer_copy,
+                    instrument_status_enabled='direct.instrument_status' in requested_operations,
                 )
             )
         if strict_cleanup:
@@ -635,6 +646,12 @@ class GatewayStrategyClientSession:
         position_client = GatewayStrategyPositionClient(
             runtime, binding=bound, route=route_copy
         )
+        instrument_status_client = None
+        if 'direct.instrument_status' in requested_operations:
+            from bt_api_py.gateway_strategy_instrument_status import (
+                GatewayStrategyInstrumentStatusClient,
+            )
+            instrument_status_client = GatewayStrategyInstrumentStatusClient(runtime, route=route_copy, peer=peer_copy)
         delegated_client = GatewayStrategyDelegatedClient(
             runtime, binding=bound, route=route_copy, cancel_host=delegated_cancel_host
         )
@@ -690,6 +707,7 @@ class GatewayStrategyClientSession:
         self._command_client = command_client
         self._execution_stream_client = execution_stream_client
         self._position_client = position_client
+        self._instrument_status_client = instrument_status_client
         self._delegated_client = delegated_client
         self._financial_client = financial_client
         self._account_observer = account_observer
@@ -735,6 +753,10 @@ class GatewayStrategyClientSession:
     @property
     def position_client(self) -> GatewayStrategyPositionClient:
         return self._position_client
+
+    @property
+    def instrument_status(self):
+        return self._instrument_status_client
 
     @property
     def delegated_client(self) -> GatewayStrategyDelegatedClient:

@@ -771,7 +771,7 @@ def _load_resources(config, *, trading):
         raw = _protected_json(resource_path)
         # A trading bundle may add a "clock" section (trusted SNTP policy).
         optional = ({"clock", "controls", "strategy_ledger", "strategy_financial", "delegation", "execution_subject_scopes", "required_monitor",
-                     "account_observation", "recovery_observation"} if trading else set()) | {"calendars"}
+                     "account_observation", "recovery_observation", "instrument_status_read"} if trading else set()) | {"calendars"}
         if type(raw) is not dict or not set(keys) <= set(raw) <= set(keys) | optional:
             _invalid()
         if type(raw["schema_version"]) is not int or raw["schema_version"] != 1:
@@ -891,6 +891,23 @@ def _load_resources(config, *, trading):
             # and every subscription waits forever (same as ctp_account_process).
             return CtpMarketStream(queue, allow_zero_md_login_response=True, **options)
         if trading:
+            instrument_status_read = None
+            if 'instrument_status_read' in raw:
+                from bt_api_base.market_protocol import MarketInstrumentKey
+
+                from bt_api_py.gateway_instrument_status_service import (
+                    GatewayInstrumentStatusReadSettings,
+                )
+                value = _mapping(raw['instrument_status_read'], ('principal_instruments', 'owner_wait_seconds'))
+                if type(value['principal_instruments']) is not dict:
+                    _invalid()
+                instruments = {}
+                for principal, keys in value['principal_instruments'].items():
+                    if type(keys) is not list:
+                        _invalid()
+                    instruments[principal] = tuple(MarketInstrumentKey.from_dict(key) for key in keys)
+                instrument_status_read = GatewayInstrumentStatusReadSettings(
+                    instruments, value['owner_wait_seconds'])
             clock = _clock_settings(raw.get("clock"))
             recovery_observation = (_recovery_observation_settings(raw["recovery_observation"], settings)
                                     if "recovery_observation" in raw else None)
@@ -926,6 +943,7 @@ def _load_resources(config, *, trading):
                 return_settings=return_settings, market_settings=market,
                 clock_verifier_factory=verifier_factory, clock_allowed_servers=allowed_servers,
                 clock_refresh_settings=refresh, control_grants=control_grants,
+                instrument_status_read=instrument_status_read,
                 required_monitor=required_monitor,
                 upgrade_controls_from_v9=upgrade_controls,
                 upgrade_strategy_ledger_from_v10=_strategy_ledger_upgrade(

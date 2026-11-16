@@ -102,6 +102,14 @@ class GatewayBtApi:
         self._command = session.command_client
         self._stream = session.execution_stream_client
         self._position = session.position_client
+        self._instrument_status = session.instrument_status
+        self._instrument_status_peer = (None if self._instrument_status is None else self._instrument_status._peer)
+        self._instrument_status_route = (None if self._instrument_status is None else self._instrument_status._route)
+        self._instrument_status_route_value = (None if self._instrument_status_route is None else replace(
+            self._instrument_status_route, scope=replace(self._instrument_status_route.scope),
+            identity=replace(self._instrument_status_route.identity)))
+        self._instrument_status_peer_value = (None if self._instrument_status_peer is None else
+                                              replace(self._instrument_status_peer))
         self._delegated = session.delegated_client
         self._financial = session.financial_client
         self._delegated_cancel_host = self._delegated._cancel_host
@@ -182,6 +190,7 @@ class GatewayBtApi:
             or session.command_client is not self._command
             or session.execution_stream_client is not self._stream
             or session.position_client is not self._position
+            or session.instrument_status is not self._instrument_status
             or session.delegated_client is not self._delegated
             or session.financial_client is not self._financial
             or session.account_observer is not self._account_observer
@@ -210,6 +219,14 @@ class GatewayBtApi:
         for client in (self._account, self._instrument, self._calendar, *self._subscriptions.values()):
             if client is not None and client._runtime is not self._runtime:
                 raise RuntimeError("GATEWAY_BINDING_CHANGED")
+        if self._instrument_status is not None and (
+                self._instrument_status._runtime is not self._runtime
+                or self._instrument_status._route is not self._instrument_status_route
+                or self._instrument_status._route != self._instrument_status_route_value
+                or self._instrument_status._route != self._route
+                or self._instrument_status._peer is not self._instrument_status_peer
+                or self._instrument_status._peer != self._instrument_status_peer_value):
+            raise RuntimeError("GATEWAY_BINDING_CHANGED")
         if self._account_observer is not None and (
             self._account_observer._runtime is not self._runtime
             or self._account_observer._route.mount != 'store.account'
@@ -1014,6 +1031,13 @@ class GatewayBtApi:
         return self._position.position(
             instrument, quantity_unit=quantity_unit, timeout_seconds=timeout_seconds
         )
+
+    def query_instrument_status(self, exchange_name, instrument, *, timeout_seconds=5.0):
+        """Read an explicitly granted diagnostic; it does not authorize trading."""
+        self._check(exchange_name)
+        if self._instrument_status is None:
+            raise RuntimeError('INSTRUMENT_STATUS_UNAVAILABLE')
+        return self._instrument_status.query(instrument, timeout_seconds=timeout_seconds)
 
     def get_strategy_close_capacity(
         self, exchange_name, instrument, *, quantity_unit, side, offset, quantity,

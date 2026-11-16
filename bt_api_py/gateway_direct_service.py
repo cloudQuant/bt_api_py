@@ -83,6 +83,7 @@ CANCEL_OPERATIONS = frozenset({"direct.cancel", "direct.cancel_status"})
 # stay importable from this module because existing callers use it.
 
 STRATEGY_POSITION_OPERATIONS = frozenset({"direct.strategy_position", "direct.strategy_close_capacity"})
+INSTRUMENT_STATUS_OPERATIONS = frozenset({"direct.instrument_status"})
 STRATEGY_FINANCIAL_OPERATIONS = frozenset({'direct.strategy_financial'})
 ACCOUNT_COMPARISON_OPERATIONS = frozenset({"account.strategy_net_comparison"})
 # Account-wide reads of every strategy's funds and book (G64-06), for an account operator only.
@@ -129,7 +130,7 @@ MARKET_OPERATIONS = frozenset({
 })
 TRADING_OPERATIONS = (
     SUPPORTED_OPERATIONS | CANCEL_OPERATIONS | ACCOUNT_READ_OPERATIONS | INSTRUMENT_OPERATIONS | EVENT_OPERATIONS
-    | MARKET_OPERATIONS | CONTROL_OPERATIONS | STRATEGY_POSITION_OPERATIONS | STRATEGY_FINANCIAL_OPERATIONS | ACCOUNT_COMPARISON_OPERATIONS | ACCOUNT_STRATEGY_READ_OPERATIONS | ACCOUNT_OBSERVER_OPERATIONS | ACCOUNT_FACTS_OPERATIONS | ACCOUNT_CANCEL_ATTEMPT_OPERATIONS | DELEGATED_STRATEGY_READ_OPERATIONS | DELEGATED_STRATEGY_CANCEL_OPERATIONS | DELEGATED_WRITE_OPERATIONS | DELEGATE_ACTOR_OPERATIONS | DELEGATE_ACTOR_V2_OPERATIONS | DELEGATE_ACTOR_STREAM_OPERATIONS | PARENT_OPERATIONS | PARENT_SOURCE_OPERATIONS | PARENT_V2_OPERATIONS | PARENT_FAULT_OPERATIONS | PARENT_ACCEPTANCE_OPERATIONS
+    | MARKET_OPERATIONS | CONTROL_OPERATIONS | STRATEGY_POSITION_OPERATIONS | INSTRUMENT_STATUS_OPERATIONS | STRATEGY_FINANCIAL_OPERATIONS | ACCOUNT_COMPARISON_OPERATIONS | ACCOUNT_STRATEGY_READ_OPERATIONS | ACCOUNT_OBSERVER_OPERATIONS | ACCOUNT_FACTS_OPERATIONS | ACCOUNT_CANCEL_ATTEMPT_OPERATIONS | DELEGATED_STRATEGY_READ_OPERATIONS | DELEGATED_STRATEGY_CANCEL_OPERATIONS | DELEGATED_WRITE_OPERATIONS | DELEGATE_ACTOR_OPERATIONS | DELEGATE_ACTOR_V2_OPERATIONS | DELEGATE_ACTOR_STREAM_OPERATIONS | PARENT_OPERATIONS | PARENT_SOURCE_OPERATIONS | PARENT_V2_OPERATIONS | PARENT_FAULT_OPERATIONS | PARENT_ACCEPTANCE_OPERATIONS
 )
 WRITE_OPERATIONS = frozenset(
     {"direct.reserve", "direct.release", "direct.dispatch", "direct.cancel", "direct.delegate_actor_cancel", "direct.delegate_actor_release"} | CONTROL_WRITE_OPERATIONS | DELEGATED_STRATEGY_CANCEL_OPERATIONS | DELEGATED_WRITE_OPERATIONS | PARENT_WRITE_OPERATIONS
@@ -584,9 +585,16 @@ class GatewayDirectServiceBinding:
         market_gate_max_latency_seconds: float = 2.0,
         market_gate_simnow_relaxed: bool = False,
         risk_only_submit_strategies: frozenset[str] = frozenset(),
+        instrument_status_service=None,
     ):
         if type(journal) is not GatewayDirectCommandJournal:
             raise TypeError("EXACT_DIRECT_JOURNAL_REQUIRED")
+        if instrument_status_service is not None:
+            from bt_api_py.gateway_instrument_status_service import GatewayInstrumentStatusService
+            if (type(instrument_status_service) is not GatewayInstrumentStatusService
+                    or instrument_status_service._owner is not owner
+                    or instrument_status_service._journal is not journal):
+                raise ValueError('INVALID_INSTRUMENT_STATUS_BINDING')
         if not isinstance(grants, Mapping) or not grants:
             raise ValueError("INVALID_DIRECT_GRANTS")
         # D63-37 (optional, empty by default): these strategies' SUBMIT belongs to
@@ -666,6 +674,7 @@ class GatewayDirectServiceBinding:
         self._cancel_journal = GatewayDirectCancelJournal(journal) if cancel_enabled else None
         self._grants = MappingProxyType(copied)
         self._owner = owner
+        self._instrument_status_service = self._original_instrument_status_service = instrument_status_service
         self._reservation_fence = reservation_fence
         self._reservation_owner_serialized = reservation_owner_serialized
         self._execution_stream = execution_stream
@@ -679,6 +688,7 @@ class GatewayDirectServiceBinding:
             | (CANCEL_OPERATIONS if cancel_enabled else frozenset())
             | (CONTROL_OPERATIONS if control is not None else frozenset())
             | (STRATEGY_POSITION_OPERATIONS if owner is not None and journal._schema_version >= 11 else frozenset())
+            | (INSTRUMENT_STATUS_OPERATIONS if instrument_status_service is not None else frozenset())
             | (STRATEGY_FINANCIAL_OPERATIONS if owner is not None and journal._schema_version >= 14 and strategy_financial_enabled else frozenset())
             | ((DELEGATED_STRATEGY_READ_OPERATIONS - {'direct.delegated_cancel_status'}) if owner is not None and journal._schema_version >= 12 else frozenset())
             | (frozenset({'direct.delegated_cancel_status'}) if cancel_enabled and journal._schema_version >= 12 else frozenset())
@@ -1475,6 +1485,15 @@ class GatewayDirectServiceBinding:
                 arguments=arguments, grant=grant)
         if operation in STRATEGY_POSITION_OPERATIONS:
             return self._handle_strategy_position(operation, context, arguments, grant)
+        if operation in INSTRUMENT_STATUS_OPERATIONS:
+            if identity.actor_ref != grant.strategy_ref or identity.delegate_ref is not None:
+                return _reject('SCOPE_DENIED')
+            if (self._instrument_status_service is None or
+                    self._instrument_status_service is not self._original_instrument_status_service):
+                return _reject('INSTRUMENT_STATUS_UNAVAILABLE')
+            result = self._instrument_status_service.handle(context, arguments, grant)
+            _ensure_reply_fits(context, result)
+            return result
         if operation == 'direct.delegated_cancel_status':
             return self._handle_delegated_cancel_status(context, arguments, permit)
         if operation in DELEGATED_STRATEGY_READ_OPERATIONS:

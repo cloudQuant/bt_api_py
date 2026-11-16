@@ -507,6 +507,7 @@ class ServiceCallContext:
     result_fits: Callable[[Mapping[str, Any]], bool] | None = None
     dispatch_admission: ServiceDispatchAdmission | RiskAdminCancelAdmission | None = None
     _wire_arguments: object = field(default=None, repr=False, compare=False)
+    service_epoch: str | None = field(default=None, repr=False, compare=False)
 
     def _is_registry_wire_arguments(self, arguments: object) -> bool:
         token = self._wire_arguments
@@ -7436,6 +7437,7 @@ class ServiceRegistry:
                 result_fits,
                 admission,
                 (_REGISTRY_WIRE_ARGUMENTS, arguments),
+                row['service_epoch'],
             )
             if admission is not None and operation in (_EXECUTION_PARENT_OPERATIONS | _EXECUTION_RELEASE_OPERATIONS):
                 admission._execution_context = context
@@ -7567,7 +7569,7 @@ class ServiceRegistry:
                 capability.port == "service.market_source" and operation == "market.clock_observation"
             ) or (
                 capability.port == "service.direct_write"
-                and operation in {"direct.strategy_position", "direct.strategy_close_capacity", "direct.strategy_financial"}
+                and operation in {"direct.strategy_position", "direct.strategy_close_capacity", "direct.strategy_financial", "direct.instrument_status"}
             ) or (
                 capability.port == "service.direct_write" and operation in {"direct.reserve", "direct.delegated_reserve"}
                 and result.get("status") == "REQUEST_REJECTED"
@@ -7582,6 +7584,7 @@ class ServiceRegistry:
                         (context.registration_id, principal, self._epoch, self._now()),
                     ).fetchone()
                     if (current is None or current["instance_id"] != instance_id
+                            or (operation == 'direct.instrument_status' and context.service_epoch != self._epoch)
                             or current["port"] != capability.port or not self._ready
                             or current["policy_version"] != self.policy_version
                             or current["requirements_version"] != self.requirements_version

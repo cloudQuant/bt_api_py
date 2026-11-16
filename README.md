@@ -652,6 +652,39 @@ recorder. The `ctp-local-readonly` profile rejects this section. Existing market
 clock, storage-isolation and journal compatibility requirements still apply;
 selecting the trading profile does not itself enable native trading writes.
 
+The same protected trading bundle can explicitly enable instrument-status
+diagnostics with `instrument_status_read`. This section has exactly two fields:
+`principal_instruments`, a mapping from existing principal references to lists
+of complete six-field `MarketInstrumentKey` objects, and `owner_wait_seconds`
+(greater than 0 and at most 5). The allowlist is copied and bounded to 256
+principals and 4096 keys in total; duplicates, empty lists and `null` are rejected.
+Each key must match the configured provider/environment, futures product type,
+account venue coverage and that principal's existing native-symbol grant.
+The Registry resource grant must separately include `direct.instrument_status`
+on `service.direct_write`. Omitting the section leaves this capability disabled;
+the read-only profile does not accept it. This creates no new native session or
+database and does not enable trading writes.
+
+Clients must explicitly request `direct.instrument_status`; default operation
+selection does not include it. `GatewayBtApi.query_instrument_status(exchange_name,
+instrument, timeout_seconds=5)` uses the existing authenticated runtime and
+returns a detached `GatewayInstrumentStatusQueryResult`: either `OBSERVED` with
+a scoped projection or `UNAVAILABLE` with a finite reason. The server reads on
+the original CTP owner and rechecks the captured session/status revision; the
+Registry rechecks registration, epoch, lease, authority and global readiness
+before returning. The first read that initializes a source scope may return
+unavailable; a later explicit read can observe that scope. A timed-out client
+keeps its original pending handle rather than implicitly issuing another query.
+
+`CURRENT` means the provider ledger was current at the captured local view.
+The client token rechecks only its original runtime, registration and peer; it
+does not query the server again or prove the status is still current at delivery.
+The result always has `decision_eligible=False`, `continuity_proven=False`,
+`authorizes_trading=False` and `product_mapping="NOT_PROVEN"`. Do not adapt an
+unavailable response to a missing provider observation or use it to authorize
+orders, compose a trading calendar, or release waiting orders. Source continuity,
+freshness, actual account acceptance and that decision path remain separate work.
+
 The session's account reader owns the sole TD client. Direct orders and daily
 settlement borrow that client; the MD provider is lazy and shared across symbols.
 The network Host and native account owner use separate threads. A fresh

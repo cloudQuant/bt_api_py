@@ -654,7 +654,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                     "service.direct_write": frozenset(
                         {"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch",
                          "direct.cancel", "direct.cancel_status",
-                         "direct.strategy_position", "direct.strategy_close_capacity", "direct.strategy_financial",
+                         "direct.strategy_position", "direct.strategy_close_capacity", "direct.strategy_financial", "direct.instrument_status",
                          "direct.delegated_command_status",
                          "direct.delegated_cancel", "direct.delegated_cancel_status",
                          "direct.delegated_reserve", "direct.delegated_dispatch",
@@ -3196,6 +3196,9 @@ def build_component(
                 and spec.options.get("role") == "trading_owner"
                 and port == "service.direct_write"
             ):
+                if (getattr(adapter, '_instrument_status_service', None) is not
+                        getattr(adapter, '_original_instrument_status_service', None)):
+                    raise ServiceComponentError('BUILTIN_COMPONENT_INVALID')
                 configured = getattr(adapter, "supported_operations", None)
                 if type(configured) is frozenset and trading_delegation_adapter is not None:
                     configured = configured | prepared.module.DELEGATED_WRITE_OPERATIONS
@@ -3211,6 +3214,7 @@ def build_component(
                     configured = configured | prepared.module.DELEGATE_ACTOR_STREAM_OPERATIONS
                 optional_operations = (
                     (prepared.module.CONTROL_OPERATIONS if prepared.options.get("control_enabled") is True else frozenset())
+                    | (prepared.module.INSTRUMENT_STATUS_OPERATIONS if getattr(adapter, '_instrument_status_service', None) is not None else frozenset())
                     | (prepared.module.STRATEGY_POSITION_OPERATIONS if prepared.options.get("strategy_ledger_enabled") is True else frozenset())
                     | (prepared.module.STRATEGY_FINANCIAL_OPERATIONS if prepared.options.get("account_facts_financial_enabled") is True else frozenset())
                     | ((prepared.module.DELEGATED_STRATEGY_READ_OPERATIONS - {'direct.delegated_cancel_status'}) if prepared.options.get("account_extensions_enabled") is True else frozenset())
@@ -3473,6 +3477,7 @@ def build_component(
                         | prepared.module.EVENT_OPERATIONS
                         | prepared.module.CANCEL_OPERATIONS
                         | prepared.module.STRATEGY_POSITION_OPERATIONS
+                        | prepared.module.INSTRUMENT_STATUS_OPERATIONS
                         | prepared.module.STRATEGY_FINANCIAL_OPERATIONS
                         | prepared.module.DELEGATED_STRATEGY_READ_OPERATIONS
                         | prepared.module.DELEGATED_STRATEGY_CANCEL_OPERATIONS

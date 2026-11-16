@@ -158,7 +158,7 @@ PORT_OPERATIONS = MappingProxyType(
         "service.direct_write": frozenset(
             {"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch",
              "direct.cancel", "direct.cancel_status",
-             "direct.strategy_position", "direct.strategy_close_capacity", "direct.strategy_financial",
+             "direct.strategy_position", "direct.strategy_close_capacity", "direct.strategy_financial", "direct.instrument_status",
              "direct.delegated_command_status",
              "direct.delegated_cancel", "direct.delegated_cancel_status",
              "direct.delegated_reserve", "direct.delegated_dispatch",
@@ -3028,7 +3028,7 @@ class ServiceClientRuntime:
             operations = operations.difference(
                 {"direct.parent.acceptance_order", "direct.events.read_after", "direct.events.progress", "direct.events.ack",
                  "direct.cancel", "direct.cancel_status", "direct.control.apply", "direct.control.resume",
-                 "direct.strategy_position", "direct.strategy_close_capacity", "direct.strategy_financial",
+                 "direct.strategy_position", "direct.strategy_close_capacity", "direct.strategy_financial", "direct.instrument_status",
                  "direct.delegated_command_status",
                  "direct.delegated_cancel", "direct.delegated_cancel_status",
                  "direct.delegated_reserve", "direct.delegated_dispatch",

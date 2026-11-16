@@ -1183,6 +1183,15 @@ class ServiceHost:
                         and actual.write_operations == planned.write_operations
                     )
                     or (
+                        planned.port == "service.direct_write"
+                        and actual.operations in (
+                            planned.operations - {"direct.instrument_status"},
+                            planned.operations - {"direct.instrument_status", "direct.events.read_after",
+                                                  "direct.events.progress", "direct.events.ack"},
+                        )
+                        and actual.write_operations == planned.write_operations
+                    )
+                    or (
                         planned.port == "service.market_source"
                         and actual.operations in (
                             planned.operations - {"market.history"},
