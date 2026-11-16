@@ -11,6 +11,7 @@ import pytest
 from bt_api_run_contract import (AccessMode, ApiConfig, GatewayConfig, IdentityState, MonitorEventsConfig,
     OperatorConfig, OperatorRole, RestartConfig, StopConfig, UnitConfig, UnitKind, ValidatedRuntimeConfig)
 from bt_api_runtime.control_auth import OperatorIdentity, SingleOperatorAuthenticator
+from bt_api_runtime.control_http import ControlTransportError
 from bt_api_runtime.events import EventStore
 from bt_api_runtime.supervision import IdentityRead, SystemClock, UnitIdentity
 import bt_api_py.runtime_service_host as module
@@ -248,3 +249,136 @@ def test_partial_bridge_start_cleanup_uncertainty_is_retryable(tmp_path, monkeyp
         if host.state != 'closed':
             host.close()
         store.close()
+
+
+def test_http_socket_close_failure_retries_same_listener(tmp_path, monkeypatch):
+    host, store, _, _, _ = setup_host(tmp_path, monkeypatch)
+    try:
+        host.start()
+        http = host._http
+        listener = http._thread
+        server = http._server
+        original_close = server.server_close
+        attempts = []
+
+        def fail_once():
+            attempts.append(server)
+            if len(attempts) == 1:
+                raise OSError('synthetic socket close failure')
+            original_close()
+
+        monkeypatch.setattr(server, 'server_close', fail_once)
+        with pytest.raises(RuntimeError, match='http_listener'):
+            host.close()
+        assert host.state == 'close_uncertain'
+        assert host._http is http and host._http_listener_thread is listener
+        assert type(host._http_stop_error) is ControlTransportError
+        assert host._http_stop_error.code == 'listener_close_failed'
+        assert server.socket.fileno() != -1 and host._service is not None
+        host.close()
+        assert host.state == 'closed' and host._http is None
+        assert attempts == [server, server]
+        assert not listener.is_alive() and server.socket.fileno() == -1
+    finally:
+        if host.state != 'closed':
+            host.close()
+        store.close()
+
+
+def test_http_stop_helper_never_overlaps_on_retry(tmp_path, monkeypatch):
+    host, store, _, _, _ = setup_host(tmp_path, monkeypatch)
+    entered, release = threading.Event(), threading.Event()
+    try:
+        host.start()
+        http = host._http
+        original_stop = http.stop
+        attempts = []
+
+        def blocked_stop():
+            attempts.append(http)
+            entered.set()
+            release.wait(5)
+            original_stop()
+
+        monkeypatch.setattr(http, 'stop', blocked_stop)
+        with pytest.raises(RuntimeError, match='http_listener'):
+            host.close()
+        assert entered.is_set()
+        helper = host._http_stop_thread
+        with pytest.raises(RuntimeError, match='http_listener'):
+            host.close()
+        assert host._http_stop_thread is helper and helper.is_alive()
+        assert attempts == [http] and host._service is not None
+        release.set()
+        helper.join(2)
+        assert not helper.is_alive()
+        host.close()
+        assert host.state == 'closed' and attempts == [http]
+    finally:
+        release.set()
+        if host.state != 'closed':
+            host.close()
+        store.close()
+
+
+@pytest.mark.parametrize('code', [
+    'listener_stop_pending', 'listener_stop_failed', 'listener_requests_in_flight',
+    'listener_close_pending', 'listener_close_failed',
+])
+def test_http_finite_stop_error_retries_only_on_next_close(tmp_path, monkeypatch, code):
+    host, store, _, _, _ = setup_host(tmp_path, monkeypatch)
+    try:
+        host.start()
+        http = host._http
+        original_stop = http.stop
+        attempts = []
+
+        def stop_once():
+            attempts.append(http)
+            if len(attempts) == 1:
+                raise ControlTransportError(code)
+            original_stop()
+
+        monkeypatch.setattr(http, 'stop', stop_once)
+        with pytest.raises(RuntimeError, match='http_listener'):
+            host.close()
+        assert host._http is http and attempts == [http]
+        host.close()
+        assert host.state == 'closed' and attempts == [http, http]
+    finally:
+        if host.state != 'closed':
+            host.close()
+        store.close()
+
+
+def test_http_opaque_stop_errors_are_retained_without_retry(tmp_path, monkeypatch):
+    class DerivedTransportError(ControlTransportError):
+        pass
+
+    for index, error in enumerate((RuntimeError('listener_stop_failed'),
+                                   ControlTransportError('unknown'),
+                                   DerivedTransportError('listener_stop_failed'))):
+        host, store, _, _, _ = setup_host(tmp_path / str(index), monkeypatch)
+        try:
+            host.start()
+            http = host._http
+            original_stop = http.stop
+            attempts = []
+
+            def fail():
+                attempts.append(http)
+                raise error
+
+            monkeypatch.setattr(http, 'stop', fail)
+            for _ in range(2):
+                with pytest.raises(RuntimeError, match='http_listener'):
+                    host.close()
+                assert host.state == 'close_uncertain' and host._http is http
+                assert host._http_stop_error is error and host._service is not None
+            assert attempts == [http]
+        finally:
+            # Release the synthetic listener after checking the sticky failure.
+            monkeypatch.setattr(http, 'stop', original_stop)
+            host._http_stop_error = ControlTransportError('listener_stop_failed')
+            host.close()
+            store.close()

@@ -13,7 +13,7 @@ from collections.abc import Mapping
 from types import MappingProxyType
 
 from bt_api_run_contract import AccessMode, ValidatedRuntimeConfig
-from bt_api_runtime.control_http import build_control_http_server
+from bt_api_runtime.control_http import ControlTransportError, build_control_http_server
 from bt_api_runtime.control_ledger import ControlDatabase
 from bt_api_runtime.control_service import build_control_service
 from bt_api_runtime.events import EventStore
@@ -24,6 +24,12 @@ from bt_api_runtime.supervision import (PosixProcessAdapter, RuntimeSupervisor,
 from bt_api_runtime.telemetry_relay import TelemetryRelay
 from bt_api_py.runtime_gateway_control import RuntimeGatewayControlBridge
 from bt_api_py.runtime_monitor_bridge import RuntimeMonitorBridge
+
+
+_RETRYABLE_HTTP_STOP_CODES = frozenset({
+    'listener_stop_pending', 'listener_stop_failed', 'listener_requests_in_flight',
+    'listener_close_pending', 'listener_close_failed',
+})
 
 
 class _ControlMux:
@@ -243,7 +249,12 @@ class RuntimeServiceHost:
             if self._http is not None:
                 if self._http_listener_thread is None:
                     self._http_listener_thread = self._http._thread
-                if self._http_stop_thread is None:
+                retry_stop = (self._http_stop_thread is not None
+                              and not self._http_stop_thread.is_alive()
+                              and type(self._http_stop_error) is ControlTransportError
+                              and type(self._http_stop_error.code) is str
+                              and self._http_stop_error.code in _RETRYABLE_HTTP_STOP_CODES)
+                if self._http_stop_thread is None or retry_stop:
                     self._http_stop_error = None
                     self._http_stop_thread = threading.Thread(target=self._stop_http, daemon=True)
                     self._http_stop_thread.start()
@@ -252,8 +263,6 @@ class RuntimeServiceHost:
                         or (self._http_listener_thread is not None and self._http_listener_thread.is_alive())
                         or self._http._server.socket.fileno() != -1):
                     errors.append('http_listener')
-                    if not self._http_stop_thread.is_alive():
-                        self._http_stop_thread = None
                 else:
                     self._http = None
             self._stop.set()
