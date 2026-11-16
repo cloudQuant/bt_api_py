@@ -59,7 +59,8 @@ IDENTITY = NativeOrderIdentity(
 
 def routing_raw(**overrides):
     value = {
-        "schema_version": 1,
+        "schema_version": 2,
+        "algorithm_build_id": "build-1",
         "component": "exec-instance",
         "account_ref": "acct",
         "strategy_ref": "strategy",
@@ -78,6 +79,7 @@ def routing_raw(**overrides):
                     "minimum_quantity": "1",
                     "quantity_unit": "lots",
                 },
+                "schedule_binding": {"quantity_step": "1", "price_step": "1", "retry_limit": 2},
                 "scheme": {"name": "pass-v1", "version": 1},
                 "algorithm": {"class": "PASS", "version": 1, "params": {}},
                 "deadline": {"kind": "absolute", "at": "2099-12-31T08:00:00+08:00"},

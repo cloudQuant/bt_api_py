@@ -19,7 +19,11 @@ from bt_api_base.service_protocol import encode_wire_value
 from bt_api_py.execution_parent_grant import QUERY, SUBMIT
 from bt_api_py.gateway_execution_stream_client import _detach_wire
 from bt_api_py.service_runtime import BoundExecutionParentTarget, ServiceRuntimeRequestNotSentError
-from bt_api_py.service_runtime_thread import ThreadedRuntimeError, ThreadedServiceClientRuntime, _copy_wire
+from bt_api_py.service_runtime_thread import (
+    ThreadedRuntimeError,
+    ThreadedServiceClientRuntime,
+    _copy_wire,
+)
 
 
 @dataclass(frozen=True)
@@ -99,17 +103,17 @@ class ExecutionParentClient:
 
     def submit(self, request):
         """Send exactly one request; a caller must persist it before calling."""
-        value, request_id, digest = self._request(request)
-        return self._call(SUBMIT, value, request_id, digest, value['spec'].get('parent_ref'), value['order_type'])
+        value, request_id, digest = ExecutionParentClient._request(self, request)
+        return ExecutionParentClient._call(self, SUBMIT, value, request_id, digest, value['spec'].get('parent_ref'), value['order_type'])
 
     def query(self, original_request):
         """Query the original ID and compare any row with the original bytes."""
-        value, request_id, digest = self._request(original_request)
-        return self._call(QUERY, {'request_id': request_id}, request_id, digest, value['spec'].get('parent_ref'), value['order_type'])
+        value, request_id, digest = ExecutionParentClient._request(self, original_request)
+        return ExecutionParentClient._call(self, QUERY, {'request_id': request_id}, request_id, digest, value['spec'].get('parent_ref'), value['order_type'])
 
     def _call(self, operation, arguments, request_id, digest, parent_ref, order_type):
         try:
-            registration = self._registration(operation)
+            registration = ExecutionParentClient._registration(self, operation)
             target = replace(self._target, registration_id=registration[0], service_epoch=registration[1])
         except Exception:
             return ExecutionParentObservation('NOT_SENT', request_id, digest, code='ROUTE_UNAVAILABLE')
@@ -125,7 +129,7 @@ class ExecutionParentClient:
         except Exception:
             return ExecutionParentObservation('UNKNOWN', request_id, digest, code='CALL_OUTCOME_UNKNOWN')
         try:
-            if self._registration(operation) != registration or type(raw) is not dict or raw.get('local_only') is not True:
+            if ExecutionParentClient._registration(self, operation) != registration or type(raw) is not dict or raw.get('local_only') is not True:
                 raise ValueError
             if operation == QUERY and type(raw.get('found')) is not bool:
                 raise ValueError

@@ -15,10 +15,11 @@ down the old path. A crash or lost reply leaves the original durable identity
 and an ``EXECUTION_UNKNOWN`` outcome; replay returns that outcome and does not
 resend.
 
-The module imports neither ``bt_api_execution`` nor a provider package. The
-port may be a fake; no reply currently has source-bound proof. Nothing here proves
-Gateway acceptance, Risk approval, venue state, or account authorization: a
-local PREPARED row is a local fact only.
+The module imports neither ``bt_api_execution`` nor a provider package. Only
+an exact bound ExecutionParentClient call can project a source-bound local
+receipt; arbitrary port replies remain UNKNOWN. Nothing here proves Gateway
+acceptance, Risk approval, venue state or account authorization: PREPARED and
+LOCAL_RECEIPT are local observations only.
 """
 
 from __future__ import annotations
@@ -34,7 +35,9 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import NoReturn
 
+from bt_api_base.frozen_algorithm_plan import algorithm_plan_digest, check_frozen_algorithm_plan
 from bt_api_base.market_protocol import MarketInstrumentKey
+from bt_api_base.service_protocol import encode_wire_value
 
 from bt_api_py._contracts.models import OrderType
 from bt_api_py._execution_route_journal import (
@@ -83,6 +86,32 @@ _SCHEMA = """CREATE TABLE execution_parent_requests_v1 (
     PRIMARY KEY (account, strategy, request_key)
 ) WITHOUT ROWID"""
 _RESULT_FIELDS = frozenset({"status", "code", "parent_ref", "execution_state"})
+_V2_SPEC_FIELDS = frozenset(
+    {
+        "parent_ref",
+        "registration_operation_id",
+        "risk_operation_id",
+        "account_scope",
+        "strategy_scope",
+        "execution_domain_ref",
+        "instrument",
+        "quantity",
+        "quantity_unit",
+        "side",
+        "offset",
+        "limit_price",
+        "creation_trading_day",
+        "allowed_trading_days",
+        "expires_at_ns",
+        "grant_revision",
+        "plan_digest",
+        "plan_version",
+        "target_position_ref",
+        "risk_selected",
+        "time_in_force",
+    }
+)
+_V2_PAYLOAD_FIELDS = frozenset({"request_id", "order_type", "spec", "algorithm_plan"})
 _PAYLOAD_FIELDS = frozenset({"request_id", "order_type", "spec", "strategy", "delegation"})
 _TOP_FIELDS = frozenset(
     {
@@ -108,6 +137,7 @@ _RULE_FIELDS = frozenset(
         "trading_day",
         "allowed_trading_days",
         "target_position_ref",
+        "schedule_binding",
     }
 )
 _MATCH_FIELDS = frozenset(
@@ -246,6 +276,7 @@ class RulePolicy:
     trading_day: str
     allowed_trading_days: tuple[str, ...]
     target_position_ref: str | None
+    schedule_binding: dict | None = None
 
     def to_plain(self) -> dict:
         match: dict = {}
@@ -274,6 +305,9 @@ class RulePolicy:
             "trading_day": self.trading_day,
             "allowed_trading_days": list(self.allowed_trading_days),
         }
+        if self.schedule_binding is not None:
+            value["algorithm"]["version"] = int(self.algorithm_version)
+            value["schedule_binding"] = dict(self.schedule_binding)
         if self.target_position_ref is not None:
             value["target_position_ref"] = self.target_position_ref
         return value
@@ -293,6 +327,8 @@ class ExecutionRoutingConfig:
     instruments: tuple[MarketInstrumentKey, ...]
     policies: tuple[RulePolicy, ...]
     configuration_id: str
+    schema_version: int = 1
+    algorithm_build_id: str | None = None
 
     @property
     def rules(self) -> tuple[_Rule, ...]:
@@ -303,8 +339,8 @@ class ExecutionRoutingConfig:
         return _RuleSet(list(self.rules))
 
     def to_plain(self) -> dict:
-        return {
-            "schema_version": 1,
+        value = {
+            "schema_version": self.schema_version,
             "component": self.component,
             "account_ref": self.account_ref,
             "strategy_ref": self.strategy_ref,
@@ -317,6 +353,9 @@ class ExecutionRoutingConfig:
             "instruments": [instrument.to_dict() for instrument in self.instruments],
             "rules": [policy.to_plain() for policy in self.policies],
         }
+        if self.schema_version == 2:
+            value["algorithm_build_id"] = self.algorithm_build_id
+        return value
 
 
 def _instrument(value: object) -> MarketInstrumentKey | None:
@@ -343,12 +382,18 @@ def _params(value: object) -> dict | None:
         return None
 
 
-def _policy(value: object, instruments: tuple[MarketInstrumentKey, ...]) -> RulePolicy | None:
+def _policy(
+    value: object, instruments: tuple[MarketInstrumentKey, ...], schema_version: int
+) -> RulePolicy | None:
     if type(value) is not dict or not set(value) <= _RULE_FIELDS:
         return None
     if "id" not in value or "match" not in value or "scheme" not in value:
         return None
-    if "algorithm" not in value or "deadline" not in value:
+    if "deadline" not in value or (schema_version == 1 and "algorithm" not in value):
+        return None
+    if schema_version == 1 and "schedule_binding" in value:
+        return None
+    if schema_version == 2 and "schedule_binding" not in value:
         return None
     if "time_in_force" not in value or "trading_day" not in value:
         return None
@@ -398,12 +443,32 @@ def _policy(value: object, instruments: tuple[MarketInstrumentKey, ...]) -> Rule
         return None
     scheme_name = _ref(scheme["name"])
     scheme_version = _version(scheme["version"])
-    algorithm = value["algorithm"]
+    algorithm = value.get("algorithm", {"class": "PASS", "version": 1, "params": {}})
     if type(algorithm) is not dict or set(algorithm) != {"class", "version", "params"}:
         return None
     algorithm_class = _ref(algorithm["class"])
     algorithm_version = _version(algorithm["version"])
     algorithm_params = _params(algorithm["params"])
+    schedule_binding = None
+    if schema_version == 2:
+        schedule_binding = value["schedule_binding"]
+        if (
+            type(schedule_binding) is not dict
+            or set(schedule_binding) != {"quantity_step", "price_step", "retry_limit"}
+            or any(
+                type(schedule_binding[key]) is not str
+                or re.fullmatch(r"(?:0|[1-9][0-9]*)(?:\.[0-9]*[1-9])?", schedule_binding[key])
+                is None
+                or len(schedule_binding[key]) > 128
+                or Decimal(schedule_binding[key]) <= 0
+                for key in ("quantity_step", "price_step")
+            )
+            or type(schedule_binding["retry_limit"]) is not int
+            or not 0 <= schedule_binding["retry_limit"] < _MAX_NS
+            or type(algorithm["version"]) is not int
+            or not 1 <= algorithm["version"] < _MAX_NS
+        ):
+            return None
     deadline = _deadline(value["deadline"])
     time_in_force = value["time_in_force"]
     if type(time_in_force) is not str or time_in_force not in {"DAY", "GTD"}:
@@ -470,6 +535,7 @@ def _policy(value: object, instruments: tuple[MarketInstrumentKey, ...]) -> Rule
         trading_day=trading_day,
         allowed_trading_days=allowed_days,
         target_position_ref=target_position_ref,
+        schedule_binding=schedule_binding,
     )
 
 
@@ -482,9 +548,15 @@ def parse_execution_routing(raw: object) -> ExecutionRoutingConfig:
     """
     try:
         value = _plain(raw)
-        if type(value) is not dict or set(value) != _TOP_FIELDS:
+        if type(value) is not dict or type(value.get("schema_version")) is not int:
             _fail("INVALID_EXECUTION_CONFIG")
-        if type(value["schema_version"]) is not int or value["schema_version"] != 1:
+        schema_version = value["schema_version"]
+        if schema_version not in (1, 2) or set(value) != (
+            _TOP_FIELDS if schema_version == 1 else _TOP_FIELDS | {"algorithm_build_id"}
+        ):
+            _fail("INVALID_EXECUTION_CONFIG")
+        build_id = None if schema_version == 1 else _text(value["algorithm_build_id"])
+        if schema_version == 2 and build_id is None:
             _fail("INVALID_EXECUTION_CONFIG")
         component = _ref(value["component"])
         account_ref = _ref(value["account_ref"])
@@ -526,7 +598,7 @@ def parse_execution_routing(raw: object) -> ExecutionRoutingConfig:
         policies = []
         seen_ids = set()
         for item in raw_rules:
-            policy = _policy(item, instruments)
+            policy = _policy(item, instruments, schema_version)
             if policy is None:
                 _fail("INVALID_EXECUTION_CONFIG")
             if policy.rule_id in seen_ids:
@@ -534,7 +606,7 @@ def parse_execution_routing(raw: object) -> ExecutionRoutingConfig:
             seen_ids.add(policy.rule_id)
             policies.append(policy)
         plain = {
-            "schema_version": 1,
+            "schema_version": schema_version,
             "component": component,
             "account_ref": account_ref,
             "strategy_ref": strategy_ref,
@@ -547,7 +619,11 @@ def parse_execution_routing(raw: object) -> ExecutionRoutingConfig:
             "instruments": [key.to_dict() for key in instruments],
             "rules": [policy.to_plain() for policy in policies],
         }
+        if schema_version == 2:
+            plain["algorithm_build_id"] = build_id
         return ExecutionRoutingConfig(
+            schema_version=schema_version,
+            algorithm_build_id=build_id,
             account_ref=account_ref,
             strategy_ref=strategy_ref,
             execution_domain_ref=execution_domain_ref,
@@ -716,21 +792,29 @@ def _validate_payload(payload: object, request_id: str, digest: str) -> None:
         _fail("EXECUTION_LOCAL_RECORD_FAILED")
     try:
         data = json.loads(payload)
+        if (
+            type(data) is not dict
+            or _canonical(data) != payload
+            or data.get("request_id") != request_id
+            or data.get("order_type") != "limit"
+            or type(data.get("spec")) is not dict
+        ):
+            raise ValueError
+        if set(data) == _PAYLOAD_FIELDS:
+            if type(data["strategy"]) is not dict or type(data["delegation"]) is not dict:
+                raise ValueError
+            content = {name: data[name] for name in _PAYLOAD_FIELDS if name != "request_id"}
+            actual = _digest(content)
+        elif set(data) == _V2_PAYLOAD_FIELDS:
+            if set(data["spec"]) != _V2_SPEC_FIELDS or _ref(data["spec"].get("parent_ref")) is None:
+                raise ValueError
+            check_frozen_algorithm_plan(data["algorithm_plan"], data["spec"])
+            actual = hashlib.sha256(encode_wire_value(data)).hexdigest()
+        else:
+            raise ValueError
+        if actual != digest:
+            raise ValueError
     except Exception:
-        _fail("EXECUTION_LOCAL_RECORD_FAILED")
-    if (
-        type(data) is not dict
-        or set(data) != _PAYLOAD_FIELDS
-        or _canonical(data) != payload
-        or data["request_id"] != request_id
-        or data["order_type"] != "limit"
-        or type(data["spec"]) is not dict
-        or type(data["strategy"]) is not dict
-        or type(data["delegation"]) is not dict
-    ):
-        _fail("EXECUTION_LOCAL_RECORD_FAILED")
-    content = {name: data[name] for name in _PAYLOAD_FIELDS if name != "request_id"}
-    if _digest(content) != digest:
         _fail("EXECUTION_LOCAL_RECORD_FAILED")
 
 
@@ -1045,29 +1129,30 @@ class ExecutionOrderRouter:
         risk_operation_id = "sdk-risk-v1:" + seed[:40]
         quantity = format(request.quantity, "f")
         limit_price = format(request.price, "f")
-        plan_digest = _digest(
-            {
-                "request_id": request_id,
-                "instrument": instrument.to_dict(),
-                "quantity": quantity,
-                "quantity_unit": request.quantity_unit,
-                "side": request.side.value,
-                "offset": request.offset,
-                "limit_price": limit_price,
-                "scheme": {"name": policy.scheme_name, "version": policy.scheme_version},
-                "algorithm": {
-                    "class": policy.algorithm_class,
-                    "version": policy.algorithm_version,
-                    "params": policy.algorithm_params,
+        parent_limit = format(request.price, "f")
+        if "." in parent_limit:
+            parent_limit = parent_limit.rstrip("0").rstrip(".")
+        plan = {
+            "schema_version": 1,
+            "plan_version": policy.algorithm_version,
+            "build_id": self._config.algorithm_build_id,
+            "schedule": {
+                "class": policy.algorithm_class,
+                "version": int(policy.algorithm_version),
+                "binding": {
+                    "deadline_ns": policy.deadline_ns,
+                    "quantity_step": policy.schedule_binding["quantity_step"],
+                    "parent_limit": parent_limit,
+                    "price_step": policy.schedule_binding["price_step"],
+                    "retry_limit": policy.schedule_binding["retry_limit"],
                 },
-                "deadline": policy.deadline_at,
-                "trading_day": policy.trading_day,
-                "allowed_trading_days": list(policy.allowed_trading_days),
-                "target_position_ref": policy.target_position_ref,
-                "grant_revision": self._config.grant_revision,
-                "risk_selected": self._risk_selected,
-            }
-        )
+                "params": policy.algorithm_params,
+            },
+        }
+        try:
+            plan_digest = algorithm_plan_digest(plan)
+        except Exception:
+            _fail("INVALID_EXECUTION_CONFIG")
         spec = {
             "parent_ref": parent_ref,
             "registration_operation_id": registration_operation_id,
@@ -1091,28 +1176,18 @@ class ExecutionOrderRouter:
             "risk_selected": self._risk_selected,
             "time_in_force": policy.time_in_force,
         }
-        strategy = {
-            "account_ref": self._config.account_ref,
-            "strategy_ref": self._config.strategy_ref,
-            "execution_domain_ref": self._config.execution_domain_ref,
-            "run_id": intent.route.scope.run_id,
-            "principal_ref": intent.binding.principal,
-            "actor_ref": intent.binding.strategy_scope,
-        }
-        delegation = {
-            "delegation_id": self._config.delegation_id,
-            "principal_ref": self._config.delegation_principal_ref,
-        }
-        content = {
+        payload = {
+            "request_id": request_id,
             "order_type": "limit",
             "spec": spec,
-            "strategy": strategy,
-            "delegation": delegation,
+            "algorithm_plan": plan,
         }
-        digest = _digest(content)
-        payload = dict(content)
-        payload["request_id"] = request_id
-        return request_id, digest, _canonical(payload)
+        try:
+            check_frozen_algorithm_plan(plan, spec)
+            digest = hashlib.sha256(encode_wire_value(payload)).hexdigest()
+            return request_id, digest, _canonical(payload)
+        except Exception:
+            _fail("INVALID_EXECUTION_CONFIG")
 
     # -- result projection ----------------------------------------------------
 
@@ -1136,8 +1211,7 @@ class ExecutionOrderRouter:
         )
 
     def _unverified_result(self, *, request_id: str, request_sha256: str) -> ExecutionRoutingResult:
-        # No installed port provides source-bound reply proof.  Do not read its
-        # self-reported fields, even when they match the locally stored request.
+        # An arbitrary port cannot authenticate its own self-reported fields.
         return self._result(
             ExecutionRoutingOutcome.EXECUTION_UNKNOWN,
             code="EXECUTION_UNVERIFIED_REPLY",
@@ -1146,10 +1220,29 @@ class ExecutionOrderRouter:
         )
 
     def _stored_result(
-        self, raw: str, *, request_id: str, request_sha256: str
+        self,
+        raw: str,
+        *,
+        request_id: str,
+        request_sha256: str,
+        expected_parent_ref: str | None = None,
     ) -> ExecutionRoutingResult:
+        data = _validate_result(raw)
+        if (
+            expected_parent_ref is not None
+            and data["parent_ref"] == expected_parent_ref
+            and data["status"] == "EXECUTION_LOCAL_RECEIPT"
+            and data["code"] is None
+            and data["execution_state"] is None
+            and _text(data["parent_ref"]) is not None
+        ):
+            return self._result(
+                ExecutionRoutingOutcome.EXECUTION_LOCAL_RECEIPT,
+                request_id=request_id,
+                request_sha256=request_sha256,
+                parent_ref=data["parent_ref"],
+            )
         # Older rows have no proof that their outcomes or codes were local.
-        _validate_result(raw)
         return self._unverified_result(request_id=request_id, request_sha256=request_sha256)
 
     def _check_replay(self, intent: GatewayOrderIntent, record: _ParentRecord) -> None:
@@ -1175,10 +1268,19 @@ class ExecutionOrderRouter:
             record.result,
             request_id=record.request_id,
             request_sha256=record.request_sha256,
+            expected_parent_ref=(
+                json.loads(record.payload)["spec"]["parent_ref"]
+                if set(json.loads(record.payload)) == _V2_PAYLOAD_FIELDS
+                else None
+            ),
         )
 
     def _store_and_return(
-        self, identity: tuple[str, str, str], result: ExecutionRoutingResult
+        self,
+        identity: tuple[str, str, str],
+        result: ExecutionRoutingResult,
+        *,
+        expected_parent_ref: str | None = None,
     ) -> ExecutionRoutingResult:
         value = _canonical(
             {
@@ -1200,7 +1302,10 @@ class ExecutionOrderRouter:
             _rollback(db)
             raise ExecutionRoutingError("EXECUTION_UNKNOWN") from None
         return self._stored_result(
-            stored, request_id=result.request_id, request_sha256=result.request_sha256
+            stored,
+            request_id=result.request_id,
+            request_sha256=result.request_sha256,
+            expected_parent_ref=expected_parent_ref,
         )
 
     def _port_callable(self, name: str):
@@ -1230,6 +1335,19 @@ class ExecutionOrderRouter:
             return self._result(
                 ExecutionRoutingOutcome.EXECUTION_REJECTED, code="EXECUTION_SCOPE_DENIED"
             )
+        # Historical requests keep their original frozen identity even when
+        # the current routing configuration has changed.
+        _begin_read(self._db)
+        try:
+            existing = _load_record(self._db, identity)
+            if existing is not None:
+                self._check_replay(intent, existing)
+        except BaseException:
+            _rollback(self._db)
+            raise
+        _rollback(self._db)
+        if existing is not None:
+            return self._replay(existing)
         instrument = self._resolve_instrument(request)
         if instrument is None:
             return self._result(
@@ -1336,6 +1454,12 @@ class ExecutionOrderRouter:
                     ExecutionRoutingOutcome.EXECUTION_REJECTED,
                     code="EXECUTION_DEADLINE_EXPIRED",
                 )
+            if self._config.schema_version != 2:
+                _rollback(db)
+                return self._result(
+                    ExecutionRoutingOutcome.EXECUTION_REJECTED,
+                    code="EXECUTION_FROZEN_PLAN_REQUIRED",
+                )
             if self._port_callable("submit") is None:
                 _rollback(db)
                 return self._result(
@@ -1379,18 +1503,39 @@ class ExecutionOrderRouter:
                 request_id=request_id,
                 request_sha256=digest,
             )
+        from bt_api_py.execution_parent_client import (
+            ExecutionParentClient,
+            ExecutionParentObservation,
+        )
+
+        request = json.loads(payload)
         try:
-            submit(json.loads(payload))
+            if type(self._port) is ExecutionParentClient:
+                reply = ExecutionParentClient.submit(self._port, request)
+            else:
+                submit(request)
+                reply = None
         except Exception:
+            reply = None
+        if (
+            type(reply) is ExecutionParentObservation
+            and reply.outcome == "LOCAL_RECEIVED"
+            and reply.request_id == request_id
+            and reply.request_sha256 == digest
+            and reply.parent_ref == request["spec"]["parent_ref"]
+            and reply.code is None
+        ):
             result = self._result(
-                ExecutionRoutingOutcome.EXECUTION_UNKNOWN,
-                code="CALL_OUTCOME_UNKNOWN",
+                ExecutionRoutingOutcome.EXECUTION_LOCAL_RECEIPT,
                 request_id=request_id,
                 request_sha256=digest,
+                parent_ref=reply.parent_ref,
             )
-            return self._store_and_return(identity, result)
-        result = self._unverified_result(request_id=request_id, request_sha256=digest)
-        return self._store_and_return(identity, result)
+        else:
+            result = self._unverified_result(request_id=request_id, request_sha256=digest)
+        return self._store_and_return(
+            identity, result, expected_parent_ref=request["spec"]["parent_ref"]
+        )
 
     def cancel(self, intent: object) -> ExecutionRoutingResult:
         """Route a cancel for one exact parent intent; never a direct venue cancel."""
@@ -1545,6 +1690,48 @@ class ExecutionOrderRouter:
             )
             cancel_outcome = cancel.outcome.value
             cancel_code = cancel.code
+        from bt_api_py.execution_parent_client import (
+            ExecutionParentClient,
+            ExecutionParentObservation,
+        )
+
+        if (
+            type(self._port) is ExecutionParentClient
+            and set(json.loads(record.payload)) == _V2_PAYLOAD_FIELDS
+        ):
+            request = json.loads(record.payload)
+            try:
+                reply = ExecutionParentClient.query(self._port, request)
+            except Exception:
+                reply = None
+            if (
+                type(reply) is ExecutionParentObservation
+                and reply.outcome == "LOCAL_RECEIVED"
+                and reply.request_id == record.request_id
+                and reply.request_sha256 == record.request_sha256
+                and reply.parent_ref == request["spec"]["parent_ref"]
+                and reply.code is None
+            ):
+                return ExecutionRoutingStatus(
+                    routed=True,
+                    outcome=ExecutionRoutingOutcome.EXECUTION_LOCAL_RECEIPT,
+                    request_id=record.request_id,
+                    request_sha256=record.request_sha256,
+                    parent_ref=reply.parent_ref,
+                    configuration_id=record.configuration_id,
+                    cancel_outcome=cancel_outcome,
+                    cancel_code=cancel_code,
+                )
+            return ExecutionRoutingStatus(
+                routed=True,
+                outcome=ExecutionRoutingOutcome.EXECUTION_UNKNOWN,
+                request_id=record.request_id,
+                request_sha256=record.request_sha256,
+                configuration_id=record.configuration_id,
+                code="EXECUTION_UNVERIFIED_REPLY",
+                cancel_outcome=cancel_outcome,
+                cancel_code=cancel_code,
+            )
         status_method = self._port_callable("status")
         if status_method is None:
             return ExecutionRoutingStatus(

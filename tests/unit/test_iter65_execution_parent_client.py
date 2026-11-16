@@ -320,3 +320,87 @@ def test_close_cancels_queued_parent_without_sending(monkeypatch):
         first.join(2)
         closer.join(2)
     assert len(calls) == 1 and not closer.is_alive()
+
+
+@pytest.mark.parametrize('reply_kind', ['valid', 'wrong_digest', 'wrong_id', 'wrong_parent', 'query_not_found', 'not_sent'])
+def test_router_uses_exact_authenticated_client_and_frozen_wire(monkeypatch, tmp_path, reply_kind):
+    import sqlite3
+    from decimal import Decimal
+    from bt_api_base.gateway_direct_protocol import GatewayCommandBinding
+    from bt_api_py._contracts.models import OrderRequest, OrderType, Side
+    from bt_api_py.execution_routing import ExecutionOrderRouter, ExecutionRoutingOutcome, install_execution_routing_tables
+    from bt_api_py.gateway_direct_client import GatewayClientRoute, build_gateway_order_intent
+    from tests.unit.test_iter65_sdk_execution_routing import make_config
+
+    calls = []
+    connection = sqlite3.connect(tmp_path / 'routing.sqlite', isolation_level=None)
+    connection.execute('BEGIN IMMEDIATE')
+    install_execution_routing_tables(connection)
+    connection.commit()
+    def handler(envelope):
+        args = dict(envelope.payload['arguments'])
+        calls.append((envelope.header.operation, args))
+        reader = sqlite3.connect(tmp_path / 'routing.sqlite')
+        try:
+            row = reader.execute('SELECT request_id, request_sha256, result FROM execution_parent_requests_v1').fetchone()
+        finally:
+            reader.close()
+        assert row is not None
+        if envelope.header.operation == SUBMIT:
+            assert row[2] is None  # durable PREPARED before authenticated request
+            parent = args['spec']['parent_ref']
+        else:
+            parent = saved['parent']
+        if envelope.header.operation == QUERY and reply_kind == 'query_not_found':
+            return {'local_only': True, 'found': False}
+        digest = row[1] if reply_kind != 'wrong_digest' else '0' * 64
+        request_id = row[0] if reply_kind != 'wrong_id' else 'foreign'
+        parent = parent if reply_kind != 'wrong_parent' else 'foreign-parent'
+        raw = {'local_only': True, 'status': 'RECEIVED', 'request_id': request_id,
+               'parent_ref': parent, 'request_sha256': digest}
+        if envelope.header.operation == QUERY:
+            raw['found'] = True
+        else:
+            saved['parent'] = args['spec']['parent_ref']
+        return raw
+    saved = {}
+    wrapper, _, target, _ = setup_synthetic(monkeypatch, handler)
+    try:
+        client_target = replace(target, service_id='unavailable') if reply_kind == 'not_sent' else target
+        client = ExecutionParentClient(wrapper, target=client_target)
+        # Instance-level method replacement cannot manufacture a trusted receipt.
+        client.submit = lambda _: pytest.fail('instance submit override used')
+        client._call = lambda *args: pytest.fail('instance _call override used')
+        binding = GatewayCommandBinding('journal', target.scope.account_ref, target.scope.strategy_ref,
+                                        target.identity.principal_ref)
+        route = GatewayClientRoute('broker.direct_write', 'gw', 'gw-instance', 'scope', target.scope, target.identity)
+        request = OrderRequest(symbol='rb', side=Side.BUY, order_type=OrderType.LIMIT,
+            quantity=Decimal('5'), account_id=target.scope.account_ref, client_order_id='client',
+            idempotency_key='request-1', price=Decimal('10'), quantity_unit='lots', exchange_id='SHFE', offset='open')
+        intent = build_gateway_order_intent(binding, route, request)
+        config = make_config(account_ref=target.scope.account_ref, strategy_ref=target.scope.strategy_ref,
+                             execution_domain_ref=target.scope.execution_domain_ref)
+        router = ExecutionOrderRouter(db=connection, config=config, execution_port=client,
+                                      risk_selected=False, clock=lambda: 1)
+        result = router.route(intent)
+        expected = (ExecutionRoutingOutcome.EXECUTION_LOCAL_RECEIPT if reply_kind in {'valid', 'query_not_found'}
+                    else ExecutionRoutingOutcome.EXECUTION_UNKNOWN)
+        assert result.outcome is expected
+        if reply_kind == 'not_sent':
+            assert result.outcome is ExecutionRoutingOutcome.EXECUTION_UNKNOWN
+            assert router.route(intent) == result and calls == []
+            assert router.status(intent).outcome is ExecutionRoutingOutcome.EXECUTION_UNKNOWN
+            assert calls == []
+            return
+        assert router.route(intent) == result and len(calls) == 1
+        assert set(calls[0][1]) == {'request_id', 'order_type', 'spec', 'algorithm_plan'}
+        assert hashlib.sha256(encode_wire_value(calls[0][1])).hexdigest() == result.request_sha256
+        status = router.status(intent)
+        assert status.outcome is (ExecutionRoutingOutcome.EXECUTION_UNKNOWN
+                                  if reply_kind == 'query_not_found' else expected)
+        assert len(calls) == 2 and calls[1][0] == QUERY
+        assert calls[1][1] == {'request_id': result.request_id}
+        assert len([item for item in calls if item[0] == SUBMIT]) == 1
+    finally:
+        wrapper.close()
+        connection.close()

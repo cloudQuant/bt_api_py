@@ -348,3 +348,32 @@ def test_selected_config_imports_routing_but_not_execution():
         "attempted": [],
         "loaded_domain_modules": [],
     }
+
+
+def test_v2_service_config_normalizes_and_reparses_frozen_fields():
+    from bt_api_py.execution_routing import parse_execution_routing
+
+    raw = routing_raw(schema_version=2, algorithm_build_id="build-1")
+    raw["rules"][0]["schedule_binding"] = {
+        "quantity_step": "1",
+        "price_step": "0.5",
+        "retry_limit": 2,
+    }
+    del raw["rules"][0]["algorithm"]
+    parsed = parse_client_config(strategy_config(routing_value=raw))
+    normalized = parsed.to_public_dict()["clients"]["execution"]["settings"]["options"][
+        "execution_routing"
+    ]
+    assert normalized["schema_version"] == 2 and normalized["algorithm_build_id"] == "build-1"
+    assert normalized["rules"][0]["algorithm"] == {"class": "PASS", "version": 1, "params": {}}
+    assert normalized["rules"][0]["schedule_binding"] == raw["rules"][0]["schedule_binding"]
+    assert parse_execution_routing(normalized).to_plain() == normalized
+
+
+def test_strategy_routing_import_does_not_load_execution_package():
+    code = (
+        "import sys; import bt_api_py.execution_routing; "
+        "assert not any(k == 'bt_api_execution' or k.startswith('bt_api_execution.') "
+        "for k in sys.modules)"
+    )
+    subprocess.run([sys.executable, '-c', code], check=True)

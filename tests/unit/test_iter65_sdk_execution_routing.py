@@ -37,7 +37,8 @@ class SimulatedProcessDeath(BaseException):
 
 def routing_raw(**overrides):
     value = {
-        "schema_version": 1,
+        "schema_version": 2,
+        "algorithm_build_id": "build-1",
         "component": "exec-instance",
         "account_ref": "acct",
         "strategy_ref": "strategy",
@@ -56,6 +57,7 @@ def routing_raw(**overrides):
                     "minimum_quantity": "1",
                     "quantity_unit": "lots",
                 },
+                "schedule_binding": {"quantity_step": "1", "price_step": "1", "retry_limit": 2},
                 "scheme": {"name": "pass-v1", "version": 1},
                 "algorithm": {"class": "PASS", "version": 1, "params": {}},
                 "deadline": {"kind": "absolute", "at": "2099-12-31T08:00:00+08:00"},
@@ -211,15 +213,19 @@ def test_matched_request_persists_identity_before_submit(db):
     stored = parent_row(db)
     assert stored is not None and stored[3] is not None
     payload = json.loads(stored[2])
-    assert set(payload) == {"request_id", "order_type", "spec", "strategy", "delegation"}
+    assert set(payload) == {"request_id", "order_type", "spec", "algorithm_plan"}
     assert payload["order_type"] == "limit"
     assert payload["spec"]["risk_selected"] is False
     assert payload["spec"]["time_in_force"] == "DAY"
     assert payload["spec"]["allowed_trading_days"] == ["20261109"]
-    assert payload["delegation"] == {
-        "delegation_id": "delegation-1",
-        "principal_ref": "principal-a",
-    }
+    import hashlib
+
+    from bt_api_base.frozen_algorithm_plan import algorithm_plan_digest
+    from bt_api_base.service_protocol import encode_wire_value
+
+    assert payload["spec"]["plan_digest"] == algorithm_plan_digest(payload["algorithm_plan"])
+    assert row[1] == hashlib.sha256(encode_wire_value(payload)).hexdigest()
+    assert payload["algorithm_plan"]["schedule"]["binding"]["parent_limit"] == "10"
 
 
 def test_replay_same_identity_and_digest_is_idempotent(db):
@@ -637,22 +643,21 @@ def _service(tmp_path, events, *, risk=None):
     return journal, gateway, service
 
 
-def test_composed_execution_service_orders_submit_then_gateway(db, tmp_path):
+def test_v2_wire_is_not_a_legacy_parent_submit_service_request(db, tmp_path):
     events = []
     journal, gateway, service = _service(tmp_path, events)
     try:
         result = make_router(db, ServicePort(service, db, events)).route(make_intent())
         assert result.outcome is ExecutionRoutingOutcome.EXECUTION_UNKNOWN
         assert result.parent_ref is None
-        assert events == ["submit", "gateway.register"]
-        assert gateway.calls[0]["request_sha256"] == result.request_sha256
-        row = journal.get_parent(result.request_id)
-        assert row is not None and row["state"] == "ACCEPTED"
+        assert events == ["submit"]
+        assert gateway.calls == []
+        assert journal.get_parent(result.request_id) is None
     finally:
         journal.close()
 
 
-def test_composed_execution_service_orders_submit_then_risk_then_gateway(db, tmp_path):
+def test_v2_wire_is_not_adapted_to_legacy_risk_or_gateway(db, tmp_path):
     events = []
     risk = FakeRisk(events)
     journal, gateway, service = _service(tmp_path, events, risk=risk)
@@ -661,9 +666,9 @@ def test_composed_execution_service_orders_submit_then_risk_then_gateway(db, tmp
             make_intent()
         )
         assert result.outcome is ExecutionRoutingOutcome.EXECUTION_UNKNOWN
-        assert events == ["submit", "risk.reserve", "gateway.register"]
-        assert gateway.calls[0]["spec"]["risk_selected"] is True
-        assert risk.calls[0]["request_id"] == result.request_id
+        assert events == ["submit"]
+        assert gateway.calls == [] and risk.calls == []
+        assert journal.get_parent(result.request_id) is None
     finally:
         journal.close()
 
@@ -853,3 +858,187 @@ def test_legacy_unverified_stored_results_and_status_cannot_promote(db):
     assert status.cancel_outcome == "EXECUTION_UNKNOWN"
     assert status.cancel_code == "EXECUTION_UNVERIFIED_REPLY"
     assert len(port.submit_calls) == 1 and port.cancel_calls == []
+
+
+@pytest.mark.parametrize(
+    "algorithm",
+    [
+        None,
+        {"class": "PASS", "version": 1, "params": {}},
+        {"class": "SLICE", "version": 1, "params": {"maximum": "3"}},
+        {
+            "class": "TWAP",
+            "version": 1,
+            "params": {"slots": [{"start_ns": 1, "end_ns": 2, "quantity": "2"}]},
+        },
+    ],
+)
+def test_v2_freezes_schedule_and_whole_wire_before_submit(db, algorithm):
+    import hashlib
+
+    from bt_api_base.frozen_algorithm_plan import algorithm_plan_digest
+    from bt_api_base.service_protocol import encode_wire_value
+    from bt_api_execution.algorithm_config import ScheduleRegistry
+
+    rule = routing_raw()["rules"][0]
+    if algorithm is None:
+        del rule["algorithm"]
+    else:
+        rule["algorithm"] = algorithm
+    port = RecordingPort()
+    result = make_router(db, port, config=make_config(rules=[rule])).route(make_intent())
+    row = parent_row(db)
+    request = json.loads(row[2])
+    plan = request["algorithm_plan"]
+    assert set(request) == {"request_id", "order_type", "spec", "algorithm_plan"}
+    assert request == port.submit_calls[0]
+    assert result.request_sha256 == hashlib.sha256(encode_wire_value(request)).hexdigest()
+    assert request["spec"]["plan_digest"] == algorithm_plan_digest(plan)
+    assert plan["build_id"] == "build-1"
+    assert plan["schedule"]["class"] == ("PASS" if algorithm is None else algorithm["class"])
+    assert plan["schedule"]["binding"]["deadline_ns"] == request["spec"]["expires_at_ns"]
+    assert plan["schedule"]["binding"]["parent_limit"] == "10"
+    assert ScheduleRegistry().create(plan["schedule"]).snapshot() == plan["schedule"]
+    assert result.outcome is ExecutionRoutingOutcome.EXECUTION_UNKNOWN
+
+
+def test_v1_config_remains_readable_but_new_match_never_calls_port(db):
+    raw = routing_raw(schema_version=1)
+    raw.pop("algorithm_build_id")
+    del raw["rules"][0]["schedule_binding"]
+    config = parse_execution_routing(raw)
+    assert config.to_plain()["schema_version"] == 1
+    port = RecordingPort()
+    result = make_router(db, port, config=config).route(make_intent())
+    assert result.outcome is ExecutionRoutingOutcome.EXECUTION_REJECTED
+    assert result.code == "EXECUTION_FROZEN_PLAN_REQUIRED"
+    assert parent_row(db) is None and port.submit_calls == []
+
+
+@pytest.mark.parametrize("missing", ["build", "quantity_step", "price_step", "retry_limit"])
+def test_v2_missing_explicit_frozen_input_is_rejected_before_call(db, missing):
+    raw = routing_raw()
+    if missing == "build":
+        del raw["algorithm_build_id"]
+    else:
+        del raw["rules"][0]["schedule_binding"][missing]
+    port = RecordingPort()
+    with pytest.raises(ExecutionRoutingError) as info:
+        make_router(db, port, config=parse_execution_routing(raw))
+    assert info.value.code == "INVALID_EXECUTION_CONFIG"
+    assert parent_row(db) is None and port.submit_calls == []
+
+
+def test_old_prepared_record_survives_config_change_without_send(db):
+    import hashlib
+
+    port = RecordingPort(reply=SimulatedProcessDeath())
+    router = make_router(db, port)
+    intent = make_intent()
+    with pytest.raises(SimulatedProcessDeath):
+        router.route(intent)
+    original = parent_row(db)
+    new_wire = json.loads(original[2])
+    legacy = {
+        "request_id": original[0],
+        "order_type": "limit",
+        "spec": new_wire["spec"],
+        "strategy": {"legacy": "original"},
+        "delegation": {"legacy": "original"},
+    }
+    payload = json.dumps(legacy, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    content = {key: legacy[key] for key in legacy if key != "request_id"}
+    digest = hashlib.sha256(
+        json.dumps(content, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+    ).hexdigest()
+    db.execute(
+        "UPDATE execution_parent_requests_v1 SET payload=?, request_sha256=?", (payload, digest)
+    )
+    frozen = parent_row(db)
+    other_rule = routing_raw()["rules"][0]
+    other_rule["match"]["side"] = "sell"
+    replay_port = RecordingPort()
+    replay = make_router(db, replay_port, config=make_config(rules=[other_rule])).route(intent)
+    assert replay.outcome is ExecutionRoutingOutcome.EXECUTION_UNKNOWN
+    assert replay.request_id == original[0] and replay.request_sha256 == digest
+    assert parent_row(db) == frozen and replay_port.submit_calls == []
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_stored_local_receipt_requires_v2_and_matching_parent(db, legacy):
+    import hashlib
+
+    port = RecordingPort()
+    router = make_router(db, port)
+    routed = router.route(make_intent())
+    row = parent_row(db)
+    wire = json.loads(row[2])
+    if legacy:
+        wire = {
+            "request_id": row[0],
+            "order_type": "limit",
+            "spec": wire["spec"],
+            "strategy": {},
+            "delegation": {},
+        }
+        content = {key: wire[key] for key in wire if key != "request_id"}
+        digest = hashlib.sha256(
+            json.dumps(content, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+        ).hexdigest()
+    else:
+        digest = row[1]
+    fake_parent = wire["spec"]["parent_ref"] if legacy else "wrong-parent"
+    fake = json.dumps(
+        {
+            "status": "EXECUTION_LOCAL_RECEIPT",
+            "parent_ref": fake_parent,
+            "code": None,
+            "execution_state": None,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    payload = json.dumps(wire, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    db.execute(
+        "UPDATE execution_parent_requests_v1 SET result=?, payload=?, request_sha256=?",
+        (fake, payload, digest),
+    )
+    result = router.route(make_intent())
+    assert result.outcome is ExecutionRoutingOutcome.EXECUTION_UNKNOWN
+    assert result.parent_ref is None and result.request_id == routed.request_id
+    assert len(port.submit_calls) == 1
+
+
+def test_v2_non_ascii_build_uses_full_wire_digest_and_canonical_parent_price(db):
+    import hashlib
+
+    from bt_api_base.service_protocol import encode_wire_value
+
+    port = RecordingPort()
+    result = make_router(db, port, config=make_config(algorithm_build_id="构建-1")).route(
+        make_intent(price="100.00")
+    )
+    payload = json.loads(parent_row(db)[2])
+    assert payload["algorithm_plan"]["build_id"] == "构建-1"
+    assert payload["algorithm_plan"]["schedule"]["binding"]["parent_limit"] == "100"
+    assert result.request_sha256 == hashlib.sha256(encode_wire_value(payload)).hexdigest()
+    assert result.request_sha256 != hashlib.sha256(parent_row(db)[2].encode()).hexdigest()
+    assert len(port.submit_calls) == 1
+
+
+def test_v2_stored_wire_hash_mismatch_fails_closed_without_resend(db):
+    port = RecordingPort()
+    router = make_router(db, port)
+    router.route(make_intent())
+    row = parent_row(db)
+    payload = json.loads(row[2])
+    payload["algorithm_plan"]["build_id"] = "other-build"
+    db.execute(
+        "UPDATE execution_parent_requests_v1 SET payload=?",
+        (json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True),),
+    )
+    with pytest.raises(ExecutionRoutingError) as error:
+        router.route(make_intent())
+    assert error.value.code == "EXECUTION_LOCAL_RECORD_FAILED"
+    assert len(port.submit_calls) == 1
