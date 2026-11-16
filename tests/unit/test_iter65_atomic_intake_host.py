@@ -45,9 +45,9 @@ def make_host(tmp_path, monkeypatch, *, wrong_identity=False, lease_ttl_ns=300_0
     if simulate_availability:
         # Test-only assumed writer fence: lease readiness is a separate
         # component check. This does not establish a real writer fence.
-        monkeypatch.setattr(AtomicIntakeService, 'local_intake_available', property(
-            lambda self: all(callable(getattr(self._intake, name, None))
-                for name in ('submit', 'query', 'query_action_facts', 'check_lease', 'renew_lease'))))
+        monkeypatch.setattr(AtomicIntakeService, 'local_intake_status',
+            lambda self: 'valid' if all(callable(getattr(self._intake, name, None))
+                for name in ('submit', 'query', 'query_action_facts', 'check_lease', 'renew_lease')) else 'failed')
     monkeypatch.setattr(importlib.import_module('bt_api_transport_zmq.service_v2'),
                         'ZmqServiceServer', PollingServer)
     component = {'config_schema_version': 2, 'settings': {'instance_id': 'exec-a',

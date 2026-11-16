@@ -2969,12 +2969,27 @@ class ServiceHost:
             return 'paper_monitor'
         return None
 
+    def _atomic_intake_fence_state(self) -> str:
+        """Observe every writer fence; only explicit contention is retryable."""
+        retry = False
+        for service in self._atomic_intake_services:
+            status = getattr(service, 'local_intake_status', None)
+            if not callable(status):
+                return 'failed'
+            state = status()
+            if type(state) is not str or state not in ('valid', 'retry', 'failed'):
+                return 'failed'
+            if state == 'failed':
+                return 'failed'
+            retry = retry or state == 'retry'
+        return 'retry' if retry else 'valid'
+
     def _components_readiness_state(self) -> str:
-        # local_intake_available is solely the independent writer-fence
-        # decision; lease readiness is checked by its component separately.
-        # Any false or exceptional fence is hard, even during lease retry.
+        # A local writer fence is independent of the component's lease.
+        # Hard failures must win even when another component asks to retry.
         try:
-            if any(service.local_intake_available is not True for service in self._atomic_intake_services):
+            fence_state = self._atomic_intake_fence_state()
+            if fence_state == 'failed':
                 return self._record_readiness('failed', 'intake_fence')
         except Exception:
             return self._record_readiness('failed', 'intake_fence_exception')
@@ -2993,7 +3008,7 @@ class ServiceHost:
             tuple(self._execution_parent_active.values())
         ):
             return self._record_readiness('failed', 'execution_parent_gateway')
-        retry = False
+        retry = fence_state == 'retry'
         for component in self._components:
             try:
                 status = component.readiness()
@@ -3011,7 +3026,8 @@ class ServiceHost:
                 or getattr(self, '_host_delay_faulted', False)
                 or self._gateway_lease_faults or self._paper_monitor_faults):
             return self._record_readiness('failed', self._readiness_fault_reason() or 'concurrent_fault')
-        return self._record_readiness('retry', 'component_retry') if retry else self._record_readiness('valid')
+        return self._record_readiness('retry', 'intake_fence_retry' if fence_state == 'retry'
+                                      else 'component_retry') if retry else self._record_readiness('valid')
 
     def _restricted_operation_ready(
         self,
@@ -3436,10 +3452,14 @@ class ServiceHost:
                         if hard_generation != registry._hard_unready_generation:
                             observed = 'failed'
                             self._record_readiness('failed', 'hard_unready_generation')
-                        if observed != 'failed' and any(service.local_intake_available is not True
-                                                        for service in self._atomic_intake_services):
-                            observed = 'failed'
-                            self._record_readiness('failed', 'intake_fence')
+                        if observed != 'failed':
+                            fence_state = self._atomic_intake_fence_state()
+                            if fence_state == 'failed':
+                                observed = 'failed'
+                                self._record_readiness('failed', 'intake_fence')
+                            elif fence_state == 'retry':
+                                observed = 'retry'
+                                self._record_readiness('retry', 'intake_fence_retry')
                         if (self._component_maintenance_faults or self._component_delay_faults
                                 or getattr(self, '_host_delay_faulted', False)
                                 or self._gateway_lease_faults or self._paper_monitor_faults):
@@ -3448,7 +3468,7 @@ class ServiceHost:
                         if observed != 'failed':
                             for service in self._atomic_intake_services:
                                 lease_state = service._lease_readiness_status()
-                                if lease_state == 'failed':
+                                if lease_state not in ('valid', 'retry'):
                                     observed = 'failed'
                                     self._record_readiness('failed', 'atomic_lease_failed')
                                     break

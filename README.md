@@ -1012,3 +1012,19 @@ The JSON schema is exact: unknown fields and duplicate keys are rejected. The fo
 The current lease contract permits this listener to start only with a fresh journal. Reopening an existing journal refuses a new intake lease because writer continuity is not established, even after a clean close or lease expiry. Creating a new journal does not resolve that continuity gap or authorize bypassing an existing account journal.
 
 A first `SIGINT` or `SIGTERM` requests bounded close on the original owner thread. If cleanup is unknown, the process reports `EXECUTION_PARENT_CLEANUP_PENDING`, retains the original resources, and waits for another signal to retry. Status messages are finite labels and do not include configuration or key values.
+# Local Execution parent recovery
+
+The parent-service configuration optionally accepts `storage.writer_mode` and
+`storage.require_existing`. Defaults remain `quarantined` and `false`.
+`single_host_cooperative` requires `require_existing: true` in this CLI and
+uses the Execution package's explicit local deployment contract. It preserves
+the original journal and advances an existing lease; it cannot claim an old
+journal with no lease or establish that other writers are stopped.
+
+The SDK consumes Execution's `local_intake_status()` three-state contract so
+temporary Host/Store lock contention can recover without permanently revoking
+readiness. Missing contracts and invalid resources remain unavailable. A local
+parent receipt is not a Risk approval, Gateway acknowledgement or sent order.
+The current independent management-read and parent hosts each own an exclusive
+journal lock and cannot run against the same root at the same time; a shared
+Host composition is still required to provide both interfaces together.

@@ -107,7 +107,8 @@ def test_retry_lease_and_recovery_preserve_last_failure(host):
 
     class Intake:
         instance_id = 'local-component'
-        local_intake_available = True
+        def local_intake_status(self):
+            return 'valid'
 
         def _lease_readiness_status(self):
             return state[0]
@@ -135,13 +136,12 @@ def test_retry_lease_and_recovery_preserve_last_failure(host):
 
 
 def test_intake_fence_and_execution_parent_categories(host):
-    host._atomic_intake_services = (SimpleNamespace(local_intake_available=False),)
+    host._atomic_intake_services = (SimpleNamespace(local_intake_status=lambda: 'failed'),)
     host._refresh_registry_readiness()
     assert host.readiness_diagnostics['reason'] == 'intake_fence'
 
     class BrokenFence:
-        @property
-        def local_intake_available(self):
+        def local_intake_status(self):
             raise ValueError('secret fence')
 
     host._atomic_intake_services = (BrokenFence(),)
@@ -167,7 +167,8 @@ def test_fault_appearing_during_callback_is_observed(host):
 
 def test_atomic_recheck_exception_is_redacted(host):
     class Intake:
-        local_intake_available = True
+        def local_intake_status(self):
+            return 'valid'
 
         def _lease_readiness_status(self):
             raise ValueError('secret lease')
@@ -181,7 +182,7 @@ def test_atomic_recheck_exception_is_redacted(host):
 
 
 def test_hard_generation_change_overrides_stale_valid_sample(host):
-    host._atomic_intake_services = (SimpleNamespace(local_intake_available=True),)
+    host._atomic_intake_services = (SimpleNamespace(local_intake_status=lambda: 'valid'),)
 
     def ready():
         host._registry._hard_unready_generation += 1

@@ -98,7 +98,7 @@ def test_retry_with_other_hard_failure_revokes_token(tmp_path, monkeypatch, faul
                 failed.set()
         elif fault == 'writer_fence':
             def inject():
-                monkeypatch.setattr(type(created['service']), 'local_intake_available', property(lambda _: False))
+                monkeypatch.setattr(type(created['service']), 'local_intake_status', lambda _: 'failed')
         else:
             def inject():
                 nonlocal gate_held

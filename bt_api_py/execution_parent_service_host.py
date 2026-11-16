@@ -1,8 +1,10 @@
 """Operator-composed Atomic parent listener; readiness is independently fenced.
 
-The local journal lease does not prove an older writer has stopped. With the
-current AtomicIntakeService this listener remains unready and cannot admit a
-parent. Configuration is trusted local input, never a source of account facts.
+The default journal mode is quarantined. The opt-in single-host cooperative
+mode assumes a sole fixed local root and original journal, cooperative writers,
+operator exclusion of old and remote writers, and no file rollback. The setting
+does not prove these assumptions or confer account authority; all independent
+source and readiness gates remain in force.
 """
 from __future__ import annotations
 
@@ -89,6 +91,8 @@ class ParentConfig:
     lease_owner: str
     lease_ttl_ns: int
     versions: tuple
+    writer_mode: str = 'quarantined'
+    require_existing: bool = False
 
 
 def parse_config(raw):
@@ -124,7 +128,18 @@ def parse_config(raw):
                          strategy_ref=_text(wire['strategy_ref']), run_id=_text(wire['run_id']))
         if (wire.account_ref, wire.strategy_ref) != (local.account_ref, local.strategy_id):
             raise ValueError
-        storage = _map(top['storage'], ('journal_root', 'registry_path', 'storage_id'))
+        storage = top['storage']
+        required = {'journal_root', 'registry_path', 'storage_id'}
+        if (type(storage) is not dict or not required <= set(storage)
+                or set(storage) - required - {'writer_mode', 'require_existing'}):
+            raise ValueError
+        writer_mode = storage.get('writer_mode', 'quarantined')
+        require_existing = storage.get('require_existing', False)
+        if (type(writer_mode) is not str
+                or writer_mode not in {'quarantined', 'single_host_cooperative'}
+                or type(require_existing) is not bool
+                or (writer_mode == 'single_host_cooperative' and not require_existing)):
+            raise ValueError
         journal_root, registry_path = _path(storage['journal_root']), _path(storage['registry_path'])
         if (journal_root == registry_path.parent or journal_root in registry_path.parents
                 or registry_path.parent in journal_root.parents):
@@ -183,7 +198,8 @@ def parse_config(raw):
             raise ValueError
         return ParentConfig(service, identity, local, wire, journal_root, registry_path, storage_id,
                             server_public, server_secret, tuple(principal_keys), tuple(grants), action_grant,
-                            tuple(policies), build_id, _text(lease['owner']), ttl, versions)
+                            tuple(policies), build_id, _text(lease['owner']), ttl, versions,
+                            writer_mode, require_existing)
     except Exception:
         raise ParentServiceError('INVALID_CONFIGURATION') from None
 
@@ -280,8 +296,11 @@ class ParentServiceHost:
                 config.versions[3], keys[0], keys[1], principal_map, grants)
 
             def provider(*_args):
+                options = {}
+                if config.writer_mode != 'quarantined' or config.require_existing:
+                    options = {'writer_mode': config.writer_mode, 'require_existing': config.require_existing}
                 journal = AccountJournalHost(root=str(config.journal_root), scope=config.local_scope,
-                                             storage_id=config.storage_id)
+                                             storage_id=config.storage_id, **options)
                 self.journal = journal
                 try:
                     lease = journal.acquire_intake_lease(config.local_scope, config.lease_owner,
