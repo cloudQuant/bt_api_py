@@ -72,6 +72,7 @@ _EXECUTION_RELEASE_PORT = 'service.execution_delegate'
 _EXECUTION_RELEASE_CHECK = 'execution.child.release_policy_check'
 _EXECUTION_RELEASE_OPERATIONS = frozenset({_EXECUTION_RELEASE_CHECK})
 _CALENDAR_READ_OPERATIONS = frozenset({"calendar.query.v1", "calendar.windows.v1"})
+_CALENDAR_MONITOR_OPERATION = "calendar.monitor.windows.v1"
 
 
 def _execution_release_local_policy_handler(_context, _arguments):
@@ -952,6 +953,9 @@ def validate_capabilities_and_grants(
     if any(type(capability) is not ServiceCapability for capability in capabilities):
         raise TypeError("capabilities must contain ServiceCapability values")
     for capability in capabilities:
+        if (_CALENDAR_MONITOR_OPERATION in capability.operations
+                and (capability.port != "service.calendar_read" or capability.write_operations)):
+            raise ValueError("monitor calendar operation requires its read-only port")
         if capability.port == _EXECUTION_RELEASE_PORT:
             if (not capability.operations <= _EXECUTION_RELEASE_OPERATIONS
                     or capability.write_operations):
@@ -975,6 +979,22 @@ def validate_capabilities_and_grants(
                 capability = capability_map.get((resource.instance_id, resource.port))
                 if capability is None or not resource.operations.issubset(capability.operations):
                     raise ValueError("resource grant exceeds declared capability")
+                if _CALENDAR_MONITOR_OPERATION in resource.operations and not (
+                    entry.identity.role is WireRole.SERVICE
+                    and entry.identity.principal_ref == principal
+                    and entry.identity.delegate_ref is None
+                    and resource.port == "service.calendar_read"
+                    and resource.operations == frozenset({_CALENDAR_MONITOR_OPERATION})
+                    and resource.scope.account_ref is not None
+                    and resource.scope == WireScope(resource.scope.execution_domain_ref,
+                                                    account_ref=resource.scope.account_ref)
+                    and not capability.write_operations
+                ):
+                    raise ValueError("monitor calendar operation requires exact service account scope")
+                if (resource.port == "service.calendar_read"
+                        and resource.operations & _CALENDAR_READ_OPERATIONS
+                        and entry.identity.role is not WireRole.STRATEGY_CLIENT):
+                    raise ValueError("strategy calendar operations require strategy identity")
                 if (resource.port == _EXECUTION_RELEASE_PORT
                         and not _is_execution_release_scope(entry.identity, resource.port, resource.scope)):
                     raise ValueError('execution release requires an exact service scope')
@@ -1027,7 +1047,7 @@ def validate_capabilities_and_grants(
                         and resource.scope.strategy_ref is not None
                         and bool(resource.operations)
                         and resource.operations <= _CALENDAR_READ_OPERATIONS
-                        and capability.operations <= _CALENDAR_READ_OPERATIONS
+                        and capability.operations <= (_CALENDAR_READ_OPERATIONS | {_CALENDAR_MONITOR_OPERATION})
                         and not capability.write_operations
                     )
                 ):

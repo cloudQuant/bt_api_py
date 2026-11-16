@@ -20,6 +20,7 @@ from bt_api_py.trading_calendar_range_simulation import CalendarRangePolicy, que
 
 CALENDAR_OPERATION = "calendar.query.v1"
 CALENDAR_WINDOWS_OPERATION = "calendar.windows.v1"
+CALENDAR_MONITOR_WINDOWS_OPERATION = "calendar.monitor.windows.v1"
 
 
 class ReceiptCheckedCalendarStore:
@@ -54,12 +55,34 @@ class CalendarGrant:
             raise ValueError("INVALID_CALENDAR_GRANT")
 
 
+@dataclass(frozen=True)
+class CalendarMonitorGrant:
+    principal_ref: str
+    actor_ref: str
+    execution_domain_ref: str
+    account_ref: str
+    route: str
+    venue: str
+    kind: str
+    product: str
+    contract: str
+
+    def __post_init__(self):
+        if (any(not _id(value) for value in vars(self).values())
+                or self.kind not in {"future", "option"}):
+            raise ValueError("INVALID_CALENDAR_MONITOR_GRANT")
+
+
 class GatewayCalendarService:
     """Owner-local binding with explicit ACL; bind/rebind are never RPC operations."""
 
-    def __init__(self, *, grants, range_policies=frozenset()):
-        if (type(grants) is not frozenset or not grants or len(grants) > 4096
+    def __init__(self, *, grants, range_policies=frozenset(), monitor_grants=frozenset()):
+        if (type(grants) is not frozenset or len(grants) > 4096
                 or any(type(grant) is not CalendarGrant for grant in grants)):
+            raise ValueError("INVALID_CALENDAR_SERVICE")
+        if (type(monitor_grants) is not frozenset or len(monitor_grants) > 4096
+                or any(type(grant) is not CalendarMonitorGrant for grant in monitor_grants)
+                or not (grants or monitor_grants)):
             raise ValueError("INVALID_CALENDAR_SERVICE")
         if (type(range_policies) is not frozenset or len(range_policies) > 4096
                 or any(type(policy) is not CalendarRangePolicy for policy in range_policies)
@@ -67,6 +90,7 @@ class GatewayCalendarService:
             raise ValueError("INVALID_CALENDAR_RANGE_POLICIES")
         self._range_policies = {policy.scope_key: policy for policy in range_policies}
         self._grants, self._epoch, self._registry = grants, None, None
+        self._monitor_grants = monitor_grants
         self._lock = RLock()
         self._closed = False
         self._binding = None
@@ -111,13 +135,15 @@ class GatewayCalendarService:
             self._revision += 1
 
     def handle(self, operation, *, context, arguments):
-        if operation not in {CALENDAR_OPERATION, CALENDAR_WINDOWS_OPERATION}:
+        if operation not in {CALENDAR_OPERATION, CALENDAR_WINDOWS_OPERATION, CALENDAR_MONITOR_WINDOWS_OPERATION}:
             raise ValueError("INVALID_CALENDAR_REQUEST")
-        if operation == CALENDAR_WINDOWS_OPERATION:
+        if operation in {CALENDAR_WINDOWS_OPERATION, CALENDAR_MONITOR_WINDOWS_OPERATION}:
             scope, start_utc, end_utc = decode_calendar_windows_query(arguments)
         else:
             scope, query = decode_calendar_query(arguments)
-        if (type(context) is not ServiceCallContext or context.identity.role is not WireRole.STRATEGY_CLIENT
+        if operation == CALENDAR_MONITOR_WINDOWS_OPERATION:
+            self._authorize_monitor(context, scope)
+        elif (type(context) is not ServiceCallContext or context.identity.role is not WireRole.STRATEGY_CLIENT
                 or context.identity.principal_ref != context.principal_ref
                 or context.identity.actor_ref != context.scope.strategy_ref
                 or context.identity.delegate_ref is not None
@@ -125,17 +151,18 @@ class GatewayCalendarService:
                 or context.scope.portfolio_ref is not None or context.scope.group_id is not None
                 or context.scope.leg_id is not None or not _id(context.registration_id)):
             raise ValueError("SCOPE_DENIED")
-        try:
-            grant = CalendarGrant(context.principal_ref, context.scope.execution_domain_ref,
+        if operation != CALENDAR_MONITOR_WINDOWS_OPERATION:
+            try:
+                grant = CalendarGrant(context.principal_ref, context.scope.execution_domain_ref,
                                   context.scope.account_ref, context.scope.strategy_ref, context.scope.run_id,
                                   scope["route"], scope["venue"], scope["kind"], scope["product"], scope["contract"])
-        except (TypeError, ValueError):
-            raise ValueError("SCOPE_DENIED") from None
-        if grant not in self._grants:
-            raise ValueError("SCOPE_DENIED")
+            except (TypeError, ValueError):
+                raise ValueError("SCOPE_DENIED") from None
+            if grant not in self._grants:
+                raise ValueError("SCOPE_DENIED")
         if self._registry is None:
             raise ValueError("SERVICE_UNAVAILABLE")
-        if operation == CALENDAR_WINDOWS_OPERATION:
+        if operation in {CALENDAR_WINDOWS_OPERATION, CALENDAR_MONITOR_WINDOWS_OPERATION}:
             return self._handle_windows(context, scope, start_utc, end_utc)
         response = {"schema": "sdk.gateway.calendar.query/1", "scope": scope,
                     "registration_id": context.registration_id, "service_epoch": self._epoch,
@@ -221,6 +248,25 @@ class GatewayCalendarService:
         if not fits:
             raise ServiceResultTooLargeError()
         return response
+
+    def _authorize_monitor(self, context, scope):
+        if (type(context) is not ServiceCallContext or context.identity.role is not WireRole.SERVICE
+                or context.identity.principal_ref != context.principal_ref
+                or context.identity.delegate_ref is not None
+                or context.scope.account_ref is None or context.scope.account_refs
+                or context.scope.strategy_ref is not None or context.scope.run_id is not None
+                or context.scope.manual_book_ref is not None or context.scope.portfolio_ref is not None
+                or context.scope.group_id is not None or context.scope.leg_id is not None
+                or not _id(context.registration_id)):
+            raise ValueError("SCOPE_DENIED")
+        try:
+            grant = CalendarMonitorGrant(context.principal_ref, context.identity.actor_ref,
+                context.scope.execution_domain_ref, context.scope.account_ref, scope["route"],
+                scope["venue"], scope["kind"], scope["product"], scope["contract"])
+        except (TypeError, ValueError):
+            raise ValueError("SCOPE_DENIED") from None
+        if grant not in self._monitor_grants:
+            raise ValueError("SCOPE_DENIED")
 
     def _handle_windows(self, context, scope, start_utc, end_utc):
         response = {"schema": "sdk.gateway.calendar.windows/1", "scope": scope,

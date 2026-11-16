@@ -1200,12 +1200,46 @@ read-only Registry resource grants must be configured separately.
 
 The root is resolved relative to the protected resource file, not the launch file
 or working directory. A range policy's exact route and instrument scope must be
-covered by a calendar grant and Registry `calendar.windows.v1` permission; day
-queries require `calendar.query.v1`. The calendar grant identifies one run and
+covered by either a strategy grant with Registry `calendar.windows.v1` permission
+or the separate Monitor grant and resource described below; strategy day queries
+require `calendar.query.v1`. The strategy grant identifies one run and
 does not grant any order or native trading capability. A matching Registry
 resource may name that exact run, or leave its run unset; it cannot authorize a
 calendar grant for a different fixed run. Product and contract are
 explicit calendar scopes, not inferred from CTP symbols.
+
+For an explicit Monitor service reader, add both `monitor_clients` and
+`monitor_grants` to that same `calendars` object. The following fields are
+complete; replace the key placeholder with that Monitor's separate 40-character
+CURVE public key and match the configured service instance, scope and policy:
+
+```json
+"monitor_clients": [{
+  "identity": {"role": "service", "principal_ref": "example-monitor-principal",
+               "actor_ref": "example-monitor", "delegate_ref": null},
+  "curve_public_key": "<monitor CURVE public key>",
+  "resources": [{"instance_id": "example-gateway", "port": "service.calendar_read",
+    "scope_ref": "example-scope", "scope": {
+      "execution_domain_ref": "example-domain", "account_ref": "example-account",
+      "account_refs": [], "strategy_ref": null, "run_id": null,
+      "manual_book_ref": null, "portfolio_ref": null, "group_id": null, "leg_id": null
+    }, "operations": ["calendar.monitor.windows.v1"]}]
+}],
+"monitor_grants": [{"principal_ref": "example-monitor-principal", "actor_ref": "example-monitor",
+  "execution_domain_ref": "example-domain", "account_ref": "example-account",
+  "route": "CTP___FUTURE", "venue": "SIM", "kind": "future",
+  "product": "x", "contract": "x2601"}]
+```
+
+The reader must explicitly configure the `upstream.calendar` mount and request
+only `calendar.monitor.windows.v1`. Both the account-scoped Registry resource
+and the exact Monitor grant are required; neither grants direct or trading
+operations. A calendar component advertises the new handler even in older
+configurations, but advertisement is not permission. Existing strategy clients
+still request their previous default day operation and cannot use the Monitor
+operation. Monitor results retain the bounded simulation contract,
+`DEPLOYMENT_DECLARED_UNVERIFIED`, `NOT_PROVEN`, the data origin, and no trade
+authorization; they do not prove exchange calendar completeness.
 
 Bootstrap pins the current receipt-checked calendar version at startup to the
 explicit day. Its `operator-simulation-...` generation is created locally for

@@ -823,6 +823,34 @@ def _load_resources(config, *, trading):
             principals[public] = identity.principal_ref
             grants[identity.principal_ref] = (PrincipalGrant(identity, tuple(entries)),)
             direct[identity.principal_ref] = GatewayDirectGrant(identity.actor_ref, _string_set(client["symbols"]))
+        calendar_raw = raw.get("calendars")
+        monitor_identities = []
+        if type(calendar_raw) is dict and "monitor_clients" in calendar_raw:
+            from bt_api_py.gateway_calendar_service import CALENDAR_MONITOR_WINDOWS_OPERATION
+
+            clients = calendar_raw["monitor_clients"]
+            if ("monitor_grants" not in calendar_raw or type(clients) is not list or not clients):
+                _invalid()
+            for client in clients:
+                client = _mapping(client, ("identity", "curve_public_key", "resources"))
+                identity = _identity(client["identity"])
+                public = _curve(client["curve_public_key"])
+                if (identity.role is not WireRole.SERVICE or identity.delegate_ref is not None
+                        or identity.principal_ref in grants or public in principals
+                        or type(client["resources"]) is not list or not client["resources"]):
+                    _invalid()
+                entries = []
+                for item in client["resources"]:
+                    item = _mapping(item, ("instance_id", "port", "scope_ref", "scope", "operations"))
+                    operations = _string_set(item["operations"])
+                    if (item["port"] != "service.calendar_read"
+                            or operations != frozenset({CALENDAR_MONITOR_WINDOWS_OPERATION})):
+                        _invalid()
+                    entries.append(ResourceGrant(item["instance_id"], item["port"], item["scope_ref"],
+                                                 _scope(item["scope"]), operations))
+                principals[public] = identity.principal_ref
+                grants[identity.principal_ref] = (PrincipalGrant(identity, tuple(entries)),)
+                monitor_identities.append(identity)
         control_grants, upgrade_controls, drain_upgrade, lease_drain, release_audit = None, False, None, None, None
         if trading and raw.get("controls") is not None:
             control_grants, upgrade_controls, drain_upgrade, lease_drain, release_audit = _controls(
@@ -842,6 +870,11 @@ def _load_resources(config, *, trading):
                 instruments=_return_settings(raw["returns"]).instruments,
                 account_operators=frozenset(principal for principal, grant in (control_grants or {}).items()
                                             if grant.account_scope_allowed))
+        for monitor_identity in monitor_identities:
+            if any(entry.identity.actor_ref == monitor_identity.actor_ref
+                   for principal, entries in grants.items() if principal != monitor_identity.principal_ref
+                   for entry in entries):
+                _invalid()
         authority = TrustedServiceAuthority(**authority_raw, principals=principals, grants=grants)
         from bt_api_py.ctp_gateway_calendar_config import parse_calendar_settings, validate_calendar_settings
         calendar_settings = (parse_calendar_settings(

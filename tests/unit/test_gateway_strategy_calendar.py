@@ -60,7 +60,8 @@ def test_calendar_port_requires_explicit_exact_service_resource(tmp_path):
     raw = _service_config("tcp://127.0.0.1:12345").to_public_dict()
     raw["components"]["gateway"]["settings"]["bind_ports"].append("service.calendar_read")
     prepared = _prepare(parse_service_config(raw))
-    assert prepared.operations_by_port["service.calendar_read"] == {"calendar.query.v1", "calendar.windows.v1"}
+    assert prepared.operations_by_port["service.calendar_read"] == {
+        "calendar.query.v1", "calendar.windows.v1", "calendar.monitor.windows.v1"}
     direct, _, _ = _resources(tmp_path)
     with pytest.raises(ServiceComponentError, match="INVALID_CALENDAR_SERVICE_BINDING"):
         _build(prepared, {"binding": direct})

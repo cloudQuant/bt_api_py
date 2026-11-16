@@ -12,6 +12,8 @@ from bt_api_gateway.calendar_config import parse_gateway_calendar_config
 
 from bt_api_py.gateway_calendar_service import (
     CalendarGrant,
+    CalendarMonitorGrant,
+    CALENDAR_MONITOR_WINDOWS_OPERATION,
     GatewayCalendarService,
     ReceiptCheckedCalendarStore,
 )
@@ -46,14 +48,15 @@ class CtpGatewayCalendarSettings:
     range_policies: frozenset[CalendarRangePolicy]
     trading_day: date | None
     day_switch: CtpCalendarDaySwitchSettings | None = None
+    monitor_grants: frozenset[CalendarMonitorGrant] = frozenset()
 
 
 def parse_calendar_settings(raw, *, config_file, config, authority, account_scope):
-    if type(raw) is not dict or set(raw) not in ({
-        "root", "mode", "route", "grants", "range_policies", "simulation_bootstrap"
-    }, {
-        "root", "mode", "route", "grants", "range_policies", "simulation_bootstrap", "day_switch"
-    }) or raw["mode"] != "SIMULATION_ONLY":
+    required = {"root", "mode", "route", "grants", "range_policies", "simulation_bootstrap"}
+    optional = {"day_switch", "monitor_grants", "monitor_clients"}
+    if (type(raw) is not dict or not required <= set(raw) <= required | optional
+            or ("monitor_grants" in raw) != ("monitor_clients" in raw)
+            or raw["mode"] != "SIMULATION_ONLY"):
         raise ValueError("INVALID_CALENDAR_CONFIGURATION")
     candidate = parse_gateway_calendar_config({"calendars": {"root": raw["root"]}}, config_file=config_file)
     if candidate.status != "CONFIGURED":
@@ -62,8 +65,13 @@ def parse_calendar_settings(raw, *, config_file, config, authority, account_scop
         raise ValueError("INVALID_CALENDAR_CONFIGURATION")
     grants = tuple(CalendarGrant(**item) for item in raw["grants"] if type(item) is dict)
     policies = tuple(CalendarRangePolicy(**item) for item in raw["range_policies"] if type(item) is dict)
+    monitor_raw = raw.get("monitor_grants", [])
+    if type(monitor_raw) is not list or ("monitor_grants" in raw and not monitor_raw):
+        raise ValueError("INVALID_CALENDAR_CONFIGURATION")
+    monitors = tuple(CalendarMonitorGrant(**item) for item in monitor_raw if type(item) is dict)
     if (len(grants) != len(raw["grants"]) or len(set(grants)) != len(grants)
-            or len(policies) != len(raw["range_policies"]) or len(set(policies)) != len(policies)):
+            or len(policies) != len(raw["range_policies"]) or len(set(policies)) != len(policies)
+            or len(monitors) != len(monitor_raw) or len(set(monitors)) != len(monitors)):
         raise ValueError("INVALID_CALENDAR_CONFIGURATION")
     bootstrap = raw["simulation_bootstrap"]
     day = None
@@ -82,7 +90,7 @@ def parse_calendar_settings(raw, *, config_file, config, authority, account_scop
             raise ValueError("INVALID_CALENDAR_CONFIGURATION")
         switch = CtpCalendarDaySwitchSettings(**switch)
     settings = CtpGatewayCalendarSettings(candidate.root_path, raw["route"], frozenset(grants),
-                                          frozenset(policies), day, switch)
+                                          frozenset(policies), day, switch, frozenset(monitors))
     validate_calendar_settings(settings, config=config, authority=authority, account_scope=account_scope)
     return settings
 
@@ -99,8 +107,11 @@ def validate_calendar_settings(settings, *, config, authority, account_scope):
             or (settings.trading_day is not None and (type(settings.trading_day) is not date or settings.root is None))
             or (settings.day_switch is not None and (type(settings.day_switch) is not CtpCalendarDaySwitchSettings
                 or settings.root is None or settings.trading_day is not None))
-            or type(settings.grants) is not frozenset or not settings.grants or len(settings.grants) > 4096
+            or type(settings.grants) is not frozenset or len(settings.grants) > 4096
             or any(type(grant) is not CalendarGrant for grant in settings.grants)
+            or type(settings.monitor_grants) is not frozenset or len(settings.monitor_grants) > 4096
+            or any(type(grant) is not CalendarMonitorGrant for grant in settings.monitor_grants)
+            or not (settings.grants or settings.monitor_grants)
             or type(settings.range_policies) is not frozenset or len(settings.range_policies) > 4096
             or any(type(policy) is not CalendarRangePolicy for policy in settings.range_policies)
             or len({p.scope_key for p in settings.range_policies}) != len(settings.range_policies)):
@@ -112,6 +123,20 @@ def validate_calendar_settings(settings, *, config, authority, account_scope):
                 if resource.port != "service.calendar_read":
                     continue
                 identity, scope = entry.identity, resource.scope
+                if identity.role is WireRole.SERVICE:
+                    if (identity.principal_ref != principal or identity.delegate_ref is not None
+                            or scope != WireScope(authority.scope.execution_domain_ref, account_ref=account_scope)
+                            or resource.instance_id != item["instance_id"] or resource.scope_ref != config.scope_ref
+                            or resource.operations != frozenset({CALENDAR_MONITOR_WINDOWS_OPERATION})):
+                        raise ValueError("INVALID_CALENDAR_CONFIGURATION")
+                    matches = [g for g in settings.monitor_grants if g.principal_ref == principal
+                               and g.actor_ref == identity.actor_ref
+                               and g.execution_domain_ref == scope.execution_domain_ref
+                               and g.account_ref == scope.account_ref and g.route == settings.route]
+                    if not matches:
+                        raise ValueError("INVALID_CALENDAR_CONFIGURATION")
+                    resources.append((identity, resource, matches))
+                    continue
                 if (identity.role is not WireRole.STRATEGY_CLIENT or identity.principal_ref != principal
                         or identity.delegate_ref is not None or scope != WireScope(
                             authority.scope.execution_domain_ref, account_ref=account_scope,
@@ -131,8 +156,15 @@ def validate_calendar_settings(settings, *, config, authority, account_scope):
         if not any(grant in matches and "calendar.query.v1" in resource.operations
                    for _, resource, matches in resources):
             raise ValueError("INVALID_CALENDAR_CONFIGURATION")
+    for grant in settings.monitor_grants:
+        if not any(grant in matches and CALENDAR_MONITOR_WINDOWS_OPERATION in resource.operations
+                   for _, resource, matches in resources):
+            raise ValueError("INVALID_CALENDAR_CONFIGURATION")
+        if not any((grant.route, grant.venue, grant.kind, grant.product, grant.contract) == policy.scope_key
+                   for policy in settings.range_policies):
+            raise ValueError("INVALID_CALENDAR_CONFIGURATION")
     for policy in settings.range_policies:
-        if not any("calendar.windows.v1" in resource.operations and any(
+        if not any(bool({"calendar.windows.v1", CALENDAR_MONITOR_WINDOWS_OPERATION} & resource.operations) and any(
                 (g.route, g.venue, g.kind, g.product, g.contract) == policy.scope_key for g in matches)
                    for _, resource, matches in resources):
             raise ValueError("INVALID_CALENDAR_CONFIGURATION")
@@ -144,7 +176,8 @@ class _RejectSwitch:
 
 
 def create_calendar_service(settings):
-    service = GatewayCalendarService(grants=settings.grants, range_policies=settings.range_policies)
+    service = GatewayCalendarService(grants=settings.grants, range_policies=settings.range_policies,
+                                     monitor_grants=settings.monitor_grants)
     if settings.trading_day is not None:
         from bt_api_ctp.calendar_snapshot import CalendarSnapshot
         binding = SimulationCalendarBinding(

@@ -651,7 +651,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             optional_resource_keys=frozenset({"owner_guard_binding", "lease_drain", "cancel_only", "instrument_block", "account_comparison", "account_strategy_reads", "account_observer", "account_facts", "account_cancel_attempts", "delegation_service", "delegate_actor_service", "delegate_actor_stream", "parent_service", "parent_acceptance_service", "claim_coordinator", "claim_sealer", "claim_wired", "execution_subject_binding", "calendar_service"}),
             public_ports=MappingProxyType(
                 {
-                    "service.calendar_read": frozenset({"calendar.query.v1", "calendar.windows.v1"}),
+                    "service.calendar_read": frozenset({"calendar.query.v1", "calendar.windows.v1", "calendar.monitor.windows.v1"}),
                     "service.direct_write": frozenset(
                         {"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch",
                          "direct.cancel", "direct.cancel_status",
@@ -1443,7 +1443,7 @@ def validate_components(specs: Sequence[ComponentSpec]) -> tuple[PreparedCompone
             if normalized.get("bounded_read_after") is not True:
                 operations = operations - {"market.read_after_bounded"}
         if spec.component == "gateway" and spec.options.get("role") == "trading_owner" and "service.calendar_read" in spec.bind_ports:
-            operations = operations | {"calendar.query.v1", "calendar.windows.v1"}
+            operations = operations | {"calendar.query.v1", "calendar.windows.v1", "calendar.monitor.windows.v1"}
         if spec.component == "gateway" and normalized.get("reconciliation_cut") is True:
             # Only an explicitly enabled worker with a trusted inspector port
             # serves reconciliation evidence (iteration 60, acceptance G2).
@@ -2426,7 +2426,8 @@ def build_component(
                         from bt_api_py.gateway_calendar_service import GatewayCalendarService
                         trading_calendar_adapter = values["calendar_service"]
                         if (type(trading_calendar_adapter) is not GatewayCalendarService
-                                or any(grant.account_ref != adapter.account_scope for grant in trading_calendar_adapter._grants)):
+                                or any(grant.account_ref != adapter.account_scope for grant in trading_calendar_adapter._grants)
+                                or any(grant.account_ref != adapter.account_scope for grant in trading_calendar_adapter._monitor_grants)):
                             raise ServiceComponentError("INVALID_CALENDAR_SERVICE_BINDING")
                         adapter_close_before_resources = trading_calendar_adapter.close
                     if "owner_guard_binding" in values:
@@ -3447,7 +3448,7 @@ def build_component(
             ) -> Mapping[str, Any]:
                 assert _adapter is not None
                 if spec.component == "gateway" and spec.options.get("role") == "trading_owner":
-                    if _operation in {"calendar.query.v1", "calendar.windows.v1"}:
+                    if _operation in {"calendar.query.v1", "calendar.windows.v1", "calendar.monitor.windows.v1"}:
                         assert trading_calendar_adapter is not None
                         return trading_calendar_adapter.handle(_operation, context=context, arguments=arguments)
                     if _operation in prepared.module.PARENT_ACCEPTANCE_OPERATIONS:

@@ -91,6 +91,7 @@ _APPLICATION_MOUNTS: Final[frozenset[str]] = frozenset(
 )
 _UPSTREAM_MOUNTS: Final[frozenset[str]] = frozenset(
     {
+        "upstream.calendar",
         "upstream.market",
         "upstream.account",
         "upstream.orders",
@@ -116,6 +117,7 @@ _MOUNTS_BY_ROLE: Final[dict[str, frozenset[str]]] = {
 
 _ACCOUNT_MOUNTS: Final[frozenset[str]] = frozenset(
     {
+        "upstream.calendar",
         "broker.direct_write",
         "broker.execution_parent",
         "application.direct_write",
@@ -157,6 +159,7 @@ _PORTFOLIO_MOUNTS: Final[frozenset[str]] = frozenset(
 )
 _OPTIONAL_MOUNTS: Final[frozenset[str]] = frozenset(
     {
+        "upstream.calendar",
         "store.market",
         "store.account",
         "store.calendar",
@@ -199,6 +202,7 @@ _CLIENT_ALIAS_MOUNTS: Final[dict[str, frozenset[str]]] = {
             "store.market",
             "store.account",
             "store.calendar",
+            "upstream.calendar",
             "application.market",
             "application.account",
             "upstream.market",

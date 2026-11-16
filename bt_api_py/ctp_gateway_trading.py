@@ -489,7 +489,9 @@ def _validate_config(
         parent_grants = () if parent_settings is None else parent_settings.grants
         parent_principals = {grant.identity.principal_ref for grant in parent_grants}
         acceptance_principals = {grant.identity.principal_ref for grant in acceptance_grants}
-        all_principals = set(grants) | set(control_grants) | set(read_principals) | market_principals | delegate_principals | parent_principals | acceptance_principals
+        calendar_monitor_principals = (set() if calendar_settings is None else
+                                       {g.principal_ref for g in calendar_settings.monitor_grants})
+        all_principals = set(grants) | set(control_grants) | set(read_principals) | market_principals | delegate_principals | parent_principals | acceptance_principals | calendar_monitor_principals
         instance = item["instance_id"]
         if (
             set(components) != {"gateway"}
@@ -580,7 +582,10 @@ def _validate_config(
                             and not (resource.port == "service.account_read" and extensions_enabled
                                      and resource.operations <= (ACCOUNT_OBSERVER_OPERATIONS | ACCOUNT_FACTS_OPERATIONS | ACCOUNT_CANCEL_ATTEMPT_OPERATIONS))
                             and not (resource.port == 'service.market_source' and principal in delegate_principals
-                                     and market_settings is not None))
+                                     and market_settings is not None)
+                            and not (resource.port == 'service.calendar_read'
+                                     and principal in calendar_monitor_principals
+                                     and resource.operations == frozenset({'calendar.monitor.windows.v1'})))
                     ):
                         raise ValueError
                     if resource.port == "service.direct_write":

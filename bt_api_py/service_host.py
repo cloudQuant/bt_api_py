@@ -1051,8 +1051,8 @@ class ServiceHost:
                         caps = [cap for cap in component.capabilities if cap.port == 'service.calendar_read']
                         if (type(calendar) is not GatewayCalendarService or len(caps) != 1
                                 or caps[0].instance_id != item.spec.instance_id
-                                or caps[0].operations != frozenset({'calendar.query.v1', 'calendar.windows.v1'})
-                                or caps[0].write_operations or not {'calendar.query.v1', 'calendar.windows.v1'} <= component.handlers.keys()
+                                or caps[0].operations != frozenset({'calendar.query.v1', 'calendar.windows.v1', 'calendar.monitor.windows.v1'})
+                                or caps[0].write_operations or not {'calendar.query.v1', 'calendar.windows.v1', 'calendar.monitor.windows.v1'} <= component.handlers.keys()
                                 or any(other is calendar for _, other in gateway_calendar_resources)):
                             raise ServiceHostError('GATEWAY_CALENDAR_INVALID')
                         gateway_calendar_resources.append((item.spec.instance_id, calendar))
@@ -1407,7 +1407,7 @@ class ServiceHost:
             try:
                 for instance_id, calendar in gateway_calendar_resources:
                     matches = [cap for cap in capabilities if cap.instance_id == instance_id and cap.port == "service.calendar_read"]
-                    if len(matches) != 1 or matches[0].operations != frozenset({"calendar.query.v1", "calendar.windows.v1"}):
+                    if len(matches) != 1 or matches[0].operations != frozenset({"calendar.query.v1", "calendar.windows.v1", "calendar.monitor.windows.v1"}):
                         raise ValueError
                     calendar.bind_registry(registry)
             except Exception:

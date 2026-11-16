@@ -144,7 +144,7 @@ def _bound_receipt_time_valid(received_ns: int, started_ns: int, deadline: float
 # remote discovery cannot introduce new actions into a proxy.
 PORT_OPERATIONS = MappingProxyType(
     {
-        "service.calendar_read": frozenset({"calendar.query.v1", "calendar.windows.v1"}),
+        "service.calendar_read": frozenset({"calendar.query.v1", "calendar.windows.v1", "calendar.monitor.windows.v1"}),
         "service.execution_delegate": frozenset(
             {"execution.child.release_policy_check"}
         ),
@@ -3008,6 +3008,10 @@ class ServiceClientRuntime:
                 raise ServiceRuntimeError("INVALID_SERVICE_REPLY")
         operations = PORT_OPERATIONS[port].intersection(remote_operations)
         requested = self._requested_operations.get(binding["mount"])
+        if binding["mount"] == "upstream.calendar" and requested != frozenset({"calendar.monitor.windows.v1"}):
+            raise ServiceRuntimeError("CAPABILITY_UNAVAILABLE")
+        if binding["mount"] == "store.calendar" and requested is not None and "calendar.monitor.windows.v1" in requested:
+            raise ServiceRuntimeError("CAPABILITY_UNAVAILABLE")
         if requested is not None:
             wanted = requested.intersection(PORT_OPERATIONS[port])
             if not wanted <= operations:
