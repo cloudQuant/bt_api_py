@@ -31,11 +31,14 @@ class FakeConnection:
         self.closed = True
 
 
-def test_sdk_inherits_core_reads_and_port_detects_replaced_identity():
+def test_sdk_delegates_core_reads_and_port_detects_replaced_identity():
     methods = ("strategy_ledger_journal_identity", "strategy_ledger_events_after", "has_intent_id")
+    core = object.__new__(CoreJournal)
+    journal = object.__new__(SDKJournal)
+    journal._core = core
     for name in methods:
         assert name not in SDKJournal.__dict__
-        assert getattr(SDKJournal, name) is getattr(CoreJournal, name)
+        assert getattr(journal, name) == getattr(core, name)
 
     scope = AccountScope("fixture", "account", "sandbox")
     state = {"scope": scope, "first": "a" * 64, "opened": [], "event": {
@@ -45,8 +48,7 @@ def test_sdk_inherits_core_reads_and_port_detects_replaced_identity():
         "record_sha256": "a" * 64, "writer_owner_id": "owner",
         "writer_fencing_token": 1, "writer_fence_sha256": "d" * 64,
     }}
-    journal = object.__new__(SDKJournal)
-    journal._connection = lambda: FakeConnection(state)
+    core._connection = lambda: FakeConnection(state)
     wire = WireScope("domain", account_ref="account", strategy_ref="strategy")
     target = SimpleNamespace(account_scope=scope, strategy_id="strategy")
     port = _RiskJournalPort(journal, {wire: target})

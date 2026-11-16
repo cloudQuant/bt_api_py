@@ -122,11 +122,9 @@ class _EvidenceReadContext(RiskExecutionJournalBridge):
             connection, row, scope, revision, target_revision=target_revision
         )
 
-    @staticmethod
-    def _risk_dispatch_profile(provider):
-        from .service_risk_order_journal import _risk_dispatch_profile
-
-        return _risk_dispatch_profile(provider)
+    def _risk_dispatch_profile(self, provider):
+        # Reuse the exact core's bound port; a portless core stays unavailable.
+        return self._core._risk_dispatch_profile(provider)
 
 
 class RiskExecutionEvidenceComposition:

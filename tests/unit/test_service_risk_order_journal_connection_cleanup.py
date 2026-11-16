@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import bt_api_risk.risk_order_journal_storage as journal_storage
 
-from bt_api_py import service_risk_order_journal as journal_module
+from bt_api_risk.risk_order_journal import RiskOrderJournal as CoreRiskOrderJournal
 
 
 class _PragmaFailingConnection:
@@ -51,7 +51,7 @@ def test_connection_closes_handle_when_pragma_setup_fails(
     expected_statements: list[str],
 ) -> None:
     connection = _PragmaFailingConnection(fail_on)
-    journal = object.__new__(journal_module.RiskOrderJournal)
+    journal = object.__new__(CoreRiskOrderJournal)
     journal._path = Path("synthetic-journal.sqlite")
 
     def connect(
