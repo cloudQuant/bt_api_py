@@ -182,6 +182,8 @@ class RiskCallResult:
     outcome: str
     answer: RiskOrderResult | None = None
     code: str | None = None
+    # For a refused route: the finite reason and the evidence still missing.
+    detail: RiskRouteRecovery | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -198,6 +200,49 @@ class RiskStatusResult:
     outcome: str
     status: RiskServiceStatus | None = None
     code: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RiskRouteRecovery:
+    """Whether a stopped Risk runtime may be replaced, and the evidence still missing.
+
+    ``replaceable`` is a local contract decision, not a grant: a true value means
+    :meth:`RiskServiceClient.reconnect` may install a fresh registration under the
+    same account/strategy/route identity. Nothing in flight is resent.
+    """
+
+    replaceable: bool
+    code: str
+    reason: str | None = None
+    missing: tuple[str, ...] = ()
+    # The retired (registration_id, epoch) pairs whose release stayed
+    # unacknowledged when the replacement was authorized; kept as an audit
+    # record after the old runtime handle is dropped.
+    unresolved_registrations: tuple[tuple[str, str], ...] = ()
+
+
+# Finite evidence tokens a refusal may cite, in canonical report order; each
+# names something a caller (or operator) would have to obtain, never an
+# invented allow.
+_RECOVERY_MISSING = (
+    "RUNTIME_SNAPSHOT_UNPROVEN",
+    "RUNTIME_NOT_STOPPED",
+    "MAINTENANCE_CAUSE_UNPROVEN",
+    "CLEANUP_POLICY_UNPROVEN",
+    "CLEANUP_STATE_UNPROVEN",
+    "UNKNOWN_REGISTRATION",
+    "OWNER_CLEANUP_UNKNOWN",
+    "UNREGISTER_UNCERTAINTY_UNRECORDED",
+    "UNRESOLVED_REGISTRATION_UNPROVEN",
+    "OLD_BINDING_RETAINED",
+    "OLD_TRANSPORT_RETAINED",
+    "ROUTE_IDENTITY_MISMATCH",
+    "FRESH_REGISTRATION_UNPROVEN",
+)
+# Registry replies to ``service.renew`` that durably retire a (registration,
+# epoch) pair. A local timeout, an elapsed lease, or a rejected unregister alone
+# is not this proof.
+_DURABLE_INACTIVE_CODES = frozenset({"NOT_REGISTERED", "STALE_EPOCH"})
 
 
 def _not_sent(code: str) -> RiskCallResult:
@@ -314,6 +359,150 @@ def _candidate_cleanup_confirmed(runtime: object, timeout_seconds: float) -> boo
     return _closed_snapshot(runtime, timeout_seconds) is not None
 
 
+def _recovery_observation(
+    snapshot: object, route: RiskClientRoute
+) -> tuple[RiskRouteRecovery, frozenset[str], frozenset[tuple[str, str]]]:
+    """Decide whether a stopped runtime may be replaced from server-held evidence.
+
+    The special path exists because a maintenance failure after a Risk restart
+    leaves an unacknowledged unregister behind. It is allowed only when the
+    registry itself durably retired the old registration (a definitive
+    NOT_REGISTERED/STALE_EPOCH renewal reply), the old runtime and every binding
+    it held are provably gone, and every unresolved release is one of those
+    retired registrations. A timeout, an elapsed lease, or a rejected unregister
+    is not that proof and stays refused.
+
+    Returns ``(observation, unresolved_ids, remote_inactive_pairs)``. The last
+    two are empty unless the observation is replaceable.
+    """
+    if type(snapshot) is not RuntimeSnapshot:
+        return (
+            RiskRouteRecovery(
+                False, "ROUTE_RECOVERY_UNPROVEN", None, ("RUNTIME_SNAPSHOT_UNPROVEN",)
+            ),
+            frozenset(),
+            frozenset(),
+        )
+    reason = (
+        snapshot.maintenance_code
+        if type(snapshot.maintenance_code) is str
+        else snapshot.error_code
+    )
+    if snapshot.state != "failed":
+        if snapshot.state in ("starting", "running", "new"):
+            # The route reports its own health; replacement is not needed yet.
+            return (
+                RiskRouteRecovery(False, "ROUTE_RECOVERY_NOT_REQUIRED", reason),
+                frozenset(),
+                frozenset(),
+            )
+        if snapshot.state == "stopping":
+            return (
+                RiskRouteRecovery(False, "ROUTE_RECOVERY_IN_PROGRESS", reason),
+                frozenset(),
+                frozenset(),
+            )
+        return (
+            RiskRouteRecovery(
+                False, "ROUTE_RECOVERY_UNPROVEN", reason, ("RUNTIME_NOT_STOPPED",)
+            ),
+            frozenset(),
+            frozenset(),
+        )
+    if snapshot.thread_alive is not False:
+        # The worker may still be cleaning up; its final evidence can appear on
+        # a later pass, so this refusal is not made sticky.
+        return (
+            RiskRouteRecovery(
+                False, "ROUTE_RECOVERY_IN_PROGRESS", reason, ("RUNTIME_NOT_STOPPED",)
+            ),
+            frozenset(),
+            frozenset(),
+        )
+
+    missing: list[str] = []
+    if snapshot.error_code != "MAINTENANCE_FAILED" or (
+        snapshot.maintenance_code not in _DURABLE_INACTIVE_CODES
+    ):
+        missing.append("MAINTENANCE_CAUSE_UNPROVEN")
+    if snapshot.strict_unregister_ack is not True:
+        missing.append("CLEANUP_POLICY_UNPROVEN")
+    if type(snapshot.cleanup_failures) is not int or snapshot.cleanup_failures < 0:
+        missing.append("CLEANUP_STATE_UNPROVEN")
+    if type(snapshot.unknown_registration_count) is not int or (
+        snapshot.unknown_registration_count != 0
+    ):
+        missing.append("UNKNOWN_REGISTRATION")
+    if type(snapshot.owner_cleanup_uncertainties) is not int or (
+        snapshot.owner_cleanup_uncertainties != 0
+    ):
+        missing.append("OWNER_CLEANUP_UNKNOWN")
+    if type(snapshot.bindings) is not tuple or snapshot.bindings != ():
+        # A retained binding means an old transport may still exist; replacing
+        # could overlap the old writer.
+        missing.append("OLD_BINDING_RETAINED")
+    if type(snapshot.open_transport_count) is not int or (
+        snapshot.open_transport_count != 0
+    ):
+        # An unclosed transport is not proof-free either.
+        missing.append("OLD_TRANSPORT_RETAINED")
+
+    unresolved: frozenset[str] = frozenset()
+    ids = snapshot.unresolved_registration_ids
+    if (
+        type(ids) is not tuple
+        or not ids
+        or any(not _ref(item) for item in ids)
+        or type(snapshot.unregister_uncertainties) is not int
+        or snapshot.unregister_uncertainties != len(ids)
+    ):
+        missing.append("UNREGISTER_UNCERTAINTY_UNRECORDED")
+    else:
+        unresolved = frozenset(ids)
+
+    remote: dict[str, str] = {}
+    pairs = snapshot.remote_inactive_registrations
+    if type(pairs) is not tuple:
+        missing.append("UNRESOLVED_REGISTRATION_UNPROVEN")
+    else:
+        for pair in pairs:
+            if (
+                type(pair) is not tuple
+                or len(pair) != 2
+                or not _ref(pair[0])
+                or not _ref(pair[1])
+            ):
+                missing.append("UNRESOLVED_REGISTRATION_UNPROVEN")
+                remote = {}
+                break
+            remote[pair[0]] = pair[1]
+        else:
+            if unresolved - set(remote):
+                missing.append("UNRESOLVED_REGISTRATION_UNPROVEN")
+
+    if snapshot.identity != route.identity or snapshot.run_id != route.scope.run_id:
+        missing.append("ROUTE_IDENTITY_MISMATCH")
+
+    tokens = tuple(token for token in _RECOVERY_MISSING if token in set(missing))
+    if tokens:
+        return (
+            RiskRouteRecovery(False, "ROUTE_RECOVERY_UNPROVEN", reason, tokens),
+            frozenset(),
+            frozenset(),
+        )
+    return (
+        RiskRouteRecovery(
+            True,
+            "ROUTE_RECOVERY_READY",
+            reason,
+            (),
+            tuple(sorted((item, remote[item]) for item in unresolved)),
+        ),
+        unresolved,
+        frozenset(remote.items()),
+    )
+
+
 # Seconds to wait after the n-th attempt to bring a lost Risk route back.
 RECONNECT_BACKOFF_SECONDS = (1.0, 2.0, 5.0, 10.0, 30.0)
 
@@ -353,6 +542,8 @@ class RiskServiceClient:
         self._pending_cleanup_uncertain = False
         self._runtime_cleanup_uncertain = False
         self._reconnect_attempt, self._reconnect_next = 0, 0.0
+        # Last local recovery observation; no remote state and no grant.
+        self._last_recovery: RiskRouteRecovery | None = None
         # Only short local state changes hold this lock; runtime callbacks may
         # reenter the client and must never run under it.
         self._lifecycle_lock = threading.Lock()
@@ -457,6 +648,8 @@ class RiskServiceClient:
                 return False
             if not self._lifecycle_current(generation):
                 return False
+            replacement_reason = None
+            replacement_unresolved: tuple[tuple[str, str], ...] = ()
             if snapshot.state == "new":
                 if not _strict_runtime(self._runtime):
                     return False
@@ -468,9 +661,25 @@ class RiskServiceClient:
                     closed = _closed_snapshot(self._runtime, remaining())
                 except ThreadedRuntimeError:
                     return False  # this close was proven not to have started
+                old_unresolved: frozenset[str] = frozenset()
+                old_inactive: frozenset[tuple[str, str]] = frozenset()
                 if closed is None:
-                    self._runtime_cleanup_uncertain = True
-                    return False
+                    # A maintenance failure after a Risk restart can leave an
+                    # unacknowledged unregister behind. Replacement is allowed
+                    # only when the registry itself retired the old binding and
+                    # every unresolved release is one of those retired pairs.
+                    recovery, old_unresolved, old_inactive = _recovery_observation(
+                        snapshot, self._route
+                    )
+                    self._last_recovery = recovery
+                    if recovery.replaceable is not True:
+                        # A worker still cleaning up may present its final
+                        # evidence later; only a final refusal is made sticky.
+                        if recovery.code != "ROUTE_RECOVERY_IN_PROGRESS":
+                            self._runtime_cleanup_uncertain = True
+                        return False
+                    replacement_reason = recovery.reason
+                    replacement_unresolved = recovery.unresolved_registrations
                 if not self._lifecycle_current(generation):
                     return False
                 try:
@@ -537,14 +746,33 @@ class RiskServiceClient:
                 self._runtime = runtime
                 self._pending_runtime = None
             try:
-                self._registration_binding("risk.order.reserve", timeout_seconds=remaining())
+                fresh = self._registration_binding(
+                    "risk.order.reserve", timeout_seconds=remaining()
+                )
                 remaining()
             except Exception:
                 if time.monotonic() >= deadline:
                     self._require_close()
                 return False
+            # A replacement must not reuse a registration the registry already
+            # retired (or that still has an unacknowledged release): that could
+            # overlap the old writer. The new registration also carries the
+            # route's original account/strategy identity via _registration_binding.
+            if (
+                fresh[2] in old_unresolved
+                or (fresh[2], fresh[3]) in old_inactive
+            ):
+                self._last_recovery = RiskRouteRecovery(
+                    False, "ROUTE_RECOVERY_UNPROVEN", None, ("FRESH_REGISTRATION_UNPROVEN",)
+                )
+                self._require_close()
+                return False
             if not self._lifecycle_current(generation):
                 return False
+            self._last_recovery = RiskRouteRecovery(
+                True, "ROUTE_RECOVERY_READY", replacement_reason, (),
+                replacement_unresolved,
+            )
             self._reconnect_attempt, self._reconnect_next = 0, 0.0
             return True
         finally:
@@ -710,6 +938,45 @@ class RiskServiceClient:
     def runtime_status(self) -> RuntimeSnapshot:
         return self._runtime.status()
 
+    def route_recovery_status(
+        self, *, timeout_seconds: float = 5.0
+    ) -> RiskRouteRecovery:
+        """Report why a lost route is or is not replaceable, without RPC.
+
+        This is a local observation: it asks the runtime for a bounded snapshot,
+        sends and resends nothing, and grants nothing. ``missing`` names the
+        evidence a refusal still needs; ``reason`` carries the finite
+        maintenance cause (for example ``STALE_EPOCH``).
+        """
+        if os.getpid() != self._pid or not _timeout(timeout_seconds):
+            return RiskRouteRecovery(
+                False, "ROUTE_RECOVERY_UNPROVEN", None, ("RUNTIME_SNAPSHOT_UNPROVEN",)
+            )
+        try:
+            snapshot = self._runtime.bounded_status(timeout_seconds=timeout_seconds)
+        except Exception:
+            return RiskRouteRecovery(
+                False, "ROUTE_RECOVERY_UNPROVEN", None, ("RUNTIME_SNAPSHOT_UNPROVEN",)
+            )
+        observation, _, _ = _recovery_observation(snapshot, self._route)
+        with self._lifecycle_lock:
+            blocked = (
+                self._pending_runtime is not None
+                or self._pending_candidate_unknown
+                or self._pending_cleanup_uncertain
+                or self._runtime_cleanup_uncertain
+            )
+        if blocked:
+            tokens = tuple(
+                token
+                for token in _RECOVERY_MISSING
+                if token in set(observation.missing) | {"CLEANUP_STATE_UNPROVEN"}
+            )
+            return RiskRouteRecovery(
+                False, "ROUTE_RECOVERY_UNPROVEN", observation.reason, tokens
+            )
+        return observation
+
     @property
     def available(self) -> bool:
         """Observe local reserve-route registration and runtime health, without RPC.
@@ -785,6 +1052,21 @@ class RiskServiceClient:
         except Exception:
             return False
 
+    def _route_unavailable(self) -> RiskCallResult:
+        """Return the finite route refusal plus the recovery evidence, if any.
+
+        The public code stays ``ROUTE_UNAVAILABLE``; ``detail`` names the
+        maintenance reason and what evidence is still missing before a lost
+        route may be re-registered. It never sends a business request.
+        """
+        try:
+            detail = self.route_recovery_status()
+        except Exception:
+            detail = RiskRouteRecovery(
+                False, "ROUTE_RECOVERY_UNPROVEN", None, ("RUNTIME_SNAPSHOT_UNPROVEN",)
+            )
+        return RiskCallResult("NOT_SENT", code="ROUTE_UNAVAILABLE", detail=detail)
+
     def _call(self, operation: str, arguments: dict[str, Any], timeout_seconds: float):
         """Return ``(raw_reply, None)`` or ``(None, RiskCallResult)``; never resends."""
         if os.getpid() != self._pid:
@@ -792,7 +1074,7 @@ class RiskServiceClient:
         try:
             binding = self._registration_binding(operation)
         except Exception:
-            return None, _not_sent("ROUTE_UNAVAILABLE")
+            return None, self._route_unavailable()
         if not self._binding_current(operation, binding):
             return None, _unknown("RPC_OUTCOME_UNKNOWN")
         try:

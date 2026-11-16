@@ -243,6 +243,19 @@ class GatewayBtApi:
             return None
         return self._risk.available
 
+    def risk_route_status(self, *, timeout_seconds=5.0):
+        """Return why the Risk route is (not) replaceable, without RPC.
+
+        None means Risk is not selected. Otherwise this reports the finite
+        recovery code, the maintenance reason (for example ``STALE_EPOCH``) and
+        the evidence still missing before a lost route may be re-registered.
+        Nothing is sent, resent, or granted by this observation.
+        """
+        self._check_process()
+        if self._risk is None:
+            return None
+        return self._risk.route_recovery_status(timeout_seconds=timeout_seconds)
+
     def status(self):
         """Return the original runtime snapshot, including cleanup uncertainty."""
         self._check_process()

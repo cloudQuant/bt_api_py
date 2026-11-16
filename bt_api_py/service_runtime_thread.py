@@ -150,6 +150,12 @@ class RuntimeSnapshot:
     # Appended to preserve older positional construction; missing evidence is unknown.
     unknown_registration_count: int | None = None
     strict_unregister_ack: bool | None = None
+    # Finite maintenance cause and the release/inactivity evidence a caller needs
+    # before replacing a failed runtime. None means the evidence was not read.
+    maintenance_code: str | None = None
+    unresolved_registration_ids: tuple[str, ...] | None = None
+    remote_inactive_registrations: tuple[tuple[str, str], ...] | None = None
+    open_transport_count: int | None = None
 
 
 class _Call:
@@ -748,6 +754,10 @@ class ThreadedServiceClientRuntime:
         self._strict_unregister_ack: bool | None = None
         self._owner_cleanup_uncertainties = 0
         self._cleanup_retry = 0
+        self._maintenance_code: str | None = None
+        self._unresolved_registration_ids: tuple[str, ...] | None = None
+        self._remote_inactive_registrations: tuple[tuple[str, str], ...] | None = None
+        self._open_transport_count: int | None = None
 
     def status(self) -> RuntimeSnapshot:
         if os.getpid() != self._creator_pid:
@@ -760,7 +770,9 @@ class ThreadedServiceClientRuntime:
                     self._error, self._bindings, self._cleanup_failures,
                     self._unregister_uncertainties, self._identity, self._run_id,
                     self._owner_cleanup_uncertainties, self._unknown_registration_count,
-                    self._strict_unregister_ack,
+                    self._strict_unregister_ack, self._maintenance_code,
+                    self._unresolved_registration_ids, self._remote_inactive_registrations,
+                    self._open_transport_count,
                 )
         with self._condition:
             healthy = self._healthy
@@ -779,6 +791,10 @@ class ThreadedServiceClientRuntime:
                 self._owner_cleanup_uncertainties,
                 self._unknown_registration_count,
                 self._strict_unregister_ack,
+                self._maintenance_code,
+                self._unresolved_registration_ids,
+                self._remote_inactive_registrations,
+                self._open_transport_count,
             )
 
     @property
@@ -1206,6 +1222,8 @@ class ThreadedServiceClientRuntime:
             self._bindings, self._cleanup_failures, self._unregister_uncertainties,
             self._identity, self._run_id, self._owner_cleanup_uncertainties,
             self._unknown_registration_count, self._strict_unregister_ack,
+            self._maintenance_code, self._unresolved_registration_ids,
+            self._remote_inactive_registrations, self._open_transport_count,
         ), thread is not None
 
     def cleanup_observation(
@@ -1238,6 +1256,8 @@ class ThreadedServiceClientRuntime:
             self._bindings, self._cleanup_failures, self._unregister_uncertainties,
             self._identity, self._run_id, self._owner_cleanup_uncertainties,
             self._unknown_registration_count, self._strict_unregister_ack,
+            self._maintenance_code, self._unresolved_registration_ids,
+            self._remote_inactive_registrations, self._open_transport_count,
         )
 
     def bounded_status(self, *, timeout_seconds: float = 5.0) -> RuntimeSnapshot:
@@ -1517,6 +1537,13 @@ class ThreadedServiceClientRuntime:
             (self._cleanup_failures, self._unregister_uncertainties,
              self._unknown_registration_count) = cleanup_counts
             self._strict_unregister_ack = strict_ack
+            # Strict capture proved both uncertainty counters zero, so no
+            # unresolved registration can exist. No replacement proof is read
+            # on this path; leave the maintenance cause unknown.
+            self._maintenance_code = None
+            self._unresolved_registration_ids = ()
+            self._remote_inactive_registrations = ()
+            self._open_transport_count = None
         return True
 
     def _capture_impl(self, runtime: Any) -> None:
@@ -1589,6 +1616,16 @@ class ThreadedServiceClientRuntime:
                     runtime._require_unregister_ack if type(runtime) is ServiceClientRuntime
                     and type(runtime._require_unregister_ack) is bool else None
                 )
+                self._maintenance_code = self._read_replacement_text(
+                    runtime, "maintenance_code"
+                )
+                self._unresolved_registration_ids = self._read_replacement_ids(runtime)
+                self._remote_inactive_registrations = (
+                    self._read_replacement_pairs(runtime)
+                )
+                self._open_transport_count = self._read_replacement_count(
+                    runtime, "open_transport_count"
+                )
 
     def _capture_raw_uncertainties(self, runtime: Any) -> tuple[int, int, int]:
         try:
@@ -1606,6 +1643,50 @@ class ThreadedServiceClientRuntime:
             raise
         except BaseException as error:
             raise _StickyCleanupSignal(error) from error
+
+    def _read_replacement_text(self, runtime: Any, name: str) -> str | None:
+        """Read one optional finite code; a missing or malformed value is unknown."""
+        try:
+            value = getattr(runtime, name)
+        except Exception:
+            return None
+        return value if type(value) is str and value else None
+
+    def _read_replacement_ids(self, runtime: Any) -> tuple[str, ...] | None:
+        """Copy unresolved registration ids, or None when the evidence is malformed."""
+        try:
+            value = runtime.unresolved_registration_ids
+        except Exception:
+            return None
+        if type(value) is not tuple or not all(
+            type(item) is str and item for item in value
+        ):
+            return None
+        return value
+
+    def _read_replacement_pairs(self, runtime: Any) -> tuple[tuple[str, str], ...] | None:
+        """Copy server-proven inactive (registration, epoch) pairs, or None."""
+        try:
+            value = runtime.remote_inactive_registrations
+        except Exception:
+            return None
+        if type(value) is not tuple or not all(
+            type(item) is tuple
+            and len(item) == 2
+            and type(item[0]) is str and item[0]
+            and type(item[1]) is str and item[1]
+            for item in value
+        ):
+            return None
+        return value
+
+    def _read_replacement_count(self, runtime: Any, name: str) -> int | None:
+        """Read one nonnegative integer; a missing or malformed value is unknown."""
+        try:
+            value = getattr(runtime, name)
+        except Exception:
+            return None
+        return value if type(value) is int and value >= 0 else None
 
     def _check_cleanup_evidence(self, runtime: Any, extension: Any) -> None:
         if extension is not None:

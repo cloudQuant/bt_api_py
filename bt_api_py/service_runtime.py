@@ -1159,8 +1159,16 @@ class ServiceClientRuntime:
         self._unregister_uncertainties: dict[str, None] = {}
         self._unresolved_unregister_count = 0
         self._last_unresolved_registration_id: str | None = None
+        self._unresolved_unregister_ids: list[str] = []
         self._unknown_registration_count = 0
         self._last_unknown_registration_key: str | None = None
+        # Evidence kept for callers deciding whether this stopped runtime may be
+        # replaced. ``_maintenance_code`` is the finite cause of the maintenance
+        # failure; ``_remote_inactive_registrations`` holds only registrations
+        # the registry itself refused as NOT_REGISTERED/STALE_EPOCH on renewal
+        # (an authoritative reply, not a local timeout or elapsed lease).
+        self._maintenance_code: str | None = None
+        self._remote_inactive_registrations: dict[str, str] = {}
 
     @property
     def sticky_cleanup_enabled(self) -> bool:
@@ -1191,10 +1199,43 @@ class ServiceClientRuntime:
         return self._unresolved_unregister_count + len(self._unregister_uncertainties)
 
     @property
+    def open_transport_count(self) -> int:
+        """Transports still held; a nonzero value may hide an old writer path."""
+
+        return len(self._transports)
+
+    @property
     def last_unresolved_registration_id(self) -> str | None:
         """Most recent registration ID no longer locally retryable, if any."""
 
         return self._last_unresolved_registration_id
+
+    @property
+    def unresolved_registration_ids(self) -> tuple[str, ...]:
+        """Every registration whose release was never acknowledged.
+
+        Folded (no longer retryable) ids come first, then ids still held in the
+        pending mapping. The count equals :attr:`unregister_uncertainties`.
+        """
+
+        return tuple(self._unresolved_unregister_ids) + tuple(self._unregister_uncertainties)
+
+    @property
+    def maintenance_code(self) -> str | None:
+        """Finite cause of the last maintenance failure, if the runtime stopped."""
+
+        return self._maintenance_code
+
+    @property
+    def remote_inactive_registrations(self) -> tuple[tuple[str, str], ...]:
+        """``(registration_id, service_epoch)`` pairs the registry proved inactive.
+
+        A pair is recorded only when ``service.renew`` itself was definitively
+        refused with NOT_REGISTERED or STALE_EPOCH. A local lease expiry, a
+        transport timeout, or a rejected unregister is not this proof.
+        """
+
+        return tuple(self._remote_inactive_registrations.items())
 
     @property
     def lease_expiry_reliance_count(self) -> int:
@@ -2214,7 +2255,7 @@ class ServiceClientRuntime:
             remaining = binding.lease_deadline - now
             if remaining <= 0:
                 if binding.required:
-                    self._mark_failed()
+                    self._mark_maintenance_failed("REQUIRED_LEASE_EXPIRED")
                     raise ServiceRuntimeError("REQUIRED_LEASE_EXPIRED")
                 self._expire_binding(binding)
                 continue
@@ -2259,6 +2300,14 @@ class ServiceClientRuntime:
                     and error.code in {"NOT_REGISTERED", "STALE_EPOCH"}
                 )
                 self._registration_lineage.pop(id(binding), None)
+                if definitely_inactive:
+                    # The registry itself refused this (registration, epoch) on
+                    # renewal. That is authoritative evidence the old binding no
+                    # longer resolves; a local lease expiry or transport timeout
+                    # is not recorded here.
+                    self._remote_inactive_registrations[
+                        binding.registration_id
+                    ] = binding.service_epoch
                 self._bindings[index] = replace(
                     binding,
                     remote_lease_inactive=definitely_inactive,
@@ -2292,7 +2341,11 @@ class ServiceClientRuntime:
                         # so it never serves without it. Explicit hub
                         # rejections and forced renewals keep failing fast.
                         break
-                    self._mark_failed()
+                    failure_code = (
+                        error.code if isinstance(error, ServiceRuntimeError)
+                        else "REQUIRED_RENEWAL_FAILED"
+                    )
+                    self._mark_maintenance_failed(failure_code)
                     if isinstance(error, ServiceRuntimeError):
                         raise
                     raise ServiceRuntimeError("REQUIRED_RENEWAL_FAILED") from None
@@ -2312,7 +2365,7 @@ class ServiceClientRuntime:
             new_deadline = request_started + lease_remaining
             if self._monotonic_now() >= binding.lease_deadline:
                 if binding.required:
-                    self._mark_failed()
+                    self._mark_maintenance_failed("LEASE_EXPIRED_DURING_RENEWAL")
                     raise ServiceRuntimeError("LEASE_EXPIRED_DURING_RENEWAL")
                 self._expire_binding(binding)
                 continue
@@ -2337,7 +2390,7 @@ class ServiceClientRuntime:
                 self._execution_upstream_observation = None
             if self._monotonic_now() >= new_deadline:
                 if binding.required:
-                    self._mark_failed()
+                    self._mark_maintenance_failed("LEASE_EXPIRED_DURING_RENEWAL")
                     raise ServiceRuntimeError("LEASE_EXPIRED_DURING_RENEWAL")
                 self._expire_binding(renewed)
                 continue
@@ -2442,6 +2495,12 @@ class ServiceClientRuntime:
         self._registration_lineage.clear()
         self._state = "failed"
 
+    def _mark_maintenance_failed(self, code: str) -> None:
+        # Keep the finite cause beside the coarse "failed" state so a caller can
+        # tell an authoritative registry refusal from a local timeout or expiry.
+        self._maintenance_code = code
+        self._mark_failed()
+
     def _require_healthy(self) -> None:
         if self._state != "registered":
             raise ServiceRuntimeError("SESSION_NOT_REGISTERED")
@@ -2452,7 +2511,7 @@ class ServiceClientRuntime:
             if binding.active and binding.required and now >= binding.lease_deadline
         ]
         if expired:
-            self._mark_failed()
+            self._mark_maintenance_failed("REQUIRED_LEASE_EXPIRED")
             raise ServiceRuntimeError("REQUIRED_LEASE_EXPIRED")
         for binding in tuple(self._bindings):
             if binding.active and not binding.required and now >= binding.lease_deadline:
@@ -2466,7 +2525,7 @@ class ServiceClientRuntime:
             binding.active and binding.required and now >= binding.lease_deadline
             for binding in self._bindings
         ):
-            self._mark_failed()
+            self._mark_maintenance_failed("REQUIRED_LEASE_EXPIRED")
             raise ServiceRuntimeError("REQUIRED_LEASE_EXPIRED")
 
     def _startup_maintain_if_due(self) -> None:
@@ -2515,13 +2574,13 @@ class ServiceClientRuntime:
             return timeout
         remaining = min(deadlines) - self._monotonic_now()
         if remaining <= 0:
-            self._mark_failed()
+            self._mark_maintenance_failed("REQUIRED_LEASE_EXPIRED")
             raise ServiceRuntimeError("REQUIRED_LEASE_EXPIRED")
         return min(timeout, remaining * self._STARTUP_RPC_TIMEOUT_FRACTION)
 
     def _expire_binding(self, binding: RegisteredBinding) -> None:
         if binding.required:
-            self._mark_failed()
+            self._mark_maintenance_failed("LEASE_EXPIRED")
             return
         self._degrade_binding(binding, "LEASE_EXPIRED")
 
@@ -3275,6 +3334,7 @@ class ServiceClientRuntime:
             self._unregister_uncertainties.pop(registration_id, None)
             self._unresolved_unregister_count += 1
             self._last_unresolved_registration_id = registration_id
+            self._unresolved_unregister_ids.append(registration_id)
 
     @staticmethod
     def _expiry(result: Mapping[str, Any]) -> float:
