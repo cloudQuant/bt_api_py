@@ -1,0 +1,38 @@
+# Trusted deployment example. Replace every reference and provide owner-only
+# CURVE public and secret files; no path component may be a symlink.
+# Run: python -m bt_api_py.monitor_service_host validate --config <path>
+# Run: python -m bt_api_py.monitor_service_host run --config <path>
+# No endpoint, identity or key below is a real account. Ready means the two
+# listeners and local storage started; it does not prove producer or alert health.
+schema: bt_api_monitor.service.v1
+scope:
+  execution_domain_ref: synthetic-domain
+  account_ref: synthetic-account
+storage:
+  directory: ./private-monitor-data
+  outbox_scope: synthetic-outbox
+  event_types: [synthetic.observation]
+ingress:
+  service_id: synthetic-monitor-events
+  principal_ref: synthetic-monitor-events-principal
+  instance_id: synthetic-monitor-events-instance
+  scope_ref: synthetic-events-scope
+  rpc_bind: tcp://127.0.0.1:7603
+  public_key_file: ./keys/events-server.public
+  secret_key_file: ./keys/events-server.secret
+  principals:
+    - principal_ref: synthetic-producer
+      actor_ref: synthetic-producer-service
+      public_key_file: ./keys/producer.public
+heartbeat:
+  service_id: synthetic-monitor-heartbeat
+  principal_ref: synthetic-monitor-heartbeat-principal
+  instance_id: synthetic-monitor-heartbeat-instance
+  scope_ref: synthetic-heartbeat-scope
+  rpc_bind: tcp://127.0.0.1:7604
+  public_key_file: ./keys/heartbeat-server.public
+  secret_key_file: ./keys/heartbeat-server.secret
+  principals:
+    - principal_ref: synthetic-gateway
+      actor_ref: synthetic-gateway-service
+      public_key_file: ./keys/gateway.public
