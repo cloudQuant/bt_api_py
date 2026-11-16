@@ -395,6 +395,33 @@ Local source tests and a synthetic ServiceHost/CURVE loopback have been checked.
 The new Gateway trading client has not yet been connected. No SimNow/production
 write acceptance or cross-platform certification is implied.
 
+### Standalone Monitor and Runtime control bridge (local acceptance, 2026-11-16)
+
+The SDK provides an explicit Monitor process with separate authenticated event
+ingress and Gateway heartbeat listeners. Provision private CURVE files and the
+scope/principal grants described in
+[`examples/services/monitor-service.example.yaml`](examples/services/monitor-service.example.yaml),
+then validate and run it:
+
+```bash
+python -m bt_api_py.monitor_service_host validate --config /path/to/monitor-service.yaml
+python -m bt_api_py.monitor_service_host run --config /path/to/monitor-service.yaml
+```
+
+Validation reads configuration only. Running opens the protected local outbox
+and two registries; `MONITOR_LISTENERS_READY` does not mean producers, alert
+rules, or trading are ready. Protected file handling currently requires POSIX.
+Local acceptance covers authenticated loopback processes and persistence, not
+an actual CTP account or the complete five-component deployment.
+
+`bt_api_py.runtime_gateway_control.RuntimeGatewayControlBridge` connects
+Runtime's existing strategy-scoped control port to Gateway using explicit SDK
+client configurations, identities, keys and externally supplied delegation
+proofs. It owns client threads and preserves ambiguous calls without retrying.
+It is an application composition API, not automatic wiring of the Runtime CLI.
+The deployment must bind its client proof to Gateway's independently installed
+proof; the existing wire does not exchange delegation IDs.
+
 ### Iteration 63 Gateway dispatch and storage RPC slice
 
 The optional `gateway` extra installs `bt_api_gateway>=0.2.0.dev63` and
