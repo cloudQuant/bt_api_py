@@ -15,15 +15,58 @@ from bt_api_py.ctp_gateway_trading import (
     CtpGatewayAccountReadSettings,
     CtpGatewayMarketSettings,
     CtpGatewayReturnSettings,
+    CtpGatewayTradingError,
     CtpGatewayTradingSettings,
     build_ctp_gateway_trading_profile,
     reconcile_ctp_gateway_account_session,
 )
 from bt_api_py.gateway_direct_service import GatewayControlGrant, GatewayDirectGrant
 from bt_api_py.gateway_operator import GatewayOperatorDeployment
-from bt_api_py.gateway_operator_application import GatewayOperatorProfileFactory
+from bt_api_py.gateway_operator_application import GatewayOperatorApplicationError, GatewayOperatorProfileFactory
 from bt_api_py.service_config import ServiceConfig
 from bt_api_py.service_host import TrustedServiceAuthority
+
+
+# Only public, value-free errors produced by the trusted CTP configuration
+# builders may cross the operator boundary. Unknown codes remain opaque.
+_CTP_CONFIGURATION_ERROR_CODES = frozenset({
+    "CANCEL_ONLY_UNAVAILABLE",
+    "INVALID_ACCOUNT_COMPARISON_CONFIGURATION",
+    "INVALID_ACCOUNT_EVENT_RECOVERY_CONFIGURATION",
+    "INVALID_ACCOUNT_EXTENSIONS_CONFIGURATION",
+    "INVALID_ACCOUNT_FACTS_CONFIGURATION",
+    "INVALID_ACCOUNT_FACT_RECOVERY_CONFIGURATION",
+    "INVALID_ACCOUNT_READ_SETTINGS",
+    "INVALID_ACTOR_STREAM_CONFIGURATION",
+    "INVALID_CANCEL_STREAM_CONFIGURATION",
+    "INVALID_CLOCK_CONFIGURATION",
+    "INVALID_CONTROL_CANCEL_CONFIGURATION",
+    "INVALID_CONTROL_CONFIGURATION",
+    "INVALID_CONTROL_RELEASE_AUDIT_CONFIGURATION",
+    "INVALID_EXECUTION_SUBJECT_SCOPES",
+    "INVALID_EXTERNAL_CLASSIFIER",
+    "INVALID_GATEWAY_ACCEPTANCE",
+    "INVALID_GATEWAY_DELEGATION",
+    "INVALID_GATEWAY_LEASE_DRAIN",
+    "INVALID_GATEWAY_PARENT",
+    "INVALID_MARKET_SETTINGS",
+    "INVALID_REQUIRED_MONITOR",
+    "INVALID_RETURN_SETTINGS",
+    "INVALID_RISK_V2_BINDING_CONFIGURATION",
+    "INVALID_STRATEGY_FINANCIAL_SOURCE",
+    "INVALID_STRATEGY_LEDGER_CONFIGURATION",
+    "INVALID_STRATEGY_ORIGIN",
+    "INVALID_TRADING_CONFIGURATION",
+    "INVALID_TRADING_PROFILE",
+    "INVALID_TRADING_SETTINGS",
+    "INVALID_TRUSTED_FACTORY",
+    "MARKET_GATE_LATENCY_REQUIRES_SIMNOW",
+    "PARENT_ACCEPTANCE_MIGRATION_PROOF_REQUIRED",
+})
+
+
+class _CtpGatewayOperatorConfigurationError(GatewayOperatorApplicationError, CtpGatewayTradingError):
+    """An operator-safe CTP configuration error; retain the direct factory contract."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,7 +143,7 @@ def create_ctp_gateway_profile_factory(
     if not callable(resource_loader):
         raise ValueError("CTP_TRUSTED_RESOURCES_INVALID")
 
-    def create(config: ServiceConfig, cancel_only: tuple[str, str] | None = None) -> GatewayOperatorDeployment:
+    def _create(config: ServiceConfig, cancel_only: tuple[str, str] | None = None) -> GatewayOperatorDeployment:
         resources = resource_loader(config)
         if type(resources) is not CtpGatewayTrustedResources:
             raise ValueError("CTP_TRUSTED_RESOURCES_INVALID")
@@ -152,6 +195,15 @@ def create_ctp_gateway_profile_factory(
             cancel_only=cancel_only,
         )
         return profile.deployment_factory()
+
+    def create(config: ServiceConfig, cancel_only: tuple[str, str] | None = None) -> GatewayOperatorDeployment:
+        try:
+            return _create(config, cancel_only)
+        except CtpGatewayTradingError as exc:
+            if (type(exc) is CtpGatewayTradingError and type(exc.code) is str
+                    and exc.code in _CTP_CONFIGURATION_ERROR_CODES):
+                raise _CtpGatewayOperatorConfigurationError(exc.code) from None
+            raise
 
     def create_cancel_only(config: ServiceConfig, operator_ref: str, reason: str) -> GatewayOperatorDeployment:
         # D63-58: the same resources, lock and identity as a normal start.
