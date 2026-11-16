@@ -2262,6 +2262,9 @@ def build_ctp_gateway_trading_profile(
             nonlocal hub_closed, proxy_closed
             owner._fence_dispatch_shutdown()
             closing.set()
+            calendar_switch = holder.get("calendar_day_switch")
+            if calendar_switch is not None and not calendar_switch.close():
+                raise CtpGatewayTradingError("CALENDAR_DAY_SWITCH_CLOSE_UNCONFIRMED")
             recorder = holder.get('recovery_observation_recorder')
             if recorder is not None and not recorder.close():
                 raise CtpGatewayTradingError('RECOVERY_OBSERVATION_CLOSE_UNCONFIRMED')
@@ -2374,6 +2377,25 @@ def build_ctp_gateway_trading_profile(
                 risk_only_submit_strategies=(frozenset() if delegation_settings is None
                                              else delegation_settings.risk_only_submit_strategies),
             )
+            if calendar_settings is not None and calendar_settings.day_switch is not None:
+                from bt_api_ctp.calendar_snapshot import CalendarSnapshot
+                from bt_api_py.ctp_gateway_calendar_day_switch import CtpGatewayCalendarDaySwitch
+                from bt_api_py.gateway_calendar_service import ReceiptCheckedCalendarStore
+                from bt_api_py.trading_calendar_store import TradingCalendarStore
+
+                calendar_session = holder["session"]
+                calendar_switch = CtpGatewayCalendarDaySwitch(
+                    owner=owner, session=calendar_session,
+                    session_is_original=lambda: holder.get("session") is calendar_session,
+                    is_closing=closing.is_set,
+                    service=holder["calendar_service"],
+                    store=ReceiptCheckedCalendarStore(TradingCalendarStore(calendar_settings.root)),
+                    snapshot_factory=CalendarSnapshot, route=calendar_settings.route,
+                    settings=calendar_settings.day_switch,
+                )
+                holder["calendar_day_switch"] = calendar_switch
+                calendar_switch.start()
+                binding.calendar_day_switch_status = calendar_switch.status
             if recovery_observation_settings is not None:
                 binding.recovery_observation_status = recorder.status
             values = {"binding": binding, 'owner_guard_binding': holder['owner_guard_binding'],

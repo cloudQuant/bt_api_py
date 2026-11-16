@@ -2,6 +2,38 @@
 
 The current checkout has SDK-family submodules under `bt_api/`, including Base, CTP, OKX, Binance, Risk, Gateway, Execution and Monitor. A checkout or installed package does not establish that a provider route, service, account or release has been accepted. Historical descriptions below are dated source snapshots.
 
+The CTP operator calendar configuration can explicitly select native session day
+changes instead of a fixed simulation bootstrap. Keep `mode: SIMULATION_ONLY`,
+set `simulation_bootstrap` to `null`, and add:
+
+```yaml
+day_switch:
+  source: CTP_AUTHENTICATED_SESSION
+  poll_interval_seconds: 1
+  owner_wait_seconds: 1
+  close_timeout_seconds: 3
+```
+
+The existing explicit calendar root, grants and range policies remain required.
+The original Gateway owner captures and rechecks its authenticated read session;
+a separate worker loads receipt-checked calendar files. A strictly later native
+trading day can activate a new version. Same-day publication or reconnect keeps
+the bound version; a new process can load the latest valid publication. A stale
+session, regressing day or failed load retains the old fixed view and reports a
+finite degraded status through `binding.calendar_day_switch_status()`. Unconfirmed
+worker cleanup retains the original resources. This observation does not establish
+settlement, R-3 recovery, account readiness or permission to trade. Calendar data
+keeps its existing simulation provenance and coverage limits.
+
+`GatewayRecoveryClockQualifier` can qualify a past interval against the original
+owner's explicitly enabled clock publication history. It returns conservative UTC
+endpoint bounds and local sample references, or UNKNOWN for unavailable history,
+expired coverage or inconsistent overlapping calibrations. Truncated history is
+usable only after omitted calibrations are provably expired or a recorded reset
+starts a new segment. The result is local to the process; SNTP remains unauthenticated.
+This helper is not yet connected to recovery persistence, the operator loader or
+Monitor duration evaluation, and does not prove that a recovery condition held.
+
 Iteration 64 is in progress and not accepted. The SDK assembles an independent Risk service and authenticated Gateway clients; Risk owns pre-trade policy and its ledger, while providers supply source facts. Default self-trade protection currently refuses OPEN/CLOSE because complete source-bound active-order coverage is unavailable. Account and intraday coverage, financial facts, Execution parent/child write authority and cross-generation not-sent proof remain gaps. R-11 v2 parses scoped rule metadata but does not by itself prove venue facts or enable trading. Selected Risk never falls back to direct. Consult the Backtrader iteration-64 review for scoped source, simulation and wheel evidence.
 
 Risk operator cancellation requires an explicit scope grant in the Risk service

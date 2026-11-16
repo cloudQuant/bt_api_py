@@ -1,6 +1,7 @@
 """Explicit read-only simulation calendar configuration for the CTP operator."""
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -8,12 +9,33 @@ from uuid import uuid4
 
 from bt_api_base.service_protocol import WireRole, WireScope
 from bt_api_gateway.calendar_config import parse_gateway_calendar_config
-from bt_api_py.gateway_calendar_service import CalendarGrant, GatewayCalendarService, ReceiptCheckedCalendarStore
+
+from bt_api_py.gateway_calendar_service import (
+    CalendarGrant,
+    GatewayCalendarService,
+    ReceiptCheckedCalendarStore,
+)
 from bt_api_py.trading_calendar_binding import SimulationCalendarBinding
 from bt_api_py.trading_calendar_range_simulation import CalendarRangePolicy
 from bt_api_py.trading_calendar_store import TradingCalendarStore
 
 _OPS = frozenset({"calendar.query.v1", "calendar.windows.v1"})
+
+
+@dataclass(frozen=True)
+class CtpCalendarDaySwitchSettings:
+    source: str
+    poll_interval_seconds: float
+    owner_wait_seconds: float
+    close_timeout_seconds: float
+
+    def __post_init__(self):
+        if (self.source != "CTP_AUTHENTICATED_SESSION" or type(self.source) is not str
+                or any(type(value) not in (int, float) or not math.isfinite(value)
+                       or not 0 < value <= maximum for value, maximum in (
+                           (self.poll_interval_seconds, 60), (self.owner_wait_seconds, 5),
+                           (self.close_timeout_seconds, 30)))):
+            raise ValueError("INVALID_CALENDAR_CONFIGURATION")
 
 
 @dataclass(frozen=True)
@@ -23,12 +45,15 @@ class CtpGatewayCalendarSettings:
     grants: frozenset[CalendarGrant]
     range_policies: frozenset[CalendarRangePolicy]
     trading_day: date | None
+    day_switch: CtpCalendarDaySwitchSettings | None = None
 
 
 def parse_calendar_settings(raw, *, config_file, config, authority, account_scope):
-    if type(raw) is not dict or set(raw) != {
+    if type(raw) is not dict or set(raw) not in ({
         "root", "mode", "route", "grants", "range_policies", "simulation_bootstrap"
-    } or raw["mode"] != "SIMULATION_ONLY":
+    }, {
+        "root", "mode", "route", "grants", "range_policies", "simulation_bootstrap", "day_switch"
+    }) or raw["mode"] != "SIMULATION_ONLY":
         raise ValueError("INVALID_CALENDAR_CONFIGURATION")
     candidate = parse_gateway_calendar_config({"calendars": {"root": raw["root"]}}, config_file=config_file)
     if candidate.status != "CONFIGURED":
@@ -51,8 +76,13 @@ def parse_calendar_settings(raw, *, config_file, config, authority, account_scop
         day = date.fromisoformat(text)
         if day.isoformat() != text or candidate.root_path is None:
             raise ValueError("INVALID_CALENDAR_CONFIGURATION")
+    switch = raw.get("day_switch")
+    if switch is not None:
+        if type(switch) is not dict or set(switch) != {"source", "poll_interval_seconds", "owner_wait_seconds", "close_timeout_seconds"}:
+            raise ValueError("INVALID_CALENDAR_CONFIGURATION")
+        switch = CtpCalendarDaySwitchSettings(**switch)
     settings = CtpGatewayCalendarSettings(candidate.root_path, raw["route"], frozenset(grants),
-                                          frozenset(policies), day)
+                                          frozenset(policies), day, switch)
     validate_calendar_settings(settings, config=config, authority=authority, account_scope=account_scope)
     return settings
 
@@ -67,6 +97,8 @@ def validate_calendar_settings(settings, *, config, authority, account_scope):
     if (type(settings) is not CtpGatewayCalendarSettings or settings.route != "CTP___FUTURE"
             or (settings.root is not None and (not isinstance(settings.root, Path) or not settings.root.is_absolute()))
             or (settings.trading_day is not None and (type(settings.trading_day) is not date or settings.root is None))
+            or (settings.day_switch is not None and (type(settings.day_switch) is not CtpCalendarDaySwitchSettings
+                or settings.root is None or settings.trading_day is not None))
             or type(settings.grants) is not frozenset or not settings.grants or len(settings.grants) > 4096
             or any(type(grant) is not CalendarGrant for grant in settings.grants)
             or type(settings.range_policies) is not frozenset or len(settings.range_policies) > 4096

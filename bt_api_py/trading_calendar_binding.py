@@ -1,9 +1,9 @@
 """SIMULATION_ONLY calendar binding prototype, not a source of trading authority.
 
 No provider event, real clock, route identity, or gate is authenticated here.
-A supplied simulation gate and snapshot factory are trust dependencies; this is
-not wired into BtApi, Gateway, or Backtrader. Real-time state composition under
-D67-08 and the D67-11 Feed API are outside this module. Manifest ranges are
+The simulation gate and snapshot factory are trust dependencies. Gateway may
+select a version using a separately checked CTP session day, which does not
+authenticate calendar data or confer trading authority. Manifest ranges are
 unverified trading-day date declarations, not UTC coverage or venue evidence.
 """
 
@@ -1021,7 +1021,7 @@ class SimulationCalendarBinding:
     An event, including a replay, is checked by the gate before any activation.
     On load failure the bound day remains the old snapshot's day; it does not
     assert that the simulated source failed to advance. A new source generation
-    requires constructing a new instance; reconnect handling is not implemented.
+    requires constructing a new instance.
     """
 
     def __init__(
@@ -1058,6 +1058,8 @@ class SimulationCalendarBinding:
         self._content = None
         self._has_interruptions = False
         self._last_event: GateDecision | None = None
+        self._prepared = None
+        self._prepare_epoch = 0
         self._status = BindingStatus(
             mode=SIMULATION_ONLY,
             route=route,
@@ -1142,6 +1144,60 @@ class SimulationCalendarBinding:
                 self._has_interruptions,
             )
         return _query_bound(snapshot, status, provenance, content, kwargs, has_interruptions)
+
+    def prepare_update(self) -> object:
+        """Load a single opaque candidate outside the owner thread."""
+        with self._lock:
+            revision = self._revision
+            self._prepare_epoch += 1
+            epoch = self._prepare_epoch
+            self._prepared = None
+        loaded = self._load()
+        token = object()
+        with self._lock:
+            if revision != self._revision or epoch != self._prepare_epoch:
+                raise BindingUnavailableError("calendar binding changed during preparation")
+            self._prepared = (token, revision, loaded)
+        return token
+
+    def activate_prepared(self, event: Any, prepared: object) -> ActivationResult:
+        """Apply only this instance's current prepared candidate after gate verification."""
+        with self._lock:
+            current = self._prepared
+            state, last_event, revision = self._status, self._last_event, self._revision
+            if current is None or current[0] is not prepared or current[1] != revision:
+                return ActivationResult("STALE", state)
+        context = GateContext(state.route, state.source_generation, state.bound_trading_day, state.last_sequence)
+        try:
+            decision = self._gate.verify(event, context)
+        except Exception:
+            return ActivationResult("GATE_ERROR", self.status())
+        if (type(decision) is not GateDecision or decision.accepted is not True
+                or decision.route != state.route or decision.source_generation != state.source_generation
+                or type(decision.trading_day) is not date or not _integer(decision.sequence)
+                or not _text(decision.event_id) or decision.trading_day <= state.bound_trading_day
+                or decision.sequence <= state.last_sequence
+                or (last_event is not None and decision.event_id == last_event.event_id)):
+            return ActivationResult("GATE_REJECTED", self.status())
+        with self._lock:
+            if self._revision != revision or self._prepared is not current:
+                return ActivationResult("STALE", self._status)
+            snapshot, source, coverage, provenance, content = current[2]
+            self._snapshot, self._provenance, self._content = snapshot, provenance, content
+            self._has_interruptions = _has_interruption(content)
+            self._last_event = decision
+            self._status = replace(
+                state, bound_trading_day=decision.trading_day, last_sequence=decision.sequence,
+                calendar_ref=source.version_id, publication_id=source.publication_id,
+                content_sha256=source.content_sha256, coverage_status=source.coverage_status,
+                coverage_manifest_sha256=source.coverage_manifest_sha256,
+                binding_sha256=source.binding_sha256, version_sha256=source.version_sha256,
+                declared_coverage=coverage, binding_reason="GATED_DAY_SWITCH", load_error=None,
+                data_origin=_validated_snapshot_origin(source, provenance),
+            )
+            self._prepared = None
+            self._revision += 1
+            return ActivationResult("ACTIVATED", self._status)
 
     def activate(self, event: Any) -> ActivationResult:
         """Attempt one externally gated day switch; no gate means no activation."""
