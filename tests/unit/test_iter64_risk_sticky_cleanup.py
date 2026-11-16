@@ -926,6 +926,7 @@ def test_gateway_start_stops_after_each_callback_latches(host, monkeypatch, stag
     host.config.strategy_financial_seconds = None
     host.config.gateway = SimpleNamespace(
         delegate=SimpleNamespace(principal_ref="synthetic", actor_ref="synthetic"),
+        principal_ref="synthetic-gateway", server_public_key=b"x" * 40,
         service_id="synthetic", instance_id="synthetic", scope_ref="synthetic",
         account_snapshot=None, market=None,
     )
@@ -933,6 +934,8 @@ def test_gateway_start_stops_after_each_callback_latches(host, monkeypatch, stag
     host.delegate_storage = object()
     monkeypatch.setattr(module, "WireScope", event("scope", object()))
     monkeypatch.setattr(host, "_service_runtime", event("factory", observer))
+    peer = module.WireIdentity(module.WireRole.SERVICE, "synthetic-gateway", "synthetic")
+    monkeypatch.setattr(host, "_peer", lambda: peer)
     monkeypatch.setattr(module, "WireIdentity", event("identity", object()))
     monkeypatch.setattr(observer_module, "GatewayAccountObserverRoute", event("route", object()))
     monkeypatch.setattr(observer_module, "GatewayAccountObserverClient", event("observer_client", object()))

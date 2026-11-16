@@ -42,6 +42,16 @@ Neither mode proves that a venue cancellation occurred.
 
 Risk clients require a runtime that proves strict unregister acknowledgement. The SDK `compose()` path constructs its own lazy runtime and is the only path that installs an automatic reconnect factory. A publicly injected `runtime_factory` is accepted for compatibility but is not invoked; an injected initial runtime is a trusted in-process extension, not a sandbox against arbitrary Python side effects. Unconfirmed registrations or cleanup retain the original resources and block replacement; this can make automatic recovery unavailable. Explicit ACK does not by itself prove an earlier handler has drained or resolve an UNKNOWN command.
 
+The Risk host now binds account-observer RPC responses to the configured Gateway
+SERVICE identity and CURVE key through the runtime owner's `call_bound` path,
+including after reconnect. An acknowledgement requires the original read's
+client-held token, epoch, registration and contiguous returned prefix; the Risk
+cursor is committed before acknowledgement. This authenticates the particular
+response, not account completeness or continuing authorization across a later
+database transaction. The v1 order quarantine remains enabled. Other callers of
+`GatewayAccountObserverClient` retain the compatibility mode unless both `peer`
+and `fingerprint` are explicitly supplied.
+
 CTP front selection uses `bt_api_ctp.ctp_env_selector`; the old SDK facade and its YAML configuration are removed. The provider selects its own defaults, which differ from the old facade, and automatic set1 selection requires verified trading-day evidence. This source change has not been behavior- or account-accepted.
 
 Position-mode acknowledgement codes are provider declarations: the Base default is unspecified. Binance, CTP and non-swap OKX preserve the previous `200`; OKX swap preserves `0`, and ten historical policies retain `200`. These inherited values do not prove venue capability. Third-party Base subclasses no longer receive a default; dynamic policies, packaging and behavior remain unvalidated.

@@ -26,6 +26,7 @@ Output never contains keys, account numbers or file paths.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 import math
@@ -1846,7 +1847,8 @@ class RiskServiceHost:
             account_scope, identity,
         )
         self._check_cleanup_ready()
-        observer = self._call_lifecycle(GatewayAccountObserverClient, observer_runtime, route=observer_route)
+        observer = self._call_lifecycle(GatewayAccountObserverClient, observer_runtime, route=observer_route,
+            peer=self._peer(), fingerprint=hashlib.sha256(gateway.server_public_key).hexdigest())
         self._check_cleanup_ready()
         self._observer_runtime = observer_runtime
         self._observer_route = observer_route
@@ -1958,7 +1960,8 @@ class RiskServiceHost:
             if not granted:
                 raise RiskServiceStartError("RISK_SERVICE_GATEWAY_OBSERVER_UNAVAILABLE")
             self._check_global_cleanup_ready(replacement)
-            observer = self._call_lifecycle(GatewayAccountObserverClient, replacement, route=route)
+            observer = self._call_lifecycle(GatewayAccountObserverClient, replacement, route=route,
+                peer=self._peer(), fingerprint=hashlib.sha256(self.config.gateway.server_public_key).hexdigest())
             self._check_global_cleanup_ready(replacement)
         except BaseException as error:
             if self._cleanup_uncertain:

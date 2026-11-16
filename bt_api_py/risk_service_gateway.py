@@ -2433,9 +2433,11 @@ class ObservationPump:
                         self._gap("observation_apply_unproven")
                         return applied
                     try:
-                        ack = observer.acknowledge(
-                            sequence, expected_epoch=epoch, timeout_seconds=self._timeout
-                        )
+                        ack_kwargs = {"expected_epoch": epoch, "timeout_seconds": self._timeout}
+                        read_token = getattr(result, "_read_token", None)
+                        if read_token is not None:
+                            ack_kwargs["read_token"] = read_token
+                        ack = observer.acknowledge(sequence, **ack_kwargs)
                     except Exception:
                         self._gap("observation_ack_failed")
                         return applied
