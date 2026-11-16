@@ -89,6 +89,9 @@ _MAX_BIND_HOST_BYTES: Final[int] = 255
 _WILDCARD_HOSTS: Final[frozenset[str]] = frozenset({"*", "0.0.0.0", "::"})
 
 # The capability contract 63.01 must authenticate before it can be trusted.
+# The operation name is the local copy of the frozen Gateway heartbeat wire;
+# tests/unit/test_service_monitor_enablement.py cross-checks it when the
+# Gateway package is installed, so it cannot drift silently.
 MONITOR_REQUIRED_PROTOCOL_VERSION: Final[int] = 1
 MONITOR_REQUIRED_OPERATIONS: Final[frozenset[str]] = frozenset({"monitor.heartbeat"})
 _MONITOR_CAPABILITY_FIELDS: Final[frozenset[str]] = frozenset(

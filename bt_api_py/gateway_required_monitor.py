@@ -16,6 +16,7 @@ from typing import Callable
 
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_gateway.monitor_heartbeat_wire import (
+    MONITOR_HEARTBEAT_OPERATIONS,
     build_monitor_heartbeat_request,
     monitor_heartbeat_ack_matches,
 )
@@ -23,6 +24,80 @@ from bt_api_gateway.monitor_heartbeat_wire import (
 # Who released a Monitor cause when the Gateway did it itself on a valid heartbeat
 # (automatic_resume), as stored on a journal with the release audit.
 MONITOR_RECOVERY_RELEASER = "system:required-monitor"
+
+# Startup observations are finite categories. A confirmed incompatible Monitor
+# is terminal and refuses the Gateway start (D68-02). Only an authenticated
+# current heartbeat is COMPATIBLE; a timeout, an unproven reply or an
+# unclassifiable failure stays UNKNOWN and never releases the cause.
+MONITOR_STARTUP_COMPATIBLE = "COMPATIBLE"
+MONITOR_STARTUP_INCOMPATIBLE = "INCOMPATIBLE"
+MONITOR_STARTUP_AUTH_FAILED = "AUTH_FAILED"
+MONITOR_STARTUP_UNREACHABLE = "UNREACHABLE"
+MONITOR_STARTUP_UNKNOWN = "UNKNOWN"
+MONITOR_STARTUP_TIMEOUT = "TIMEOUT"
+
+_STARTUP_TERMINAL = frozenset(
+    {
+        MONITOR_STARTUP_COMPATIBLE,
+        MONITOR_STARTUP_INCOMPATIBLE,
+        MONITOR_STARTUP_AUTH_FAILED,
+    }
+)
+# Among provisional observations the most cautious one wins; none of them may
+# be reported as COMPATIBLE.
+_STARTUP_PROVISIONAL_RANK = {
+    MONITOR_STARTUP_TIMEOUT: 0,
+    MONITOR_STARTUP_UNREACHABLE: 1,
+    MONITOR_STARTUP_UNKNOWN: 2,
+}
+_AUTH_FAILURE_CODES = frozenset(
+    {"DENIED", "AUTHENTICATION_FAILED", "SCOPE_DENIED", "UNAUTHORIZED_RELAY"}
+)
+# The frozen operation set is exactly one passive operation; the worker calls
+# that name and nothing else.
+if len(MONITOR_HEARTBEAT_OPERATIONS) != 1:
+    raise RuntimeError("MONITOR_HEARTBEAT_OPERATION_SET_INVALID")
+_HEARTBEAT_OPERATION = next(iter(MONITOR_HEARTBEAT_OPERATIONS))
+# A request may be authenticated yet unproven: a handler failure, a reply that
+# is not the exact ACK, or a lost local proof. None of these is reachability,
+# compatibility or liveness evidence.
+_UNKNOWN_CODES = frozenset(
+    {
+        "BUSINESS_OUTCOME_UNKNOWN",
+        "HANDLER_FAILED",
+        "INVALID_HEARTBEAT",
+        "MONITOR_ACK_EXPIRED",
+        "MONITOR_ACK_INVALID",
+        "MONITOR_BINDING_UNAVAILABLE",
+        "MONITOR_CAUSE_MISMATCH",
+        "MONITOR_OWNER_CHANGED",
+        "MONITOR_PEER_UNTRUSTED",
+        "MONITOR_PROOF_EXPIRED",
+        "MONITOR_RUNTIME_UNTRUSTED",
+        "UNSUPPORTED_OPERATION",
+    }
+)
+
+
+class _MonitorWorkerError(RuntimeError):
+    """A finite local worker failure that is never a liveness proof."""
+
+    __slots__ = ("code",)
+
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(code)
+
+
+def _startup_category_for(error: BaseException) -> str:
+    """Classify one failed heartbeat without ever claiming compatibility."""
+    code = getattr(error, "code", "")
+    if code in _AUTH_FAILURE_CODES:
+        return MONITOR_STARTUP_AUTH_FAILED
+    if code in _UNKNOWN_CODES:
+        return MONITOR_STARTUP_UNKNOWN
+    return MONITOR_STARTUP_UNREACHABLE
+
 
 
 @dataclass(frozen=True)
@@ -107,7 +182,7 @@ class _Gate:
         with self._lock:
             if (self._closed or os.getpid() != self._pid or self._proof != proof
                     or time.monotonic_ns() >= self._deadline):
-                raise RuntimeError("MONITOR_PROOF_EXPIRED")
+                raise _MonitorWorkerError("MONITOR_PROOF_EXPIRED")
 
     def activate(self, proof):
         with self._lock:
@@ -133,6 +208,7 @@ class RequiredMonitor:
         self._stop = threading.Event()
         self._thread = None
         self._startup_event = threading.Event()
+        self._startup_lock = threading.Lock()
         self._startup_category = None
         self._owner = self._control = None
         self._initial_cause = "monitor:" + uuid.uuid4().hex
@@ -153,17 +229,44 @@ class RequiredMonitor:
         self._thread.start()
 
     def startup_probe(self, timeout_seconds):
-        """Return only a classified authenticated observation within the budget."""
-        if self._thread is None or type(timeout_seconds) not in (int, float) or timeout_seconds < 0:
+        """Return only a classified authenticated observation within the budget.
+
+        A provisional observation (unreachable, unknown, timeout) never ends
+        the probe: a confirmed incompatible Monitor seen later in the startup
+        grace must still refuse the start (D68-02). Only a terminal category
+        (``COMPATIBLE``, ``INCOMPATIBLE``, ``AUTH_FAILED``) ends it early.
+        """
+        if (
+            self._thread is None
+            or type(timeout_seconds) not in (int, float)
+            or not math.isfinite(timeout_seconds)
+            or timeout_seconds < 0
+        ):
             raise ValueError("INVALID_MONITOR_STARTUP")
         if not self._startup_event.wait(timeout_seconds):
-            return "TIMEOUT"
-        return self._startup_category
+            with self._startup_lock:
+                return self._startup_category or MONITOR_STARTUP_TIMEOUT
+        with self._startup_lock:
+            return self._startup_category
 
     def _record_startup(self, category):
-        if not self._startup_event.is_set():
-            self._startup_category = category
-            self._startup_event.set()
+        """Record one observation; a provisional one must not mask a terminal one."""
+        if category not in _STARTUP_TERMINAL and category not in _STARTUP_PROVISIONAL_RANK:
+            raise ValueError("INVALID_MONITOR_STARTUP")
+        with self._startup_lock:
+            current = self._startup_category
+            if category in _STARTUP_TERMINAL:
+                if current in _STARTUP_TERMINAL:
+                    return
+                self._startup_category = category
+                self._startup_event.set()
+                return
+            if current in _STARTUP_TERMINAL:
+                return
+            if current is None or (
+                _STARTUP_PROVISIONAL_RANK[category] > _STARTUP_PROVISIONAL_RANK[current]
+            ):
+                self._startup_category = category
 
     def close(self, timeout_seconds):
         self.gate.close()
@@ -190,7 +293,7 @@ class RequiredMonitor:
         def recheck():
             binding = self._owner.binding()
             if binding is None or binding.generation != self.generation:
-                raise RuntimeError("MONITOR_OWNER_CHANGED")
+                raise _MonitorWorkerError("MONITOR_OWNER_CHANGED")
             control._owned()
             self.gate.require_proof(proof)
         def restore():
@@ -198,7 +301,7 @@ class RequiredMonitor:
             causes = control.active_system_causes(origin)
             if any(cause["mode"] != "STOP_NEW" or cause["scope_kind"] != "account"
                    or cause["scope_value"] != "" for cause in causes):
-                raise RuntimeError("MONITOR_CAUSE_MISMATCH")
+                raise _MonitorWorkerError("MONITOR_CAUSE_MISMATCH")
             if self.settings.automatic_resume:
                 for cause in causes:
                     control.resume(cause["cause_id"], expected_version=cause["version"],
@@ -216,11 +319,12 @@ class RequiredMonitor:
         if (type(runtime) is not ServiceClientRuntime or type(runtime._factory) is not ZmqTransportFactory
                 or runtime.identity != s.gateway_identity or runtime._monotonic_clock is not time.monotonic
                 or not runtime.healthy):
-            raise RuntimeError("MONITOR_RUNTIME_UNTRUSTED")
+            raise _MonitorWorkerError("MONITOR_RUNTIME_UNTRUSTED")
         matches = [b for b in runtime.bindings if b.active and b.mount == s.mount
-                   and b.scope == s.scope and b.required and "monitor.heartbeat" in b.operations]
+                   and b.scope == s.scope and b.required
+                   and MONITOR_HEARTBEAT_OPERATIONS <= b.operations]
         if len(matches) != 1:
-            raise RuntimeError("MONITOR_BINDING_UNAVAILABLE")
+            raise _MonitorWorkerError("MONITOR_BINDING_UNAVAILABLE")
         binding = matches[0]
         transport = runtime._transports.get((binding.service_id, binding.transport_ref))
         if (runtime._peers.get(binding.service_id) != s.monitor_identity
@@ -228,7 +332,7 @@ class RequiredMonitor:
                 or type(transport) is not _RequestNotSentAdapter
                 or type(transport._transport) is not ZmqServiceClient
                 or transport._transport._identity != s.monitor_identity):
-            raise RuntimeError("MONITOR_PEER_UNTRUSTED")
+            raise _MonitorWorkerError("MONITOR_PEER_UNTRUSTED")
         return binding
 
     def _precheck_runtime(self, runtime):
@@ -236,8 +340,9 @@ class RequiredMonitor:
         if (type(runtime) is not ServiceClientRuntime or type(runtime._factory) is not ZmqTransportFactory
                 or runtime.identity != self.settings.gateway_identity
                 or runtime._monotonic_clock is not time.monotonic
-                or runtime._requested_operations.get(self.settings.mount) != frozenset({"monitor.heartbeat"})):
-            raise RuntimeError("MONITOR_RUNTIME_UNTRUSTED")
+                or runtime._requested_operations.get(self.settings.mount)
+                != MONITOR_HEARTBEAT_OPERATIONS):
+            raise _MonitorWorkerError("MONITOR_RUNTIME_UNTRUSTED")
 
     def _confirmed_incompatible(self, runtime, error):
         from bt_api_py.service_runtime import ServiceRuntimeError
@@ -252,7 +357,7 @@ class RequiredMonitor:
                 and runtime._peers.get(self.settings.monitor_identity.actor_ref) == self.settings.monitor_identity):
             if error.code == "PROTOCOL_VERSION_MISMATCH":
                 return True
-            if error.code == "UNKNOWN_OPERATION":
+            if error.code in {"UNKNOWN_OPERATION", "UNSUPPORTED_OPERATION"}:
                 try:
                     self._binding(runtime)
                     return True
@@ -274,7 +379,7 @@ class RequiredMonitor:
                     binding = self._binding(runtime)
                     owner_binding = self._owner.binding()
                     if owner_binding is None or owner_binding.generation != self.generation:
-                        raise RuntimeError("MONITOR_OWNER_CHANGED")
+                        raise _MonitorWorkerError("MONITOR_OWNER_CHANGED")
                     sent = time.monotonic_ns()
                     deadline = sent + int(self.settings.timeout_seconds * 1_000_000_000)
                     heartbeat_id = uuid.uuid4().hex
@@ -286,7 +391,8 @@ class RequiredMonitor:
                         heartbeat_id=heartbeat_id,
                         sent_at_ns=sent,
                     )
-                    response = runtime.call(self.settings.mount, "monitor.heartbeat", request,
+                    response = runtime.call(self.settings.mount, _HEARTBEAT_OPERATION,
+                                            request,
                                             account_ref=self.settings.scope.account_ref,
                                             scope_ref=binding.scope_ref)
                     after = self._binding(runtime)
@@ -296,12 +402,12 @@ class RequiredMonitor:
                             or not monitor_heartbeat_ack_matches(
                                 request, response,
                                 self.settings.monitor_identity.principal_ref)):
-                        raise RuntimeError("MONITOR_ACK_INVALID")
-                    self._record_startup("COMPATIBLE")
+                        raise _MonitorWorkerError("MONITOR_ACK_INVALID")
+                    self._record_startup(MONITOR_STARTUP_COMPATIBLE)
                     proof = (self.generation, binding.registration_id, binding.service_epoch, heartbeat_id)
                     gap = self.gate.acknowledge(proof, deadline)
                     if gap is None:
-                        raise RuntimeError("MONITOR_ACK_EXPIRED")
+                        raise _MonitorWorkerError("MONITOR_ACK_EXPIRED")
                     if gap or pending_outage:
                         self._persist_outage()
                         pending_outage = False
@@ -315,10 +421,9 @@ class RequiredMonitor:
                     except Exception:
                         pass
                     if self._confirmed_incompatible(runtime, error):
-                        self._record_startup("INCOMPATIBLE")
+                        self._record_startup(MONITOR_STARTUP_INCOMPATIBLE)
                         break
-                    code = getattr(error, "code", "")
-                    self._record_startup("AUTH_FAILED" if code in {"DENIED", "AUTHENTICATION_FAILED"} else "UNREACHABLE")
+                    self._record_startup(_startup_category_for(error))
                     if runtime is not None and (
                         runtime.state != "registered" or getattr(error, "code", None) in {
                             "STALE_EPOCH", "NOT_REGISTERED", "LEASE_EXPIRED",
@@ -337,7 +442,7 @@ class RequiredMonitor:
                 self._stop.wait(self.settings.interval_seconds)
         finally:
             self.gate.close()
-            self._record_startup("UNREACHABLE")
+            self._record_startup(MONITOR_STARTUP_UNREACHABLE)
             if runtime is not None:
                 try:
                     runtime.close()

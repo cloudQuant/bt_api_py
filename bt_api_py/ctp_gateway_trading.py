@@ -1154,6 +1154,11 @@ def build_ctp_gateway_trading_profile(
     def resources(
         component: str, instance_id: str, options: Mapping[str, object], scope: WireScope
     ):
+        from bt_api_py.gateway_required_monitor import (
+            MONITOR_STARTUP_INCOMPATIBLE,
+            RequiredMonitor,
+        )
+
         normalized_options = dict(options)
         normalized_options.setdefault("cancel_enabled", False)
         expected_options = {
@@ -1485,8 +1490,6 @@ def build_ctp_gateway_trading_profile(
                     # operator's reconcile: a listing is current, also for a view-only operator.
                     holder["drain_observer"] = GatewayDrainTargetObserver(control=holder["control"])
                 if required_monitor is not None:
-                    from bt_api_py.gateway_required_monitor import RequiredMonitor
-
                     monitor = RequiredMonitor(required_monitor, generation)
                     monitor.initialize_on_owner(journal, holder["control"], guard)
                     holder["required_monitor"] = monitor
@@ -2213,7 +2216,7 @@ def build_ctp_gateway_trading_profile(
                 monitor = holder["required_monitor"]
                 monitor.start(owner, holder["control"])
                 category = monitor.startup_probe(max(0.0, startup_deadline - time.monotonic()))
-                if category == "INCOMPATIBLE":
+                if category == MONITOR_STARTUP_INCOMPATIBLE:
                     raise CtpGatewayTradingError("MONITOR_INCOMPATIBLE")
             returns = holder.get("returns")
             strategy_ledger = holder.get("strategy_ledger")

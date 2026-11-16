@@ -32,6 +32,7 @@ from bt_api_py.service_monitor_lifecycle import (
     MONITOR_NOT_INSTALLED,
     MONITOR_NOT_SUPPORTED_IN_DIRECT,
     MONITOR_REQUIRED_NOT_APPLICABLE_TO_MONITOR_SERVICE,
+    MONITOR_REQUIRED_OPERATIONS,
     MONITOR_REQUIRED_REQUIRES_MONITOR,
     MONITOR_REQUIRES_GATEWAY,
     MONITOR_SELECTION_DIRECT,
@@ -619,3 +620,10 @@ assert tuple(threading.enumerate()) == before_threads
 """
     result = _run_isolated(program, tmp_path)
     assert result.returncode == 0, result.stderr
+
+
+def test_required_operations_match_the_frozen_gateway_heartbeat_wire():
+    """The local capability check must name exactly the frozen operation."""
+    wire = pytest.importorskip("bt_api_gateway.monitor_heartbeat_wire")
+    assert MONITOR_REQUIRED_OPERATIONS == wire.MONITOR_HEARTBEAT_OPERATIONS
+    assert frozenset({"monitor.heartbeat"}) == MONITOR_REQUIRED_OPERATIONS
