@@ -53,6 +53,7 @@ _CTP_CONFIGURATION_ERROR_CODES = frozenset({
     "INVALID_MARKET_SETTINGS",
     "INVALID_REQUIRED_MONITOR",
     "INVALID_RECOVERY_OBSERVATION_SETTINGS",
+    "INVALID_RECOVERY_MONITOR_RELAY_SETTINGS",
     "INVALID_RETURN_SETTINGS",
     "INVALID_RISK_V2_BINDING_CONFIGURATION",
     "INVALID_STRATEGY_FINANCIAL_SOURCE",
@@ -119,6 +120,7 @@ class CtpGatewayTrustedResources:
     calendar_settings: object | None = field(default=None, repr=False)
     recovery_observation_settings: object | None = field(default=None, repr=False)
     instrument_status_read: object | None = field(default=None, repr=False)
+    recovery_monitor_relay: object | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         from bt_api_py.gateway_parent_acceptance_service import GatewayParentAcceptanceGrant
@@ -199,6 +201,7 @@ def create_ctp_gateway_profile_factory(
             upgrade_control_release_audit=resources.upgrade_control_release_audit,
             calendar_settings=resources.calendar_settings,
             recovery_observation_settings=resources.recovery_observation_settings,
+            recovery_monitor_relay=resources.recovery_monitor_relay,
             instrument_status_read=resources.instrument_status_read,
             cancel_only=cancel_only,
         )

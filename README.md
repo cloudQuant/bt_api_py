@@ -599,10 +599,10 @@ durable capture-stop marker identifies the last committed sequence and leaves
 later coverage unknown; it does not claim the provider's remaining buffer was
 drained or that the source recovered.
 `binding.recovery_observation_status()` exposes finite local worker status;
-ready is not proof of network health. The default remains disabled. Calendar
-accumulation and Monitor transport/evaluator are not yet connected to this
-source-recording option; its local monotonic timestamps must not be sent as a
-cross-process clock.
+ready is not proof of network health. The default remains disabled. An explicit
+Monitor relay can forward v2 records as described below; calendar accumulation
+and the duration evaluator remain unconnected. Local monotonic timestamps must
+not be treated as a cross-process clock.
 
 An explicitly enabled recorder may select `qualification_mode="local_clock_v1"`
 and an explicit positive `clock_max_interval_ns`. The default `disabled` mode
@@ -670,6 +670,71 @@ To record only v1 observations, use `qualification_mode: "disabled"` and
 recorder. The `ctp-local-readonly` profile rejects this section. Existing market,
 clock, storage-isolation and journal compatibility requirements still apply;
 selecting the trading profile does not itself enable native trading writes.
+
+To forward this same v2 source, explicitly add `recovery_monitor_relay` to the
+protected trading bundle. All fields below are required. The source path,
+source reference and source scope are derived from `recovery_observation`;
+the destination `scope_ref` below belongs to Monitor. Provision the exact
+Gateway SERVICE principal and matching source/binding/type in Monitor's v2
+configuration separately. No principal or event permission is added to Monitor
+automatically. Replace the key placeholders with provisioned CURVE keys in the
+protected bundle, never in a public manifest:
+
+```json
+{
+  "recovery_monitor_relay": {
+    "monitor_identity": {
+      "role": "service",
+      "principal_ref": "synthetic-monitor-events-principal",
+      "actor_ref": "synthetic-monitor-events",
+      "delegate_ref": null
+    },
+    "instance_id": "synthetic-monitor-events-instance",
+    "scope_ref": "synthetic-events-scope",
+    "rpc_connect": "tcp://127.0.0.1:7603",
+    "server_curve_public_key": "<provisioned server public key>",
+    "client_curve_public_key": "<provisioned Gateway public key>",
+    "client_curve_secret_key": "<provisioned Gateway secret key>",
+    "outbox_scope": "synthetic-outbox",
+    "binding_ref": "synthetic-gateway-recovery",
+    "checkpoint_path": "/operator-owned/recovery-monitor-checkpoint.sqlite",
+    "poll_interval_seconds": 1,
+    "start_timeout_seconds": 5,
+    "close_timeout_seconds": 5,
+    "request_timeout_seconds": 2,
+    "max_records": 16,
+    "max_bytes": 65536
+  }
+}
+```
+
+These budgets are illustrative. RPC timeout is separate from poll/start/close
+timeouts; the runtime heartbeat interval is rounded up from poll seconds with
+a minimum of one second. The current Host destination is account-scoped, and
+the dedicated client requests only `events.append`. Its worker owns the client,
+sink and checkpoint on a separate thread; required-Monitor heartbeat and its
+trading gate use their existing independent runtime. Omission enables nothing;
+the read-only profile, a v1 source, invalid configuration or aliased storage
+are rejected. An enabled relay that cannot start does not silently disappear.
+
+The relay borrows the recorder's original v2 journal and only reads it; the
+journal's underlying SQLite connections still use `mode=rw`. It persists one
+pending envelope before sending, and advances its checkpoint only after a
+matching authenticated intake receipt. Unknown outcomes replay the same
+envelope and ID. The envelope timestamp is first enqueue time, not a source
+clock claim. Original-file checks and source row anchors detect observed
+replacement or history changes; the POSIX lock coordinates local cooperating
+writers only. Cross-process checkpoint rollback, simultaneous rollback of both
+databases, hostile filesystem ABA and power-loss persistence remain unproven.
+
+Shutdown closes the recorder before the relay. A pending event may remain for
+the next explicit start; local resource cleanup does not mean all source events
+were delivered. `binding.recovery_monitor_relay_status()` reports finite resource
+and delivery observations. Unconfirmed shutdown retains the original worker,
+runtime and checkpoint for explicit retry. No automatic replacement runtime or
+source database is created. Source qualification, receipt and cursor do not
+prove recovery, calendar coverage, completed alert evaluation or trading rights;
+the ordinary positive `for_seconds` guard remains in place.
 
 The same protected trading bundle can explicitly enable instrument-status
 diagnostics with `instrument_status_read`. This section has exactly two fields:

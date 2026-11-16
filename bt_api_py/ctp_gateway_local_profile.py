@@ -771,7 +771,7 @@ def _load_resources(config, *, trading):
         raw = _protected_json(resource_path)
         # A trading bundle may add a "clock" section (trusted SNTP policy).
         optional = ({"clock", "controls", "strategy_ledger", "strategy_financial", "delegation", "execution_subject_scopes", "required_monitor",
-                     "account_observation", "recovery_observation", "instrument_status_read"} if trading else set()) | {"calendars"}
+                     "account_observation", "recovery_observation", "recovery_monitor_relay", "instrument_status_read"} if trading else set()) | {"calendars"}
         if type(raw) is not dict or not set(keys) <= set(raw) <= set(keys) | optional:
             _invalid()
         if type(raw["schema_version"]) is not int or raw["schema_version"] != 1:
@@ -911,6 +911,16 @@ def _load_resources(config, *, trading):
             clock = _clock_settings(raw.get("clock"))
             recovery_observation = (_recovery_observation_settings(raw["recovery_observation"], settings)
                                     if "recovery_observation" in raw else None)
+            recovery_monitor_relay = None
+            if "recovery_monitor_relay" in raw:
+                from bt_api_py.ctp_gateway_recovery_relay_config import (
+                    build_recovery_monitor_settings,
+                )
+
+                recovery_monitor_relay = build_recovery_monitor_settings(
+                    raw["recovery_monitor_relay"], config=config, authority=authority,
+                    account_scope=settings.account_scope, observation=recovery_observation,
+                )
             if market is not None and clock is None:
                 # Decision B qualifies every dispatch against a fresh quote and
                 # the Gateway's own verified clock; without one no order could
@@ -964,6 +974,7 @@ def _load_resources(config, *, trading):
                 account_read_principals=read_principals,
                 calendar_settings=calendar_settings,
                 recovery_observation_settings=recovery_observation,
+                recovery_monitor_relay=recovery_monitor_relay,
                 control_release_audit_enabled=release_audit is not None,
                 upgrade_control_release_audit=release_audit is True,
                 **drain_options,

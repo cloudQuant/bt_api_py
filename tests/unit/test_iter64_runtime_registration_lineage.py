@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import gc
-import inspect
 import multiprocessing
 import os
 import threading
@@ -15,7 +14,6 @@ from bt_api_transport_zmq.service_v2 import RequestOutcomeUnknownError
 
 from bt_api_py.service_runtime import (
     ClientCurveKeys,
-    ServiceClientRuntime,
     ServiceRuntimeError,
     ZmqTransportFactory,
 )
@@ -124,12 +122,14 @@ def test_socket_retirement_invalidates_observation(live_runtime):
     assert not runtime._has_current_registration_observation(binding)
 
 
-def test_wrong_thread_rpc_preserves_owner_lineage(live_runtime):
+def test_wrong_thread_rpc_preserves_owner_lineage(live_runtime, monkeypatch):
     runtime, _, _ = live_runtime
     binding = runtime.start().bindings[0]
     assert runtime._has_current_registration_observation(binding)
     prior_lineage = dict(runtime._registration_lineage)
     prior_failures = dict(runtime._registration_failure_generation)
+    revocations = []
+    monkeypatch.setattr(runtime, "_invalidate_live_parent_capabilities", lambda: revocations.append(True))
     errors = []
 
     def invoke():
@@ -146,6 +146,27 @@ def test_wrong_thread_rpc_preserves_owner_lineage(live_runtime):
     assert errors == ["WRONG_TRANSPORT_THREAD"]
     assert runtime._registration_lineage == prior_lineage
     assert runtime._registration_failure_generation == prior_failures
+    assert revocations == []
+    assert runtime._has_current_registration_observation(binding)
+
+
+def test_wrong_process_rpc_preserves_owner_lineage(live_runtime, monkeypatch):
+    runtime, _, _ = live_runtime
+    binding = runtime.start().bindings[0]
+    prior_lineage = dict(runtime._registration_lineage)
+    prior_failures = dict(runtime._registration_failure_generation)
+    revocations = []
+    monkeypatch.setattr(runtime, "_invalidate_live_parent_capabilities", lambda: revocations.append(True))
+    owner_pid = runtime._owner_pid
+    runtime._owner_pid = -1
+    try:
+        with pytest.raises(ServiceRuntimeError, match="WRONG_TRANSPORT_PROCESS"):
+            runtime._rpc(binding.service_id, binding.transport_ref, binding.scope, "service.discover", {})
+    finally:
+        runtime._owner_pid = owner_pid
+    assert runtime._registration_lineage == prior_lineage
+    assert runtime._registration_failure_generation == prior_failures
+    assert revocations == []
     assert runtime._has_current_registration_observation(binding)
 
 
@@ -456,34 +477,35 @@ def test_timed_out_rpc_retires_observation(synthetic_runtime):
     assert not runtime._has_current_registration_observation(binding)
 
 
-def test_rpc_signature_and_legacy_argument_forwarding(monkeypatch):
-    signature = inspect.signature(ServiceClientRuntime._rpc)
-    assert str(signature) == (
-        "(self, service_id, transport_ref, scope, operation, payload, *, control=True, "
-        "timeout=None, include_started_at=False, started_at=None, timing=None, "
-        "include_receive_receipt=False)"
-    )
+def test_rpc_legacy_and_bound_argument_forwarding(monkeypatch):
     runtime = _runtime(_config(), lambda *_: None)
     calls = []
     marker = object()
-    monkeypatch.setattr(runtime, "_rpc_impl", lambda *args, **kwargs: calls.append((args, kwargs)) or marker)
+    def fake_impl(service_id, transport_ref, scope, operation, payload, *, control=True,
+                  timeout=None, include_started_at=False, started_at=None, timing=None,
+                  include_receive_receipt=False, _bound_send_fence=None, bound_transport=None,
+                  bound_client=None, bound_socket_binding=None, bound_peer=None, bound_identity=None,
+                  deadline_monotonic=None, _require_issued_receipt=False):
+        calls.append(locals())
+        return marker
+    monkeypatch.setattr(runtime, "_rpc_impl", fake_impl)
     scope, payload, started, timing = object(), {}, [], {}
     assert runtime._rpc("service", "transport", scope, "operation", payload) is marker
-    assert calls[-1] == (("service", "transport", scope, "operation", payload), {
-        "control": True, "timeout": None, "include_started_at": False,
-        "started_at": None, "timing": None, "include_receive_receipt": False,
-    })
+    assert tuple(calls[-1][name] for name in ("service_id", "transport_ref", "scope", "operation", "payload")) == (
+        "service", "transport", scope, "operation", payload)
+    assert calls[-1]["control"] is True and calls[-1]["timeout"] is None
+    assert calls[-1]["include_started_at"] is False and calls[-1]["include_receive_receipt"] is False
     assert runtime._rpc(
         service_id="service", transport_ref="transport", scope=scope,
         operation="operation", payload=payload, control=False, timeout=2,
         include_started_at=True, started_at=started, timing=timing,
-        include_receive_receipt=False,
+        include_receive_receipt=False, bound_transport=marker, _require_issued_receipt=True,
     ) is marker
-    assert calls[-1] == (("service", "transport", scope, "operation", payload), {
-        "control": False, "timeout": 2, "include_started_at": True,
-        "started_at": started, "timing": timing, "include_receive_receipt": False,
-    })
-    assert calls[-1][1]["started_at"] is started
-    assert calls[-1][1]["timing"] is timing
+    assert tuple(calls[-1][name] for name in ("service_id", "transport_ref", "scope", "operation", "payload")) == (
+        "service", "transport", scope, "operation", payload)
+    assert calls[-1]["control"] is False and calls[-1]["timeout"] == 2
+    assert calls[-1]["include_started_at"] is True and calls[-1]["include_receive_receipt"] is False
+    assert calls[-1]["started_at"] is started and calls[-1]["timing"] is timing
+    assert calls[-1]["bound_transport"] is marker and calls[-1]["_require_issued_receipt"] is True
     with pytest.raises(TypeError):
         runtime._rpc("service", "transport", scope, "operation", payload, False)

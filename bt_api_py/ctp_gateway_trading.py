@@ -746,7 +746,8 @@ def _market_gate_latency(settings, market_settings) -> float:
     return latency
 
 
-def _isolated_storage(settings, registry_path, account_read_settings, recovery_settings=None) -> None:
+def _isolated_storage(settings, registry_path, account_read_settings, recovery_settings=None,
+                      relay_settings=None) -> None:
     """Refuse startup unless Gateway storage is OS-isolated to this user (I63 decision)."""
     from .gateway_storage_trust import assert_gateway_storage_isolated
 
@@ -757,6 +758,8 @@ def _isolated_storage(settings, registry_path, account_read_settings, recovery_s
                   Path(account_read_settings.observation_identity_path)]
     if recovery_settings is not None:
         files.append(Path(recovery_settings.journal_path))
+    if relay_settings is not None:
+        files.extend((Path(relay_settings.checkpoint_path), Path(str(relay_settings.checkpoint_path) + '.lock')))
     directories += [path.parent for path in files]
     assert_gateway_storage_isolated(directories, files)
 
@@ -777,6 +780,37 @@ def _recovery_storage_distinct(settings, registry_path, account_read_settings, r
             and _distinct_journals(str(target) + suffix, other)
             for suffix in ('-wal', '-shm', '-journal')) for other in files)
     except (OSError, ValueError, RuntimeError):
+        return False
+
+
+def _relay_storage_distinct(settings, registry_path, account_read_settings, recovery_settings,
+                            calendar_settings, relay_settings):
+    checkpoint = Path(relay_settings.checkpoint_path)
+    relay_files = (checkpoint, Path(str(checkpoint) + '.lock'))
+    files = [registry_path, settings.journal_path, recovery_settings.journal_path]
+    if account_read_settings is not None:
+        files.extend((account_read_settings.journal_path, account_read_settings.observation_identity_path))
+    roots = [Path(settings.guard_root), Path(settings.trusted_flow_root)]
+    try:
+        if calendar_settings is not None and calendar_settings.root is not None:
+            roots.append(Path(calendar_settings.root))
+        for candidate in relay_files:
+            resolved = candidate.resolve()
+            for root in roots:
+                resolved_root = root.resolve()
+                if resolved == resolved_root or resolved_root in resolved.parents or resolved in resolved_root.parents:
+                    return False
+            for other in files:
+                for suffix in ('', '-wal', '-shm', '-journal'):
+                    if (not _distinct_journals(candidate, str(other) + suffix)
+                            or not _distinct_journals(str(candidate) + suffix, other)):
+                        return False
+        return all(
+            _distinct_journals(relay_files[0], str(relay_files[1]) + suffix)
+            and _distinct_journals(str(relay_files[0]) + suffix, relay_files[1])
+            for suffix in ('', '-wal', '-shm', '-journal')
+        )
+    except (AttributeError, OSError, TypeError, ValueError, RuntimeError):
         return False
 
 
@@ -828,6 +862,7 @@ def build_ctp_gateway_trading_profile(
     account_read_principals: frozenset[str] = frozenset(),
     market_settings: CtpGatewayMarketSettings | None = None,
     recovery_observation_settings=None,
+    recovery_monitor_relay=None,
     instrument_status_read=None,
     control_grants: Mapping[str, GatewayControlGrant] | None = None,
     upgrade_controls_from_v9: bool = False,
@@ -929,6 +964,19 @@ def build_ctp_gateway_trading_profile(
             raise CtpGatewayTradingError("INVALID_RECOVERY_OBSERVATION_SETTINGS")
     if type(authority) is not TrustedServiceAuthority:
         raise CtpGatewayTradingError("INVALID_TRADING_CONFIGURATION")
+    if recovery_monitor_relay is not None:
+        from bt_api_py.gateway_recovery_monitor_worker import GatewayRecoveryMonitorSettings
+
+        if (type(recovery_monitor_relay) is not GatewayRecoveryMonitorSettings
+                or recovery_observation_settings is None
+                or recovery_observation_settings.qualification_mode != 'local_clock_v1'
+                or recovery_monitor_relay.source_ref != recovery_observation_settings.source_ref
+                or recovery_monitor_relay.journal_scope_ref != recovery_observation_settings.scope_ref
+                or os.fspath(recovery_monitor_relay.journal_path) != os.fspath(recovery_observation_settings.journal_path)
+                or not _relay_storage_distinct(settings, registry_path, account_read_settings,
+                                               recovery_observation_settings, calendar_settings,
+                                               recovery_monitor_relay)):
+            raise CtpGatewayTradingError('INVALID_RECOVERY_MONITOR_RELAY_SETTINGS')
     from bt_api_py.gateway_execution_subject_scopes import GatewayExecutionSubjectScopes
     if execution_subject_scopes is not None:
         if (type(execution_subject_scopes) is not GatewayExecutionSubjectScopes
@@ -1379,7 +1427,8 @@ def build_ctp_gateway_trading_profile(
 
             try:
                 # Rechecked at owner start, before the guard and journal open.
-                _isolated_storage(settings, registry_path, account_read_settings, recovery_observation_settings)
+                _isolated_storage(settings, registry_path, account_read_settings, recovery_observation_settings,
+                                  recovery_monitor_relay)
                 if (recovery_observation_settings is not None and not _recovery_storage_distinct(
                         settings, registry_path, account_read_settings, recovery_observation_settings)):
                     raise CtpGatewayTradingError("INVALID_RECOVERY_OBSERVATION_SETTINGS")
@@ -2296,6 +2345,14 @@ def build_ctp_gateway_trading_profile(
             recorder = holder.get('recovery_observation_recorder')
             if recorder is not None and not recorder.close():
                 raise CtpGatewayTradingError('RECOVERY_OBSERVATION_CLOSE_UNCONFIRMED')
+            relay = holder.get('recovery_monitor_relay')
+            if relay is not None:
+                try:
+                    relay_closed = relay.close() is True
+                except Exception:
+                    relay_closed = False
+                if not relay_closed:
+                    raise CtpGatewayTradingError('RECOVERY_MONITOR_RELAY_CLOSE_UNCONFIRMED') from None
             calendar_service = holder.get("calendar_service")
             if calendar_service is not None:
                 calendar_service.close()
@@ -2421,6 +2478,19 @@ def build_ctp_gateway_trading_profile(
                 recorder = GatewayRecoveryObservationRecorder(owner, capture, recovery_observation_settings)
                 holder['recovery_observation_recorder'] = recorder
                 recorder.start()
+            if recovery_monitor_relay is not None:
+                from bt_api_py.gateway_recovery_monitor_worker import GatewayRecoveryMonitorWorker
+
+                if not _relay_storage_distinct(settings, registry_path, account_read_settings,
+                                               recovery_observation_settings, calendar_settings,
+                                               recovery_monitor_relay):
+                    raise CtpGatewayTradingError('INVALID_RECOVERY_MONITOR_RELAY_SETTINGS')
+                relay = GatewayRecoveryMonitorWorker(recorder, recovery_monitor_relay)
+                holder['recovery_monitor_relay'] = relay
+                try:
+                    relay.start()
+                except Exception:
+                    raise CtpGatewayTradingError('RECOVERY_MONITOR_RELAY_START_FAILED') from None
             journal = holder["journal"]
             if required_monitor is not None:
                 monitor = holder["required_monitor"]
@@ -2484,6 +2554,8 @@ def build_ctp_gateway_trading_profile(
                 binding.calendar_day_switch_status = calendar_switch.status
             if recovery_observation_settings is not None:
                 binding.recovery_observation_status = recorder.status
+            if recovery_monitor_relay is not None:
+                binding.recovery_monitor_relay_status = relay.status
             values = {"binding": binding, 'owner_guard_binding': holder['owner_guard_binding'],
                       'claim_coordinator': holder['dispatch_claim_coordinator'],
                       'claim_sealer': holder['dispatch_claim_sealer'],
@@ -2725,7 +2797,10 @@ def build_ctp_gateway_trading_profile(
             elif type(error) is CtpGatewayTradingError and error.code in _SURFACED_JOURNAL_CODES:
                 # The bundle's controls.release_audit section does not fit the journal.
                 surfaced = error.code
-            elif type(error) is CtpGatewayTradingError and error.code in _SURFACED_CTP_SESSION_CODES:
+            elif type(error) is CtpGatewayTradingError and (
+                error.code in _SURFACED_CTP_SESSION_CODES
+                or error.code == 'RECOVERY_MONITOR_RELAY_START_FAILED'
+            ):
                 surfaced = error.code
             raise ServiceResourceConstructionError(partial, monitor_incompatible=(
                 type(error) is CtpGatewayTradingError and error.code == "MONITOR_INCOMPATIBLE"
@@ -2734,7 +2809,8 @@ def build_ctp_gateway_trading_profile(
     def deployment_factory():
         # Before the Registry opens: refuse a storage layout another OS user
         # could write or redirect (the error code is a category only).
-        _isolated_storage(settings, registry_path, account_read_settings, recovery_observation_settings)
+        _isolated_storage(settings, registry_path, account_read_settings, recovery_observation_settings,
+                          recovery_monitor_relay)
         try:
             return GatewayOperatorDeployment(
                 config, authority, registry_path, resource_provider=resources

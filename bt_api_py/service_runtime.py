@@ -2281,8 +2281,10 @@ class ServiceClientRuntime:
             renewal_timeout = min(binding.timeout, remaining * 0.5)
             timing: dict[str, Any] = {}
             old_lineage = None
-            if (binding.operations.intersection({
+            if ((binding.operations.intersection({
                     "account.cancel_attempts.read_after", "account.cancel_attempts.ack"})
+                 or (binding.mount == "upstream.telemetry" and self.identity.role is WireRole.SERVICE
+                     and "events.append" in binding.operations))
                     and self._has_current_registration_observation(binding, _startup=startup)):
                 old_lineage = self._registration_lineage.get(id(binding))
             upstream_old = None
@@ -2437,7 +2439,7 @@ class ServiceClientRuntime:
                         )
                 except Exception:
                     # The renewed service binding remains usable by ordinary
-                    # paths, but cancel-stream lineage cannot be inferred.
+                    # paths, but the required registration lineage cannot be inferred.
                     pass
             index += 1
         if startup:
@@ -3597,6 +3599,7 @@ class ServiceClientRuntime:
             raise ServiceRuntimeError("BOUND_ROUTE_UNAVAILABLE") from None
 
     def _rpc(self, *args, **kwargs):
+        self._assert_owner_thread()
         service_id = args[0] if args else kwargs.get('service_id')
         transport_ref = args[1] if len(args) > 1 else kwargs.get('transport_ref')
         operation = args[3] if len(args) > 3 else kwargs.get('operation')

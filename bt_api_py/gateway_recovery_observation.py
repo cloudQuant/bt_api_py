@@ -76,6 +76,8 @@ class GatewayRecoveryObservationRecorder:
         if type(settings) is not GatewayRecoveryObservationSettings or not callable(capture):
             raise ValueError('INVALID_RECORDER_CONFIGURATION')
         self._owner, self._capture, self._settings = owner, capture, settings
+        self._pid = os.getpid()
+        self._journal = None
         self._lock = threading.Lock()
         self._wake = threading.Event()
         self._started = threading.Event()
@@ -102,6 +104,21 @@ class GatewayRecoveryObservationRecorder:
                     'pending_pages': int(self._page is not None),
                     'pending_stop_marker': int(self._stop and self._epoch is not None
                                                and not self._stop_marker_committed)}
+
+    def borrow_journal(self):
+        """Borrow the original published journal; callers may only use read_after.
+
+        The underlying journal uses fresh mode=rw SQLite connections. Borrowing
+        does not create a read-only filesystem handle, authorize writes or grant
+        any source continuity claim. The same object remains available after
+        recorder close so committed stop markers can be drained.
+        """
+        if os.getpid() != self._pid:
+            raise RuntimeError('RECORDER_WRONG_PROCESS')
+        with self._lock:
+            if self._journal is None or not self._started.is_set():
+                raise RuntimeError('RECORDER_JOURNAL_UNAVAILABLE')
+            return self._journal
 
     def start(self):
         with self._lock:
@@ -161,6 +178,8 @@ class GatewayRecoveryObservationRecorder:
             self._set('failed', 'JOURNAL_START_FAILED')
             self._started.set()
             return
+        with self._lock:
+            self._journal = journal
         self._started.set()
         while True:
             with self._lock:
