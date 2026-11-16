@@ -2464,6 +2464,65 @@ class ServiceClientRuntime:
         self._state = "new"
         return self.start()
 
+    def retire_required_monitor_session(self) -> bool:
+        """Retire one heartbeat-only upstream without losing unregister evidence.
+
+        This owner-thread operation disables business calls before the first
+        unregister. A false result retains the original binding and transport
+        for a later attempt; it never relies on a locally elapsed lease. Only
+        after the Registry has acknowledged retirement (or an existing
+        authenticated inactive-epoch proof is applicable) is local close tried.
+        """
+        self._assert_owner_thread()
+        clients = self._config.get("clients", {})
+        declared = [binding for client in clients.values()
+                    for binding in client["settings"]["bindings"]]
+        if (self.sticky_cleanup_enabled or self._state not in {
+                "new", "registered", "failed", "monitor_cleanup_pending", "close_failed", "closed"}
+                or type(self.identity) is not WireIdentity or self.identity.role is not WireRole.SERVICE
+                or self.identity.delegate_ref is not None
+                or self._requested_operations != {"upstream.telemetry": frozenset({"monitor.heartbeat"})}
+                or len(declared) != 1 or declared[0]["mount"] != "upstream.telemetry"
+                or declared[0].get("required", True) is not True):
+            raise ServiceRuntimeError("MONITOR_CLEANUP_UNAVAILABLE")
+        if len(self._bindings) > 1 or any(
+            type(binding) is not RegisteredBinding
+            or binding.mount != "upstream.telemetry" or binding.required is not True
+            or binding.service_id != declared[0]["service_id"]
+            or binding.instance_id != declared[0]["instance_id"]
+            or binding.scope_ref != declared[0]["scope_ref"]
+            or binding.transport_ref != declared[0]["transport_ref"]
+            or binding.operations != frozenset({"monitor.heartbeat"})
+            for binding in self._bindings
+        ):
+            raise ServiceRuntimeError("MONITOR_CLEANUP_UNAVAILABLE")
+        if self._state == "registered" and len(self._bindings) != 1:
+            raise ServiceRuntimeError("MONITOR_CLEANUP_UNAVAILABLE")
+        if self._state != "closed":
+            self._invalidate_live_parent_capabilities()
+            self._registration_lineage.clear()
+            self._state = "monitor_cleanup_pending"
+        if self._unknown_registration_count or self._unresolved_unregister_count:
+            raise ServiceRuntimeError("MONITOR_CLEANUP_REGISTRATION_UNKNOWN")
+        binding_ids = {binding.registration_id for binding in self._bindings}
+        if set(self._unregister_uncertainties) - binding_ids:
+            raise ServiceRuntimeError("MONITOR_CLEANUP_REGISTRATION_UNKNOWN")
+        if self._state == "closed":
+            if self._bindings or self._transports or self.unregister_uncertainties:
+                raise ServiceRuntimeError("MONITOR_CLEANUP_UNAVAILABLE")
+            return True
+        if self._bindings:
+            binding = self._bindings[0]
+            if (binding.service_id, binding.transport_ref) not in self._transports:
+                raise ServiceRuntimeError("MONITOR_CLEANUP_REGISTRATION_UNKNOWN")
+            if not self._unregister_binding(binding):
+                return False
+            self._bindings.clear()
+        if self.unregister_uncertainties:
+            raise ServiceRuntimeError("MONITOR_CLEANUP_REGISTRATION_UNKNOWN")
+        self.close()
+        return self._state == "closed" and not self._transports
+
     def close(self) -> None:
         self._assert_owner_thread()
         self._strict_public_lifecycle_entry()

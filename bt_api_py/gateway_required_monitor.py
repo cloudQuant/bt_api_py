@@ -6,6 +6,7 @@ an owner blocked in provider code cannot extend a heartbeat's deadline.
 from __future__ import annotations
 
 import hashlib
+import logging
 import math
 import os
 import threading
@@ -20,6 +21,8 @@ from bt_api_gateway.monitor_heartbeat_wire import (
     build_monitor_heartbeat_request,
     monitor_heartbeat_ack_matches,
 )
+
+_LOG = logging.getLogger(__name__)
 
 # Who released a Monitor cause when the Gateway did it itself on a valid heartbeat
 # (automatic_resume), as stored on a journal with the release audit.
@@ -213,6 +216,25 @@ class RequiredMonitor:
         self._owner = self._control = None
         self._initial_cause = "monitor:" + uuid.uuid4().hex
         self._cleanup_uncertain = False
+        self._cleanup_retry = threading.Event()
+        self._diagnostic_lock = threading.Lock()
+        self._diagnostic = ("STARTING", "NONE", "NONE")
+
+    @property
+    def diagnostic(self):
+        """Finite worker state; it contains no account, route or exception text."""
+        with self._diagnostic_lock:
+            phase, failure, cleanup = self._diagnostic
+            return {"phase": phase, "failure_category": failure, "cleanup_kind": cleanup}
+
+    def _set_diagnostic(self, phase, failure, cleanup):
+        value = (phase, failure, cleanup)
+        with self._diagnostic_lock:
+            if self._diagnostic == value:
+                return
+            self._diagnostic = value
+        log = _LOG.warning if failure != "NONE" or cleanup not in {"NONE", "COMPLETE"} else _LOG.info
+        log("Required Monitor phase=%s failure=%s cleanup=%s", *value)
 
     def initialize_on_owner(self, journal, control, guard):
         if journal.generation != self.generation or control._journal is not journal:
@@ -271,6 +293,7 @@ class RequiredMonitor:
     def close(self, timeout_seconds):
         self.gate.close()
         self._stop.set()
+        self._cleanup_retry.set()
         if self._thread is None:
             return True
         self._thread.join(timeout_seconds)
@@ -368,10 +391,57 @@ class RequiredMonitor:
     def _run(self):
         runtime = None
         pending_outage = False
+        retiring = False
+        terminating = False
+        failure_category = "NONE"
         try:
-            while not self._stop.is_set():
+            while True:
+                terminating = terminating or self._stop.is_set()
+                if terminating or retiring:
+                    if runtime is None:
+                        if terminating:
+                            break
+                        retiring = False
+                        continue
+                    if terminating:
+                        self._cleanup_retry.clear()
+                    self._set_diagnostic("STOPPING" if terminating else "RECONCILING",
+                                         failure_category, "REMOTE_PENDING")
+                    try:
+                        complete = runtime.retire_required_monitor_session()
+                        if complete and (runtime.unregister_uncertainties != 0
+                                         or runtime.unknown_registration_count != 0
+                                         or runtime.open_transport_count != 0):
+                            raise _MonitorWorkerError("MONITOR_CLEANUP_UNCERTAIN")
+                    except Exception as error:
+                        complete = False
+                        code = getattr(error, "code", None)
+                        cleanup = ("UNKNOWN_REGISTRATION" if code == "MONITOR_CLEANUP_REGISTRATION_UNKNOWN"
+                                   or getattr(runtime, "unknown_registration_count", 0)
+                                   else "LOCAL_PENDING" if code == "CLOSE_FAILED"
+                                   else "CLEANUP_UNCERTAIN")
+                    else:
+                        cleanup = "COMPLETE" if complete else "REMOTE_PENDING"
+                    self._cleanup_uncertain = not complete
+                    self._set_diagnostic("STOPPING" if terminating else "RECONCILING",
+                                         failure_category, cleanup)
+                    if complete:
+                        runtime = None
+                        retiring = False
+                        if terminating:
+                            break
+                        self._set_diagnostic("STARTING", failure_category, "COMPLETE")
+                        continue
+                    # On shutdown do one bounded attempt per explicit close;
+                    # the same owner thread and resources survive for retry.
+                    if terminating:
+                        self._cleanup_retry.wait()
+                    else:
+                        self._stop.wait(self.settings.interval_seconds)
+                    continue
                 try:
                     if runtime is None:
+                        self._set_diagnostic("STARTING", failure_category, "NONE")
                         runtime = self.settings.runtime_factory()
                         self._precheck_runtime(runtime)
                         runtime.start()
@@ -412,6 +482,8 @@ class RequiredMonitor:
                         self._persist_outage()
                         pending_outage = False
                     self._restore(proof)
+                    failure_category = "NONE"
+                    self._set_diagnostic("MONITORING", "NONE", "NONE")
                 except Exception as error:
                     self.gate.revoke()
                     pending_outage = True
@@ -422,31 +494,29 @@ class RequiredMonitor:
                         pass
                     if self._confirmed_incompatible(runtime, error):
                         self._record_startup(MONITOR_STARTUP_INCOMPATIBLE)
-                        break
-                    self._record_startup(_startup_category_for(error))
+                        failure_category = "INCOMPATIBLE"
+                        terminating = True
+                        continue
+                    failure_category = _startup_category_for(error)
+                    self._record_startup(failure_category)
                     if runtime is not None and (
                         runtime.state != "registered" or getattr(error, "code", None) in {
                             "STALE_EPOCH", "NOT_REGISTERED", "LEASE_EXPIRED",
                             "REQUIRED_LEASE_EXPIRED", "SESSION_NOT_REGISTERED",
                         }
                     ):
-                        try:
-                            runtime.close()
-                            if runtime.unregister_uncertainties or runtime.unknown_registration_count:
-                                self._cleanup_uncertain = True
-                                break
-                            runtime = None
-                        except Exception:
-                            self._cleanup_uncertain = True
-                            break
+                        retiring = True
+                    self._set_diagnostic("RECONCILING" if retiring else "MONITORING",
+                                         failure_category, "REMOTE_PENDING" if retiring else "NONE")
                 self._stop.wait(self.settings.interval_seconds)
         finally:
             self.gate.close()
             self._record_startup(MONITOR_STARTUP_UNREACHABLE)
             if runtime is not None:
-                try:
-                    runtime.close()
-                    if runtime.unregister_uncertainties:
-                        self._cleanup_uncertain = True
-                except BaseException:
-                    self._cleanup_uncertain = True
+                # Never destroy an unconfirmed old registration here. Retain
+                # the same object instead of inventing successful cleanup.
+                self._cleanup_uncertain = True
+                self._retained_runtime = runtime
+                self._set_diagnostic("BLOCKED", failure_category, "CLEANUP_UNCERTAIN")
+            else:
+                self._set_diagnostic("STOPPED", failure_category, "COMPLETE")
