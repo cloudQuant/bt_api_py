@@ -842,14 +842,14 @@ def _gateway(raw: object, base: Path, instruments: Mapping[str, RiskInstrumentBi
 
 def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceConfig:
     """Validate an already parsed document; ``path`` is the configuration file."""
-    # Refuse v2 before resolving paths or reading key files. The claim and
-    # observation implementations are not yet wired into the service.
-    if type(document) is dict and type(document.get("rules")) is dict:
-        raw_rules = document["rules"]
-        if "r04" in raw_rules:
-            selection = _r04_selection(raw_rules["r04"])
-            if selection is not None:
-                _fail("RISK_SERVICE_R04_V2_UNAVAILABLE")
+    # Decision B-2: a ``rules.r04`` selection is parsed and carried here; the
+    # service host validates it against the trusted allowlist and composes the
+    # artifact before any resource is acquired. The parsed selection is a claim,
+    # not an authorization (see ``_r04_selection``). A malformed selection is
+    # still refused before any path is resolved or key file read.
+    if (type(document) is dict and type(document.get("rules")) is dict
+            and "r04" in document["rules"]):
+        _r04_selection(document["rules"]["r04"])
     base = Path(path).resolve().parent
     top = _mapping(
         document,

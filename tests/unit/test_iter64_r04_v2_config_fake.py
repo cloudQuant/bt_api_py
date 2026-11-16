@@ -1,9 +1,17 @@
-"""Pure SDK R04 selection tests; no service, key file or account is opened."""
+"""Host-side R-04 v2 selection tests; no service, key file or account is opened.
+
+Decision B-2: ``rules.r04`` may select one v2 rule set. The configuration parser
+carries the selection as a claim; the host validates it against the trusted
+``rules.trusted_implementations`` allowlist without importing anything, and
+builds the exact artifact mapping only when storage is already owned. Every
+invalid, forged or unlisted selection is a finite ``RISK_SERVICE_*`` refusal
+taken before the host touches a resource.
+"""
 
 from __future__ import annotations
 
-import copy
 import builtins
+import copy
 import json
 import sys
 from dataclasses import replace
@@ -61,9 +69,26 @@ def document():
     }
 
 
+def allowed_document():
+    value = document()
+    value["rules"] = {
+        "r04": selection(), "trusted_implementations": {"trusted.rules:CombinedR04": 1},
+    }
+    return value
+
+
+@pytest.fixture
+def parsed(monkeypatch):
+    monkeypatch.setattr(Path, "resolve", lambda self, *a, **k: self)
+    monkeypatch.setattr(config_module, "read_key_file", lambda path, *, secret: path.name.encode())
+    return config_module.parse_risk_service_config(
+        allowed_document(), path=Path("/synthetic/service.yaml")
+    )
+
+
 class ForbiddenPath:
     def __fspath__(self):
-        raise AssertionError("v2 must be refused before resolving a path")
+        raise AssertionError("an invalid selection must be refused before a path")
 
 
 @pytest.fixture
@@ -78,12 +103,28 @@ def no_risk_or_plugin_import(monkeypatch):
     monkeypatch.setattr(builtins, "__import__", checked)
 
 
-def test_v2_refused_before_paths_keys_or_plugin_import(monkeypatch, no_risk_or_plugin_import):
-    monkeypatch.setattr(config_module, "read_key_file", lambda *a, **k: pytest.fail("key read"))
-    config = {"rules": {"r04": selection()}}
-    with pytest.raises(config_module.RiskServiceConfigError) as error:
-        config_module.parse_risk_service_config(config, path=ForbiddenPath())
-    assert error.value.code == "RISK_SERVICE_R04_V2_UNAVAILABLE"
+def test_v2_selection_is_carried_without_importing_the_plugin(monkeypatch):
+    forbidden = []
+
+    def record(name, *args, **kwargs):
+        if name == "bt_api_risk" or name.startswith("bt_api_risk.") or name.startswith("trusted"):
+            forbidden.append(name)
+            pytest.fail("plugin imported while parsing configuration")
+        return original(name, *args, **kwargs)
+
+    original = builtins.__import__
+    monkeypatch.setattr(builtins, "__import__", record)
+    monkeypatch.setattr(Path, "resolve", lambda self, *a, **k: self)
+    monkeypatch.setattr(config_module, "read_key_file", lambda path, *, secret: path.name.encode())
+    parsed_config = config_module.parse_risk_service_config(
+        allowed_document(), path=Path("/synthetic/service.yaml")
+    )
+    selected = parsed_config.r04_selection
+    assert type(selected) is config_module.RiskR04Selection
+    assert selected.implementation == "trusted.rules:CombinedR04"
+    assert (selected.implementation_version, selected.claim_contract_version,
+            selected.observation_contract_version) == (1, 2, 2)
+    assert forbidden == []
 
 
 @pytest.mark.parametrize("field,value", [
@@ -136,21 +177,52 @@ def claimed_v2():
     return config_module.RiskR04Selection("trusted.rules:CombinedR04", 1, 2, 2)
 
 
-def test_manually_constructed_v2_config_cannot_start(monkeypatch, no_risk_or_plugin_import):
+def test_an_allowlisted_selection_passes_without_importing_the_plugin(parsed, no_risk_or_plugin_import):
+    assert host_module._require_supported_r04(parsed) is None
+
+
+@pytest.mark.parametrize("config", [
+    SimpleNamespace(r04_selection=claimed_v2()),                            # no trusted list
+    SimpleNamespace(r04_selection=claimed_v2(), trusted_rules={}),
+    SimpleNamespace(r04_selection=claimed_v2(),
+                    trusted_rules={"trusted.rules:CombinedR04": 2}),        # version drift
+    SimpleNamespace(r04_selection=claimed_v2(),
+                    trusted_rules={"trusted.rules:Other": 1}),              # not listed
+    SimpleNamespace(r04_selection=claimed_v2(), trusted_rules=[("x", 1)]),  # not a dict
+    SimpleNamespace(r04_selection={"implementation": "trusted.rules:CombinedR04",
+                                   "implementation_version": 1}),           # forged shape
+    SimpleNamespace(r04_selection=selection()),                             # a plain dict claim
+])
+def test_a_forged_or_unlisted_selection_is_refused_before_any_resource(
+    config, no_risk_or_plugin_import,
+):
+    with pytest.raises(host_module.RiskServiceStartError) as error:
+        host_module._require_supported_r04(config)
+    assert error.value.code in (
+        "RISK_SERVICE_R04_NOT_ALLOWED", "RISK_SERVICE_R04_SELECTION_INVALID")
+
+
+def test_a_manually_constructed_v2_config_cannot_start_unlisted(monkeypatch, no_risk_or_plugin_import):
     monkeypatch.setattr(Path, "resolve", lambda self, *a, **k: self)
     monkeypatch.setattr(config_module, "read_key_file", lambda path, *, secret: path.name.encode())
-    parsed = config_module.parse_risk_service_config(document(), path=Path("/synthetic/service.yaml"))
-    fake_host = SimpleNamespace(config=replace(parsed, r04_selection=claimed_v2()))
+    parsed_config = config_module.parse_risk_service_config(
+        document(), path=Path("/synthetic/service.yaml")
+    )
+    fake_host = SimpleNamespace(config=replace(parsed_config, r04_selection=claimed_v2()))
     with pytest.raises(host_module.RiskServiceStartError) as error:
         host_module.RiskServiceHost.start(fake_host)
-    assert error.value.code == "RISK_SERVICE_R04_V2_UNAVAILABLE"
+    assert error.value.code == "RISK_SERVICE_R04_NOT_ALLOWED"
 
 
-def test_constructor_refuses_v2_before_any_initialization(monkeypatch, no_risk_or_plugin_import):
+def test_constructor_refuses_an_unlisted_selection_before_any_initialization(
+    monkeypatch, no_risk_or_plugin_import,
+):
     monkeypatch.setattr(Path, "resolve", lambda self, *a, **k: self)
     monkeypatch.setattr(config_module, "read_key_file", lambda path, *, secret: path.name.encode())
-    parsed = config_module.parse_risk_service_config(document(), path=Path("/synthetic/service.yaml"))
-    v2 = replace(parsed, r04_selection=claimed_v2())
+    parsed_config = config_module.parse_risk_service_config(
+        document(), path=Path("/synthetic/service.yaml")
+    )
+    v2 = replace(parsed_config, r04_selection=claimed_v2())
 
     def forbidden(*_args, **_kwargs):
         pytest.fail("constructor accessed a resource")
@@ -161,24 +233,26 @@ def test_constructor_refuses_v2_before_any_initialization(monkeypatch, no_risk_o
     fake_self = SimpleNamespace()
     with pytest.raises(host_module.RiskServiceStartError) as error:
         host_module.RiskServiceHost.__init__(fake_self, v2)
-    assert error.value.code == "RISK_SERVICE_R04_V2_UNAVAILABLE"
+    assert error.value.code == "RISK_SERVICE_R04_NOT_ALLOWED"
     assert vars(fake_self) == {}
     with pytest.raises(TypeError, match="RISK_SERVICE_CONFIG_REQUIRED"):
         host_module.RiskServiceHost.__init__(fake_self, SimpleNamespace(r04_selection=claimed_v2()))
     assert vars(fake_self) == {}
 
 
-def test_constructor_keeps_v1_initialization_order(monkeypatch):
+def test_constructor_keeps_the_initialization_order_for_an_allowed_selection(monkeypatch):
     monkeypatch.setattr(Path, "resolve", lambda self, *a, **k: self)
     monkeypatch.setattr(config_module, "read_key_file", lambda path, *, secret: path.name.encode())
-    parsed = config_module.parse_risk_service_config(document(), path=Path("/synthetic/service.yaml"))
+    parsed_config = config_module.parse_risk_service_config(
+        allowed_document(), path=Path("/synthetic/service.yaml")
+    )
     stack, event = object(), object()
     monkeypatch.setattr(host_module, "ExitStack", lambda: stack)
     monkeypatch.setattr(host_module, "threading", SimpleNamespace(Event=lambda: event))
     monkeypatch.setattr(host_module, "os", SimpleNamespace(getpid=lambda: 123))
     fake_self = SimpleNamespace()
-    host_module.RiskServiceHost.__init__(fake_self, parsed)
-    assert fake_self.config is parsed and fake_self._creator_pid == 123
+    host_module.RiskServiceHost.__init__(fake_self, parsed_config)
+    assert fake_self.config is parsed_config and fake_self._creator_pid == 123
     assert fake_self._stack is stack and fake_self.stop_event is event
 
 
@@ -192,34 +266,38 @@ def test_constructor_keeps_v1_initialization_order(monkeypatch):
     ("_construct_risk_raw_runtime", (lambda: pytest.fail("factory called"),)),
     ("_reconnect_observer", ()), ("_start_strategy_financial", ()), ("_start_market", ()),
 ])
-def test_host_entry_points_refuse_v2_before_accessing_host_or_resources(method, args, no_risk_or_plugin_import):
+def test_host_entry_points_refuse_an_unlisted_selection(method, args, no_risk_or_plugin_import):
     # Unbound methods run against a fake object with no lifecycle methods or resources.
     fake_host = SimpleNamespace(config=SimpleNamespace(r04_selection=claimed_v2()))
     with pytest.raises(host_module.RiskServiceStartError) as error:
         getattr(host_module.RiskServiceHost, method)(fake_host, *args)
-    assert error.value.code == "RISK_SERVICE_R04_V2_UNAVAILABLE"
+    assert error.value.code == "RISK_SERVICE_R04_NOT_ALLOWED"
 
 
 @pytest.mark.parametrize("function,args", [
     ("service_config_document", ()), ("_gateway_client_config", ("mount",)),
     ("_control_client_config", ([],)), ("build_authority", ()),
 ])
-def test_config_factories_refuse_v2_before_imports(function, args, no_risk_or_plugin_import):
+def test_config_factories_refuse_an_unlisted_selection(function, args, no_risk_or_plugin_import):
     config = SimpleNamespace(r04_selection=claimed_v2())
     with pytest.raises(host_module.RiskServiceStartError) as error:
         getattr(host_module, function)(config, *args)
-    assert error.value.code == "RISK_SERVICE_R04_V2_UNAVAILABLE"
+    assert error.value.code == "RISK_SERVICE_R04_NOT_ALLOWED"
 
 
-def test_bootstrap_refuses_before_risk_import_or_policy_read(monkeypatch, no_risk_or_plugin_import):
+def test_bootstrap_refuses_before_policy_read_when_the_selection_is_unlisted(
+    monkeypatch, no_risk_or_plugin_import,
+):
     monkeypatch.setattr(host_module, "read_policy_files", lambda *a: pytest.fail("policy read"))
     with pytest.raises(host_module.RiskServiceStartError) as error:
         host_module.bootstrap_policy(None, None, SimpleNamespace(r04_selection=claimed_v2()), None)
-    assert error.value.code == "RISK_SERVICE_R04_V2_UNAVAILABLE"
+    assert error.value.code == "RISK_SERVICE_R04_NOT_ALLOWED"
 
 
 @pytest.mark.parametrize("command", ["_command_run", "_command_status", "_command_validate_policy"])
-def test_cli_refuses_v2_before_host_policy_or_resource_calls(command, monkeypatch, capsys, no_risk_or_plugin_import):
+def test_cli_refuses_an_unlisted_selection_before_host_calls(
+    command, monkeypatch, capsys, no_risk_or_plugin_import,
+):
     monkeypatch.setattr(host_module, "load_risk_service_config",
                         lambda _: SimpleNamespace(r04_selection=claimed_v2()))
     monkeypatch.setattr(host_module, "RiskServiceHost", lambda *a, **k: pytest.fail("host created"))
@@ -227,16 +305,119 @@ def test_cli_refuses_v2_before_host_policy_or_resource_calls(command, monkeypatc
     result = getattr(host_module, command)(SimpleNamespace(config="synthetic", policy="synthetic"))
     captured = capsys.readouterr()
     assert result == 2
-    assert "RISK_SERVICE_R04_V2_UNAVAILABLE" in (captured.out + captured.err)
+    assert "RISK_SERVICE_R04_NOT_ALLOWED" in (captured.out + captured.err)
     if command != "_command_run":
-        assert json.loads(captured.out)["code"] == "RISK_SERVICE_R04_V2_UNAVAILABLE"
+        assert json.loads(captured.out)["code"] == "RISK_SERVICE_R04_NOT_ALLOWED"
 
 
 def test_absent_selection_preserves_v1_host_gate():
     assert host_module._require_supported_r04(SimpleNamespace(r04_selection=None)) is None
 
 
-def test_validate_policy_does_not_claim_v2_is_supported_without_config(monkeypatch, capsys):
+# ----------------------------------------------------------- artifact construction
+
+MODULE = "trusted.rules"
+CLASS = "CombinedR04"
+
+
+def plugin_module(rule_class):
+    from bt_api_risk.pretrade.r04_v2_observation_contract import BuiltinR04CombinedV2
+
+    module = ModuleType(MODULE)
+    module.CombinedR04 = rule_class if rule_class is not None else BuiltinR04CombinedV2
+    package = ModuleType("trusted")
+    package.__path__ = []
+    module.__dict__["__path__"] = []
+    return {"trusted": package, MODULE: module}
+
+
+@pytest.fixture
+def plugin(monkeypatch):
+    def install(rule_class):
+        for name, module in plugin_module(rule_class).items():
+            monkeypatch.setitem(sys.modules, name, module)
+
+    return install
+
+
+def config_with(**changes):
+    base = SimpleNamespace(
+        r04_selection=claimed_v2(),
+        trusted_rules={"trusted.rules:CombinedR04": 1},
+    )
+    for name, value in changes.items():
+        setattr(base, name, value)
+    return base
+
+
+def test_artifact_mapping_is_exactly_the_selected_implementation(plugin):
+    from bt_api_risk.pretrade.r04_v2_observation_contract import BuiltinR04CombinedV2
+    from bt_api_risk.pretrade.r04_v2_registry_candidate import R04ArtifactBinding
+
+    plugin(BuiltinR04CombinedV2)
+    artifacts = host_module._r04_artifacts(config_with())
+    assert list(artifacts) == ["trusted.rules:CombinedR04"]
+    artifact = artifacts["trusted.rules:CombinedR04"]
+    assert type(artifact) is R04ArtifactBinding
+    assert (
+        artifact.implementation, artifact.implementation_version,
+        artifact.claim_contract_version, artifact.observation_contract_version,
+        artifact.rule_class, artifact.artifact_ref,
+    ) == ("trusted.rules:CombinedR04", 1, 2, 2, BuiltinR04CombinedV2,
+          "trusted.rules:CombinedR04")
+
+
+def test_absent_selection_builds_no_artifact_and_never_imports(no_risk_or_plugin_import):
+    assert host_module._r04_artifacts(SimpleNamespace(r04_selection=None)) is None
+
+
+def test_a_class_with_one_runner_only_is_refused(plugin):
+    from bt_api_risk.pretrade.r04_v2_contract import R04RuleV2
+
+    class ClaimOnly(R04RuleV2):
+        implementation_version = 1
+        result_contract_version = 2
+
+        def evaluate(self, context):
+            raise NotImplementedError
+
+    plugin(ClaimOnly)
+    with pytest.raises(host_module.RiskServiceStartError) as error:
+        host_module._r04_artifacts(config_with())
+    assert error.value.code == "RISK_SERVICE_R04_UNAVAILABLE"
+
+
+@pytest.mark.parametrize("rule_class", [None, object, 42, "CombinedR04"])
+def test_a_non_class_or_bare_object_is_refused(plugin, rule_class):
+    plugin(rule_class)
+    if rule_class is None:
+        return  # the module provides a valid class in this case
+    with pytest.raises(host_module.RiskServiceStartError) as error:
+        host_module._r04_artifacts(config_with())
+    assert error.value.code == "RISK_SERVICE_R04_UNAVAILABLE"
+
+
+def test_an_unimportable_module_is_refused():
+    # The selected plugin module does not exist; only that import is attempted
+    # (the risk package itself is imported by this path).
+    with pytest.raises(host_module.RiskServiceStartError) as error:
+        host_module._r04_artifacts(config_with())
+    assert error.value.code == "RISK_SERVICE_R04_UNAVAILABLE"
+
+
+def test_versions_and_contract_drift_are_left_to_composition(plugin, parsed):
+    from bt_api_risk.pretrade.r04_v2_observation_contract import BuiltinR04CombinedV2
+
+    plugin(BuiltinR04CombinedV2)
+    # The host records the selection's declared version; compose_r04_v2 then
+    # re-checks it against the class declarations and the policy binding.
+    artifacts = host_module._r04_artifacts(
+        replace(parsed, trusted_rules={"trusted.rules:CombinedR04": 1})
+    )
+    assert artifacts["trusted.rules:CombinedR04"].implementation_version == 1
+
+
+def test_validate_policy_does_not_claim_the_rule_set_is_installed(monkeypatch, capsys):
     package = ModuleType("bt_api_risk")
     package.__path__ = []
     pretrade = ModuleType("bt_api_risk.pretrade")

@@ -51,6 +51,7 @@ from bt_api_base.risk_service_protocol import (
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 
 from bt_api_py.risk_service_config import (
+    RiskR04Selection,
     RiskServiceConfig,
     RiskServiceConfigError,
     ensure_private_directory,
@@ -176,9 +177,79 @@ def _fail(code: str) -> None:
 
 
 def _require_supported_r04(config: RiskServiceConfig) -> None:
-    """R-04 v2 must not acquire resources until both engine paths are wired."""
-    if getattr(config, "r04_selection", None) is not None:
-        _fail("RISK_SERVICE_R04_V2_UNAVAILABLE")
+    """Validate a v2 R-04 selection statically, before any resource is acquired.
+
+    Decision B-2: an explicit ``rules.r04`` selection may name one v2 rule set.
+    The selection must be an exact :class:`RiskR04Selection` whose implementation
+    is listed in the same trusted ``rules.trusted_implementations`` allowlist with
+    exactly its declared implementation version; both contract versions are
+    already pinned to the frozen ones by the config parser. This function never
+    imports the plugin or touches the host, so a forged or unlisted selection is
+    refused with a finite code and no side effect. The class itself is verified
+    when the artifact mapping is built (:func:`_r04_artifacts`).
+    """
+    selection = getattr(config, "r04_selection", None)
+    if selection is None:
+        return
+    if type(selection) is not RiskR04Selection:
+        _fail("RISK_SERVICE_R04_SELECTION_INVALID")
+    trusted = getattr(config, "trusted_rules", None)
+    if not isinstance(trusted, Mapping):
+        _fail("RISK_SERVICE_R04_NOT_ALLOWED")
+    expected = None
+    for name, version in trusted.items():
+        if type(name) is not str:
+            _fail("RISK_SERVICE_R04_NOT_ALLOWED")
+        if name == selection.implementation:
+            expected = version
+    if type(expected) is not int or expected != selection.implementation_version:
+        _fail("RISK_SERVICE_R04_NOT_ALLOWED")
+
+
+def _r04_artifacts(config: RiskServiceConfig) -> dict[str, Any] | None:
+    """Build the host's exact v2 artifact mapping for the selected rule set.
+
+    This is the only place the host imports the selected implementation: the
+    name comes from trusted service configuration, is re-checked against the
+    allowlist, and must resolve to an exact class that subclasses both frozen
+    runner bases. Declared versions and the two contract versions are checked
+    again by ``compose_r04_v2`` at activation, and the artifact reference is a
+    consistency claim, not a signature. Any failure is a finite refusal.
+    """
+    selection = getattr(config, "r04_selection", None)
+    if selection is None:
+        return None
+    _require_supported_r04(config)
+    from bt_api_risk.pretrade.r04_v2_contract import R04RuleV2
+    from bt_api_risk.pretrade.r04_v2_observation_contract import R04ObservationRuleV2
+    from bt_api_risk.pretrade.r04_v2_registry_candidate import R04ArtifactBinding
+
+    module_name, _, class_name = selection.implementation.partition(":")
+    try:
+        module = __import__(module_name, fromlist=[class_name])
+        rule_class = getattr(module, class_name)
+    except Exception:
+        _fail("RISK_SERVICE_R04_UNAVAILABLE")
+    if (
+        type(rule_class) is not type
+        or R04RuleV2 not in rule_class.__mro__
+        or R04ObservationRuleV2 not in rule_class.__mro__
+    ):
+        # A class must implement both runners; one contract alone cannot serve
+        # the claim and observation paths with one instance.
+        _fail("RISK_SERVICE_R04_UNAVAILABLE")
+    try:
+        binding = R04ArtifactBinding(
+            selection.implementation,
+            selection.implementation_version,
+            selection.claim_contract_version,
+            selection.observation_contract_version,
+            rule_class,
+            selection.implementation,
+        )
+    except Exception:
+        _fail("RISK_SERVICE_R04_UNAVAILABLE")
+    return {selection.implementation: binding}
 
 
 def _finite_poll_value(value: Any) -> bool:
@@ -678,6 +749,10 @@ def bootstrap_policy(engine: Any, ledger: Any, config: RiskServiceConfig, regist
     if policy.route != config.route or policy.account_scope != config.account_scope:
         _fail("RISK_SERVICE_POLICY_ACCOUNT_MISMATCH")
     summary = engine.status_summary()
+    if summary["policy_load_error"] == "RULE_R04_BINDING_UNAVAILABLE":
+        # A stored v2 policy binds a rule this host did not select or cannot
+        # compose; the service must not run without the policy it was given.
+        _fail("RISK_SERVICE_R04_UNAVAILABLE")
     if summary["policy_digest"] == policy.digest:
         return "unchanged"
     with ledger.transaction() as txn:
@@ -711,7 +786,11 @@ def bootstrap_policy(engine: Any, ledger: Any, config: RiskServiceConfig, regist
             "first policy version from the service policy file" if row is None else None,
             exchange_rules_text=rules_text,
         )
-    except RiskAdminError:
+    except RiskAdminError as error:
+        if getattr(error, "code", None) == "policy_r04_binding_unavailable":
+            # The file binds an R-04 implementation that the selection did not
+            # provide (or whose version/contract does not match): refused whole.
+            _fail("RISK_SERVICE_R04_UNAVAILABLE")
         _fail("RISK_SERVICE_POLICY_PUBLISH_REFUSED")
     return "bootstrapped" if row is None else "tightened"
 
@@ -1373,7 +1452,11 @@ class RiskServiceHost:
             self.policy_store = PolicyStore(self.ledger)
             self._check_storage_acquisition_ready()
             try:
-                self.rules = RuleRegistry(dict(config.trusted_rules))
+                self.rules = RuleRegistry(
+                    dict(config.trusted_rules), r04_artifacts=_r04_artifacts(config)
+                )
+            except RiskServiceStartError:
+                raise
             except Exception:
                 _fail("RISK_SERVICE_RULES_INVALID")
             self._check_storage_acquisition_ready()

@@ -39,18 +39,19 @@ PRINCIPALS = {
                                 cancel_instrument_refs=frozenset({"SHFE:rb"})),
 }
 
-# The product is v2-policy-only and v2 activation is blocked pending the
-# iteration-64 R-04/R-11 decision: ``publish_policy`` validates a v1 document
-# through the v2 validator (``policy_schema_unsupported``) and ``activate``
-# raises ``RULE_R04_V2_UNAVAILABLE`` even for a v2 document.  Tests that need a
-# published policy therefore cannot build their fixture yet.  They stay
-# collected and strict-xfailed so an approved activation (or a rewritten v2
-# fixture) surfaces as XPASS instead of failing silently.
+# The product is v2-policy-only: ``publish_policy`` validates every document
+# through the v2 validator, and this fixture still publishes a v1 document, so
+# it is refused with ``policy_schema_unsupported`` before any scenario runs.
+# (Decision B-2 connected the R-04/R-11 v2 activation; this marker is about the
+# v1 fixture below, not about a missing activation path.) Tests that need a
+# published policy therefore cannot build their fixture yet. They stay
+# collected and strict-xfailed so a rewritten v2 fixture surfaces as XPASS
+# instead of failing silently.
 V2_POLICY_BLOCKED = pytest.mark.xfail(
     strict=True,
-    reason="RULE_R04_V2_UNAVAILABLE: v2 policy activation is blocked pending the "
-           "iteration-64 R-04/R-11 decision; this fixture still publishes a v1 "
-           "document, which the v2-only validator refuses (policy_schema_unsupported)",
+    reason="policy_schema_unsupported: this fixture still publishes a v1 "
+           "document, which the v2-only validator refuses; the R-04/R-11 v2 "
+           "activation path itself is connected (decision B-2)",
 )
 
 
