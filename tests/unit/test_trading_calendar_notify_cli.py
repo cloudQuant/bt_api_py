@@ -19,7 +19,17 @@ from tests.unit.test_trading_calendar_observation_run import env_without_network
 
 
 @pytest.fixture
-def setup_store(tmp_path):
+def setup_store(tmp_path, monkeypatch):
+    # Candidate creation runs in a subprocess with SMALL_MOCK installed. The
+    # notification reader must re-evaluate it with the identical generator.
+    from bt_api_py import trading_calendar_mock as mock
+
+    fixture_code, marker, _ = SMALL_MOCK.partition("mock.build = tiny_mock")
+    assert marker
+    namespace = {}
+    exec(fixture_code, namespace)  # noqa: S102 - trusted test fixture source
+    monkeypatch.setattr(mock, "build", namespace["tiny_mock"])
+
     def create(mode):
         root, config = settings(tmp_path, mode)
         env = env_without_network(tmp_path, SMALL_MOCK)
@@ -673,7 +683,7 @@ print(json.dumps(result))
             **kwargs,
             _runner=lambda *_: (
                 "CHILD_OK",
-                {"status": "OK", "rows": [["交易时间", "日盘 09:00-10:00"]]},
+                {"status": "OK", "rows": [["交易时间", "日盘 09:00-10:30"]]},
             ),
         )
 
@@ -682,7 +692,7 @@ print(json.dumps(result))
         observation_id="9" * 32,
         run_id="a" * 32,
         venue="SHFE",
-        contract="RB2702",
+        contract="RB2701",
         requested_date=date(2026, 11, 13),
         timeout=1,
         filesystem="TRUSTED_LOCAL_POSIX",
@@ -702,7 +712,7 @@ print(json.dumps(result))
             "difference"
         ]
     assert difference["schema"] == "bt_api.calendar-full-declaration-difference/2"
-    assert not any(difference["changes"].values())
+    assert difference["changes"]["trading_hours"]
     assert (
         difference["simulation"]["before"]["semantic_sha256"]
         != difference["simulation"]["after"]["semantic_sha256"]
