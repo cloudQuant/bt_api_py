@@ -705,8 +705,10 @@ def _clock_settings(value):
     from bt_api_py.clock_verification import ClockVerifier
     from bt_api_py.gateway_server_clock_refresh import GatewayServerClockRefreshSettings
 
+    if type(value) is not dict:
+        _invalid()
     value = _mapping(value, ("servers", "max_error_bound_ms", "max_sample_validity_seconds",
-                             "refresh_interval_seconds"))
+                             "refresh_interval_seconds") + (("history_capacity",) if "history_capacity" in value else ()))
     servers = value["servers"]
     if (type(servers) is not list or not servers or len(servers) > 8
             or len(set(servers)) != len(servers)):
@@ -718,8 +720,23 @@ def _clock_settings(value):
     refresh = GatewayServerClockRefreshSettings(
         max_error_bound_ns=int(error_ms * 1_000_000),
         max_sample_validity_seconds=value["max_sample_validity_seconds"],
-        refresh_interval_seconds=value["refresh_interval_seconds"])
+        refresh_interval_seconds=value["refresh_interval_seconds"],
+        history_capacity=value.get("history_capacity", 0))
     return (lambda: ClockVerifier(servers=servers)), frozenset(servers), refresh
+
+
+def _recovery_observation_settings(value, settings):
+    """Parse only explicit local observation settings; create no journal."""
+    from bt_api_py.gateway_recovery_observation import GatewayRecoveryObservationSettings
+
+    value = _mapping(value, (
+        "journal_path", "source_capacity", "page_limit", "max_events", "max_bytes",
+        "sqlite_timeout_seconds", "poll_interval_seconds", "owner_wait_seconds",
+        "close_timeout_seconds", "qualification_mode", "clock_max_interval_ns",
+    ))
+    return GatewayRecoveryObservationSettings(
+        **value, scope_ref=settings.account_scope, source_ref=settings.market_source_ref
+    )
 
 
 def _execution_subject_scopes(value):
@@ -754,7 +771,7 @@ def _load_resources(config, *, trading):
         raw = _protected_json(resource_path)
         # A trading bundle may add a "clock" section (trusted SNTP policy).
         optional = ({"clock", "controls", "strategy_ledger", "strategy_financial", "delegation", "execution_subject_scopes", "required_monitor",
-                     "account_observation"} if trading else set()) | {"calendars"}
+                     "account_observation", "recovery_observation"} if trading else set()) | {"calendars"}
         if type(raw) is not dict or not set(keys) <= set(raw) <= set(keys) | optional:
             _invalid()
         if type(raw["schema_version"]) is not int or raw["schema_version"] != 1:
@@ -875,6 +892,8 @@ def _load_resources(config, *, trading):
             return CtpMarketStream(queue, allow_zero_md_login_response=True, **options)
         if trading:
             clock = _clock_settings(raw.get("clock"))
+            recovery_observation = (_recovery_observation_settings(raw["recovery_observation"], settings)
+                                    if "recovery_observation" in raw else None)
             if market is not None and clock is None:
                 # Decision B qualifies every dispatch against a fresh quote and
                 # the Gateway's own verified clock; without one no order could
@@ -926,6 +945,7 @@ def _load_resources(config, *, trading):
                 account_read_settings=read_settings,
                 account_read_principals=read_principals,
                 calendar_settings=calendar_settings,
+                recovery_observation_settings=recovery_observation,
                 control_release_audit_enabled=release_audit is not None,
                 upgrade_control_release_audit=release_audit is True,
                 **drain_options,

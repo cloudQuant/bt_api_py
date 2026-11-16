@@ -32,9 +32,9 @@ expired coverage or inconsistent overlapping calibrations. Truncated history is
 usable only after omitted calibrations are provably expired or a recorded reset
 starts a new segment. The result is local to the process; SNTP remains unauthenticated.
 The trusted Python factory can persist these results through the explicit
-`local_clock_v1` recorder option described below. The operator loader and Monitor
-duration evaluation are not yet connected; qualification does not prove that a
-recovery condition held.
+`local_clock_v1` recorder option described below. The trading operator loader
+supports explicit recorder settings; Monitor duration evaluation is not yet
+connected. Qualification does not prove that a recovery condition held.
 
 Iteration 64 is in progress and not accepted. The SDK assembles an independent Risk service and authenticated Gateway clients; Risk owns pre-trade policy and its ledger, while providers supply source facts. Default self-trade protection currently refuses OPEN/CLOSE because complete source-bound active-order coverage is unavailable. Account and intraday coverage, financial facts, Execution parent/child write authority and cross-generation not-sent proof remain gaps. R-11 v2 parses scoped rule metadata but does not by itself prove venue facts or enable trading. Selected Risk never falls back to direct. Consult the Backtrader iteration-64 review for scoped source, simulation and wheel evidence.
 
@@ -580,10 +580,10 @@ durable capture-stop marker identifies the last committed sequence and leaves
 later coverage unknown; it does not claim the provider's remaining buffer was
 drained or that the source recovered.
 `binding.recovery_observation_status()` exposes finite local worker status;
-ready is not proof of network health. The default remains disabled. The normal
-operator configuration loader, calendar accumulation and Monitor
-transport/evaluator are not yet connected to this source-recording option;
-its local monotonic timestamps must not be sent as a cross-process clock.
+ready is not proof of network health. The default remains disabled. Calendar
+accumulation and Monitor transport/evaluator are not yet connected to this
+source-recording option; its local monotonic timestamps must not be sent as a
+cross-process clock.
 
 An explicitly enabled recorder may select `qualification_mode="local_clock_v1"`
 and an explicit positive `clock_max_interval_ns`. The default `disabled` mode
@@ -611,11 +611,46 @@ actual SAMPLE, UNAVAILABLE and STOPPED publications in bounded memory;
 restart has a new history epoch. An observed configuration change or recorder
 failure leaves history unavailable for that epoch, without changing the
 existing clock/dispatch behavior. Availability does not mean a sample is valid,
-and SNTP remains unauthenticated. This history has no disk, wire or operator
-configuration interface. The local qualifier can derive UTC endpoint bounds
+and SNTP remains unauthenticated. This history has no disk or wire interface.
+The local qualifier can derive UTC endpoint bounds
 for eligible past intervals, and the explicit recorder option above persists
 those results. This is not cross-process monotonic comparison, a continuous
 market-health assertion, or a Monitor duration-rule implementation.
+
+The protected JSON bundle for `ctp-simnow-trading` can explicitly add a
+`recovery_observation` object. All fields shown below are required when the
+section exists; `null`, unknown fields and invalid numeric types are rejected.
+The loader derives `scope_ref` and `source_ref` from the existing trading
+settings, so they must not be repeated in this section. The path must be
+absolute and isolated from the other service databases. These values are an
+illustrative configuration, not deployment sizing advice:
+
+```json
+{
+  "recovery_observation": {
+    "journal_path": "/operator-owned/recovery-observations.sqlite",
+    "source_capacity": 64,
+    "page_limit": 32,
+    "max_events": 100000,
+    "max_bytes": 67108864,
+    "sqlite_timeout_seconds": 1,
+    "poll_interval_seconds": 1,
+    "owner_wait_seconds": 1,
+    "close_timeout_seconds": 3,
+    "qualification_mode": "local_clock_v1",
+    "clock_max_interval_ns": 60000000000
+  }
+}
+```
+
+For local clock qualification, the existing `clock` object can also explicitly
+set `history_capacity` to 2–4096; omission or 0 disables history. With unavailable
+history, v2 records remain UNKNOWN rather than obtaining invented UTC values.
+To record only v1 observations, use `qualification_mode: "disabled"` and
+`clock_max_interval_ns: null`. Omitting the entire recovery section creates no
+recorder. The `ctp-local-readonly` profile rejects this section. Existing market,
+clock, storage-isolation and journal compatibility requirements still apply;
+selecting the trading profile does not itself enable native trading writes.
 
 The session's account reader owns the sole TD client. Direct orders and daily
 settlement borrow that client; the MD provider is lazy and shared across symbols.
