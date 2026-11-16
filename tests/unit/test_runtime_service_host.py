@@ -159,9 +159,11 @@ def test_blocked_monitor_never_blocks_producer_and_close_is_retryable(tmp_path, 
         with pytest.raises(RuntimeError, match='telemetry_owner'):
             host.close()
         assert host.state == 'close_uncertain' and monitor.closed == 0 and store.available
+        assert host.cleanup_components == ('telemetry_owner',)
         monitor.release.set()
         host.close()
         assert host.state == 'closed' and monitor.closed == 1 and store.relay is None
+        assert host.cleanup_components == ()
     finally:
         monitor.release.set()
         if host.state != 'closed':
@@ -212,12 +214,14 @@ def test_blocked_dispatch_keeps_home_lock_until_retry(tmp_path, monkeypatch):
         assert entered.wait(2)
         with pytest.raises(RuntimeError, match='http_dispatch'):
             host.close()
+        assert 'http_dispatch' in host.cleanup_components
         lock = SingleInstanceLock(str(Path(host.config.home) / 'runtime.lock'))
         with pytest.raises(Exception, match='single_instance_lock_held'):
             lock.acquire()
         release.set()
         thread.join(2)
         host.close()
+        assert host.cleanup_components == ()
         lock.acquire()
         lock.release()
     finally:
@@ -251,6 +255,37 @@ def test_partial_bridge_start_cleanup_uncertainty_is_retryable(tmp_path, monkeyp
         store.close()
 
 
+def test_cleanup_components_only_describe_latest_attempt(tmp_path, monkeypatch):
+    host, store, _, gateway, monitor = setup_host(tmp_path, monkeypatch, gateway=True, monitor=True)
+    try:
+        host.start()
+        def fail_monitor():
+            monitor.closed += 1
+            if monitor.closed == 1:
+                raise RuntimeError('private monitor detail')
+            monitor.state = 'closed'
+
+        def fail_gateway():
+            gateway.closed += 1
+            if gateway.closed <= 2:
+                raise RuntimeError('private gateway detail')
+            gateway.state = 'closed'
+
+        monitor.close, gateway.close = fail_monitor, fail_gateway
+        with pytest.raises(RuntimeError):
+            host.close()
+        assert host.cleanup_components == ('monitor', 'gateway')
+        with pytest.raises(RuntimeError):
+            host.close()
+        assert host.cleanup_components == ('gateway',)
+        host.close()
+        assert host.cleanup_components == () and host.state == 'closed'
+    finally:
+        if host.state != 'closed':
+            host.close()
+        store.close()
+
+
 def test_http_socket_close_failure_retries_same_listener(tmp_path, monkeypatch):
     host, store, _, _, _ = setup_host(tmp_path, monkeypatch)
     try:
@@ -271,6 +306,7 @@ def test_http_socket_close_failure_retries_same_listener(tmp_path, monkeypatch):
         with pytest.raises(RuntimeError, match='http_listener'):
             host.close()
         assert host.state == 'close_uncertain'
+        assert host.cleanup_components == ('http_listener',)
         assert host._http is http and host._http_listener_thread is listener
         assert type(host._http_stop_error) is ControlTransportError
         assert host._http_stop_error.code == 'listener_close_failed'

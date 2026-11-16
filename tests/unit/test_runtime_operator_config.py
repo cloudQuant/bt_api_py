@@ -152,6 +152,7 @@ def test_uncertain_close_waits_for_another_signal(capsys):
     class Host:
         state = 'running'
         calls = 0
+        cleanup_components = ('gateway',)
         def close(self):
             self.calls += 1
             if self.calls == 1:
@@ -167,10 +168,28 @@ def test_uncertain_close_waits_for_another_signal(capsys):
             break
         threading.Event().wait(.005)
     assert host.calls == 1 and thread.is_alive()
-    assert 'private error' not in capsys.readouterr().err
+    output = capsys.readouterr().err
+    assert 'private error' not in output
+    assert 'runtime_cleanup_components=gateway' in output
     event.set()
     thread.join(2)
     assert not thread.is_alive() and host.state == 'closed' and host.calls == 2
+
+
+def test_cleanup_diagnostic_filters_untrusted_values(capsys):
+    class Host:
+        cleanup_components = ('monitor', 'private-token', 'gateway', object())
+
+    cli._emit_cleanup_uncertain(Host())
+    assert capsys.readouterr().err.splitlines() == [
+        'runtime_cleanup_uncertain; signal to retry',
+        'runtime_cleanup_components=monitor,gateway',
+    ]
+    Host.cleanup_components = ('private-path',)
+    cli._emit_cleanup_uncertain(Host())
+    assert capsys.readouterr().err.splitlines()[-1] == 'runtime_cleanup_components=unknown'
+    cli._emit_cleanup_uncertain(event_store=True)
+    assert capsys.readouterr().err.splitlines()[-1] == 'runtime_cleanup_components=event_store'
 
 
 @pytest.mark.parametrize('fail_before_host', [True, False])
@@ -234,3 +253,4 @@ def test_event_store_close_failure_waits_for_signal_without_reclosing_host(
     output = capsys.readouterr()
     assert 'private-store-path' not in output.err + output.out
     assert 'private-construction-path' not in output.err + output.out
+    assert 'runtime_cleanup_components=event_store' in output.err

@@ -18,6 +18,12 @@ from bt_api_py.runtime_operator_config import build_bridges, load_authenticator,
 from bt_api_py.runtime_service_host import RuntimeServiceHost
 
 
+_CLEANUP_COMPONENTS = frozenset({
+    'http_dispatch', 'http_listener', 'telemetry_owner', 'service', 'database',
+    'supervisor', 'relay', 'monitor', 'gateway',
+})
+
+
 def _emit(message, *, error=False):
     print(message, file=sys.stderr if error else sys.stdout, flush=True)
 
@@ -29,6 +35,23 @@ def _emit_start_failure(error):
         _emit(f'runtime_start_code={error.code}', error=True)
 
 
+def _emit_cleanup_uncertain(host=None, *, event_store=False):
+    _emit('runtime_cleanup_uncertain; signal to retry', error=True)
+    components = ()
+    if event_store:
+        components = ('event_store',)
+    elif host is not None:
+        try:
+            cached = host.cleanup_components
+            if type(cached) is tuple:
+                components = tuple(item for item in cached
+                                   if type(item) is str and item in _CLEANUP_COMPONENTS)
+        except Exception:
+            pass
+    _emit('runtime_cleanup_components=' + (','.join(components) if components else 'unknown'),
+          error=True)
+
+
 def _wait_close(host, requested):
     while True:
         requested.wait()
@@ -36,11 +59,11 @@ def _wait_close(host, requested):
         try:
             host.close()
         except Exception:
-            _emit('runtime_cleanup_uncertain; signal to retry', error=True)
+            _emit_cleanup_uncertain(host)
             continue
         if host.state == 'closed':
             return
-        _emit('runtime_cleanup_uncertain; signal to retry', error=True)
+        _emit_cleanup_uncertain(host)
 
 
 def _close_store(store, requested):
@@ -51,9 +74,9 @@ def _close_store(store, requested):
             if store.close_confirmed is True:
                 return
         except Exception:
-            _emit('runtime_cleanup_uncertain; signal to retry', error=True)
+            _emit_cleanup_uncertain(event_store=True)
         else:
-            _emit('runtime_cleanup_uncertain; signal to retry', error=True)
+            _emit_cleanup_uncertain(event_store=True)
         requested.wait()
         requested.clear()
 
@@ -85,13 +108,13 @@ def _run(config):
                 try:
                     host.close()
                 except Exception:
-                    _emit('runtime_cleanup_uncertain; signal to retry', error=True)
+                    _emit_cleanup_uncertain(host)
                     _wait_close(host, requested)
                     return 1
                 else:
                     if host.state == 'closed':
                         return 1
-            _emit('runtime_cleanup_uncertain; signal to retry', error=True)
+            _emit_cleanup_uncertain(host)
         if not startup_failed:
             address, port = host.bound_address
             _emit(f'runtime_control_listening {address} {port}')
@@ -103,11 +126,11 @@ def _run(config):
             try:
                 host.close()
             except Exception:
-                _emit('runtime_cleanup_uncertain; signal to retry', error=True)
+                _emit_cleanup_uncertain(host)
                 _wait_close(host, requested)
             else:
                 if host.state != 'closed':
-                    _emit('runtime_cleanup_uncertain; signal to retry', error=True)
+                    _emit_cleanup_uncertain(host)
                     _wait_close(host, requested)
         return 1
     finally:

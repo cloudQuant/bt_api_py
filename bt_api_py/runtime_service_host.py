@@ -157,10 +157,16 @@ class RuntimeServiceHost:
         self._http_stop_error = None
         self._http_listener_thread = None
         self._poll_error = None
+        self._cleanup_components = ()
 
     @property
     def state(self):
         return self._state
+
+    @property
+    def cleanup_components(self):
+        """Fixed categories from the latest close attempt, with no exception details."""
+        return self._cleanup_components
 
     @property
     def telemetry_status(self):
@@ -242,6 +248,7 @@ class RuntimeServiceHost:
         with self._lock:
             if self._state == 'closed':
                 return
+            self._cleanup_components = ()
             self._state = 'closing'
             errors = []
             if self._gate is not None and not self._gate.close_gate(self._close_timeout):
@@ -316,6 +323,9 @@ class RuntimeServiceHost:
                 except Exception:
                     errors.append('gateway')
             if errors:
+                self._cleanup_components = tuple(
+                    {'_database': 'database', '_supervisor': 'supervisor'}.get(error, error)
+                    for error in errors)
                 self._state = 'close_uncertain'
                 raise RuntimeError('RUNTIME_HOST_CLEANUP_UNCERTAIN: ' + ', '.join(errors))
             self._state = 'closed'
