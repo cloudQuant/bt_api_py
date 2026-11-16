@@ -234,14 +234,25 @@ def _covered_source(source: Any) -> tuple[tuple[DeclaredCoverage, ...], bytes]:
         or _sha(source.binding_bytes) != source.binding_sha256
     ):
         raise ValueError("artifact digest mismatch")
+    schema = manifest.get("schema")
+    valid_manifest = (
+        schema == "bt_api.calendar-simulation-coverage/1"
+        and set(manifest) == {"schema", "snapshot_sha256", "coverage"}
+    ) or (
+        schema == "bt_api.calendar-simulation-coverage/2"
+        and set(manifest) == {"schema", "snapshot_sha256", "coverage", "data_origin"}
+        and type(manifest["data_origin"]) is str
+        and manifest["data_origin"] == "SYNTHETIC_MOCK"
+    )
     if (
-        set(manifest) != {"schema", "snapshot_sha256", "coverage"}
-        or manifest["schema"] != "bt_api.calendar-simulation-coverage/1"
+        not valid_manifest
         or manifest["snapshot_sha256"] != source.content_sha256
         or type(manifest["coverage"]) is not list
         or not manifest["coverage"]
     ):
         raise ValueError("invalid manifest")
+    if schema == "bt_api.calendar-simulation-coverage/2" and source.simulation_provenance is not None:
+        raise ValueError("synthetic seed and mixed provenance conflict")
     if (
         set(binding) != {"schema", "snapshot_sha256", "manifest_sha256"}
         or binding["schema"] != "bt_api.calendar-simulation-binding/1"
@@ -305,6 +316,17 @@ def _covered_source(source: Any) -> tuple[tuple[DeclaredCoverage, ...], bytes]:
         coverage.append(DeclaredCoverage(row["venue"], start, end))
         last_venue = row["venue"]
     return tuple(coverage), content_bytes
+
+
+def _validated_snapshot_origin(source: StoreSnapshot, provenance: Any) -> str:
+    """Classify only declarations in an already validated, digest-bound snapshot."""
+    manifest = _object_bytes(source.coverage_manifest_bytes)
+    synthetic = manifest.get("schema") == "bt_api.calendar-simulation-coverage/2"
+    if synthetic and provenance is not None:
+        raise ValueError("synthetic seed and mixed provenance conflict")
+    if synthetic:
+        return "SYNTHETIC_MOCK"
+    return "AKSHARE_MOCK" if provenance is not None else "UNSPECIFIED"
 
 
 def _mock_utc(value: Any) -> datetime:
@@ -1078,7 +1100,7 @@ class SimulationCalendarBinding:
                 binding_sha256=source.binding_sha256,
                 version_sha256=source.version_sha256,
                 declared_coverage=coverage,
-                data_origin="AKSHARE_MOCK" if provenance is not None else "UNSPECIFIED",
+                data_origin=_validated_snapshot_origin(source, provenance),
             )
 
     def _load(self) -> tuple[Any, StoreSnapshot, tuple[DeclaredCoverage, ...], Any, dict]:
@@ -1187,7 +1209,7 @@ class SimulationCalendarBinding:
                 declared_coverage=coverage,
                 binding_reason="GATED_DAY_SWITCH",
                 load_error=None,
-                data_origin="AKSHARE_MOCK" if provenance is not None else "UNSPECIFIED",
+                data_origin=_validated_snapshot_origin(source, provenance),
             )
             self._revision += 1
             return ActivationResult("ACTIVATED", self._status)

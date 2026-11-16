@@ -217,7 +217,11 @@ class TradingCalendarStatusReader:
         except ImportError:
             return TradingCalendarCurrentQuery("UNKNOWN", "PROVIDER_UNAVAILABLE")
         try:
-            from bt_api_py.trading_calendar_binding import _canonical, _covered_source
+            from bt_api_py.trading_calendar_binding import (
+                _canonical,
+                _covered_source,
+                _validated_snapshot_origin,
+            )
 
             _bounded_content(stored.content)
             coverage, content_bytes = _covered_source(stored)
@@ -317,7 +321,7 @@ class TradingCalendarStatusReader:
                 stored.coverage_status,
                 source_ids=observed.source_ids,
                 source_classification=classification,
-                data_origin="AKSHARE_MOCK" if provenance is not None else "UNSPECIFIED",
+                data_origin=_validated_snapshot_origin(stored, provenance),
                 simulation_provenance=attribution,
             )
         except Exception:

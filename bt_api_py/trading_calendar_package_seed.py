@@ -47,7 +47,7 @@ MANIFEST_SCHEMA = "bt_api.calendar-package-seed.manifest/1"
 LAYER_SCHEMA = "bt_api.calendar-package-seed.layer/1"
 SEED_SCHEMA_VERSION = 1
 
-COVERAGE_MANIFEST_SCHEMA = "bt_api.calendar-simulation-coverage/1"
+COVERAGE_MANIFEST_SCHEMA = "bt_api.calendar-simulation-coverage/2"
 BINDING_SCHEMA = "bt_api.calendar-simulation-binding/1"
 COVERAGE_SEMANTICS = "DECLARED_INCLUSIVE"
 COVERAGE_STATUS = "DECLARED_UNVERIFIED"
@@ -817,6 +817,7 @@ def _coverage_artifacts(seed: PackageSeed, content_sha256: str) -> tuple[bytes, 
             "schema": COVERAGE_MANIFEST_SCHEMA,
             "snapshot_sha256": content_sha256,
             "coverage": _coverage_declarations(seed.coverage),
+            "data_origin": DATA_ORIGIN,
         }
     )
     manifest_sha256 = _sha(manifest)

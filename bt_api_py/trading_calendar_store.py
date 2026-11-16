@@ -95,6 +95,7 @@ _POLICY_EVENTS = (_EVENT_POLICY, _EVENT_POLICY_COVERED, _EVENT_POLICY_FULL, _EVE
 _COVERED_EVENTS = (_EVENT_COVERED, _EVENT_POLICY_COVERED, _EVENT_POLICY_FULL, _EVENT_INTERRUPTION)
 _TIMED_EVENTS = (_EVENT_TIMED, _EVENT_COVERED, *_POLICY_EVENTS)
 _MANIFEST = "bt_api.calendar-simulation-coverage/1"
+_MANIFEST_ORIGIN = "bt_api.calendar-simulation-coverage/2"
 _BINDING = "bt_api.calendar-simulation-binding/1"
 _VENUE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z")
 _POINTER = "bt_api.calendar-store.current/1"
@@ -567,7 +568,12 @@ def _coverage_bundle(
     ):
         raise CalendarStoreError("invalid manifest or binding digest")
     manifest = _decode(manifest_bytes)
-    _fields(manifest, {"schema", "snapshot_sha256", "coverage"}, _MANIFEST)
+    if manifest.get("schema") == _MANIFEST_ORIGIN:
+        _fields(manifest, {"schema", "snapshot_sha256", "coverage", "data_origin"}, _MANIFEST_ORIGIN)
+        if manifest["data_origin"] != "SYNTHETIC_MOCK" or type(manifest["data_origin"]) is not str:
+            raise CalendarStoreError("unsupported simulation origin declaration")
+    else:
+        _fields(manifest, {"schema", "snapshot_sha256", "coverage"}, _MANIFEST)
     if (
         manifest["snapshot_sha256"] != _sha(content_bytes)
         or type(manifest["coverage"]) is not list
@@ -1610,6 +1616,8 @@ def _snapshot_bytes(content_bytes: bytes, *artifacts: Any, simulation_provenance
             "binding_sha256": artifacts[3],
         }
         if simulation_provenance is not None:
+            if manifest["schema"] == _MANIFEST_ORIGIN:
+                raise CalendarStoreError("synthetic seed and mixed provenance conflict")
             _simulation_provenance(content, simulation_provenance)
             value["schema"] = (
                 _SNAPSHOT_PARTIAL
@@ -1697,6 +1705,8 @@ def _decode_version(
         binding_bytes,
         snapshot["binding_sha256"],
     )
+    if mixed and snapshot["manifest"]["schema"] == _MANIFEST_ORIGIN:
+        raise CalendarStoreError("synthetic seed and mixed provenance conflict")
     return CalendarSnapshot(
         event["publication_id"],
         event["sequence"],

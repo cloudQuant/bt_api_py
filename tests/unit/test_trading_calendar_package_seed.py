@@ -297,6 +297,7 @@ def test_coverage_manifest_and_binding_are_canonical_declarations():
     assert manifest == {
         "schema": COVERAGE_MANIFEST_SCHEMA,
         "snapshot_sha256": staged.content_sha256,
+        "data_origin": "SYNTHETIC_MOCK",
         "coverage": [
             {
                 "venue": venue,

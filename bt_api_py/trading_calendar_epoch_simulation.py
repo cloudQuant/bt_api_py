@@ -22,6 +22,7 @@ from bt_api_py.trading_calendar_binding import (
     GateDecision,
     SimulationCalendarReadView,
     _load_simulation_snapshot,
+    _validated_snapshot_origin,
 )
 
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z", re.ASCII)
@@ -407,7 +408,7 @@ class SimulationCalendarEpochCoordinator:
             declared_coverage=coverage,
             binding_reason=reason,
             load_error=None,
-            data_origin="AKSHARE_MOCK" if provenance is not None else "UNSPECIFIED",
+            data_origin=_validated_snapshot_origin(source, provenance),
         )
         view = SimulationCalendarReadView(snapshot, status, provenance, content)
         c = plan.closure

@@ -77,7 +77,8 @@ def validate_calendar_response(value):
                 or any(type(binding[name]) is not str or _HASH.fullmatch(binding[name]) is None
                        for name in ("content_sha256", "coverage_manifest_sha256", "binding_sha256", "version_sha256"))
                 or binding["coverage_status"] != "DECLARED_UNVERIFIED"
-                or binding["data_origin"] not in {"UNSPECIFIED", "AKSHARE_MOCK"}
+                or type(binding["data_origin"]) is not str
+                or binding["data_origin"] not in {"UNSPECIFIED", "AKSHARE_MOCK", "SYNTHETIC_MOCK"}
                 or binding["load_status"] not in {"CURRENT", "STALE"}):
             raise ValueError("INVALID_CALENDAR_RESPONSE")
         _day(binding["bound_trading_day"])
