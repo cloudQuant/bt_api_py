@@ -387,7 +387,7 @@ def test_maintenance_failure_closes_reservation_before_unconfirmed_cleanup(
         resources.close()
 
 
-def test_stream_close_timeout_retains_guard_until_read_drains(tmp_path, monkeypatch):
+def test_stream_close_timeout_revokes_binding_and_retains_guard_until_read_drains(tmp_path, monkeypatch):
     from contextlib import contextmanager
 
     from bt_api_gateway.session_guard import LocalAccountSessionGuard, LocalAccountSessionGuardError
@@ -437,7 +437,9 @@ def test_stream_close_timeout_retains_guard_until_read_drains(tmp_path, monkeypa
         with pytest.raises(LocalAccountSessionGuardError):
             contender.acquire()
         assert stream.handle("direct.events.progress", context=context, arguments={})["code"] == "EVENTS_UNAVAILABLE"
-        assert resources.values["binding"]._owner.binding() is not None
+        owner = resources.values["binding"]._owner
+        assert owner.binding() is None
+        assert owner.status().thread_alive and not owner.closed
         release.set()
         reader.join(5)
         assert not reader.is_alive()
@@ -451,16 +453,20 @@ def test_stream_close_timeout_retains_guard_until_read_drains(tmp_path, monkeypa
         reader.join(5)
         resources.close()
     assert responses[0]["status"] == "OK"
+    assert owner.closed
     contender.acquire()
     contender.release()
 
 
-def test_reservation_commit_timeout_retains_guard_and_permanently_closes_gate(tmp_path, monkeypatch):
+def test_reservation_commit_timeout_revokes_binding_and_retains_guard_until_cleanup(tmp_path, monkeypatch):
     import os
+    import sqlite3
+    from contextlib import closing
 
     from bt_api_gateway.session_guard import LocalAccountSessionGuard, LocalAccountSessionGuardError
 
     import bt_api_py.ctp_gateway_return_maintenance as return_module
+    from bt_api_py.gateway_direct_owner import GatewayOwnerServiceCallError
 
     actual_gate_type = return_module.CtpGatewayReturnMaintenance
 
@@ -492,6 +498,14 @@ def test_reservation_commit_timeout_retains_guard_and_permanently_closes_gate(tm
     outcomes = []
     original_commit = binding._journal._commit
 
+    def read_journal_rows():
+        with closing(sqlite3.connect(Path(settings.journal_path).resolve().as_uri() + "?mode=ro", uri=True)) as db:
+            db.row_factory = sqlite3.Row
+            return [dict(row) for row in db.execute(
+                "SELECT * FROM direct_journal_commands WHERE account = ? AND strategy = ? ORDER BY request_key",
+                (settings.account_scope, CLIENT_A.actor_ref),
+            )]
+
     def commit(db):
         if threading.current_thread() is binding._owner._thread and db.execute(
             "SELECT 1 FROM direct_journal_commands WHERE request_key='held'"
@@ -514,18 +528,46 @@ def test_reservation_commit_timeout_retains_guard_and_permanently_closes_gate(tm
         contender = LocalAccountSessionGuard(Path(settings.guard_root), settings.account_scope, "other")
         with pytest.raises(LocalAccountSessionGuardError):
             contender.acquire()
-        assert binding._owner.binding() is not None
+        assert binding._owner.binding() is None
+        assert binding._owner.status().thread_alive and not binding._owner.closed
         release.set()
         assert done.wait(5)
         assert outcomes[0]["status"] == "OK"
+        committed = read_journal_rows()
+        assert len(committed) == 1
+        original_record = outcomes[0]["record"]
+        assert (committed[0]["request_key"], committed[0]["principal"], committed[0]["reservation_id"],
+                committed[0]["digest"], committed[0]["status"], committed[0]["version"]) == (
+            "held", CLIENT_A.principal_ref, original_record["reservation_id"],
+            original_record["digest"], "RESERVED", original_record["version"])
+        submit = binding._owner.submit_service_call
+        refusals = []
+
+        def observe_submit(callback):
+            try:
+                return submit(callback)
+            except GatewayOwnerServiceCallError as error:
+                refusals.append(error.code)
+                raise
+
+        monkeypatch.setattr(binding._owner, "submit_service_call", observe_submit)
         denied = reserve("new")
-        assert denied["code"] == "ADMISSION_DENIED", denied
-        assert reserve("held")["status"] == "OK"
+        assert denied == {"status": "UNKNOWN"}, denied
+        assert refusals == ["SERVICE_CALL_NOT_READY"]
+        replay = reserve("held")
+        assert replay["status"] == "OK"
+        assert replay["record"]["reservation_id"] == original_record["reservation_id"]
+        assert replay["record"]["digest"] == original_record["digest"]
+        assert refusals == ["SERVICE_CALL_NOT_READY"]  # replay used the read-only preflight
+        assert FakeSession.instances[0].provider.sends == []
     finally:
         release.set()
         worker.join(5)
         registry.close()
         resources.close()
+    assert binding._owner.closed
+    assert read_journal_rows() == committed  # complete held row unchanged; no new row
+    assert FakeSession.instances[0].provider.sends == []
     contender.acquire()
     contender.release()
 
