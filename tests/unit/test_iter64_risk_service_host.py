@@ -73,7 +73,6 @@ def opened(tmp_path):
     return host
 
 
-@V2_POLICY_BLOCKED
 def test_policy_bootstrap_first_unchanged_tightened_and_loosening_refused(tmp_path):
     setup(tmp_path)
     host = opened(tmp_path)
