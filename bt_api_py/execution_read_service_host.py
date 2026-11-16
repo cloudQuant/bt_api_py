@@ -203,11 +203,51 @@ def _keys(config):
 
 
 class ReadServiceHost:
-    def __init__(self, config):
+    """Own a read listener; an optional running parent remains journal owner.
+
+    Borrowing requires the exact parent owner because a bare account journal
+    does not establish the parent strategy binding. Close never closes a borrow.
+    """
+    def __init__(self, config, *, borrowed_from=None):
+        if type(config) is not Config:
+            raise ReadServiceError('INVALID_CONFIGURATION')
         self.config = config
+        self._borrowed_from = borrowed_from
         self.journal = None
         self.listener = None
         self.state = 'new'
+
+    def _borrowed_journal(self):
+        """Validate a running parent and its exact local journal/strategy binding."""
+        from .execution_parent_service_host import ParentServiceHost
+
+        owner, config = self._borrowed_from, self.config
+        try:
+            if (type(owner) is not ParentServiceHost or owner.state != 'running'
+                    or owner.host is None or type(owner.journal) is not AccountJournalHost
+                    or owner.config.local_scope != config.local_scope
+                    or owner.config.journal_root != config.journal_root
+                    or owner.config.storage_id != config.storage_id
+                    or (owner.config.wire_scope.execution_domain_ref, owner.config.wire_scope.account_ref,
+                        owner.config.wire_scope.strategy_ref) != (config.wire_scope.execution_domain_ref,
+                        config.wire_scope.account_ref, config.wire_scope.strategy_ref)):
+                raise ValueError
+            journal = owner.journal
+            services = owner.host._atomic_intake_services
+            if (journal._pid != os.getpid() or journal._closed or journal._closing
+                    or journal._root != str(config.journal_root)
+                    or journal._storage_id != config.storage_id
+                    or journal._account_hash != hashlib.sha256(config.local_scope.account_key.encode()).hexdigest()
+                    or len(services) != 1 or services[0]._intake._host is not journal
+                    or services[0]._intake._store is not journal._store
+                    or len(services[0]._intake._routes) != 1
+                    or next(iter(services[0]._intake._routes)) != owner.config.wire_scope
+                    or next(iter(services[0]._intake._routes.values())).scope != config.local_scope):
+                raise ValueError
+            journal._verify_paths()
+            return journal
+        except Exception:
+            raise ReadServiceError('INVALID_BORROWED_JOURNAL') from None
 
     def start(self):
         if self.state != 'new':
@@ -217,12 +257,13 @@ class ReadServiceHost:
         self.state = 'close_uncertain'
         try:
             config = self.config
+            borrowed = self._borrowed_journal() if self._borrowed_from is not None else None
             _directory(config.journal_root)
             _directory(config.audit_root)
             _check_existing(config)
             public, secret, client_key = _keys(config)
-            self.journal = AccountJournalHost(root=str(config.journal_root), scope=config.local_scope,
-                                              storage_id=config.storage_id)
+            self.journal = borrowed if borrowed is not None else AccountJournalHost(
+                root=str(config.journal_root), scope=config.local_scope, storage_id=config.storage_id)
             grant = ExecutionManagementReadGrant(config.instance_id, config.client_identity, config.wire_scope,
                                                   config.revision, config.instruments, OPERATIONS)
             self.listener = ExecutionManagementReadHost(TrustedManagementReadListener(
@@ -254,7 +295,8 @@ class ReadServiceHost:
                     raise ReadServiceError('CLEANUP_UNKNOWN')
                 self.listener = None
             if self.journal is not None:
-                self.journal.close()
+                if self._borrowed_from is None:
+                    self.journal.close()
                 self.journal = None
         except BaseException:
             # Keep every unresolved object reachable for a same-owner retry.

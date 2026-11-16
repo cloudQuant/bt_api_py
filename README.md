@@ -971,7 +971,7 @@ source authentication not proven and no trade authorization.
 
 ### Atomic Execution parent listener (currently unready)
 
-The SDK entry point `python -m bt_api_py.execution_parent_service_host --config /absolute/path/parent.json` starts the selected `atomic_intake` ServiceHost with its AccountJournalHost, atomic intake, explicit strategy grants and separate service action grant. The JSON file and CURVE key files must be private, owner-controlled regular files (mode `0600` on POSIX, no symlinks or hard links); the journal directory and the separate registry directory must already exist, be private, and not overlap. The listener accepts a loopback IPv4 TCP endpoint only. The stable storage UUID and exact account/strategy/run binding must be supplied by the operator; they do not authenticate an account or establish an old-writer fence. A local lease is not such a fence. The current Atomic service reports **UNREADY** and refuses registration; this does not establish parent submission, provider or trading capability.
+The SDK entry point `python -m bt_api_py.execution_parent_service_host --config /absolute/path/parent.json` starts the selected `atomic_intake` ServiceHost with its AccountJournalHost, atomic intake, explicit strategy grants and separate service action grant. The JSON file and CURVE key files must be private, owner-controlled regular files (mode `0600` on POSIX, no symlinks or hard links); the journal directory and the separate registry directory must already exist, be private, and not overlap. The listener accepts a loopback IPv4 TCP endpoint only. The stable storage UUID and exact account/strategy/run binding must be supplied by the operator; they do not authenticate an account or establish an old-writer fence. A local lease is not such a fence. The default quarantined Atomic service reports **UNREADY** and refuses registration. The explicit cooperative mode below supports local parent intake; neither mode establishes provider or trading capability.
 
 The JSON schema is exact: unknown fields and duplicate keys are rejected. The following is a structure example, not credentials or a ready-to-run deployment. Replace every illustrative reference and supply distinct key files. `service` is a normal parsed SDK ServiceConfig with exactly one Execution `atomic_intake` component and no outbound clients.
 
@@ -1009,7 +1009,7 @@ The JSON schema is exact: unknown fields and duplicate keys are rejected. The fo
 }
 ```
 
-The current lease contract permits this listener to start only with a fresh journal. Reopening an existing journal refuses a new intake lease because writer continuity is not established, even after a clean close or lease expiry. Creating a new journal does not resolve that continuity gap or authorize bypassing an existing account journal.
+The default quarantined mode permits this listener to start only with a fresh journal and keeps parent registration unavailable. Reopening an existing journal requires the explicit cooperative recovery contract below. Creating a new journal does not resolve writer continuity or authorize bypassing an existing account journal.
 
 A first `SIGINT` or `SIGTERM` requests bounded close on the original owner thread. If cleanup is unknown, the process reports `EXECUTION_PARENT_CLEANUP_PENDING`, retains the original resources, and waits for another signal to retry. Status messages are finite labels and do not include configuration or key values.
 # Local Execution parent recovery
@@ -1018,13 +1018,55 @@ The parent-service configuration optionally accepts `storage.writer_mode` and
 `storage.require_existing`. Defaults remain `quarantined` and `false`.
 `single_host_cooperative` requires `require_existing: true` in this CLI and
 uses the Execution package's explicit local deployment contract. It preserves
-the original journal and advances an existing lease; it cannot claim an old
-journal with no lease or establish that other writers are stopped.
+the original journal and advances an existing lease. The operator must establish
+that all writers cooperate with the same local Host lock, old and remote writers
+are excluded, and storage has not been rolled back. The option cannot establish
+these deployment facts or grant provider/account authority.
+
+An original management-only journal with no intake lease has a separate,
+explicit first-claim configuration:
+
+```json
+"lease": {
+  "owner": "local-owner",
+  "ttl_ns": 300000000000,
+  "initial_claim": {
+    "claim_id": "00000000-0000-4000-8000-000000000002",
+    "expected_incarnation": "00000000000000000000000000000001",
+    "history_assertion": "management_read_only_no_prior_intake"
+  }
+}
+```
+
+The values above are illustrative. Supply a new claim ID and the original
+journal incarnation. This setting is an operator declaration, not historical
+proof. Execution verifies the exact initial schema and metadata and empty
+business tables, then commits the marker and first lease together. Preserve
+the original journal throughout. After a confirmed successful claim, remove
+`lease.initial_claim` for subsequent recovery; reusing it fails closed. Even if
+startup later fails, the claim may already be committed. Confirm cleanup and
+inspect the original marker and lease before choosing ordinary recovery. Never
+delete a marker, lease, or journal to retry an uncertain result.
 
 The SDK consumes Execution's `local_intake_status()` three-state contract so
 temporary Host/Store lock contention can recover without permanently revoking
 readiness. Missing contracts and invalid resources remain unavailable. A local
 parent receipt is not a Risk approval, Gateway acknowledgement or sent order.
-The current independent management-read and parent hosts each own an exclusive
-journal lock and cannot run against the same root at the same time; a shared
-Host composition is still required to provide both interfaces together.
+The independent management-read and parent CLIs each own an exclusive journal
+lock and cannot run against the same root at the same time. To expose both
+interfaces, use `python -m bt_api_py.execution_combined_service_host validate
+--config /absolute/path/combined.json`, followed by the `run` command. Its
+owner-only JSON configuration has exactly `schema`, `parent`, and `management`:
+`schema` is `bt_api_execution.combined_service.v1`; the other fields embed the
+existing parent and management configurations. They must name the same original
+root, storage UUID, local account/strategy and wire domain/account/strategy,
+distinct loopback endpoints, and separate audit and Registry storage.
+
+The combined host opens one parent-owned journal and lets the management
+listener borrow it. Management closes before the parent; uncertain cleanup keeps
+the same owners available for retry. Each listener reports its own readiness,
+so management can remain available while parent intake is unready. Management
+reads do not observe uncommitted parent rows. A failure to start management can
+occur after first-claim commit and follows the same explicit recovery steps
+above. The tested local CURVE paths establish local receipt/read behavior only,
+not Risk approval, Gateway dispatch or provider execution.

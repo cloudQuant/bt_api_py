@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import signal
 import stat
 import time
@@ -93,6 +94,7 @@ class ParentConfig:
     versions: tuple
     writer_mode: str = 'quarantined'
     require_existing: bool = False
+    initial_claim: tuple | None = None
 
 
 def parse_config(raw):
@@ -140,6 +142,24 @@ def parse_config(raw):
                 or type(require_existing) is not bool
                 or (writer_mode == 'single_host_cooperative' and not require_existing)):
             raise ValueError
+        lease = top['lease']
+        if (type(lease) is not dict or not {'owner', 'ttl_ns'} <= set(lease)
+                or set(lease) - {'owner', 'ttl_ns', 'initial_claim'}):
+            raise ValueError
+        ttl = lease['ttl_ns']
+        if type(ttl) is not int or not 1_000_000 <= ttl <= 300_000_000_000:
+            raise ValueError
+        initial_claim = None
+        if 'initial_claim' in lease:
+            claim = _map(lease['initial_claim'], ('claim_id', 'expected_incarnation', 'history_assertion'))
+            claim_id, incarnation, assertion = (claim['claim_id'], claim['expected_incarnation'],
+                                                claim['history_assertion'])
+            if (writer_mode != 'single_host_cooperative' or require_existing is not True
+                    or type(claim_id) is not str or str(uuid.UUID(claim_id)) != claim_id
+                    or type(incarnation) is not str or re.fullmatch(r'[0-9a-f]{32}', incarnation) is None
+                    or assertion != 'management_read_only_no_prior_intake' or type(assertion) is not str):
+                raise ValueError
+            initial_claim = (claim_id, incarnation, assertion)
         journal_root, registry_path = _path(storage['journal_root']), _path(storage['registry_path'])
         if (journal_root == registry_path.parent or journal_root in registry_path.parents
                 or registry_path.parent in journal_root.parents):
@@ -189,17 +209,13 @@ def parse_config(raw):
                 rules.append(allowed)
             policies.append(AlgorithmPolicy(wire.account_ref, wire.strategy_ref, wire.execution_domain_ref,
                                             plan_version, build_id, tuple(rules)))
-        lease = _map(top['lease'], ('owner', 'ttl_ns'))
-        ttl = lease['ttl_ns']
-        if type(ttl) is not int or not 1_000_000 <= ttl <= 300_000_000_000:
-            raise ValueError
         paths = [server_public, server_secret, *(p for _, p in principal_keys), registry_path]
         if len(set(paths)) != len(paths) or any(p == journal_root or journal_root in p.parents for p in paths):
             raise ValueError
         return ParentConfig(service, identity, local, wire, journal_root, registry_path, storage_id,
                             server_public, server_secret, tuple(principal_keys), tuple(grants), action_grant,
                             tuple(policies), build_id, _text(lease['owner']), ttl, versions,
-                            writer_mode, require_existing)
+                            writer_mode, require_existing, initial_claim)
     except Exception:
         raise ParentServiceError('INVALID_CONFIGURATION') from None
 
@@ -303,8 +319,13 @@ class ParentServiceHost:
                                              storage_id=config.storage_id, **options)
                 self.journal = journal
                 try:
-                    lease = journal.acquire_intake_lease(config.local_scope, config.lease_owner,
-                                                        ttl_ns=config.lease_ttl_ns)
+                    lease_options = {'ttl_ns': config.lease_ttl_ns}
+                    if config.initial_claim is not None:
+                        from bt_api_execution.account_journal_host import InitialIntakeClaim
+                        claim_id, incarnation, assertion = config.initial_claim
+                        lease_options['initial_claim'] = InitialIntakeClaim(
+                            claim_id=claim_id, expected_incarnation=incarnation, history_assertion=assertion)
+                    lease = journal.acquire_intake_lease(config.local_scope, config.lease_owner, **lease_options)
                     intake = AtomicSubmissionIntake(host=journal, targets={config.wire_scope: config.local_scope},
                         lease=lease, schedule_registry=ScheduleRegistry(), schedule_build_id=config.build_id,
                         algorithm_policies=config.policies)
