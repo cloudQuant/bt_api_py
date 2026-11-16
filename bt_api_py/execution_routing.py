@@ -665,6 +665,21 @@ class ExecutionRoutingResult:
 
 
 @dataclass(frozen=True)
+class ExecutionPreparedRoute:
+    """Identity of a committed local PREPARED record, not a remote receipt."""
+
+    account: str
+    strategy: str
+    request_key: str
+    intent_digest: str
+    request_id: str
+    request_sha256: str
+    configuration_id: str
+    execution_domain_ref: str
+    parent_ref: str
+
+
+@dataclass(frozen=True)
 class ExecutionRoutingStatus:
     routed: bool
     outcome: ExecutionRoutingOutcome
@@ -902,6 +917,32 @@ def _load_record(db: sqlite3.Connection, identity: tuple[str, str, str]) -> _Par
             ).fetchone()
         )
     )
+
+
+def _prepared_route(record: _ParentRecord) -> ExecutionPreparedRoute:
+    """Project the validated frozen record without exposing its mutable payload."""
+    try:
+        data = json.loads(record.payload)
+        spec = data["spec"]
+        domain, parent = spec["execution_domain_ref"], spec["parent_ref"]
+        if (
+            set(data) != _V2_PAYLOAD_FIELDS
+            or _ref(domain) is None
+            or _ref(parent) is None
+            or _HEX_RE.fullmatch(record.configuration_id) is None
+            or spec["account_scope"] != record.account
+            or spec["strategy_scope"] != record.strategy
+            or record.result is not None
+            or record.cancel_operation_id is not None
+            or record.cancel_result is not None
+        ):
+            raise ValueError
+        return ExecutionPreparedRoute(
+            record.account, record.strategy, record.request_key, record.intent_digest,
+            record.request_id, record.request_sha256, record.configuration_id, domain, parent,
+        )
+    except Exception:
+        _fail("EXECUTION_LOCAL_RECORD_FAILED")
 
 
 def _insert_prepared(
@@ -1326,8 +1367,13 @@ class ExecutionOrderRouter:
 
     # -- public operations ----------------------------------------------------
 
-    def route(self, intent: object) -> ExecutionRoutingResult:
-        """Match one intent; for a match, persist first and submit exactly once."""
+    def route(self, intent: object, *, before_submit=None) -> ExecutionRoutingResult:
+        """Persist first and submit once; optionally require a local persistence acknowledgement.
+
+        The callback is invoked only for a newly committed PREPARED record. It
+        must return literal True after persisting its own association. Failure
+        leaves the record PREPARED and replay never invokes it or submits.
+        """
         intent = self._validate_intent(intent)
         identity = self._identity(intent)
         request = self._decode_request(intent)
@@ -1486,6 +1532,62 @@ class ExecutionOrderRouter:
             raise
         if not created:
             return self._replay(record)
+        if before_submit is not None:
+            failure = self._result(
+                ExecutionRoutingOutcome.EXECUTION_UNKNOWN,
+                code="EXECUTION_PERSISTENCE_BARRIER_FAILED",
+                request_id=record.request_id,
+                request_sha256=record.request_sha256,
+                parent_ref=json.loads(record.payload)["spec"]["parent_ref"],
+            )
+            try:
+                descriptor = _prepared_route(record)
+                config = self._config
+                config_snapshot = _canonical(config.to_plain())
+                port = self._port
+                clock = self._clock
+                risk_selected = self._risk_selected
+                if (
+                    type(risk_selected) is not bool
+                    or risk_selected is not json.loads(record.payload)["spec"]["risk_selected"]
+                ):
+                    return failure
+                if before_submit(descriptor) is not True:
+                    return failure
+                if self._clock is not clock:
+                    return failure
+                checked_now = self._now()
+                if (
+                    self._db is not db
+                    or self._config is not config
+                    or self._port is not port
+                    or self._clock is not clock
+                    or self._risk_selected is not risk_selected
+                    or config.configuration_id != record.configuration_id
+                    or _canonical(config.to_plain()) != config_snapshot
+                    or config.execution_domain_ref != descriptor.execution_domain_ref
+                    or db.in_transaction
+                    or checked_now < now
+                    or checked_now >= policy.deadline_ns
+                ):
+                    return failure
+                _begin_read(db)
+                try:
+                    current = _load_record(db, identity)
+                    created_at = _row(db.execute(
+                        "SELECT created_at_ns FROM main.execution_parent_requests_v1 "
+                        "WHERE account=? AND strategy=? AND request_key=?", identity
+                    ).fetchone())
+                    if (
+                        current != record
+                        or created_at != (now,)
+                        or _prepared_route(current) != descriptor
+                    ):
+                        return failure
+                finally:
+                    _rollback(db)
+            except Exception:
+                return failure
         return self._call_submit(identity, request_id, digest, payload)
 
     def _call_submit(
