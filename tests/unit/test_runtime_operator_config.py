@@ -1,4 +1,5 @@
 import json
+import socket
 import threading
 from pathlib import Path
 
@@ -34,6 +35,54 @@ def test_validate_never_reads_secrets_or_creates_home(tmp_path, capsys):
     assert not (tmp_path / 'secret.json').exists()
     assert not (tmp_path / 'home').exists()
     assert repr(load_config(path)).find(envelope['subject_token_file']) < 0
+
+
+@pytest.mark.parametrize('code', ['listener_bind_failed', 'non_loopback_bind', 'invalid_port'])
+def test_start_failure_reports_only_exact_transport_allowlist(code, capsys):
+    cli._emit_start_failure(cli.ControlTransportError(code))
+    assert capsys.readouterr().err.splitlines() == [
+        'runtime_start_failed', f'runtime_start_code={code}']
+
+
+def test_start_failure_hides_untrusted_code_and_other_exception_types(capsys):
+    class DerivedTransportError(cli.ControlTransportError):
+        pass
+    for error in (cli.ControlTransportError('private-error'), RuntimeError('listener_bind_failed'),
+                  DerivedTransportError('listener_bind_failed')):
+        cli._emit_start_failure(error)
+        assert capsys.readouterr().err.splitlines() == ['runtime_start_failed']
+
+
+def test_real_port_conflict_reports_bind_code_and_confirms_cleanup(tmp_path, monkeypatch, capsys):
+    from bt_api_runtime.events import EventStore
+    from bt_api_runtime.supervision.persistence import SingleInstanceLock
+
+    path, envelope = _deployment(tmp_path)
+    secret = Path(envelope['subject_token_file'])
+    secret.write_text(json.dumps({'schema': TOKEN_SCHEMA,
+        'tokens': [{'token': 'synthetic-token-' + 'x' * 32, 'operator': 'alice'}]}))
+    secret.chmod(0o600)
+    stores = []
+    def create_store(*args):
+        store = EventStore(*args)
+        stores.append(store)
+        return store
+    monkeypatch.setattr(cli, 'EventStore', create_store)
+    with socket.socket() as listener:
+        listener.bind(('127.0.0.1', 0))
+        listener.listen()
+        runtime_path = Path(envelope['runtime_config_file'])
+        runtime = json.loads(runtime_path.read_text())
+        runtime['api']['port'] = listener.getsockname()[1]
+        runtime_path.write_text(json.dumps(runtime))
+        assert cli.main(['run', '--config', str(path)]) == 1
+    output = capsys.readouterr()
+    assert output.err.splitlines() == ['runtime_start_failed', 'runtime_start_code=listener_bind_failed']
+    assert 'runtime_control_listening' not in output.out and 'READY' not in output.out + output.err
+    assert len(stores) == 1 and stores[0].close_confirmed
+    lock = SingleInstanceLock(str(tmp_path / 'home' / 'runtime.lock'))
+    lock.acquire()
+    lock.release()
 
 
 def test_public_example_validates_offline_and_binding_mismatches_fail(tmp_path):

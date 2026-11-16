@@ -10,6 +10,7 @@ import signal
 import sys
 import threading
 
+from bt_api_runtime.control_http import ControlTransportError
 from bt_api_runtime.events import EventStore
 from bt_api_runtime.supervision import SystemClock
 
@@ -19,6 +20,13 @@ from bt_api_py.runtime_service_host import RuntimeServiceHost
 
 def _emit(message, *, error=False):
     print(message, file=sys.stderr if error else sys.stdout, flush=True)
+
+
+def _emit_start_failure(error):
+    _emit('runtime_start_failed', error=True)
+    if (type(error) is ControlTransportError and type(error.code) is str
+            and error.code in ('listener_bind_failed', 'non_loopback_bind', 'invalid_port')):
+        _emit(f'runtime_start_code={error.code}', error=True)
 
 
 def _wait_close(host, requested):
@@ -68,9 +76,9 @@ def _run(config):
             event_store=store, monitor_bridge=monitor, unit_strategies=config.unit_strategies)
         try:
             host.start()
-        except Exception:
+        except Exception as error:
             startup_failed = True
-            _emit('runtime_start_failed', error=True)
+            _emit_start_failure(error)
             if host.state == 'closed':
                 return 1
             if host.state != 'close_uncertain':

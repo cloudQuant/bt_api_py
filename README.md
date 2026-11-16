@@ -395,7 +395,7 @@ Local source tests and a synthetic ServiceHost/CURVE loopback have been checked.
 The new Gateway trading client has not yet been connected. No SimNow/production
 write acceptance or cross-platform certification is implied.
 
-### Standalone Monitor and Runtime control bridge (local acceptance, 2026-11-16)
+### Standalone services and Runtime composition (2026-11-16)
 
 The SDK provides an explicit Monitor process with separate authenticated event
 ingress and Gateway heartbeat listeners. Provision private CURVE files and the
@@ -418,9 +418,22 @@ an actual CTP account or the complete five-component deployment.
 Runtime's existing strategy-scoped control port to Gateway using explicit SDK
 client configurations, identities, keys and externally supplied delegation
 proofs. It owns client threads and preserves ambiguous calls without retrying.
-It is an application composition API, not automatic wiring of the Runtime CLI.
-The deployment must bind its client proof to Gateway's independently installed
-proof; the existing wire does not exchange delegation IDs.
+The SDK's explicit `runtime_operator_cli` composes this bridge with
+`RuntimeServiceHost` and `RuntimeMonitorBridge`; it does not change the optional
+Runtime package's default CLI. See the
+[Runtime deployment templates](examples/services/runtime_operator/README.md)
+for the separate subject-token file, exact route bindings and protected CURVE
+keys. The deployment must bind its client proof to Gateway's independently
+installed proof; the existing wire does not exchange delegation IDs. Starting
+the control listener does not start strategies or prove trading readiness.
+
+`bt_api_py.execution_read_service_host` provides an independent authenticated
+management listener for three local parent-journal reads. See
+[`execution-read-service.example.json`](examples/services/execution-read-service.example.json).
+It does not provide parent submission, intake leases, scheduling or dispatch;
+an empty journal is not evidence of an empty trading account. The SDK order
+router currently keeps unverified port replies `UNKNOWN`, including plain
+`ACCEPTED` or `NOT_SENT`, and does not retry or fall back to a native route.
 
 ### Iteration 63 Gateway dispatch and storage RPC slice
 
