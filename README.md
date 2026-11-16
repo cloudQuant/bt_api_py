@@ -534,6 +534,23 @@ creates one `CtpGatewaySession`. The account scope must equal the canonical
 The current factory explicitly supports SimNow and defaults to writes disabled.
 Journal initialization and upgrade are separate operations, never startup repair.
 
+The trusted Python factory optionally accepts `recovery_observation_settings`
+(`GatewayRecoveryObservationSettings`). Its source/account binding and separate
+isolated journal path must match the selected market profile; all queue, page,
+storage and timing budgets are explicit. The original CTP owner captures local
+recovery pages, while a separate recorder thread writes the Gateway source log.
+Timeouts keep the original owner-call handle, and failed writes keep the same
+page until its commit is confirmed. Close first fences dispatch, then retains
+an unconfirmed call, page or worker for retry on the original resources. A
+durable capture-stop marker identifies the last committed sequence and leaves
+later coverage unknown; it does not claim the provider's remaining buffer was
+drained or that the source recovered.
+`binding.recovery_observation_status()` exposes finite local worker status;
+ready is not proof of network health. The default remains disabled. The normal
+operator configuration loader, UTC qualification, calendar accumulation and
+Monitor transport/evaluator are not yet connected to this source-recording
+option; its local source timestamps must not be sent as a cross-process clock.
+
 The session's account reader owns the sole TD client. Direct orders and daily
 settlement borrow that client; the MD provider is lazy and shared across symbols.
 The network Host and native account owner use separate threads. A fresh

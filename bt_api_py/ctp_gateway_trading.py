@@ -741,7 +741,7 @@ def _market_gate_latency(settings, market_settings) -> float:
     return latency
 
 
-def _isolated_storage(settings, registry_path, account_read_settings) -> None:
+def _isolated_storage(settings, registry_path, account_read_settings, recovery_settings=None) -> None:
     """Refuse startup unless Gateway storage is OS-isolated to this user (I63 decision)."""
     from .gateway_storage_trust import assert_gateway_storage_isolated
 
@@ -750,8 +750,29 @@ def _isolated_storage(settings, registry_path, account_read_settings) -> None:
     if account_read_settings is not None:
         files += [Path(account_read_settings.journal_path),
                   Path(account_read_settings.observation_identity_path)]
+    if recovery_settings is not None:
+        files.append(Path(recovery_settings.journal_path))
     directories += [path.parent for path in files]
     assert_gateway_storage_isolated(directories, files)
+
+
+def _recovery_storage_distinct(settings, registry_path, account_read_settings, recovery_settings):
+    target = Path(recovery_settings.journal_path)
+    files = [registry_path, settings.journal_path]
+    if account_read_settings is not None:
+        files.extend((account_read_settings.journal_path, account_read_settings.observation_identity_path))
+    try:
+        resolved = target.resolve()
+        if any(resolved == root or root in resolved.parents or resolved in root.parents for root in (
+            Path(settings.guard_root).resolve(), Path(settings.trusted_flow_root).resolve()
+        )):
+            return False
+        return all(_distinct_journals(target, other) and all(
+            _distinct_journals(target, str(other) + suffix)
+            and _distinct_journals(str(target) + suffix, other)
+            for suffix in ('-wal', '-shm', '-journal')) for other in files)
+    except (OSError, ValueError, RuntimeError):
+        return False
 
 
 def reconcile_ctp_gateway_account_session(
@@ -801,6 +822,7 @@ def build_ctp_gateway_trading_profile(
     account_read_settings: CtpGatewayAccountReadSettings | None = None,
     account_read_principals: frozenset[str] = frozenset(),
     market_settings: CtpGatewayMarketSettings | None = None,
+    recovery_observation_settings=None,
     control_grants: Mapping[str, GatewayControlGrant] | None = None,
     upgrade_controls_from_v9: bool = False,
     upgrade_strategy_ledger_from_v10: bool = False,
@@ -876,6 +898,17 @@ def build_ctp_gateway_trading_profile(
     control_grants = {} if control_grants is None else dict(control_grants)
     if type(settings) is not CtpGatewayTradingSettings or not _absolute(registry_path):
         raise CtpGatewayTradingError("INVALID_TRADING_SETTINGS")
+    if recovery_observation_settings is not None:
+        from bt_api_py.gateway_recovery_observation import GatewayRecoveryObservationSettings
+        if (type(recovery_observation_settings) is not GatewayRecoveryObservationSettings
+                or market_settings is None
+                or (account_read_settings is not None and
+                    type(account_read_settings) is not CtpGatewayAccountReadSettings)
+                or recovery_observation_settings.scope_ref != settings.account_scope
+                or recovery_observation_settings.source_ref != settings.market_source_ref
+                or not _recovery_storage_distinct(settings, registry_path, account_read_settings,
+                                                  recovery_observation_settings)):
+            raise CtpGatewayTradingError("INVALID_RECOVERY_OBSERVATION_SETTINGS")
     if type(authority) is not TrustedServiceAuthority:
         raise CtpGatewayTradingError("INVALID_TRADING_CONFIGURATION")
     from bt_api_py.gateway_execution_subject_scopes import GatewayExecutionSubjectScopes
@@ -1320,7 +1353,10 @@ def build_ctp_gateway_trading_profile(
 
             try:
                 # Rechecked at owner start, before the guard and journal open.
-                _isolated_storage(settings, registry_path, account_read_settings)
+                _isolated_storage(settings, registry_path, account_read_settings, recovery_observation_settings)
+                if (recovery_observation_settings is not None and not _recovery_storage_distinct(
+                        settings, registry_path, account_read_settings, recovery_observation_settings)):
+                    raise CtpGatewayTradingError("INVALID_RECOVERY_OBSERVATION_SETTINGS")
                 guard = LocalAccountSessionGuard(
                     Path(settings.guard_root), settings.account_scope, settings.owner_id
                 )
@@ -1558,6 +1594,8 @@ def build_ctp_gateway_trading_profile(
                         "observation_instruments": account_read_settings.observation_instruments,
                     }
                 )
+                if recovery_observation_settings is not None:
+                    observation_options['recovery_observation_capacity'] = recovery_observation_settings.source_capacity
                 from bt_api_ctp.account_provider import CtpAccountSessionProviderError
                 from bt_api_ctp.gateway_session import CtpGatewaySessionError
                 try:
@@ -1609,6 +1647,8 @@ def build_ctp_gateway_trading_profile(
                         holder['session_failure'] = (code, time.monotonic())
                     raise
                 holder["session"] = session
+                if recovery_observation_settings is not None:
+                    holder['recovery_observation_provider'] = session.market_provider
                 from bt_api_ctp.ctp.client import TraderClient
                 trader = getattr(session, '_trader', None)
                 if type(trader) is TraderClient:
@@ -2218,11 +2258,14 @@ def build_ctp_gateway_trading_profile(
 
         def close_resources():
             nonlocal hub_closed, proxy_closed
+            owner._fence_dispatch_shutdown()
+            closing.set()
+            recorder = holder.get('recovery_observation_recorder')
+            if recorder is not None and not recorder.close():
+                raise CtpGatewayTradingError('RECOVERY_OBSERVATION_CLOSE_UNCONFIRMED')
             calendar_service = holder.get("calendar_service")
             if calendar_service is not None:
                 calendar_service.close()
-            owner._fence_dispatch_shutdown()
-            closing.set()
             monitor = holder.get("required_monitor")
             if monitor is not None and not monitor.close(settings.close_timeout_seconds):
                 raise CtpGatewayTradingError("MONITOR_CLOSE_UNCONFIRMED")
@@ -2275,6 +2318,29 @@ def build_ctp_gateway_trading_profile(
                 raise CtpGatewayTradingError(
                     holder.get("startup_code") or session_code or "TRADING_OWNER_START_FAILED"
                 )
+            if recovery_observation_settings is not None:
+                from bt_api_py.gateway_recovery_observation import (
+                    GatewayRecoveryObservationRecorder,
+                )
+
+                if not _recovery_storage_distinct(settings, registry_path, account_read_settings,
+                                                  recovery_observation_settings):
+                    raise CtpGatewayTradingError('INVALID_RECOVERY_OBSERVATION_SETTINGS')
+                bound_session = holder['session']
+                bound_provider = holder['recovery_observation_provider']
+
+                def capture_recovery(after_sequence, limit):
+                    if (holder.get('session') is not bound_session
+                            or holder.get('recovery_observation_provider') is not bound_provider):
+                        raise CtpGatewayTradingError('RECOVERY_SOURCE_CHANGED')
+                    provider = bound_session.market_provider
+                    if provider is not bound_provider:
+                        raise CtpGatewayTradingError('RECOVERY_SOURCE_CHANGED')
+                    return provider.read_recovery_observations(after_sequence=after_sequence, limit=limit)
+
+                recorder = GatewayRecoveryObservationRecorder(owner, capture_recovery, recovery_observation_settings)
+                holder['recovery_observation_recorder'] = recorder
+                recorder.start()
             journal = holder["journal"]
             if required_monitor is not None:
                 monitor = holder["required_monitor"]
@@ -2306,6 +2372,8 @@ def build_ctp_gateway_trading_profile(
                 risk_only_submit_strategies=(frozenset() if delegation_settings is None
                                              else delegation_settings.risk_only_submit_strategies),
             )
+            if recovery_observation_settings is not None:
+                binding.recovery_observation_status = recorder.status
             values = {"binding": binding, 'owner_guard_binding': holder['owner_guard_binding'],
                       'claim_coordinator': holder['dispatch_claim_coordinator'],
                       'claim_sealer': holder['dispatch_claim_sealer'],
@@ -2556,7 +2624,7 @@ def build_ctp_gateway_trading_profile(
     def deployment_factory():
         # Before the Registry opens: refuse a storage layout another OS user
         # could write or redirect (the error code is a category only).
-        _isolated_storage(settings, registry_path, account_read_settings)
+        _isolated_storage(settings, registry_path, account_read_settings, recovery_observation_settings)
         try:
             return GatewayOperatorDeployment(
                 config, authority, registry_path, resource_provider=resources
