@@ -31,8 +31,10 @@ endpoint bounds and local sample references, or UNKNOWN for unavailable history,
 expired coverage or inconsistent overlapping calibrations. Truncated history is
 usable only after omitted calibrations are provably expired or a recorded reset
 starts a new segment. The result is local to the process; SNTP remains unauthenticated.
-This helper is not yet connected to recovery persistence, the operator loader or
-Monitor duration evaluation, and does not prove that a recovery condition held.
+The trusted Python factory can persist these results through the explicit
+`local_clock_v1` recorder option described below. The operator loader and Monitor
+duration evaluation are not yet connected; qualification does not prove that a
+recovery condition held.
 
 Iteration 64 is in progress and not accepted. The SDK assembles an independent Risk service and authenticated Gateway clients; Risk owns pre-trade policy and its ledger, while providers supply source facts. Default self-trade protection currently refuses OPEN/CLOSE because complete source-bound active-order coverage is unavailable. Account and intraday coverage, financial facts, Execution parent/child write authority and cross-generation not-sent proof remain gaps. R-11 v2 parses scoped rule metadata but does not by itself prove venue facts or enable trading. Selected Risk never falls back to direct. Consult the Backtrader iteration-64 review for scoped source, simulation and wheel evidence.
 
