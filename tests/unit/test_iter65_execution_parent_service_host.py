@@ -165,7 +165,7 @@ def test_cleanup_failure_keeps_same_host_for_retry(tmp_path):
 
 
 def test_readme_sample_parses():
-    text = Path('README.md').read_text(encoding='utf-8')
+    text = (Path(__file__).resolve().parents[2] / 'README.md').read_text(encoding='utf-8')
     section = text.split('### Atomic Execution parent listener (currently unready)', 1)[1]
     sample = section.split('```json\n', 1)[1].split('\n```', 1)[0]
     assert parse_config(json.loads(sample)).wire_scope.run_id == 'run-a'
@@ -218,3 +218,27 @@ def test_failed_provider_cleanup_retains_original_journal_for_retry(tmp_path, mo
     assert calls == [journal, journal]
     parent.close()
     assert calls == [journal, journal, journal] and parent.state == 'closed'
+
+
+def test_closed_journal_reopen_fails_without_changing_original_rows(tmp_path):
+    raw, _, _ = setup_config(tmp_path)
+    config = parse_config(raw)
+    first = ParentServiceHost(config)
+    first.start()
+    assert first.host.healthy is False
+    first.close()
+    journal_root = tmp_path / 'journal'
+    database, = journal_root.glob('*.sqlite3')
+    marker, = journal_root.glob('*.owner')
+    def observed():
+        with sqlite3.connect(database) as db:
+            return (db.execute('SELECT * FROM execution_writer_leases').fetchall(),
+                    db.execute('SELECT * FROM execution_parent_records').fetchall())
+    marker_before = marker.read_bytes()
+    before = observed()
+    assert len(before[0]) == 1 and before[1] == []
+    reopened = ParentServiceHost(config)
+    with pytest.raises(ParentServiceError, match='START_FAILED'):
+        reopened.start()
+    assert reopened.state == 'closed' and reopened.host is None and reopened.journal is None
+    assert marker.read_bytes() == marker_before and observed() == before

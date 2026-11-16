@@ -999,4 +999,6 @@ The JSON schema is exact: unknown fields and duplicate keys are rejected. The fo
 }
 ```
 
+The current lease contract permits this listener to start only with a fresh journal. Reopening an existing journal refuses a new intake lease because writer continuity is not established, even after a clean close or lease expiry. Creating a new journal does not resolve that continuity gap or authorize bypassing an existing account journal.
+
 A first `SIGINT` or `SIGTERM` requests bounded close on the original owner thread. If cleanup is unknown, the process reports `EXECUTION_PARENT_CLEANUP_PENDING`, retains the original resources, and waits for another signal to retry. Status messages are finite labels and do not include configuration or key values.
