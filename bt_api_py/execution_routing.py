@@ -26,9 +26,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import sqlite3
+import threading
 import time
+import weakref
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -298,7 +301,7 @@ class RulePolicy:
             "algorithm": {
                 "class": self.algorithm_class,
                 "version": self.algorithm_version,
-                "params": self.algorithm_params,
+                "params": _plain(self.algorithm_params),
             },
             "deadline": {"kind": "absolute", "at": self.deadline_at},
             "time_in_force": self.time_in_force,
@@ -662,6 +665,130 @@ class ExecutionRoutingResult:
     parent_ref: str | None = None
     code: str | None = None
     execution_state: str | None = None
+    direct_decision: object | None = None
+    rejection_decision: object | None = None
+
+
+class _DirectDecision:
+    """Opaque, process-local handle; membership in the registry is required."""
+
+    __slots__ = ("__weakref__",)
+
+    def __reduce__(self):
+        raise TypeError("direct decisions cannot be serialized")
+
+
+class _RejectionDecision:
+    __slots__ = ("__weakref__",)
+
+    def __reduce__(self):
+        raise TypeError("rejection decisions cannot be serialized")
+
+
+_direct_decisions = weakref.WeakKeyDictionary()
+_direct_decisions_lock = threading.Lock()
+_rejection_decisions = weakref.WeakKeyDictionary()
+_issued_local_decisions = set()
+_MAX_LOCAL_DECISIONS = 65536
+
+
+def _database_key(db):
+    rows = db.execute("PRAGMA database_list").fetchall()
+    main = [tuple(row) for row in rows if row[1] == "main"]
+    if len(main) != 1 or type(main[0][2]) is not str:
+        raise ValueError("invalid database")
+    path = main[0][2]
+    # Retain a memory connection itself, avoiding object-id reuse.
+    return ("file", os.path.realpath(path)) if path else ("memory", db)
+
+
+def _claim_local_decision(router, intent):
+    key = (router._source_database_key, router._identity(intent))
+    with _direct_decisions_lock:
+        if key in _issued_local_decisions or len(_issued_local_decisions) >= _MAX_LOCAL_DECISIONS:
+            return False
+        _issued_local_decisions.add(key)
+        return True
+
+
+def _issue_direct_decision(router, intent, candidate):
+    if not _claim_local_decision(router, intent):
+        return None
+    token = _DirectDecision()
+    with _direct_decisions_lock:
+        _direct_decisions[token] = (
+            router, router._db, router._config, os.getpid(), threading.current_thread(),
+            candidate.snapshot,
+        )
+    return token
+
+
+def consume_execution_direct_decision(decision, *, intent, configuration_id) -> bool:
+    """Consume one newly committed local NO_MATCH decision, without granting authority.
+
+    A failed check also consumes the handle. It cannot be recreated from the
+    journal and provides no proof that an order was never sent elsewhere.
+    """
+    if type(decision) is not _DirectDecision:
+        return False
+    with _direct_decisions_lock:
+        saved = _direct_decisions.pop(decision, None)
+    if saved is None:
+        return False
+    router, db, config, pid, thread, snapshot = saved
+    try:
+        if (pid != os.getpid() or thread is not threading.current_thread()
+                or router._db is not db or router._config is not config
+                or type(configuration_id) is not str
+                or configuration_id != config.configuration_id or not router._source_valid()
+                or db.in_transaction):
+            return False
+        intent = router._validate_intent(intent)
+        if not router._scope_matches(intent):
+            return False
+        _begin_read(db)
+        try:
+            candidate = load_route_candidate(db, intent)
+            return (candidate is not None and candidate.outcome is _Outcome.NO_MATCH
+                    and candidate.snapshot == snapshot
+                    and _candidate_configuration(candidate) == configuration_id
+                    and _load_record(db, router._identity(intent)) is None)
+        finally:
+            _rollback(db)
+    except Exception:
+        return False
+
+
+def consume_execution_rejection_decision(decision, *, intent, configuration_id, code) -> bool:
+    """Consume a first local pre-submit rejection; this is not a remote receipt."""
+    if type(decision) is not _RejectionDecision:
+        return False
+    with _direct_decisions_lock:
+        saved = _rejection_decisions.pop(decision, None)
+    if saved is None:
+        return False
+    router, db, config, pid, thread, snapshot, expected_code = saved
+    try:
+        if (pid != os.getpid() or thread is not threading.current_thread()
+                or router._db is not db or router._config is not config
+                or not router._source_valid() or db.in_transaction
+                or type(configuration_id) is not str or configuration_id != config.configuration_id
+                or type(code) is not str or code != expected_code):
+            return False
+        intent = router._validate_intent(intent)
+        if not router._scope_matches(intent):
+            return False
+        _begin_read(db)
+        try:
+            candidate = load_route_candidate(db, intent)
+            return (candidate is not None and candidate.snapshot == snapshot
+                    and candidate.outcome is not _Outcome.NO_MATCH
+                    and _candidate_configuration(candidate) == configuration_id
+                    and _load_record(db, router._identity(intent)) is None)
+        finally:
+            _rollback(db)
+    except Exception:
+        return False
 
 
 @dataclass(frozen=True)
@@ -1043,6 +1170,66 @@ def _candidate_configuration(candidate: RouteCandidate) -> str:
         _fail("EXECUTION_LOCAL_RECORD_FAILED")
 
 
+def verify_execution_direct_route(router, *, intent, configuration_id) -> bool:
+    """Read a previously committed NO_MATCH, without issuing a send permit."""
+    try:
+        if (type(router) is not ExecutionOrderRouter or not router._source_valid()
+                or type(configuration_id) is not str
+                or configuration_id != router._config.configuration_id or router._db.in_transaction):
+            return False
+        intent = router._validate_intent(intent)
+        if not router._scope_matches(intent):
+            return False
+        db = router._db
+        _begin_read(db)
+        try:
+            candidate = load_route_candidate(db, intent)
+            return (candidate is not None and candidate.outcome is _Outcome.NO_MATCH
+                    and _candidate_configuration(candidate) == configuration_id
+                    and _load_record(db, router._identity(intent)) is None)
+        finally:
+            _rollback(db)
+    except Exception:
+        return False
+
+
+def verify_execution_parent_route(router, *, intent, prepared) -> bool:
+    """Read the original frozen parent and intent, without sending or granting authority."""
+    try:
+        if (type(router) is not ExecutionOrderRouter or type(prepared) is not ExecutionPreparedRoute
+                or not router._source_valid() or router._db.in_transaction):
+            return False
+        intent = router._validate_intent(intent)
+        if not router._scope_matches(intent):
+            return False
+        db = router._db
+        _begin_read(db)
+        try:
+            record = _load_record(db, router._identity(intent))
+            candidate = load_route_candidate(db, intent)
+            if (record is None or candidate is None or candidate.outcome is not _Outcome.MATCH
+                    or _candidate_configuration(candidate) != record.configuration_id
+                    or record.configuration_id != router._config.configuration_id):
+                return False
+            router._check_replay(intent, record)
+            payload = json.loads(record.payload)
+            if set(payload) != _V2_PAYLOAD_FIELDS:
+                return False
+            spec = payload["spec"]
+            expected = ExecutionPreparedRoute(
+                record.account, record.strategy, record.request_key, record.intent_digest,
+                record.request_id, record.request_sha256, record.configuration_id,
+                spec["execution_domain_ref"], spec["parent_ref"])
+            return (prepared == expected and spec["account_scope"] == record.account
+                    and spec["strategy_scope"] == record.strategy
+                    and spec["execution_domain_ref"] == intent.route.scope.execution_domain_ref
+                    and spec["parent_ref"] == "sdk-parent-v1:" + router._seed(intent)[:40])
+        finally:
+            _rollback(db)
+    except Exception:
+        return False
+
+
 class ExecutionOrderRouter:
     """Durable SDK routing for one strategy's Gateway order intents.
 
@@ -1069,11 +1256,66 @@ class ExecutionOrderRouter:
             _fail("INVALID_EXECUTION_CONFIG")
         if not callable(clock):
             _fail("INVALID_EXECUTION_CONFIG")
+        try:
+            plain = config.to_plain()
+            frozen_config = parse_execution_routing(plain)
+            if frozen_config != config or frozen_config.configuration_id != config.configuration_id:
+                _fail("INVALID_EXECUTION_CONFIG")
+        except Exception:
+            _fail("INVALID_EXECUTION_CONFIG")
         self._db = connection
-        self._config = config
+        self._config = frozen_config
         self._port = execution_port
         self._risk_selected = risk_selected
         self._clock = clock
+        self._source_db = connection
+        self._source_config = frozen_config
+        self._source_config_snapshot = _canonical(frozen_config.to_plain())
+        self._source_pid = os.getpid()
+        self._source_database_key = _database_key(connection)
+
+    def _source_valid(self) -> bool:
+        try:
+            return (self._source_pid == os.getpid() and self._db is self._source_db
+                    and self._config is self._source_config
+                    and _database_key(self._db) == self._source_database_key
+                    and _canonical(self._config.to_plain()) == self._source_config_snapshot
+                    and _digest(self._config.to_plain()) == self._config.configuration_id)
+        except Exception:
+            return False
+
+    def _reject_before_submit(self, intent, code):
+        """Fence a first locally calculable rejection in the existing journal."""
+        result = self._result(ExecutionRoutingOutcome.EXECUTION_REJECTED, code=code)
+        db = self._db
+        if not self._source_valid() or not self._scope_matches(intent) or db.in_transaction:
+            return result
+        try:
+            _begin(db)
+            if (_load_record(db, self._identity(intent)) is not None
+                    or load_route_candidate(db, intent) is not None):
+                _rollback(db)
+                return result
+            candidate = record_route_candidate(db, intent,
+                configuration_id=self._config.configuration_id,
+                instruments=self._config.instruments, rules=self._config.rule_set)
+            if candidate.outcome is _Outcome.NO_MATCH:
+                _rollback(db)
+                return result
+            _commit(db)
+            if not _claim_local_decision(self, intent):
+                return result
+            token = _RejectionDecision()
+            with _direct_decisions_lock:
+                _rejection_decisions[token] = (
+                    self, db, self._config, os.getpid(), threading.current_thread(),
+                    candidate.snapshot, code,
+                )
+            return ExecutionRoutingResult(ExecutionRoutingOutcome.EXECUTION_REJECTED,
+                                          code=code, rejection_decision=token)
+        except Exception:
+            _rollback(db)
+            return result
 
     # -- identity and matching ------------------------------------------------
 
@@ -1187,7 +1429,7 @@ class ExecutionOrderRouter:
                     "price_step": policy.schedule_binding["price_step"],
                     "retry_limit": policy.schedule_binding["retry_limit"],
                 },
-                "params": policy.algorithm_params,
+                "params": _plain(policy.algorithm_params),
             },
         }
         try:
@@ -1374,13 +1616,13 @@ class ExecutionOrderRouter:
         must return literal True after persisting its own association. Failure
         leaves the record PREPARED and replay never invokes it or submits.
         """
+        if not self._source_valid():
+            _fail("INVALID_EXECUTION_CONFIG")
         intent = self._validate_intent(intent)
         identity = self._identity(intent)
         request = self._decode_request(intent)
         if not self._scope_matches(intent):
-            return self._result(
-                ExecutionRoutingOutcome.EXECUTION_REJECTED, code="EXECUTION_SCOPE_DENIED"
-            )
+            return self._reject_before_submit(intent, "EXECUTION_SCOPE_DENIED")
         # Historical requests keep their original frozen identity even when
         # the current routing configuration has changed.
         _begin_read(self._db)
@@ -1396,10 +1638,7 @@ class ExecutionOrderRouter:
             return self._replay(existing)
         instrument = self._resolve_instrument(request)
         if instrument is None:
-            return self._result(
-                ExecutionRoutingOutcome.EXECUTION_REJECTED,
-                code="EXECUTION_INSTRUMENT_UNRESOLVED",
-            )
+            return self._reject_before_submit(intent, "EXECUTION_INSTRUMENT_UNRESOLVED")
         facts = _OrderFacts(
             instrument,
             getattr(request.side, "value", None),
@@ -1410,26 +1649,17 @@ class ExecutionOrderRouter:
         )
         decision = self._config.rule_set.match(facts)
         if decision.outcome is _Outcome.INDETERMINATE:
-            return self._result(
-                ExecutionRoutingOutcome.EXECUTION_REJECTED,
-                code="EXECUTION_ROUTE_INDETERMINATE",
-            )
+            return self._reject_before_submit(intent, "EXECUTION_ROUTE_INDETERMINATE")
         if decision.outcome is _Outcome.REJECT_UNSUPPORTED:
-            return self._result(
-                ExecutionRoutingOutcome.EXECUTION_REJECTED,
-                code="EXECUTION_ORDER_TYPE_UNSUPPORTED",
-            )
+            return self._reject_before_submit(intent, "EXECUTION_ORDER_TYPE_UNSUPPORTED")
         if decision.outcome is _Outcome.MATCH:
             policy = self._config.policies[decision.rule_index]
             rejection = self._policy_rejection(request, policy)
             if rejection is not None:
-                return self._result(ExecutionRoutingOutcome.EXECUTION_REJECTED, code=rejection)
+                return self._reject_before_submit(intent, rejection)
             now = self._now()
             if now >= policy.deadline_ns:
-                return self._result(
-                    ExecutionRoutingOutcome.EXECUTION_REJECTED,
-                    code="EXECUTION_DEADLINE_EXPIRED",
-                )
+                return self._reject_before_submit(intent, "EXECUTION_DEADLINE_EXPIRED")
 
         db = self._db
         _begin(db)
@@ -1446,7 +1676,8 @@ class ExecutionOrderRouter:
                 if error.args and error.args[0] == "CANDIDATE_UNAVAILABLE":
                     raise ExecutionRoutingError("EXECUTION_REQUEST_CONFLICT") from None
                 raise ExecutionRoutingError("EXECUTION_LOCAL_RECORD_FAILED") from None
-            if candidate is None:
+            candidate_created = candidate is None
+            if candidate_created:
                 try:
                     candidate = record_route_candidate(
                         db,
@@ -1462,7 +1693,8 @@ class ExecutionOrderRouter:
                     raise ExecutionRoutingError("EXECUTION_LOCAL_RECORD_FAILED") from None
             if candidate.outcome is _Outcome.NO_MATCH:
                 _commit(db)
-                return self._result(ExecutionRoutingOutcome.DIRECT_PATH)
+                token = _issue_direct_decision(self, intent, candidate) if candidate_created else None
+                return ExecutionRoutingResult(ExecutionRoutingOutcome.DIRECT_PATH, direct_decision=token)
             if candidate.outcome is _Outcome.INDETERMINATE:
                 _commit(db)
                 return self._result(
@@ -1474,6 +1706,15 @@ class ExecutionOrderRouter:
                 return self._result(
                     ExecutionRoutingOutcome.EXECUTION_REJECTED,
                     code="EXECUTION_ORDER_TYPE_UNSUPPORTED",
+                )
+            if not candidate_created:
+                # A normal MATCH and its PREPARED parent commit together. A
+                # surviving MATCH without a parent may be a local rejection or
+                # an incomplete/rolled-back history; it cannot be sent later.
+                _rollback(db)
+                return self._result(
+                    ExecutionRoutingOutcome.EXECUTION_UNKNOWN,
+                    code="EXECUTION_ROUTE_POLICY_UNAVAILABLE",
                 )
             if _candidate_configuration(candidate) != self._config.configuration_id:
                 _rollback(db)
@@ -1502,10 +1743,7 @@ class ExecutionOrderRouter:
                 )
             if self._config.schema_version != 2:
                 _rollback(db)
-                return self._result(
-                    ExecutionRoutingOutcome.EXECUTION_REJECTED,
-                    code="EXECUTION_FROZEN_PLAN_REQUIRED",
-                )
+                return self._reject_before_submit(intent, "EXECUTION_FROZEN_PLAN_REQUIRED")
             if self._port_callable("submit") is None:
                 _rollback(db)
                 return self._result(
@@ -1559,6 +1797,7 @@ class ExecutionOrderRouter:
                 checked_now = self._now()
                 if (
                     self._db is not db
+                    or not self._source_valid()
                     or self._config is not config
                     or self._port is not port
                     or self._clock is not clock
@@ -1895,6 +2134,10 @@ __all__ = [
     "ExecutionRoutingError",
     "ExecutionRoutingOutcome",
     "ExecutionRoutingResult",
+    "consume_execution_direct_decision",
+    "consume_execution_rejection_decision",
+    "verify_execution_direct_route",
+    "verify_execution_parent_route",
     "ExecutionRoutingStatus",
     "RulePolicy",
     "install_execution_routing_tables",
