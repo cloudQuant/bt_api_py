@@ -144,6 +144,7 @@ def _bound_receipt_time_valid(received_ns: int, started_ns: int, deadline: float
 # remote discovery cannot introduce new actions into a proxy.
 PORT_OPERATIONS = MappingProxyType(
     {
+        "service.calendar_read": frozenset({"calendar.query.v1"}),
         "service.execution_delegate": frozenset(
             {"execution.child.release_policy_check"}
         ),

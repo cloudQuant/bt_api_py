@@ -23,6 +23,7 @@ from bt_api_py.gateway_execution_time import GatewayExecutionTimePolicy
 from bt_api_py.gateway_strategy_account import GatewayAccountClientSettings
 from bt_api_py.gateway_strategy_client import GatewayStrategyClientSession
 from bt_api_py.gateway_strategy_instrument import GatewayInstrumentClientSettings
+from bt_api_py.gateway_strategy_calendar import GatewayCalendarClientSettings
 from bt_api_py.gateway_strategy_market import (
     GatewayMarketClientSettings,
     GatewayMarketSubscriptionSettings,
@@ -176,7 +177,7 @@ def _instrument(value):
     )
 
 
-def _validate_client(client, binding, route, peer, operations, account, market, instrument):
+def _validate_client(client, binding, route, peer, operations, account, market, instrument, calendar):
     # Mirror the existing session's public configuration cross-checks without
     # constructing its runtime or introducing transport credentials.
     if client.process_role != "strategy_client" or set(client.clients) != {"gateway"}:
@@ -187,6 +188,8 @@ def _validate_client(client, binding, route, peer, operations, account, market, 
         expected.add("store.account")
     if market is not None:
         expected.add("store.market")
+    if calendar is not None:
+        expected.add("store.calendar")
     indexed = {item["mount"]: item for item in bindings}
     if len(bindings) != len(indexed) or set(indexed) != expected:
         raise ValueError
@@ -317,7 +320,7 @@ def _decode(raw):
             "instruments_by_ref",
             "risk",
         },
-        {"account_settings", "market_settings", "instrument_settings", "strategy_finance_currency"},
+        {"account_settings", "market_settings", "instrument_settings", "calendar_settings", "strategy_finance_currency"},
     )
     if type(raw["schema_version"]) is not int or raw["schema_version"] != 1:
         raise ValueError
@@ -351,7 +354,14 @@ def _decode(raw):
         _market(raw.get("market_settings")),
         _instrument(raw.get("instrument_settings")),
     )
-    _validate_client(client, binding, route, peer, operations, account, market, instrument)
+    raw_calendar = raw.get("calendar_settings")
+    calendar = None
+    if "calendar_settings" in raw:
+        raw_calendar = _mapping(raw_calendar, {"mode", "scopes"})
+        calendar = GatewayCalendarClientSettings(raw_calendar["mode"], tuple(_list(raw_calendar["scopes"])))
+        if any(dict(item)["route"] != exchange for item in calendar.scopes):
+            raise ValueError
+    _validate_client(client, binding, route, peer, operations, account, market, instrument, calendar)
     currency = raw.get("strategy_finance_currency")
     if "strategy_finance_currency" in raw and (
         type(currency) is not str or not 0 < len(currency) <= 256
@@ -371,6 +381,7 @@ def _decode(raw):
         "account_settings": account,
         "market_settings": market,
         "instrument_settings": instrument,
+        "calendar_settings": calendar,
         "strategy_finance_currency": currency,
         "risk": risk,
     }
@@ -438,6 +449,10 @@ class GatewayStrategyConfig:
         return self._values()["instrument_settings"]
 
     @property
+    def calendar_settings(self):
+        return self._values()["calendar_settings"]
+
+    @property
     def risk_selection(self):
         """The selected Risk client (D64-01), or None for an explicit ``"none"``."""
         return self._values()["risk"]
@@ -480,6 +495,7 @@ class GatewayStrategyConfig:
             account_settings=values["account_settings"],
             market_settings=values["market_settings"],
             instrument_settings=values["instrument_settings"],
+            calendar_settings=values["calendar_settings"],
         )
 
     def create_api(

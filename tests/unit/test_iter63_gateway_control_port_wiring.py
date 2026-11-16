@@ -58,7 +58,7 @@ def runtime_client(mount: str) -> dict[str, object]:
 
 def test_the_gateway_trading_owner_serves_the_control_port():
     assert _COMPONENT_PORTS["gateway"]["trading_owner"] == frozenset(
-        {"service.direct_write", "service.account_read", "service.market_source"})
+        {"service.direct_write", "service.account_read", "service.market_source", "service.calendar_read"})
     assert "service.direct_write" in _SERVICE_PORTS
     assert CONTROL_OPERATIONS <= _GATEWAY_CONTROL_OPERATIONS
 

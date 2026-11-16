@@ -99,6 +99,7 @@ class GatewayBtApi:
         self._account = session.account_client
         self._market = session.market_client
         self._instrument = session.instruments
+        self._calendar = session.calendar
         self._subscriptions = dict(self._market._clients) if self._market is not None else {}
         if risk_client is not None:
             from bt_api_py.risk_service_client import RiskServiceClient
@@ -145,6 +146,7 @@ class GatewayBtApi:
             or session.account_client is not self._account
             or session.market_client is not self._market
             or session.instruments is not self._instrument
+            or session.calendar is not self._calendar
         ):
             raise RuntimeError("GATEWAY_BINDING_CHANGED")
         for client in (self._command, self._stream, self._position, self._delegated, self._financial):
@@ -162,7 +164,7 @@ class GatewayBtApi:
             or self._delegated._cancel_host is not self._delegated_cancel_host
         ):
             raise RuntimeError("GATEWAY_BINDING_CHANGED")
-        for client in (self._account, self._instrument, *self._subscriptions.values()):
+        for client in (self._account, self._instrument, self._calendar, *self._subscriptions.values()):
             if client is not None and client._runtime is not self._runtime:
                 raise RuntimeError("GATEWAY_BINDING_CHANGED")
         if self._account_observer is not None and (
@@ -745,6 +747,15 @@ class GatewayBtApi:
         if type(name) is not str or name not in self._subscriptions:
             raise RuntimeError("MARKET_SUBSCRIPTION_UNAVAILABLE")
         return self._subscriptions[name]
+
+    def trading_calendar_query(self, exchange_name, *, route, venue, kind, product, contract, trading_day, timeout_seconds=5.0):
+        """Read the explicitly configured simulation calendar through Gateway."""
+        self._check(exchange_name)
+        if self._calendar is None:
+            raise RuntimeError("CALENDAR_CLIENT_UNAVAILABLE")
+        if route != exchange_name:
+            raise ValueError("CALENDAR_SCOPE_NOT_CONFIGURED")
+        return self._calendar.query(route=route, venue=venue, kind=kind, product=product, contract=contract, trading_day=trading_day, timeout_seconds=timeout_seconds)
 
     def get_instrument_spec(self, exchange_name, symbol, *, timeout_seconds=5.0):
         self._check(exchange_name)

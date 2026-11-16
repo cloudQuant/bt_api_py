@@ -931,6 +931,7 @@ class ServiceHost:
             trading_account_optional_omissions: dict[str, frozenset[str]] = {}
             gateway_heartbeat_resources: list[tuple[str, object]] = []
             gateway_claim_resources: list[ComponentResources] = []
+            gateway_calendar_resources: list[tuple[str, object]] = []
             gateway_owner_guard_resources: list[tuple[PreparedComponent, ServiceComponent, ComponentResources]] = []
             risk_admin_component = None
             execution_parent_grants: list[object] = []
@@ -1044,6 +1045,17 @@ class ServiceHost:
                     if 'account_cancel_attempts' not in pending_resources.values:
                         omitted |= direct_module.ACCOUNT_CANCEL_ATTEMPT_OPERATIONS
                     trading_account_optional_omissions[item.spec.instance_id] = omitted
+                    calendar = pending_resources.values.get('calendar_service')
+                    if calendar is not None:
+                        from bt_api_py.gateway_calendar_service import GatewayCalendarService
+                        caps = [cap for cap in component.capabilities if cap.port == 'service.calendar_read']
+                        if (type(calendar) is not GatewayCalendarService or len(caps) != 1
+                                or caps[0].instance_id != item.spec.instance_id
+                                or caps[0].operations != frozenset({'calendar.query.v1'})
+                                or caps[0].write_operations or 'calendar.query.v1' not in component.handlers
+                                or any(other is calendar for _, other in gateway_calendar_resources)):
+                            raise ServiceHostError('GATEWAY_CALENDAR_INVALID')
+                        gateway_calendar_resources.append((item.spec.instance_id, calendar))
                     subject_binding = pending_resources.values.get('execution_subject_binding')
                     if subject_binding is not None:
                         gateway_subject_bindings.append(subject_binding)
@@ -1383,6 +1395,14 @@ class ServiceHost:
                 # The registry closed its database and refused to open.
                 raise ServiceHostError(exc.code) from None
             registry = self._registry
+            try:
+                for instance_id, calendar in gateway_calendar_resources:
+                    matches = [cap for cap in capabilities if cap.instance_id == instance_id and cap.port == "service.calendar_read"]
+                    if len(matches) != 1 or matches[0].operations != frozenset({"calendar.query.v1"}):
+                        raise ValueError
+                    calendar.bind_registry(registry)
+            except Exception:
+                raise ServiceHostError("GATEWAY_CALENDAR_INVALID") from None
             for prepared, component, resources in gateway_owner_guard_resources:
                 expected = tuple(cap for cap in capabilities if cap.instance_id == component.instance_id)
                 self._bind_gateway_owner_guard(registry, prepared, component, resources, expected)

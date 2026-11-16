@@ -358,7 +358,7 @@ def validate_service_options(
         or ("bounded_read_after" in options and "service.market_source" not in bind_ports)
         or "service.direct_write" not in bind_ports
         or len(bind_ports) != len(set(bind_ports))
-        or not set(bind_ports) <= {"service.direct_write", "service.account_read", "service.market_source"}
+        or not set(bind_ports) <= {"service.direct_write", "service.account_read", "service.market_source", "service.calendar_read"}
     ):
         raise ValueError("INVALID_DIRECT_OPTIONS")
     result = {

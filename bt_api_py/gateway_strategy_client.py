@@ -152,21 +152,30 @@ class _StrategyOwnerExtension:
         account_settings,
         market_settings,
         instrument_settings,
+        calendar_settings,
         *,
         account_ref,
         scope_ref,
         stream_scope,
         security_profiles,
+        route,
+        peer,
     ):
+        self._route, self._peer = route, peer
+        self._calendar_settings = calendar_settings
         self._account_settings = account_settings
         self._market_settings = market_settings
         self._instrument_settings = instrument_settings
         self._account_ref, self._scope_ref = account_ref, scope_ref
         self._stream_scope, self._security_profiles = stream_scope, security_profiles
-        self._account = self._market = self._instrument = None
-        self._uncertainties = {"account": 0, "market": 0, "instrument": 0}
+        self._account = self._market = self._instrument = self._calendar = None
+        self._uncertainties = {"account": 0, "market": 0, "instrument": 0, "calendar": 0}
 
     def start(self, runtime):
+        if self._calendar_settings is not None:
+            from bt_api_py.gateway_strategy_calendar import GatewayCalendarOwner
+            self._calendar = GatewayCalendarOwner(self._calendar_settings, account_ref=self._account_ref, scope_ref=self._scope_ref, route=self._route, peer=self._peer)
+            self._calendar.start(runtime)
         if self._account_settings is not None:
             from bt_api_py.gateway_strategy_account import GatewayAccountOwner
 
@@ -208,6 +217,8 @@ class _StrategyOwnerExtension:
             if self._account is None:
                 raise OwnerOperationError("ACCOUNT_UNAVAILABLE")
             return self._account.invoke(operation.removeprefix("account."), arguments)
+        if operation.startswith("calendar.") and self._calendar is not None:
+            return self._calendar.invoke(operation.removeprefix("calendar."), arguments)
         if operation.startswith("instrument.") and self._instrument is not None:
             return self._instrument.invoke(
                 operation.removeprefix("instrument."), arguments
@@ -218,7 +229,7 @@ class _StrategyOwnerExtension:
 
     @property
     def cleanup_uncertainties(self):
-        for name in ("account", "market", "instrument"):
+        for name in ("account", "market", "instrument", "calendar"):
             owner = getattr(self, "_" + name)
             if owner is not None:
                 count = owner.cleanup_uncertainties
@@ -232,7 +243,7 @@ class _StrategyOwnerExtension:
 
     def close(self):
         failed = False
-        for name in ("market", "instrument", "account"):
+        for name in ("calendar", "market", "instrument", "account"):
             owner = getattr(self, "_" + name)
             if owner is None:
                 continue
@@ -283,13 +294,14 @@ class GatewayStrategyClientSession:
         account_facts_operations: frozenset[str] | None = None,
         market_settings: GatewayMarketClientSettings | None = None,
         instrument_settings: GatewayInstrumentClientSettings | None = None,
+        calendar_settings=None,
     ) -> None:
         if type(config) is not ClientConfig:
             raise ValueError("INVALID_CONFIG")
         if type(strict_cleanup) is not bool:
             raise ValueError("INVALID_CLEANUP_POLICY")
         if strict_cleanup and any(item is not None for item in (
-            account_settings, market_settings, instrument_settings
+            account_settings, market_settings, instrument_settings, calendar_settings
         )):
             # These owners have separate acquisition/cleanup lifetimes and
             # are not yet composed into this strict session's custody.
@@ -309,6 +321,8 @@ class GatewayStrategyClientSession:
                 expected_mounts.add("store.account")
             if market_settings is not None:
                 expected_mounts.add("store.market")
+            if calendar_settings is not None:
+                expected_mounts.add("store.calendar")
             indexed = {item["mount"]: item for item in bindings}
             if len(bindings) != len(indexed) or set(indexed) != expected_mounts:
                 raise ValueError
@@ -503,6 +517,12 @@ class GatewayStrategyClientSession:
                 instruments=instrument_settings.instruments,
                 requested_operations=instrument_settings.requested_operations,
             )
+        frozen_calendar = None
+        if calendar_settings is not None:
+            from bt_api_py.gateway_strategy_calendar import GatewayCalendarClientSettings
+            if type(calendar_settings) is not GatewayCalendarClientSettings:
+                raise ValueError("INVALID_CALENDAR_SETTINGS")
+            frozen_calendar = GatewayCalendarClientSettings(calendar_settings.mode, tuple(dict(item) for item in calendar_settings.scopes))
         operation_map = {route_copy.mount: requested_operations}
         if frozen_account is not None:
             operation_map["store.account"] = frozen_account.requested_operations
@@ -515,6 +535,8 @@ class GatewayStrategyClientSession:
                 operation_map.get("store.account", frozenset())
                 | frozen_instrument.requested_operations
             )
+        if frozen_calendar is not None:
+            operation_map["store.calendar"] = frozenset({"calendar.query.v1"})
         if frozen_market is not None:
             operation_map["store.market"] = frozen_market.requested_operations
         base_scope = WireScope(
@@ -553,16 +575,19 @@ class GatewayStrategyClientSession:
             frozen_account is not None
             or frozen_market is not None
             or frozen_instrument is not None
+            or frozen_calendar is not None
         ):
             runtime_options["owner_extension_factory"] = (
                 lambda: _StrategyOwnerExtension(
                     frozen_account,
                     frozen_market,
                     frozen_instrument,
+                    frozen_calendar,
                     account_ref=bound.account_scope,
                     scope_ref=route_copy.scope_ref,
                     stream_scope=WireScope(scope.execution_domain_ref),
                     security_profiles=frozen_security,
+                    route=route_copy, peer=peer_copy,
                 )
             )
         if strict_cleanup:
@@ -616,6 +641,11 @@ class GatewayStrategyClientSession:
             instrument_client = GatewayStrategyInstrumentClient(
                 runtime, frozen_instrument
             )
+        calendar_client = None
+        if frozen_calendar is not None:
+            from bt_api_py.gateway_strategy_calendar import GatewayStrategyCalendarClient
+            calendar_client = GatewayStrategyCalendarClient(runtime, frozen_calendar, route=route_copy, peer=peer_copy)
+        self._calendar_client = calendar_client
         self._account_client, self._market_client = account_client, market_client
         self._instrument_client = instrument_client
         self._runtime = runtime
@@ -643,6 +673,10 @@ class GatewayStrategyClientSession:
     @property
     def market_client(self):
         return self._market_client
+
+    @property
+    def calendar(self):
+        return self._calendar_client
 
     @property
     def instruments(self):

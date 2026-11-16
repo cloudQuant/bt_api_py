@@ -647,9 +647,10 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             module_name="bt_api_py.gateway_direct_service",
             operations_attribute=("TRADING_OPERATIONS",),
             resource_keys=frozenset({"binding"}),
-            optional_resource_keys=frozenset({"owner_guard_binding", "lease_drain", "cancel_only", "instrument_block", "account_comparison", "account_strategy_reads", "account_observer", "account_facts", "account_cancel_attempts", "delegation_service", "delegate_actor_service", "delegate_actor_stream", "parent_service", "parent_acceptance_service", "claim_coordinator", "claim_sealer", "claim_wired", "execution_subject_binding"}),
+            optional_resource_keys=frozenset({"owner_guard_binding", "lease_drain", "cancel_only", "instrument_block", "account_comparison", "account_strategy_reads", "account_observer", "account_facts", "account_cancel_attempts", "delegation_service", "delegate_actor_service", "delegate_actor_stream", "parent_service", "parent_acceptance_service", "claim_coordinator", "claim_sealer", "claim_wired", "execution_subject_binding", "calendar_service"}),
             public_ports=MappingProxyType(
                 {
+                    "service.calendar_read": frozenset({"calendar.query.v1"}),
                     "service.direct_write": frozenset(
                         {"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch",
                          "direct.cancel", "direct.cancel_status",
@@ -1439,6 +1440,8 @@ def validate_components(specs: Sequence[ComponentSpec]) -> tuple[PreparedCompone
                 operations = operations - {"direct.delegate_events.read_after", "direct.delegate_events.progress", "direct.delegate_events.ack"}
             if normalized.get("bounded_read_after") is not True:
                 operations = operations - {"market.read_after_bounded"}
+        if spec.component == "gateway" and spec.options.get("role") == "trading_owner" and "service.calendar_read" in spec.bind_ports:
+            operations = operations | {"calendar.query.v1"}
         if spec.component == "gateway" and normalized.get("reconciliation_cut") is True:
             # Only an explicitly enabled worker with a trusted inspector port
             # serves reconciliation evidence (iteration 60, acceptance G2).
@@ -2067,7 +2070,7 @@ def build_component(
     execution_owner_lock: _ExecutionOwnerFileLock | _ExecutionOwnerMemoryLock | None = None
     execution_owner_lock_transferred = False
     adapter_close_before_resources: Callable[[], None] | None = None
-    defer_resource_tracking = (spec.component == "execution" and spec.options.get("role") == "atomic_intake") or ("service.order_entry" in spec.bind_ports and (
+    defer_resource_tracking = (spec.component == "gateway" and spec.options.get("role") == "trading_owner" and "service.calendar_read" in spec.bind_ports) or (spec.component == "execution" and spec.options.get("role") == "atomic_intake") or ("service.order_entry" in spec.bind_ports and (
         (
             spec.component == "execution"
             and spec.options.get("role") == "group_account_owner"
@@ -2103,6 +2106,11 @@ def build_component(
         raise ServiceComponentError("RESOURCE_RESOLUTION_FAILED") from None
     if type(resources) is not ComponentResources:
         raise ServiceComponentError("INVALID_COMPONENT_RESOURCES")
+    if defer_resource_tracking and spec.component == "gateway" and "calendar_service" in resources.values:
+        from bt_api_py.gateway_calendar_service import GatewayCalendarService
+        calendar_resource = resources.values["calendar_service"]
+        if type(calendar_resource) is GatewayCalendarService:
+            adapter_close_before_resources = calendar_resource.close
     injected_internal_ports = (
         {} if trusted_internal_ports is None else dict(trusted_internal_ports)
     )
@@ -2217,6 +2225,9 @@ def build_component(
             if resources.values["group_admission"] is None:
                 raise ServiceComponentError("GROUP_POLICY_RESOURCE_INVALID")
             expected_keys = expected_keys | {"group_admission"}
+        if (spec.component == "gateway" and spec.options.get("role") == "trading_owner"
+                and (("service.calendar_read" in public_ports) != ("calendar_service" in resources.values))):
+            raise ServiceComponentError("INVALID_CALENDAR_SERVICE_BINDING")
         if set(resources.values) != set(expected_keys):
             raise ServiceComponentError("RESOURCE_KEYS_MISMATCH")
         group_compensation_source: object | None = None
@@ -2359,6 +2370,7 @@ def build_component(
         trading_read_adapter: object | None = None
         trading_read_module: object | None = None
         trading_instrument_adapter: object | None = None
+        trading_calendar_adapter: object | None = None
         trading_account_comparison: object | None = None
         trading_account_strategy_reads: object | None = None
         trading_account_observer: object | None = None
@@ -2408,6 +2420,13 @@ def build_component(
                     adapter = values["binding"]
                     if type(adapter) is not module.GatewayDirectServiceBinding:
                         raise ServiceComponentError("INVALID_DIRECT_BINDING")
+                    if "service.calendar_read" in public_ports:
+                        from bt_api_py.gateway_calendar_service import GatewayCalendarService
+                        trading_calendar_adapter = values["calendar_service"]
+                        if (type(trading_calendar_adapter) is not GatewayCalendarService
+                                or any(grant.account_ref != adapter.account_scope for grant in trading_calendar_adapter._grants)):
+                            raise ServiceComponentError("INVALID_CALENDAR_SERVICE_BINDING")
+                        adapter_close_before_resources = trading_calendar_adapter.close
                     if "owner_guard_binding" in values:
                         from bt_api_py._gateway_owner_guard_binding import _GatewayOwnerGuardBinding
                         from bt_api_py.gateway_direct_owner import GatewayDirectOwner
@@ -3412,6 +3431,9 @@ def build_component(
             ) -> Mapping[str, Any]:
                 assert _adapter is not None
                 if spec.component == "gateway" and spec.options.get("role") == "trading_owner":
+                    if _operation == "calendar.query.v1":
+                        assert trading_calendar_adapter is not None
+                        return trading_calendar_adapter.handle(_operation, context=context, arguments=arguments)
                     if _operation in prepared.module.PARENT_ACCEPTANCE_OPERATIONS:
                         assert trading_parent_acceptance_adapter is not None
                         return trading_parent_acceptance_adapter.handle(_operation, context, arguments)
