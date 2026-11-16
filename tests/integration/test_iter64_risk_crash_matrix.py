@@ -22,19 +22,22 @@ import pytest
 from bt_api_py.risk_service_host import FAULT_EXIT_CODE
 from tests.integration import _iter64_recovery_support as support
 
-# The counters-less v2 policy now publishes and activates (decision B-1), so
-# policy activation no longer blocks these scenarios.  What still blocks them
-# is the synthetic Gateway journal: it is built at schema 12, and the current
-# account-observer ACK refuses an offer it cannot bind to the authenticated
-# registration owner (schema < 19, ACCOUNT_OBSERVER_HANDOFF_UNAVAILABLE).  Risk
-# therefore reports ``observation_ack_unproven`` and these checks never reach
-# the crash points.  Keep them collected and strict-xfailed so the fixture
-# upgrade surfaces as XPASS.
+# The counters-less v2 policy now publishes and activates (decision B-1), and
+# the synthetic Gateway journal is now schema 19: the account-observer ACK
+# handoff succeeds and Risk reports observation continuity VERIFIED.  What
+# still blocks these scenarios is the unwired v1 write path: the Risk service
+# refuses every authenticated order write with UNKNOWN risk_permit_mismatch
+# (and risk.status reports available=False while
+# bt_api_risk.pretrade.engine keeps the v1 source quarantined), so the runs
+# never reach their crash points.  Keep them collected and strict-xfailed so a
+# wired proof surfaces as XPASS.
 OBSERVATION_ACK_BLOCKED = pytest.mark.xfail(
     strict=True,
-    reason="observation_ack_unproven: the synthetic Gateway journal is below "
-           "schema 19, so the account-observer ACK handoff is unavailable; "
-           "policy activation itself succeeds for the counters-less v2 fixture",
+    reason="risk_v1_writes_quarantined: the synthetic Gateway journal is now "
+           "schema 19 and the account-observer ACK handoff succeeds "
+           "(continuity VERIFIED), but the Risk service refuses every "
+           "authenticated order write with UNKNOWN risk_permit_mismatch "
+           "because the v1 first-creation proof is not wired",
 )
 pytestmark = OBSERVATION_ACK_BLOCKED
 

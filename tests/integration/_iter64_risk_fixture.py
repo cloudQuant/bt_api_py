@@ -3,11 +3,12 @@
 Processes, all over real CURVE on loopback:
 
 * one spawned Gateway (synthetic native dispatcher and cancel dispatcher, synthetic
-  venue returns injected on request, journal schema 17 with the strategy ledger,
-  strategy origins and contract controls; delegation of strategies A and B to the
-  Risk principal; the Risk principal is also the account observer; a ``risk``
-  control grant for the Risk control principal and an ``operator`` control grant
-  for a human Gateway operator);
+  venue returns injected on request, journal schema 19 with the strategy ledger,
+  strategy origins, contract controls, and durable account fact/event consumer
+  ownership; delegation of strategies A and B to the Risk principal; the Risk
+  principal is also the account observer; a ``risk`` control grant for the Risk
+  control principal and an ``operator`` control grant for a human Gateway
+  operator);
 * the Risk host, started through its CLI ``python -m bt_api_py.risk_service_host run``
   in a subprocess (restartable on the same storage);
 * three spawned strategy processes: A and B select Risk (``GatewayBtApi`` with a
@@ -229,6 +230,7 @@ def gateway_process(root, endpoint, server_keys, publics, messages, controls, pa
                 "enable_account_extensions", "enable_parent_authority",
                 "enable_account_facts_financial", "enable_actor_stream",
                 "enable_strategy_origin", "enable_control_cancel",
+                "enable_account_fact_recovery", "enable_account_event_recovery",
             ):
                 getattr(journal, step)(guard)
             holder["control"] = GatewayDirectControl(journal, guard)

@@ -27,7 +27,7 @@ import sys
 import tempfile
 import threading
 import time
-from contextlib import closing
+from contextlib import closing, nullcontext
 from decimal import Decimal
 from pathlib import Path
 
@@ -356,6 +356,7 @@ def gateway_main(root, endpoint, server_keys, publics, strategy_count, messages,
         from bt_api_gateway.session_guard import LocalAccountSessionGuard
         from iter63_claim_support import SyntheticClaimPort, claiming
 
+        import bt_api_py.gateway_strategy_origin_source as source_module
         from bt_api_py.gateway_account_comparison import GatewayAccountComparison
         from bt_api_py.gateway_account_observer import (
             ACCOUNT_OBSERVER_OPERATIONS,
@@ -379,8 +380,12 @@ def gateway_main(root, endpoint, server_keys, publics, strategy_count, messages,
         from bt_api_py.service_config import parse_service_config
         from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority
         from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
+        from tests._synthetic_strategy_origin_source import SyntheticStrategyOriginSource
         from tests.integration.test_iter63_delegate_risk_execution_loopback import _read_service
         from tests.integration.test_iter63_gateway_direct_service import _service_config
+
+        # Child-process synthetic source only; it does not establish claim coverage.
+        source_module.GatewayStrategyOriginSource = SyntheticStrategyOriginSource
 
         key = instrument()
         root = Path(root)
@@ -401,12 +406,23 @@ def gateway_main(root, endpoint, server_keys, publics, strategy_count, messages,
                     database, ACCOUNT, generation=generation, expected_journal_id=journal_id,
                     minimum_revision=revision, controls_enabled=True,
                     strategy_ledger_enabled=True, account_extensions_enabled=True,
+                    parent_authority_enabled=True, account_facts_financial_enabled=True,
+                    actor_stream_enabled=True, strategy_origin_enabled=True,
+                    control_cancel_enabled=True, account_fact_recovery_enabled=True,
+                    account_event_recovery_enabled=True,
                 )
             else:
                 journal = GatewayDirectCommandJournal.create(database, ACCOUNT, generation=generation)
                 journal.enable_controls(guard)
                 journal.enable_strategy_ledger(guard)
                 journal.enable_account_extensions(guard)
+                journal.enable_parent_authority(guard)
+                journal.enable_account_facts_financial(guard)
+                journal.enable_actor_stream(guard)
+                journal.enable_strategy_origin(guard)
+                journal.enable_control_cancel(guard)
+                journal.enable_account_fact_recovery(guard)
+                journal.enable_account_event_recovery(guard)
             holder["control"] = GatewayDirectControl(journal, guard)
             holder["ledger"] = GatewayDirectExecutionLedger(journal, guard)
 
@@ -444,9 +460,19 @@ def gateway_main(root, endpoint, server_keys, publics, strategy_count, messages,
             cancel_dispatcher = GatewayDirectCancelDispatcher(
                 GatewayDirectCancelJournal(journal), dispatcher, guard, "CTP", cancel, lambda _: True
             )
+            source = SyntheticStrategyOriginSource(
+                resolve=lambda _context, _order: key,
+                recheck=lambda value: value == key,
+            )
             holder["journal"] = journal
+            holder["source"] = source
+
+            def close():
+                source.close()
+                guard.release()
+
             return GatewayDirectOwnerResources(
-                dispatcher, journal, guard.release, cancel_dispatcher=cancel_dispatcher
+                dispatcher, journal, close, cancel_dispatcher=cancel_dispatcher
             )
 
         owner = GatewayDirectOwner(
@@ -462,9 +488,11 @@ def gateway_main(root, endpoint, server_keys, publics, strategy_count, messages,
             journal,
             {s.principal_ref: GatewayDirectGrant(s.actor_ref, frozenset({"rb"})) for s in strategies},
             owner=owner,
+            reservation_fence=lambda _context, _order: nullcontext(),
             cancel_enabled=True,
             execution_stream=stream,
             execution_domain_ref=DOMAIN,
+            strategy_origin_source=holder["source"],
             control=holder["control"],
             control_grants={
                 CONTROL.principal_ref: GatewayControlGrant(

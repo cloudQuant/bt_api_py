@@ -22,6 +22,7 @@ import sqlite3
 import subprocess
 import sys
 import time
+from contextlib import nullcontext
 from decimal import Decimal
 from pathlib import Path
 
@@ -29,17 +30,22 @@ import pytest
 import zmq
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 
-# The counters-less v2 policy now publishes and activates (decision B-1).  This
-# scenario is still blocked at the observation gate: the synthetic Gateway
-# journal is below schema 19, so the account-observer ACK handoff is refused
-# (ACCOUNT_OBSERVER_HANDOFF_UNAVAILABLE) and Risk reports
-# ``observation_ack_unproven``.  Keep it collected and strict-xfailed so the
-# fixture upgrade surfaces as XPASS.
+# The counters-less v2 policy now publishes and activates (decision B-1), and
+# the synthetic Gateway journal is now schema 19: the account-observer ACK
+# handoff succeeds and observation continuity is VERIFIED.  This scenario is
+# still blocked by the unwired v1 write path: risk.status reports
+# available=False while bt_api_risk.pretrade.engine keeps the v1 source
+# quarantined, and every authenticated order write is refused with UNKNOWN
+# risk_permit_mismatch (the first-creation proof is not wired).  Keep it
+# collected and strict-xfailed so a wired proof surfaces as XPASS.
 OBSERVATION_ACK_BLOCKED = pytest.mark.xfail(
     strict=True,
-    reason="observation_ack_unproven: the synthetic Gateway journal is below "
-           "schema 19, so the account-observer ACK handoff is unavailable; "
-           "policy activation itself succeeds for the counters-less v2 fixture",
+    reason="risk_v1_writes_quarantined: the synthetic Gateway journal is now "
+           "schema 19 and the account-observer ACK handoff succeeds "
+           "(continuity VERIFIED), but risk.status reports available=False "
+           "while bt_api_risk.pretrade.engine keeps the v1 source quarantined, "
+           "and every authenticated order write is refused with UNKNOWN "
+           "risk_permit_mismatch",
 )
 
 ACCOUNT, DOMAIN, RUN = "account-a", "paper:demo", "strategy-run"
@@ -183,6 +189,7 @@ def _gateway(root, endpoint, server_keys, publics, messages, controls):
         from bt_api_gateway.direct_execution_journal import GatewayDirectExecutionLedger
         from bt_api_gateway.session_guard import LocalAccountSessionGuard
 
+        import bt_api_py.gateway_strategy_origin_source as source_module
         from bt_api_py.gateway_account_observer import (
             ACCOUNT_OBSERVER_OPERATIONS,
             GatewayAccountObserver,
@@ -205,8 +212,12 @@ def _gateway(root, endpoint, server_keys, publics, messages, controls):
         from bt_api_py.service_config import parse_service_config
         from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority
         from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
+        from tests._synthetic_strategy_origin_source import SyntheticStrategyOriginSource
         from tests.integration.test_iter63_delegate_risk_execution_loopback import _read_service
         from tests.integration.test_iter63_gateway_direct_service import _service_config
+
+        # Child-process synthetic source only; it does not establish claim coverage.
+        source_module.GatewayStrategyOriginSource = SyntheticStrategyOriginSource
 
         instrument = _instrument()
         root = Path(root)
@@ -221,6 +232,13 @@ def _gateway(root, endpoint, server_keys, publics, messages, controls):
             journal.enable_controls(guard)
             journal.enable_strategy_ledger(guard)
             journal.enable_account_extensions(guard)
+            journal.enable_parent_authority(guard)
+            journal.enable_account_facts_financial(guard)
+            journal.enable_actor_stream(guard)
+            journal.enable_strategy_origin(guard)
+            journal.enable_control_cancel(guard)
+            journal.enable_account_fact_recovery(guard)
+            journal.enable_account_event_recovery(guard)
             holder["control"] = GatewayDirectControl(journal, guard)
             holder["ledger"] = GatewayDirectExecutionLedger(journal, guard)
 
@@ -260,9 +278,19 @@ def _gateway(root, endpoint, server_keys, publics, messages, controls):
             cancel_dispatcher = GatewayDirectCancelDispatcher(
                 GatewayDirectCancelJournal(journal), dispatcher, guard, "CTP", cancel, lambda _: True
             )
+            source = SyntheticStrategyOriginSource(
+                resolve=lambda _context, _order: instrument,
+                recheck=lambda value: value == instrument,
+            )
             holder["journal"] = journal
+            holder["source"] = source
+
+            def close():
+                source.close()
+                guard.release()
+
             return GatewayDirectOwnerResources(
-                dispatcher, journal, guard.release, cancel_dispatcher=cancel_dispatcher
+                dispatcher, journal, close, cancel_dispatcher=cancel_dispatcher
             )
 
         owner = GatewayDirectOwner(
@@ -278,9 +306,11 @@ def _gateway(root, endpoint, server_keys, publics, messages, controls):
             journal,
             {STRATEGY.principal_ref: GatewayDirectGrant(STRATEGY.actor_ref, frozenset({"rb"}))},
             owner=owner,
+            reservation_fence=lambda _context, _order: nullcontext(),
             cancel_enabled=True,
             execution_stream=stream,
             execution_domain_ref=DOMAIN,
+            strategy_origin_source=holder["source"],
             control=holder["control"],
             control_grants={
                 CONTROL.principal_ref: GatewayControlGrant(

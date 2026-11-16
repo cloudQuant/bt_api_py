@@ -8,11 +8,22 @@ from __future__ import annotations
 import multiprocessing
 import sqlite3
 
+import pytest
+
 from tests.integration import _iter64_recovery_support as support
-from tests.integration.test_iter64_risk_crash_matrix import (
-    OBSERVATION_ACK_BLOCKED,
-    _answer,
-    _Loopback,
+from tests.integration.test_iter64_risk_crash_matrix import _answer, _Loopback
+
+# The synthetic Gateway journal is now schema 19, so the account-observer ACK
+# handoff succeeds and Risk reports observation continuity VERIFIED.  This
+# scenario is still blocked by the unwired v1 write path: the first Risk
+# reservation is refused with UNKNOWN risk_permit_mismatch, so the Gateway
+# restart is never reached.
+RISK_V1_WRITES_BLOCKED = pytest.mark.xfail(
+    strict=True,
+    reason="risk_v1_writes_quarantined: the first Risk reservation returns "
+           "UNKNOWN risk_permit_mismatch because the v1 first-creation proof is "
+           "not wired; the synthetic Gateway journal is schema 19 and the "
+           "account-observer ACK handoff succeeds",
 )
 
 
@@ -21,7 +32,7 @@ def _cursor(root):
         return db.execute("SELECT continuity, gap_reason FROM risk_pretrade_cursor").fetchone()
 
 
-@OBSERVATION_ACK_BLOCKED
+@RISK_V1_WRITES_BLOCKED
 def test_gateway_restart_recovers_original_risk_process_without_replaying_writes(tmp_path_factory):
     root = support.retained_loopback_root(tmp_path_factory.getbasetemp())
     print(f"Retained synthetic Risk loopback root: {root}")

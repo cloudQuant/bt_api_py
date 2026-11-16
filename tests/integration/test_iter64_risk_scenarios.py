@@ -28,26 +28,46 @@ from tests.integration._iter64_risk_fixture import (
 A, B, C = (STRATEGIES[name].actor_ref for name in ("a", "b", "c"))
 
 # The counters-less v2 policy now publishes, loads and activates (decision
-# B-1), so the retired v1 fixture is gone.  The remaining blockers are not the
-# policy schema: (1) the synthetic Gateway journal is built below schema 19, so
-# the account-observer ACK handoff is refused
-# (ACCOUNT_OBSERVER_HANDOFF_UNAVAILABLE) and Risk reports
-# ``observation_ack_unproven``; (2) behind it, the BT v1 facade refuses a new
-# reservation locally (first-creation proof, ``RISK_OUTCOME_UNKNOWN``).  Keep
-# the scenarios collected and strict-xfailed so either fixture upgrade or a
-# wired proof surfaces as XPASS.  Tests with a ``skip`` GAP marker stay skipped.
+# B-1), and the synthetic Gateway journal is now schema 19, so the
+# account-observer ACK handoff succeeds and Risk reports observation continuity
+# VERIFIED.  What still blocks these scenarios is the unwired v1 write path:
+# the Risk service refuses every authenticated order write with UNKNOWN
+# ``risk_permit_mismatch`` (the first-creation proof is not wired), and the BT
+# v1 facade returns local ``RISK_OUTCOME_UNKNOWN``.  Keep the scenarios
+# collected and strict-xfailed so a wired proof surfaces as XPASS.  Tests with
+# a ``skip`` GAP marker stay skipped.
 NOT_POLICY_BLOCKED = pytest.mark.xfail(
     strict=True,
-    reason="observation_ack_unproven and the BT v1 facade first-creation proof: "
-           "the synthetic Gateway journal is below schema 19 (observer ACK "
-           "handoff unavailable) and facade reservations still return local "
-           "UNKNOWN; v2 policy activation itself succeeds (decision B-1)",
+    reason="risk_v1_writes_quarantined: the synthetic Gateway journal is now "
+           "schema 19, so the account-observer ACK handoff succeeds and "
+           "observation continuity is VERIFIED, but the Risk service refuses "
+           "every authenticated order write with UNKNOWN risk_permit_mismatch "
+           "and the BT v1 facade returns local RISK_OUTCOME_UNKNOWN; the "
+           "first-creation proof is not wired",
 )
 COUNTERS_BLOCKED = pytest.mark.xfail(
     strict=True,
     reason="policy_r04_v2_unavailable: a v2 policy with counters still needs the "
-           "unconnected R-04 v2 rule evaluation; B-1 covers counters-less "
-           "documents only",
+           "unconnected R-04 v2 rule evaluation, so the host refuses its policy "
+           "file at startup (RISK_SERVICE_POLICY_PUBLISH_REFUSED, caused by "
+           "policy_r04_v2_unavailable / RULE_R04_V2_UNAVAILABLE); B-1 covers "
+           "only counters-less documents",
+)
+ROUTE_RECOVERY_GAP = pytest.mark.xfail(
+    strict=True,
+    reason="risk_route_sticky_after_restart: the first PLACE after a Risk "
+           "restart returns UNKNOWN as allowed, but the client keeps the failed "
+           "runtime (MAINTENANCE_FAILED) because its earlier unregister is now "
+           "unconfirmed (unregister_uncertainties=1), so reconnect refuses to "
+           "replace it and the route never recovers within the wait; the "
+           "sibling unconfirmed-unregister test asserts that refusal (D64-02)",
+)
+BYPASS_ATTRIBUTION_GAP = pytest.mark.xfail(
+    strict=True,
+    reason="bypass order attribution: this scenario now reaches the Risk "
+           "projection, but bt_api_risk.pretrade.engine stores strategy_ref=NULL "
+           "for an observed order without a Risk permit (and adds no position "
+           "row), so the Gateway-attributed strategy C is not recorded",
 )
 
 
@@ -346,7 +366,7 @@ def test_d64_02_unconfirmed_unregister_retains_original_runtime_and_refuses(env)
     assert env.call("a", "risk_runtime_status") == snapshot
 
 
-@NOT_POLICY_BLOCKED
+@BYPASS_ATTRIBUTION_GAP
 def test_inv64_10_bypass_order_is_accepted_by_the_gateway_and_observed_by_risk(env):
     import json
     import sqlite3
@@ -747,7 +767,7 @@ def test_d64_11_cancel_rule_cancels_working_targets_once_and_retries_after_an_ou
     assert "a-hc" not in env.gateway_cancels()
 
 
-@NOT_POLICY_BLOCKED
+@ROUTE_RECOVERY_GAP
 def test_place_right_after_a_risk_restart_keeps_original_key_safe(env):
     # STALE_EPOCH proves this invocation was not sent, not that no earlier host
     # used the same key. Keep the original key UNKNOWN unless Risk answers.
