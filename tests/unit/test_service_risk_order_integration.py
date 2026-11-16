@@ -10,6 +10,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+import pytest
 import zmq
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_execution import ExecutionScope, SqliteExecutionStore
@@ -313,6 +314,11 @@ def _host_command(record: dict[str, Any], *command):
     return result
 
 
+@pytest.mark.skip(reason=(
+    "Retired Execution account owner (LEGACY_EXECUTION_OWNER_RETIRED, iteration 65); "
+    "ordinary submit plus command_bindings moved to risk/account_owner and has no "
+    "current execution-role equivalent."
+))
 def test_spawned_service_enforces_real_risk_admission_before_order_dispatch(tmp_path) -> None:
     from tests.unit.test_service_account_integration import (
         _assert_no_fallback_cleanup,

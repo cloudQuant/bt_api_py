@@ -38,6 +38,12 @@ from bt_api_base.market_protocol import MarketInstrumentKey, MarketSubscriptionK
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 
 from tests.integration import _iter64_recovery_support as support
+from tests.unit.test_iter64_risk_service_component import V2_POLICY_BLOCKED
+
+# Both scenarios start a Risk host that bootstraps a v1 policy file; the product
+# accepts only v2 documents and v2 activation remains blocked by
+# RULE_R04_V2_UNAVAILABLE pending the iteration-64 R-04/R-11 decision.
+pytestmark = V2_POLICY_BLOCKED
 
 ACCOUNT = AccountKey("ctp", "simnow", "simnow", "account", "9999")  # with a sub-account
 SCOPE = ACCOUNT.account_key_id

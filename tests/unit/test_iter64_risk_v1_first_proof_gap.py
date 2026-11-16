@@ -9,6 +9,7 @@ from bt_api_py.gateway_api import GatewayBtApi
 from tests.unit.test_iter63_gateway_api import order
 from tests.unit.test_iter64_risk_service_client import answer, delegated_observation, facade
 from tests.unit.test_iter64_risk_service_component import service as _service_fixture
+from tests.unit.test_iter64_risk_service_component import V2_POLICY_BLOCKED
 
 ROUTE = "CTP___FUTURE"
 KEY = "same-key"
@@ -115,6 +116,7 @@ def test_known_delegated_observation_can_still_be_cancelled(monkeypatch):
     assert wire.calls == [] and gateway_calls == []
 
 
+@V2_POLICY_BLOCKED
 @pytest.mark.parametrize("quantity", ["1", "3"])
 def test_new_risk_ledger_with_old_gateway_key_stays_unknown(
     service, monkeypatch, quantity
@@ -172,6 +174,7 @@ def test_new_risk_ledger_with_old_gateway_key_stays_unknown(
     assert wire.calls == [] and direct_gateway == []
 
 
+@V2_POLICY_BLOCKED
 def test_synthetic_historical_risk_permit_survives_new_run_without_writes(service, monkeypatch):
     """A synthetic old SQLite row is not evidence of Gateway/account authority."""
     from tests.unit.test_iter64_risk_quarantine_sdk import seed_synthetic_legacy_order

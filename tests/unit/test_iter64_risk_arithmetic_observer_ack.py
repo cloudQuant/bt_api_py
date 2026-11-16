@@ -14,7 +14,7 @@ from bt_api_risk.pretrade.controls import derive_effect
 from bt_api_risk.pretrade.ledger import PretradeDecimalEncodingError
 
 from tests.unit.test_iter64_risk_service_component import (
-    DAY, payload, service as _service_fixture,
+    DAY, V2_POLICY_BLOCKED, payload, service as _service_fixture,
 )
 from tests.unit.test_iter64_risk_service_gateway import (
     EPOCH, Observer, account_event, page, pump,
@@ -55,6 +55,7 @@ def _seed_historical_permit(service):
         txn.insert_permit(values)
 
 
+@V2_POLICY_BLOCKED
 @pytest.mark.parametrize("counter,precision", [("1.23", 2), ("NaN", 28)])
 def test_failed_trade_arithmetic_rolls_back_page_and_never_acknowledges(
     service, counter, precision, monkeypatch
@@ -101,6 +102,7 @@ def test_failed_trade_arithmetic_rolls_back_page_and_never_acknowledges(
     assert service.gateway.calls == before_calls == []
 
 
+@V2_POLICY_BLOCKED
 def test_exact_trade_counter_commits_and_acknowledges_same_fake_path(service):
     _seed_historical_permit(service)
     observer = Observer([page([account_event(1, key="first"),

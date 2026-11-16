@@ -13,7 +13,14 @@ from fastapi.testclient import TestClient
 import bt_api_py.risk_service_component as component
 from bt_api_py.service_registry import PrincipalGrant, ResourceGrant, ServiceCapability, ServiceRegistry
 from tests.unit.test_iter64_risk_audit_contract import ORIGIN, SERVICE_ID, live_adapter
-from tests.unit.test_iter64_risk_service_component import ACCOUNT, DOMAIN, ctx, operator_ctx, service
+from tests.unit.test_iter64_risk_service_component import (
+    ACCOUNT,
+    DOMAIN,
+    V2_POLICY_BLOCKED,
+    ctx,
+    operator_ctx,
+    service,
+)
 from tests.unit.test_service_registry import _next_request, _register
 
 
@@ -38,6 +45,7 @@ def reject(code):
     return {"status": "REQUEST_REJECTED", "code": code}
 
 
+@V2_POLICY_BLOCKED
 def test_small_result_preserves_v1_fields_and_order(service):
     fake(service, [row("first"), row("second", Decimal("0.0100"))])
     result = call(service)
@@ -52,6 +60,7 @@ def test_small_result_preserves_v1_fields_and_order(service):
                                            "state", "instrument", "side", "offset", "quantity", "since"]
 
 
+@V2_POLICY_BLOCKED
 def test_authorization_and_missing_capabilities_do_not_read(service):
     calls = []
     service._engine = SimpleNamespace(list_unknown=lambda: calls.append("legacy"),
@@ -63,6 +72,7 @@ def test_authorization_and_missing_capabilities_do_not_read(service):
     assert calls == []
 
 
+@V2_POLICY_BLOCKED
 @pytest.mark.parametrize("quantity,code", [
     (Decimal("1E+999999"), "risk_unknown_list_too_large"),
     (Decimal("0E-999999"), "risk_unknown_list_too_large"),
@@ -77,18 +87,21 @@ def test_huge_or_invalid_quantity_refused_without_details(service, quantity, cod
     assert call(service) == reject(code)
 
 
+@V2_POLICY_BLOCKED
 def test_nonpositive_zero_and_other_decimal_semantics(service):
     fake(service, [row("a", Decimal("0E+999999"))])
     assert call(service) == reject("risk_unknown_list_corrupt")
     assert component.json_safe(Decimal("0.0100")) == "0.0100"
 
 
+@V2_POLICY_BLOCKED
 @pytest.mark.parametrize("key", ["", " whitespace", "a" * 257])
 def test_malformed_request_key_refuses_all_rows(service, key):
     fake(service, [row("valid"), row(key)])
     assert call(service) == reject("risk_unknown_list_corrupt")
 
 
+@V2_POLICY_BLOCKED
 @pytest.mark.parametrize("duplicate", ["permit_id", "request"])
 def test_duplicate_ledger_identity_refuses_complete_result(service, duplicate):
     first, second = row("a"), row("b")
@@ -100,6 +113,7 @@ def test_duplicate_ledger_identity_refuses_complete_result(service, duplicate):
     assert call(service) == reject("risk_unknown_list_corrupt")
 
 
+@V2_POLICY_BLOCKED
 def test_request_keys_can_repeat_across_strategies(service):
     first, second = row("same"), row("same")
     second.update(strategy_ref="strategy-b", permit_id="another-permit")
@@ -107,6 +121,7 @@ def test_request_keys_can_repeat_across_strategies(service):
     assert len(call(service)["permits"]) == 2
 
 
+@V2_POLICY_BLOCKED
 @pytest.mark.parametrize("field,value", [
     ("strategy_ref", ""), ("permit_id", ""), ("instrument_id", ""),
     ("side", "SELL?!"), ("offset", "anything"),
@@ -120,6 +135,7 @@ def test_malformed_public_fields_refuse_complete_result(service, field, value):
     assert call(service) == reject("risk_unknown_list_corrupt")
 
 
+@V2_POLICY_BLOCKED
 @pytest.mark.parametrize("side,offset", [
     ("BUY", "OPEN"), ("SELL", "CLOSE"), ("BUY", "CLOSE_TODAY"),
     ("SELL", "CLOSE_YESTERDAY"),
@@ -133,6 +149,7 @@ def test_valid_side_offset_and_epoch_timestamp_keep_wire_shape(service, side, of
         side, offset, "1970-01-01T00:00:00.000000Z")
 
 
+@V2_POLICY_BLOCKED
 @pytest.mark.parametrize("mode", ["raise", "nonbool", "mutate", "nondeterministic"])
 def test_checker_fails_closed_without_details(service, mode):
     fake(service, [row("secret-test-key")])
@@ -150,6 +167,7 @@ def test_checker_fails_closed_without_details(service, mode):
     assert call(service, checker) == reject("risk_unknown_list_unavailable")
 
 
+@V2_POLICY_BLOCKED
 def test_full_result_refuses_instead_of_truncating(service, monkeypatch):
     fake(service, [row("a"), row("b")])
     assert call(service, lambda reply: len(reply["permits"]) <= 1) == reject("risk_unknown_list_too_large")
@@ -164,6 +182,7 @@ def test_web_node_budget_is_the_exact_shared_limit():
     assert not component._audit_nodes_fit({"items": [None] * 199_999})
 
 
+@V2_POLICY_BLOCKED
 def test_temporary_sqlite_bounded_reader_and_legacy_shape(service):
     from tests.unit.test_iter64_risk_arithmetic_observer_ack import _seed_historical_permit
 
@@ -175,6 +194,7 @@ def test_temporary_sqlite_bounded_reader_and_legacy_shape(service):
         "offset": "OPEN", "quantity": "1", "since": "2030-03-17T17:46:40.000000Z"}]}
 
 
+@V2_POLICY_BLOCKED
 @pytest.mark.parametrize("code", ["risk_unknown_list_too_large", "risk_unknown_list_corrupt",
                                   "risk_unknown_list_unavailable", "untrusted-secret"])
 def test_bounded_reader_errors_are_finite_and_do_not_leak(service, code):
@@ -185,6 +205,7 @@ def test_bounded_reader_errors_are_finite_and_do_not_leak(service, code):
     assert call(service) == reject(expected)
 
 
+@V2_POLICY_BLOCKED
 def test_real_registry_and_web_small_frame_are_complete_or_refused(live_adapter, tmp_path, monkeypatch):
     service, run = live_adapter
     identity = WireIdentity(WireRole.APPLICATION_CLIENT, "operator-1", "ops")

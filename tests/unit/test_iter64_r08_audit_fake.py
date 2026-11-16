@@ -15,6 +15,13 @@ from bt_api_risk.pretrade.engine import PretradeEngine
 from bt_api_risk.pretrade.policy import validate_policy_document
 from bt_api_py.risk_service_component import RiskOrderService
 from bt_api_py.risk_service_config import RiskPrincipal
+from tests.unit.test_iter64_risk_service_component import V2_POLICY_BLOCKED
+
+# ``_inputs`` validates a v1 policy; the product is v2-only and v2 activation
+# is blocked by RULE_R04_V2_UNAVAILABLE pending the iteration-64 R-04/R-11
+# decision, so no policy reaches the engine yet.  Strict xfail keeps the cases
+# collected and flags an XPASS when the activation lands.
+pytestmark = V2_POLICY_BLOCKED
 
 D = Decimal
 DAY = "20261114"

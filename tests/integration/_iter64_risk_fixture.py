@@ -756,6 +756,8 @@ class RiskScenarioEnv:
         self._admin = self._control = None
         self._pending: dict[str, tuple] = {}
         self.bootstrap = bootstrap
+        self.risk_stderr = ""
+        self._closed = False
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -790,32 +792,50 @@ class RiskScenarioEnv:
         return self
 
     def close(self) -> None:
-        if getattr(self, "_closed", False):
+        if self._closed:
             return
         self._closed = True
         self.pause_release.set()  # release a test-owned pause if an assertion failed
+        failures: list[BaseException] = []
         for client in (self._admin, self._control):
             if client is not None:
                 with contextlib.suppress(Exception):  # test-process client cleanup only
                     client.close(timeout_seconds=5)
         self._admin = self._control = None
+        # A half-started scenario (for example a Risk host that refused its
+        # policy) must still release every process it did start.  Collect the
+        # failures and re-raise the first one only after all cleanup ran.
         for which in list(self.strategies):
-            self.stop_strategy(which)
+            try:
+                self.stop_strategy(which)
+            except BaseException as exc:
+                failures.append(exc)
         if self.risk is not None:
-            self.stop_risk()
+            try:
+                self.stop_risk()
+            except BaseException as exc:
+                failures.append(exc)
         if self.gateway is not None:
-            self.controls.put("stop")
-            self.gateway.join(30)
-            while True:
-                try:
-                    item = self.messages.get(timeout=0.5)
-                except queue.Empty:
-                    break
-                if item[0] == "modules":
-                    self.modules["gateway"] = item[3]
-            if self.gateway.is_alive():
-                self.gateway.kill()
-                self.gateway.join(10)
+            try:
+                self._stop_gateway()
+            except BaseException as exc:
+                failures.append(exc)
+        if failures:
+            raise failures[0]
+
+    def _stop_gateway(self) -> None:
+        self.controls.put("stop")
+        self.gateway.join(30)
+        while True:
+            try:
+                item = self.messages.get(timeout=0.5)
+            except queue.Empty:
+                break
+            if item[0] == "modules":
+                self.modules["gateway"] = item[3]
+        if self.gateway.is_alive():
+            self.gateway.kill()
+            self.gateway.join(10)
 
     # ------------------------------------------------------------------ Gateway fixture
 
@@ -1053,7 +1073,14 @@ class RiskScenarioEnv:
             process.kill()
             code = process.wait(timeout=10)
         self.risk_exits.append(code)
-        self.risk_stderr = process.stderr.read().decode("utf-8", "replace")
+        try:
+            printed = process.stderr.read()
+        except (OSError, ValueError):
+            # ``start_risk`` already drained and closed the pipes through
+            # communicate() when the host refused to start; keep that text.
+            printed = b""
+        if printed:
+            self.risk_stderr = printed.decode("utf-8", "replace")
         return code
 
     def restart_risk(self) -> None:

@@ -27,6 +27,19 @@ from tests.integration._iter64_risk_fixture import (
 
 A, B, C = (STRATEGIES[name].actor_ref for name in ("a", "b", "c"))
 
+# The scenario host bootstraps ``BASE_POLICY`` (a v1 document) at start.  The
+# product is v2-policy-only, so the host refuses it (RISK_SERVICE_POLICY_INVALID
+# from ``policy_schema_unsupported``), and v2 activation itself is blocked by
+# RULE_R04_V2_UNAVAILABLE pending the iteration-64 R-04/R-11 decision.  Keep the
+# scenarios collected and strict-xfailed so the approved activation surfaces as
+# XPASS.  Tests already carrying a ``skip`` GAP marker stay skipped.
+pytestmark = pytest.mark.xfail(
+    strict=True,
+    reason="RULE_R04_V2_UNAVAILABLE: v2 policy activation is blocked pending the "
+           "iteration-64 R-04/R-11 decision; the Risk host refuses the fixture's v1 "
+           "policy (RISK_SERVICE_POLICY_INVALID)",
+)
+
 
 @pytest.fixture
 def make_env(tmp_path):
@@ -40,9 +53,19 @@ def make_env(tmp_path):
         item.wait_risk_verified(bypass_at_least=1)
         return item
 
-    yield make
-    for item in created:
-        item.close()
+    try:
+        yield make
+    finally:
+        # Close every environment even when one teardown fails; the first
+        # failure is re-raised after the rest have been released.
+        failures = []
+        for item in reversed(created):
+            try:
+                item.close()
+            except BaseException as exc:
+                failures.append(exc)
+        if failures:
+            raise failures[0]
 
 
 @pytest.fixture

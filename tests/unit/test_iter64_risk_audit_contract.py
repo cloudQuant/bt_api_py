@@ -32,6 +32,7 @@ from bt_api_py.service_registry import (
 from tests.unit.test_iter64_risk_service_component import (
     ACCOUNT,
     DOMAIN,
+    V2_POLICY_BLOCKED,
     ctx,
     operator_ctx,
 )
@@ -146,6 +147,7 @@ def web(live_adapter):
         yield client, service, run, budget
 
 
+@V2_POLICY_BLOCKED
 @pytest.mark.parametrize("limit", [500, 501, 1000])
 def test_documented_audit_limits_reach_real_component(web, limit):
     client, service, run, _ = web
@@ -158,6 +160,7 @@ def test_documented_audit_limits_reach_real_component(web, limit):
     assert body["next_after"] == body["records"][-1]["seq"]
 
 
+@V2_POLICY_BLOCKED
 def test_over_limit_is_rejected_by_web_and_component(web):
     client, service, run, _ = web
     assert client.get("/api/v1/risk/audit?limit=1001").status_code == 422
@@ -165,6 +168,7 @@ def test_over_limit_is_rejected_by_web_and_component(web):
         "status": "REQUEST_REJECTED", "code": "risk_request_invalid"}
 
 
+@V2_POLICY_BLOCKED
 def test_small_frame_requires_smaller_limit_and_pages_without_skipping(web):
     client, service, run, budget = web
     after = run(lambda: _append(service, 12, size=350))
@@ -193,6 +197,7 @@ def test_small_frame_requires_smaller_limit_and_pages_without_skipping(web):
     assert received == list(range(12))
 
 
+@V2_POLICY_BLOCKED
 def test_web_node_budget_refuses_page_before_old_clients_can_treat_it_as_eof(web):
     client, service, run, _ = web
 
@@ -226,6 +231,7 @@ def test_web_node_budget_refuses_page_before_old_clients_can_treat_it_as_eof(web
     assert received == list(range(600))
 
 
+@V2_POLICY_BLOCKED
 def test_single_oversized_record_is_finite_error_without_advancing_cursor(web):
     client, service, run, budget = web
     after = run(lambda: _append(service, 1, size=2500))
@@ -236,6 +242,7 @@ def test_single_oversized_record_is_finite_error_without_advancing_cursor(web):
         assert response.json() == {"status": "REQUEST_REJECTED", "code": "risk_audit_record_too_large"}
 
 
+@V2_POLICY_BLOCKED
 def test_oversized_record_after_fitting_prefix_is_not_skipped(web):
     client, service, run, budget = web
     after = run(_append, service, 1)
@@ -257,6 +264,7 @@ def test_oversized_record_after_fitting_prefix_is_not_skipped(web):
         assert blocked.json()["code"] == "risk_audit_record_too_large"
 
 
+@V2_POLICY_BLOCKED
 def test_oversized_page_is_not_a_short_success_for_eof_clients(live_adapter):
     service, run = live_adapter
     after = run(_append, service, 1000)
@@ -276,6 +284,7 @@ def test_oversized_page_is_not_a_short_success_for_eof_clients(live_adapter):
     assert [row["detail"]["index"] for row in followup["records"]] == list(range(319, 638))
 
 
+@V2_POLICY_BLOCKED
 def test_checker_cannot_mutate_page_or_receive_an_untrusted_success(live_adapter):
     service, run = live_adapter
     after = run(_append, service, 1)
@@ -290,6 +299,7 @@ def test_checker_cannot_mutate_page_or_receive_an_untrusted_success(live_adapter
     assert normal["records"][0]["seq"] == after + 1
 
 
+@V2_POLICY_BLOCKED
 @pytest.mark.parametrize("checker", [None, lambda result: None, lambda result: 1,
                                      lambda result: (_ for _ in ()).throw(RuntimeError("private"))])
 def test_missing_or_failed_size_checker_is_not_treated_as_success(live_adapter, checker):
@@ -299,6 +309,7 @@ def test_missing_or_failed_size_checker_is_not_treated_as_success(live_adapter, 
         "status": "REQUEST_REJECTED", "code": "risk_audit_size_unavailable"}
 
 
+@V2_POLICY_BLOCKED
 def test_wrong_scope_cannot_read_audit_even_with_permissive_checker(live_adapter):
     service, run = live_adapter
     after = run(_append, service, 1)
@@ -307,6 +318,7 @@ def test_wrong_scope_cannot_read_audit_even_with_permissive_checker(live_adapter
         "status": "REQUEST_REJECTED", "code": "risk_unauthorized"}
 
 
+@V2_POLICY_BLOCKED
 def test_wrong_identity_cannot_read_audit_or_invoke_size_checker(live_adapter):
     service, run = live_adapter
     after = run(_append, service, 1)
@@ -337,12 +349,14 @@ def test_web_session_without_audit_grant_never_calls_the_service():
     assert calls == []
 
 
+@V2_POLICY_BLOCKED
 def test_overflowing_after_is_finite_rejection_not_sqlite_overflow(live_adapter):
     service, run = live_adapter
     assert run(_call, service, 2**63, 1, _fits(4096)) == {
         "status": "REQUEST_REJECTED", "code": "risk_request_invalid"}
 
 
+@V2_POLICY_BLOCKED
 def test_old_engine_without_bounded_reader_fails_without_calling_legacy_reader(live_adapter):
     service, run = live_adapter
 
@@ -362,6 +376,7 @@ def test_old_engine_without_bounded_reader_fails_without_calling_legacy_reader(l
     assert calls == []
 
 
+@V2_POLICY_BLOCKED
 @pytest.mark.parametrize("number", [1.5, -0.0, 1e-100])
 def test_finite_audit_float_survives_web_and_actual_envelope(web, number):
     client, service, run, _ = web
@@ -379,6 +394,7 @@ def test_finite_audit_float_survives_web_and_actual_envelope(web, number):
     assert type(value) is float and value == number
 
 
+@V2_POLICY_BLOCKED
 @pytest.mark.parametrize("kind,code", [
     ("nan", "risk_audit_number_unrepresentable"),
     ("inf", "risk_audit_number_unrepresentable"),
@@ -409,6 +425,7 @@ def test_unreadable_audit_detail_is_finite_refusal(web, kind, code):
     assert response.json() == {"status": "REQUEST_REJECTED", "code": code}
 
 
+@V2_POLICY_BLOCKED
 @pytest.mark.parametrize("number", ["1e-999", "1e309", "18446744073709551616"])
 def test_valid_but_unrepresentable_json_number_has_distinct_finite_refusal(web, number):
     client, service, run, _ = web
@@ -419,6 +436,7 @@ def test_valid_but_unrepresentable_json_number_has_distinct_finite_refusal(web, 
         "status": "REQUEST_REJECTED", "code": "risk_audit_number_unrepresentable"}
 
 
+@V2_POLICY_BLOCKED
 def test_real_registry_size_checker_preserves_complete_pages(live_adapter, tmp_path):
     service, run = live_adapter
     identity = WireIdentity(WireRole.APPLICATION_CLIENT, "operator-1", "ops")

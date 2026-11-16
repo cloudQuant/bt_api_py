@@ -35,6 +35,10 @@ from tests.integration import test_service_execution_risk_cancel_owner_control a
 
 
 @pytest.mark.integration
+@pytest.mark.skip(reason=(
+    "Retired Execution account owner (LEGACY_EXECUTION_OWNER_RETIRED, iteration 65); "
+    "the execution owner.cancel control route has no current execution-role equivalent."
+))
 def test_owner_cancel_uses_reserved_gateway_quota_after_open_capacity_is_full(
     tmp_path: Path,
 ) -> None:

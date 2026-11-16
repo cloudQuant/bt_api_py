@@ -7,6 +7,7 @@ import pytest
 from bt_api_risk.pretrade.engine import ObservationApplyResult
 
 from tests.unit.test_iter64_risk_service_component import service as _service_fixture
+from tests.unit.test_iter64_risk_service_component import V2_POLICY_BLOCKED
 from tests.unit.test_iter64_risk_service_gateway import (
     EPOCH,
     Engine,
@@ -375,6 +376,7 @@ def test_cursor_reset_during_ack_marks_gap_after_ack_may_have_occurred():
     assert engine.gaps[-1] == "observation_ack_unproven"
 
 
+@V2_POLICY_BLOCKED
 def test_real_risk_conflict_stops_before_collision_without_ack(service):
     engine = service._engine
     observer = Observer([page([account_event(1, key="same"), account_event(2, key="same")])], offered=2)
@@ -387,6 +389,7 @@ def test_real_risk_conflict_stops_before_collision_without_ack(service):
         assert txn.has_order_identity_conflict()
 
 
+@V2_POLICY_BLOCKED
 def test_real_risk_external_event_same_epoch_replay_is_covered_without_reprojection(service):
     engine = service._engine
     original = Observer([page([account_event(1, principal="external", key="external-order")])], offered=1)
@@ -411,6 +414,7 @@ def test_real_risk_external_event_same_epoch_replay_is_covered_without_reproject
     assert replayed_rows == original_rows
 
 
+@V2_POLICY_BLOCKED
 def test_real_risk_two_page_replay_accepts_known_historical_ack_without_skipping(service):
     first = account_event(1, principal="external", key="first")
     second = account_event(2, principal="external", key="second")
@@ -439,6 +443,7 @@ def test_real_risk_two_page_replay_accepts_known_historical_ack_without_skipping
         ).fetchall()] == old_rows
 
 
+@V2_POLICY_BLOCKED
 def test_real_risk_changed_event_at_same_epoch_sequence_is_not_acknowledged(service):
     engine = service._engine
     original = Observer([page([account_event(1, principal="external", key="external-order")])], offered=1)
@@ -460,6 +465,7 @@ def test_real_risk_changed_event_at_same_epoch_sequence_is_not_acknowledged(serv
         ).fetchall()] == original_rows
 
 
+@V2_POLICY_BLOCKED
 def test_real_risk_legacy_history_without_fingerprint_never_replays_or_acks(service):
     with service._ledger.transaction() as txn:
         txn._c.execute("INSERT INTO risk_pretrade_seen_events VALUES (?,?,?)", (txn._scope, EPOCH, 0))

@@ -4,6 +4,7 @@ import pytest
 
 from tests.unit.test_iter64_risk_service_component import ctx, payload
 from tests.unit.test_iter64_risk_service_component import service as _service_fixture
+from tests.unit.test_iter64_risk_service_component import V2_POLICY_BLOCKED
 
 
 @pytest.fixture
@@ -15,6 +16,7 @@ def _status(service):
     return service.handle("risk.status", context=ctx("principal-a"), arguments={})
 
 
+@V2_POLICY_BLOCKED
 def test_quarantine_status_and_client_preserve_policy_version(service, monkeypatch):
     from tests.unit.test_iter64_risk_service_client import make_client
 
@@ -33,6 +35,7 @@ def test_quarantine_status_and_client_preserve_policy_version(service, monkeypat
     assert service.gateway.calls == [] and service.runs == []
 
 
+@V2_POLICY_BLOCKED
 def test_quarantined_service_does_not_fallback_and_delegated_reads_and_cancel_remain(
     service, monkeypatch
 ):
@@ -107,6 +110,7 @@ def seed_synthetic_legacy_order(service):
         return txn.permit_by_key("strategy-a", "k1")
 
 
+@V2_POLICY_BLOCKED
 def test_quarantine_preserves_authenticated_order_status_without_claiming_state(service):
     old = seed_synthetic_legacy_order(service)
     assert old is not None and old.state == "RESERVED"
@@ -125,6 +129,7 @@ def test_quarantine_preserves_authenticated_order_status_without_claiming_state(
         assert original is not None and original.state == "RESERVED" and original.occupancy > 0
 
 
+@V2_POLICY_BLOCKED
 @pytest.mark.parametrize("identity", ["strategy", "execution", "operator_without_permission"])
 def test_unknown_list_requires_explicit_operator_permission(service, monkeypatch, identity):
     from dataclasses import replace

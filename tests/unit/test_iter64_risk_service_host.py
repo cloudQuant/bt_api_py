@@ -18,6 +18,7 @@ from bt_api_py.risk_service_host import (
     main,
     probe_writer_fence,
 )
+from tests.unit.test_iter64_risk_service_component import V2_POLICY_BLOCKED
 from tests.unit.test_iter64_risk_service_config import document, write_keys
 
 POLICY = (
@@ -72,6 +73,7 @@ def opened(tmp_path):
     return host
 
 
+@V2_POLICY_BLOCKED
 def test_policy_bootstrap_first_unchanged_tightened_and_loosening_refused(tmp_path):
     setup(tmp_path)
     host = opened(tmp_path)
@@ -165,13 +167,16 @@ def test_cli_validate_policy_offline(tmp_path, capsys):
     assert out["valid"] is False and out["code"]
 
 
+@V2_POLICY_BLOCKED
 def test_cli_status_reads_the_local_ledger_without_the_gateway(tmp_path, capsys):
     path = setup(tmp_path)
     assert main(["status", "--config", str(path)]) == 2
     assert json.loads(capsys.readouterr().out) == {"code": "RISK_SERVICE_STORAGE_MISSING"}
     host = opened(tmp_path)
-    bootstrap_policy(host.engine, host.ledger, host.config, host.rules)
     try:
+        # Inside the try: a refused bootstrap (today RULE_R04_V2_UNAVAILABLE via
+        # RISK_SERVICE_POLICY_PUBLISH_REFUSED) must still close the host fence.
+        bootstrap_policy(host.engine, host.ledger, host.config, host.rules)
         # While the service holds the fence, status answers "running" at once.
         assert main(["status", "--config", str(path)]) == 3
         assert json.loads(capsys.readouterr().out) == {"running": True,

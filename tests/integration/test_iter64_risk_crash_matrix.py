@@ -21,6 +21,12 @@ import pytest
 
 from bt_api_py.risk_service_host import FAULT_EXIT_CODE
 from tests.integration import _iter64_recovery_support as support
+from tests.unit.test_iter64_risk_service_component import V2_POLICY_BLOCKED
+
+# Every loopback scenario starts the Risk host, which bootstraps a v1 policy
+# document.  The product is v2-only and v2 activation is blocked by
+# RULE_R04_V2_UNAVAILABLE pending the iteration-64 R-04/R-11 decision.
+pytestmark = V2_POLICY_BLOCKED
 
 STRATEGY = support.strategy_identity(0)
 TTL_SECONDS = 4

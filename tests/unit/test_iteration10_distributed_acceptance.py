@@ -92,6 +92,10 @@ def test_prepare_creates_separate_synthetic_curve_bundles(tmp_path: Path) -> Non
 
 
 @pytest.mark.integration
+@pytest.mark.skip(reason=(
+    "Retired Execution account owner (LEGACY_EXECUTION_OWNER_RETIRED, iteration 65); "
+    "scripts/iteration10_distributed_acceptance.py still composes execution/account_owner."
+))
 def test_local_curve_tcp_owner_reconnect_halt_and_second_owner_exclusion(
     tmp_path: Path,
 ) -> None:

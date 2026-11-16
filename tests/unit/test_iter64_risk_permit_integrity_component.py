@@ -2,8 +2,19 @@
 
 import pytest
 
-from tests.unit.test_iter64_risk_service_component import ctx, payload, reserve
+from tests.unit.test_iter64_risk_service_component import (
+    V2_POLICY_BLOCKED,
+    ctx,
+    payload,
+    reserve,
+)
 from tests.unit.test_iter64_risk_service_component import service as _service_fixture
+
+# Every test here needs the shared fixture's published policy; that is blocked
+# by RULE_R04_V2_UNAVAILABLE until the iteration-64 R-04/R-11 activation
+# decision.  Strict xfail keeps the cases collected and flags an XPASS when the
+# activation (or a v2 fixture) lands.
+pytestmark = V2_POLICY_BLOCKED
 
 
 @pytest.fixture

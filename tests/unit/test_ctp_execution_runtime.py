@@ -788,6 +788,17 @@ def _build_execution_component(case, monkeypatch, *, ports=None):
     its service identity, so orders.submit/orders.cancel are typed-only.
     """
 
+    # Iteration 65 retired execution/account_owner and account_group_owner
+    # (LEGACY_EXECUTION_OWNER_RETIRED).  Ordinary submit plus command_bindings
+    # has no current execution role equivalent -- fresh_intake/atomic_intake
+    # reject the option and bind service.execution_parent, group_account_owner
+    # covers only group legs, and the capability now lives on risk/account_owner.
+    pytest.skip(
+        "Retired Execution account owner (LEGACY_EXECUTION_OWNER_RETIRED, iteration 65); "
+        "ordinary submit plus command_bindings moved to risk/account_owner and has no "
+        "current execution-role equivalent."
+    )
+
     monkeypatch.setattr(
         service_host_fixtures,
         "_endpoint",

@@ -1044,6 +1044,11 @@ def test_later_partial_fill_without_fee_keeps_zero_fill_risk_reservation_counted
 
 
 @pytest.mark.unit
+@pytest.mark.skip(reason=(
+    "Retired Execution account owner (LEGACY_EXECUTION_OWNER_RETIRED, iteration 65); "
+    "this recovery route composes execution/account_owner with command_bindings, and "
+    "ordinary submit plus command_bindings has no current execution-role equivalent."
+))
 def test_recovery_close_reduces_only_store_proved_fill_and_retains_unknown_fee_risk(
     tmp_path, monkeypatch, request
 ):

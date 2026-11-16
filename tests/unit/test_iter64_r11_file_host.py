@@ -14,6 +14,7 @@ from bt_api_py.risk_service_host import (
     read_policy_files,
 )
 from tests.unit.test_iter64_risk_service_component import ctx, payload
+from tests.unit.test_iter64_risk_service_component import V2_POLICY_BLOCKED
 from tests.unit.test_iter64_risk_service_config import document, write_keys
 
 
@@ -62,6 +63,11 @@ def open_host(config_path):
     return host
 
 
+# ``setup_files`` writes a v1 policy; the product accepts only v2 documents and
+# v2 activation remains blocked by RULE_R04_V2_UNAVAILABLE pending the
+# iteration-64 R-04/R-11 decision, so the bootstrap these cases assert cannot
+# happen yet.  Strict xfail keeps them collected and flags an XPASS.
+@V2_POLICY_BLOCKED
 def test_relative_files_offline_validation_and_restart_keep_policy_digest(tmp_path, capsys, monkeypatch):
     config_path, policy_path, rules_path, rules, _ = setup_files(tmp_path)
     # Neither config nor policy paths are interpreted relative to process cwd.
@@ -89,7 +95,11 @@ def test_relative_files_offline_validation_and_restart_keep_policy_digest(tmp_pa
         assert restarted.close()
 
 
-@pytest.mark.parametrize("case", ["missing", "wrong_account", "invalid_range"])
+@pytest.mark.parametrize("case", [
+    "missing",
+    pytest.param("wrong_account", marks=V2_POLICY_BLOCKED),
+    pytest.param("invalid_range", marks=V2_POLICY_BLOCKED),
+])
 def test_unusable_rule_files_refuse_bootstrap(tmp_path, capsys, case):
     config_path, policy_path, rules_path, rules, _ = setup_files(tmp_path)
     if case == "missing":
@@ -116,6 +126,7 @@ def test_unusable_rule_files_refuse_bootstrap(tmp_path, capsys, case):
         assert host.close()
 
 
+@V2_POLICY_BLOCKED
 @pytest.mark.parametrize("window", ["valid", "expired_time", "expired_day"])
 def test_selected_r11_stays_unavailable_without_authoritative_issuer(tmp_path, monkeypatch, window):
     from bt_api_risk.pretrade.policy import exchange_rule_context_match, parse_exchange_rules

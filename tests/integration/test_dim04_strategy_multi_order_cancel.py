@@ -352,6 +352,10 @@ def _submit(runtime: ServiceClientRuntime, intent_id: str, *, account_ref: str, 
 
 
 @pytest.mark.integration
+@pytest.mark.skip(reason=(
+    "Retired Execution account owner (LEGACY_EXECUTION_OWNER_RETIRED, iteration 65); "
+    "the execution owner.cancel control route has no current execution-role equivalent."
+))
 def test_strategy_owner_cancel_cancels_all_own_run_orders_only(tmp_path, monkeypatch) -> None:
     # The V2 synthetic provider normalizer binds to its provider account ID.
     # Use that same identity through the trusted service fixture.

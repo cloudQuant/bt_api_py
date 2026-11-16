@@ -7,6 +7,7 @@ import pytest
 
 from tests.unit.test_iter64_risk_service_component import ctx, reserve
 from tests.unit.test_iter64_risk_service_component import service as _service_fixture
+from tests.unit.test_iter64_risk_service_component import V2_POLICY_BLOCKED
 from tests.unit.test_iter64_risk_service_gateway import Handle, canonical, port
 
 
@@ -21,6 +22,7 @@ def _port_reserve(delegate, run, key="k1"):
                             ttl_seconds=10)
 
 
+@V2_POLICY_BLOCKED
 def test_different_run_reserve_preserves_original_handle_and_occupancy(service):
     delegate, handles = port()
     delegate.status(strategy_ref="strategy-a", run_id="old-run", request_key="old")
@@ -46,6 +48,7 @@ def test_different_run_reserve_preserves_original_handle_and_occupancy(service):
     assert old.client.calls == before
 
 
+@V2_POLICY_BLOCKED
 def test_policy_denied_new_order_does_not_touch_existing_delegate(service):
     delegate, handles = port()
     delegate.status(strategy_ref="strategy-a", run_id="old-run", request_key="old")
@@ -59,6 +62,7 @@ def test_policy_denied_new_order_does_not_touch_existing_delegate(service):
     assert len(handles) == 1 and old.client.calls == calls
 
 
+@V2_POLICY_BLOCKED
 @pytest.mark.parametrize("other_writer", ["foreign", "old_run"])
 def test_new_snapshot_race_does_not_retire_old_delegate(service, monkeypatch, other_writer):
     delegate, handles = port()
@@ -86,6 +90,7 @@ def test_new_snapshot_race_does_not_retire_old_delegate(service, monkeypatch, ot
     assert len(handles) == 1 and old.client.calls == calls
 
 
+@V2_POLICY_BLOCKED
 def test_new_order_connect_occurs_only_after_committed_reserving_row(service):
     observed, handles = [], []
 
@@ -421,6 +426,7 @@ def test_invalidation_during_instrument_mapping_prevents_reserve():
     assert len(handles) == 1
 
 
+@V2_POLICY_BLOCKED
 @pytest.mark.parametrize("action", ["invalidate", "close"])
 def test_invalidation_or_close_during_gateway_call_keeps_unknown_occupancy(service, action):
     from tests.unit.test_iter64_risk_service_gateway import obs
@@ -461,6 +467,7 @@ def test_invalidation_or_close_during_gateway_call_keeps_unknown_occupancy(servi
     assert len(handles) == 1 and len(handles[0].client.calls) == 1
 
 
+@V2_POLICY_BLOCKED
 def test_invalidation_during_reply_mapping_keeps_unknown_occupancy(service):
     from tests.unit.test_iter64_risk_service_gateway import obs
 

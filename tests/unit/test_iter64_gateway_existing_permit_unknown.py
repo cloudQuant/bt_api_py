@@ -12,6 +12,7 @@ from bt_api_py.service_runtime_thread import ThreadedRuntimeError
 from tests.unit.test_iter63_gateway_api import order
 from tests.unit.test_iter64_risk_service_client import DIGEST, answer, facade
 from tests.unit.test_iter64_risk_service_component import service  # noqa: F401
+from tests.unit.test_iter64_risk_service_component import V2_POLICY_BLOCKED
 
 ROUTE = "CTP___FUTURE"
 KEY = "same-key"
@@ -243,6 +244,7 @@ def test_synthetic_known_permit_unknown_dispatch_and_release_preserve_identity(m
     assert direct_gateway == []
 
 
+@V2_POLICY_BLOCKED
 @pytest.mark.parametrize("new_run", ["old-run", "new-run"])
 def test_new_host_synthetic_legacy_key_stays_unknown_through_local_service(request, monkeypatch, new_run):
     from decimal import Decimal

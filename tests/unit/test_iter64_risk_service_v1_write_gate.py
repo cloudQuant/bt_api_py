@@ -4,6 +4,7 @@ import pytest
 
 from tests.unit.test_iter64_risk_service_component import ctx, payload
 from tests.unit.test_iter64_risk_service_component import service as _service_fixture
+from tests.unit.test_iter64_risk_service_component import V2_POLICY_BLOCKED
 
 
 @pytest.fixture
@@ -42,6 +43,7 @@ def _arguments(operation, old, *, malformed=False):
     return result
 
 
+@V2_POLICY_BLOCKED
 @pytest.mark.parametrize("operation", ["risk.order.reserve", "risk.order.dispatch", "risk.order.release"])
 @pytest.mark.parametrize("identity", ["owner", "new_run", "foreign"])
 @pytest.mark.parametrize("malformed", [False, True])
@@ -68,6 +70,7 @@ def test_v1_writes_are_unknown_without_reading_or_mutating_any_state(
     assert _rows(service) == rows and service.gateway.calls == gateway and service.runs == runs
 
 
+@V2_POLICY_BLOCKED
 @pytest.mark.parametrize("operation", ["risk.order.reserve", "risk.order.dispatch", "risk.order.release"])
 def test_absent_and_corrupt_keys_have_same_minimal_write_answer(service, operation):
     old = _legacy_order(service)
@@ -84,6 +87,7 @@ def test_absent_and_corrupt_keys_have_same_minimal_write_answer(service, operati
     assert _rows(service) == before and service.gateway.calls == gateway and service.runs == runs
 
 
+@V2_POLICY_BLOCKED
 def test_existing_status_remains_readable_and_absent_status_remains_not_found(service):
     old = _legacy_order(service)
     assert old.state == "RESERVED" and old.reservation_id == "legacy-reservation"
@@ -98,6 +102,7 @@ def test_existing_status_remains_readable_and_absent_status_remains_not_found(se
     assert _rows(service) == before and service.gateway.calls == gateway and service.runs == runs
 
 
+@V2_POLICY_BLOCKED
 @pytest.mark.parametrize("operation", ["risk.order.reserve", "risk.order.dispatch", "risk.order.release"])
 def test_malformed_existing_key_stays_unknown_through_risk_client(service, monkeypatch, operation):
     from tests.unit.test_iter64_risk_service_client import make_client
@@ -111,6 +116,7 @@ def test_malformed_existing_key_stays_unknown_through_risk_client(service, monke
     assert call.answer.code == "risk_permit_mismatch" and call.answer.state is None
 
 
+@V2_POLICY_BLOCKED
 @pytest.mark.parametrize("operation", ["risk.order.reserve", "risk.order.dispatch", "risk.order.release"])
 @pytest.mark.parametrize("malformation", ["depth", "item_count", "byte_limit"])
 def test_wire_decoder_rejection_does_not_prove_old_order_terminal(
@@ -156,6 +162,7 @@ def test_delegated_gateway_cancel_remains_independent(monkeypatch):
     assert calls == [observation] and wire.calls == [] and gateway == []
 
 
+@V2_POLICY_BLOCKED
 def test_unregistered_v2_operation_cannot_fall_back_to_v1(service):
     reply = service.handle("risk.order.reserve_v2", context=ctx("principal-a"),
                            arguments={"request_key": "k1"})

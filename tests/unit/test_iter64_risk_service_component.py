@@ -39,6 +39,20 @@ PRINCIPALS = {
                                 cancel_instrument_refs=frozenset({"SHFE:rb"})),
 }
 
+# The product is v2-policy-only and v2 activation is blocked pending the
+# iteration-64 R-04/R-11 decision: ``publish_policy`` validates a v1 document
+# through the v2 validator (``policy_schema_unsupported``) and ``activate``
+# raises ``RULE_R04_V2_UNAVAILABLE`` even for a v2 document.  Tests that need a
+# published policy therefore cannot build their fixture yet.  They stay
+# collected and strict-xfailed so an approved activation (or a rewritten v2
+# fixture) surfaces as XPASS instead of failing silently.
+V2_POLICY_BLOCKED = pytest.mark.xfail(
+    strict=True,
+    reason="RULE_R04_V2_UNAVAILABLE: v2 policy activation is blocked pending the "
+           "iteration-64 R-04/R-11 decision; this fixture still publishes a v1 "
+           "document, which the v2-only validator refuses (policy_schema_unsupported)",
+)
+
 
 def sha(text):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -127,37 +141,43 @@ def service(tmp_path):
     )
     from bt_api_risk.risk_order_journal import RiskOrderJournal
 
-    stack = ExitStack()
-    journal = RiskOrderJournal(tmp_path / "risk.sqlite", writer_id="unit")
-    fence = stack.enter_context(journal.writer_fence(AccountScope("ctp", ACCOUNT, "simnow")))
-    ledger = PretradeLedger(journal, fence)
-    gateway = Gateway()
-    clock = [1_900_000_000_000_000_000]
-    engine = PretradeEngine(
-        ledger, PolicyStore(ledger), RuleRegistry(), Facts(), gateway, Control(),
-        account_scope=ACCOUNT, route=ROUTE, now_ns=lambda: clock[0],
-        reservation_ttl_seconds=10.0, actor_principal="risk-principal",
-        dispatch_recheck_seconds=5.0, dispatch_recheck_limit=8,
-    )
-    operator = CallerIdentity("operator-1", "ops", "operator", frozenset(), None,
-                              frozenset({"risk.policy.publish"}))
-    engine.publish_policy(operator, {
-        "schema": "bt_api_risk.policy.v1", "policy_id": "unit",
-        "account": {"route": ROUTE, "account_scope": ACCOUNT},
-        "per_order": {"max_quantity": {"strategy-a": {"rb": "2"}, "strategy-b": {"rb": "2"}}},
-        "self_trade": {"enabled": False, "on_unverifiable": "deny"},
-    }, 0, "unit bootstrap")
-    runs = []
-    svc = RiskOrderService(
-        engine, ledger, account_scope=ACCOUNT, route=ROUTE, execution_domain_ref=DOMAIN,
-        principals=PRINCIPALS,
-        instrument_for=lambda venue, native: RB if (venue, native) == ("SHFE", "rb") else None,
-        ready=lambda: True, note_run=lambda strategy, run: runs.append((strategy, run)),
-        cancel_status=lambda op: {"status": "OBSERVED", "operation_id": op, "counts": {"SENT": 1}},
-    )
-    svc.gateway, svc.runs = gateway, runs
-    yield svc
-    stack.close()
+    # ``ExitStack`` must wrap the setup as well as the yield: the product keeps
+    # a process-global provisional-owner registry and never clears it, so a
+    # failure before ``yield`` (today: the v2-only policy validator refusing a
+    # v1 document) would otherwise leave the writer fence rooted and poison
+    # every later fence on the same scope with FENCE_ENTRY_OWNER_ACTIVE.
+    with ExitStack() as stack:
+        journal = RiskOrderJournal(tmp_path / "risk.sqlite", writer_id="unit")
+        fence = stack.enter_context(journal.writer_fence(AccountScope("ctp", ACCOUNT, "simnow")))
+        ledger = PretradeLedger(journal, fence)
+        gateway = Gateway()
+        clock = [1_900_000_000_000_000_000]
+        engine = PretradeEngine(
+            ledger, PolicyStore(ledger), RuleRegistry(), Facts(), gateway, Control(),
+            account_scope=ACCOUNT, route=ROUTE, now_ns=lambda: clock[0],
+            reservation_ttl_seconds=10.0, actor_principal="risk-principal",
+            dispatch_recheck_seconds=5.0, dispatch_recheck_limit=8,
+        )
+        operator = CallerIdentity("operator-1", "ops", "operator", frozenset(), None,
+                                  frozenset({"risk.policy.publish"}))
+        engine.publish_policy(operator, {
+            "schema": "bt_api_risk.policy.v1", "policy_id": "unit",
+            "account": {"route": ROUTE, "account_scope": ACCOUNT},
+            "per_order": {"max_quantity": {"strategy-a": {"rb": "2"},
+                                           "strategy-b": {"rb": "2"}}},
+            "self_trade": {"enabled": False, "on_unverifiable": "deny"},
+        }, 0, "unit bootstrap")
+        runs = []
+        svc = RiskOrderService(
+            engine, ledger, account_scope=ACCOUNT, route=ROUTE, execution_domain_ref=DOMAIN,
+            principals=PRINCIPALS,
+            instrument_for=lambda venue, native: RB if (venue, native) == ("SHFE", "rb") else None,
+            ready=lambda: True, note_run=lambda strategy, run: runs.append((strategy, run)),
+            cancel_status=lambda op: {"status": "OBSERVED", "operation_id": op,
+                                      "counts": {"SENT": 1}},
+        )
+        svc.gateway, svc.runs = gateway, runs
+        yield svc
 
 
 def ctx(principal, *, role=WireRole.STRATEGY_CLIENT, actor=None, strategy="strategy-a",
@@ -197,6 +217,7 @@ def test_options_validator_binds_exactly_the_two_ports():
             validate_service_options(options, ports)
 
 
+@V2_POLICY_BLOCKED
 def test_reserve_dispatch_with_the_authenticated_strategy_and_run(service):
     reply = reserve(service, ctx("principal-a"))
     assert reply["outcome"] == "RESERVED", reply
@@ -217,6 +238,7 @@ def test_reserve_dispatch_with_the_authenticated_strategy_and_run(service):
     assert status["state"] == "DISPATCHED"
 
 
+@V2_POLICY_BLOCKED
 def test_old_run_status_does_not_replace_the_current_write_route(service):
     from tests.unit.test_iter64_risk_service_gateway import port
 
@@ -257,6 +279,7 @@ def test_old_run_status_does_not_replace_the_current_write_route(service):
     assert delegate.close() is True
 
 
+@V2_POLICY_BLOCKED
 def test_existing_key_from_other_run_or_principal_is_unknown_without_identity(service):
     from types import MappingProxyType
 
@@ -296,6 +319,7 @@ def test_existing_key_from_other_run_or_principal_is_unknown_without_identity(se
     assert changed["outcome"] == "UNKNOWN" and changed["permit_id"] is None
 
 
+@V2_POLICY_BLOCKED
 def test_registry_old_reader_cannot_displace_new_writer_or_use_old_permit(service):
     from bt_api_py.risk_service_component import ORDER_WRITE_OPERATIONS
     from bt_api_py.service_registry import PrincipalGrant, ResourceGrant, ServiceCapability, ServiceRegistry
@@ -358,6 +382,7 @@ def test_registry_old_reader_cannot_displace_new_writer_or_use_old_permit(servic
         delegate.close()
 
 
+@V2_POLICY_BLOCKED
 def test_parent_mutations_fail_closed_without_registry_execution_write_claim(service):
     from dataclasses import replace
 
@@ -379,6 +404,7 @@ def test_parent_mutations_fail_closed_without_registry_execution_write_claim(ser
         assert txn._c.execute("SELECT count(*) FROM risk_pretrade_parents").fetchone()[0] == before
 
 
+@V2_POLICY_BLOCKED
 def test_strategy_order_status_quarantines_synthetic_history_across_principals(service, monkeypatch):
     from dataclasses import replace
     from bt_api_risk.pretrade import engine as pretrade_engine
@@ -407,6 +433,7 @@ def test_strategy_order_status_quarantines_synthetic_history_across_principals(s
     # and omitted fields do not establish it.
 
 
+@V2_POLICY_BLOCKED
 def test_existing_execution_parent_and_child_cannot_bypass_missing_writer_claim(service, monkeypatch):
     from dataclasses import replace
     from bt_api_base.risk_service_protocol import RISK_ORDER_OPERATIONS, RiskParentView
@@ -592,6 +619,7 @@ def test_existing_execution_parent_and_child_cannot_bypass_missing_writer_claim(
     assert after_rows == before_rows
 
 
+@V2_POLICY_BLOCKED
 def test_view_effect_comes_from_the_explicit_offset_never_from_the_caller(service):
     view, canonical, code = service.build_view(
         SimpleNamespace(strategy_refs=frozenset({"strategy-a"}), role="strategy"), "k9",
@@ -610,6 +638,7 @@ def test_view_effect_comes_from_the_explicit_offset_never_from_the_caller(servic
     ({"idempotency_key": "other"}, "risk_request_invalid"),
     ({"account_id": "account-b"}, "risk_request_invalid"),
 ])
+@V2_POLICY_BLOCKED
 def test_payload_refusals_never_reach_the_gateway(service, change, code):
     raw = payload("k1", **change)
     reply = service.handle("risk.order.reserve", context=ctx("principal-a"), arguments={
@@ -618,6 +647,7 @@ def test_payload_refusals_never_reach_the_gateway(service, change, code):
     assert service.gateway.calls == []
 
 
+@V2_POLICY_BLOCKED
 def test_r01_refusal_is_counted_for_the_callers_strategy_only(service):
     reply = reserve(service, ctx("principal-a"), "big", quantity="5")
     assert reply["code"] == "risk_order_quantity_exceeds_cap" and service.gateway.calls == []
@@ -630,6 +660,7 @@ def test_r01_refusal_is_counted_for_the_callers_strategy_only(service):
     assert other["refusal_counts"] == {}
 
 
+@V2_POLICY_BLOCKED
 def test_a_strategy_cannot_act_for_another_strategy(service):
     # principal-a registered with strategy-b's scope: the Registry would refuse, and so does Risk.
     reply = reserve(service, ctx("principal-a", strategy="strategy-b"))
@@ -664,6 +695,7 @@ def test_a_strategy_cannot_act_for_another_strategy(service):
     assert service.gateway.calls == calls_before and service.runs == runs_before
 
 
+@V2_POLICY_BLOCKED
 def test_execution_principal_maps_to_the_execution_origin(service):
     caller, code = service.caller(ctx("exec-1", role=WireRole.SERVICE), "risk.order.reserve")
     assert code is None and caller.role == "execution" and caller.strategy_refs == {"strategy-a"}
@@ -672,6 +704,7 @@ def test_execution_principal_maps_to_the_execution_origin(service):
     assert caller is None and code == "risk_unauthorized"
 
 
+@V2_POLICY_BLOCKED
 def test_admin_operations_are_operator_only(service):
     assert service.handle("risk.admin.status", context=ctx("principal-a"), arguments={}) == {
         "status": "REQUEST_REJECTED", "code": "risk_unauthorized"}
@@ -691,6 +724,7 @@ def test_admin_operations_are_operator_only(service):
     assert status["status"] == "OBSERVED" and status["summary"]["policy_version"] == 1
 
 
+@V2_POLICY_BLOCKED
 def test_admin_shapes(service):
     op = operator_ctx()
     assert service.handle("risk.admin.status", context=op, arguments={"x": 1}) == {
@@ -734,6 +768,7 @@ def test_admin_shapes(service):
         "status": "NOT_FOUND", "operation_id": "none"}
 
 
+@V2_POLICY_BLOCKED
 def test_latch_and_unknown_rows_use_the_frozen_wire_projection(service):
     from bt_api_py.risk_service_component import _latch, _unknown, iso_utc
 
@@ -759,6 +794,7 @@ def test_latch_and_unknown_rows_use_the_frozen_wire_projection(service):
                       "since": "2025-11-12T00:00:00.000000Z"}
 
 
+@V2_POLICY_BLOCKED
 def test_unknown_or_extra_order_arguments(service):
     reply = service.handle("risk.order.status", context=ctx("principal-a"),
                            arguments={"request_key": "k1", "strategy_ref": "strategy-b"})
@@ -795,6 +831,7 @@ def test_builtin_is_registered_and_requires_the_typed_service():
     assert raised.value.code == "RISK_ORDER_SERVICE_INVALID"
 
 
+@V2_POLICY_BLOCKED
 def test_built_component_passes_the_authenticated_context(service):
     from bt_api_py.risk_service_host import service_config_document
     from bt_api_py.service_components import (
@@ -814,3 +851,26 @@ def test_built_component_passes_the_authenticated_context(service):
                                     {"service": service}, ready=lambda: True))
     reply = component.handlers["risk.status"](ctx("principal-a"), {})
     assert reply["available"] is True and reply["policy_version"] == "1"
+
+
+def test_failed_service_bootstrap_does_not_leave_a_provisional_owner(tmp_path):
+    """A setup refusal must unwind the writer fence.
+
+    Regression guard for the FENCE_ENTRY_OWNER_ACTIVE cascade: the fixture
+    enters ``journal.writer_fence`` before the v2-only validator refuses the v1
+    bootstrap document, and production never clears the process-global
+    provisional-owner registry.  Without the ``with ExitStack()`` teardown the
+    second attempt on the same account scope fails FENCE_ENTRY_OWNER_ACTIVE.
+    """
+    from bt_api_risk.core.admission import AccountScope
+    from bt_api_risk.pretrade.engine import RiskAdminError
+    from bt_api_risk.risk_order_journal import RiskOrderJournal
+
+    for _ in range(2):
+        generator = service.__wrapped__(tmp_path)
+        with pytest.raises(RiskAdminError) as raised:
+            next(generator)
+        assert raised.value.code == "policy_schema_unsupported"
+    probe = RiskOrderJournal(tmp_path / "probe.sqlite", writer_id="probe")
+    with probe.writer_fence(AccountScope("ctp", ACCOUNT, "simnow")):
+        pass

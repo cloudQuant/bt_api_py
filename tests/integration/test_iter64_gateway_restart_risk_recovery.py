@@ -10,6 +10,7 @@ import sqlite3
 
 from tests.integration import _iter64_recovery_support as support
 from tests.integration.test_iter64_risk_crash_matrix import _Loopback, _answer
+from tests.unit.test_iter64_risk_service_component import V2_POLICY_BLOCKED
 
 
 def _cursor(root):
@@ -17,6 +18,7 @@ def _cursor(root):
         return db.execute("SELECT continuity, gap_reason FROM risk_pretrade_cursor").fetchone()
 
 
+@V2_POLICY_BLOCKED
 def test_gateway_restart_recovers_original_risk_process_without_replaying_writes(tmp_path_factory):
     root = support.retained_loopback_root(tmp_path_factory.getbasetemp())
     print(f"Retained synthetic Risk loopback root: {root}")

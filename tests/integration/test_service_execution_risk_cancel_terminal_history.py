@@ -102,6 +102,10 @@ class _RiskBackedDispatch:
 
 
 @pytest.mark.integration
+@pytest.mark.skip(reason=(
+    "Retired Execution account owner (LEGACY_EXECUTION_OWNER_RETIRED, iteration 65); "
+    "the execution owner.cancel control route has no current execution-role equivalent."
+))
 def test_owner_cancel_ack_keeps_risk_latched_until_persisted_terminal_history(
     tmp_path, monkeypatch
 ) -> None:

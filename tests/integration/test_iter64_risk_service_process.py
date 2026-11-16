@@ -27,6 +27,7 @@ from pathlib import Path
 
 import zmq
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
+from tests.unit.test_iter64_risk_service_component import V2_POLICY_BLOCKED
 
 ACCOUNT, DOMAIN, RUN = "account-a", "paper:demo", "strategy-run"
 TRADING_DAY = "20300101"
@@ -598,6 +599,7 @@ def _request(key, client_order_id, quantity="1"):
                         quantity_unit="lots", exchange_id="SHFE")
 
 
+@V2_POLICY_BLOCKED
 def test_strategy_order_through_the_risk_process_reaches_the_gateway_and_settles(tmp_path):
     from bt_api_base.gateway_direct_protocol import GatewayCommandBinding
 

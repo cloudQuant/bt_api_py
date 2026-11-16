@@ -2,8 +2,13 @@
 
 from tests.integration import _iter64_recovery_support as support
 from tests.integration.test_iter64_risk_crash_matrix import _Loopback
+from tests.unit.test_iter64_risk_service_component import V2_POLICY_BLOCKED
 
 
+# The recovery fixture bootstraps a v1 policy; the product is v2-only and v2
+# activation is blocked by RULE_R04_V2_UNAVAILABLE pending the iteration-64
+# R-04/R-11 decision (the host refuses with RISK_SERVICE_POLICY_INVALID).
+@V2_POLICY_BLOCKED
 def test_composed_risk_client_reconnects_after_ack_without_business_replay(tmp_path_factory):
     root = support.retained_loopback_root(tmp_path_factory.getbasetemp())
     print(f"Retained synthetic Risk loopback root: {root}")
