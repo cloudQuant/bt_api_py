@@ -551,6 +551,16 @@ operator configuration loader, UTC qualification, calendar accumulation and
 Monitor transport/evaluator are not yet connected to this source-recording
 option; its local source timestamps must not be sent as a cross-process clock.
 
+The trusted factory's `GatewayServerClockRefreshSettings` can separately select
+`history_capacity` (2–4096, default 0). The original background clock records
+actual SAMPLE, UNAVAILABLE and STOPPED publications in bounded memory;
+`read_history()` runs on its original owner and reports sequence gaps. Each
+restart has a new history epoch. An observed configuration change or recorder
+failure leaves history unavailable for that epoch, without changing the
+existing clock/dispatch behavior. Availability does not mean a sample is valid,
+and SNTP remains unauthenticated. This history has no disk, wire or operator
+configuration interface and does not yet qualify recovery intervals as UTC.
+
 The session's account reader owns the sole TD client. Direct orders and daily
 settlement borrow that client; the MD provider is lazy and shared across symbols.
 The network Host and native account owner use separate threads. A fresh

@@ -1576,7 +1576,9 @@ def build_ctp_gateway_trading_profile(
                                 max_error_bound_ns=clock_refresh_settings.max_error_bound_ns,
                                 max_sample_validity_seconds=clock_refresh_settings.max_sample_validity_seconds,
                                 refresh_interval_seconds=clock_refresh_settings.refresh_interval_seconds,
-                                claim_coordinator=holder['dispatch_claim_coordinator'])
+                                claim_coordinator=holder['dispatch_claim_coordinator'],
+                                **({'history_capacity': clock_refresh_settings.history_capacity}
+                                   if clock_refresh_settings.history_capacity else {}))
                             holder['clock_refresher'] = clock_refresher
                             holder['dispatch_claim_wired'].add(
                                 'gateway_server_clock_refresh.sample_change')
