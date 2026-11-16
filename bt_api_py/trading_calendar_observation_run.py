@@ -2704,7 +2704,9 @@ def main(argv=None):
     mock_batch.add_argument("--run-id", required=True)
     mock_batch.add_argument("--scope-json", action="append", required=True)
     mock_batch.add_argument("--supplement")
-    mock_batch.add_argument("--batch-budget", type=float, default=600)
+    mock_batch.add_argument("--batch-budget", type=float, default=1800)
+    mock_batch.add_argument("--fetch-max-attempts", type=int)
+    mock_batch.add_argument("--fetch-retry-interval-seconds", type=float)
     mock_batch.add_argument("--trusted-local-posix", action="store_true")
     mock_batch_show = sub.add_parser("mock-batch-show")
     mock_batch_show.add_argument("--calendar-root", required=True)
@@ -2861,6 +2863,8 @@ def main(argv=None):
                     scopes=scopes,
                     supplement=args.supplement,
                     budget_seconds=args.batch_budget,
+                    fetch_retry=args.fetch_max_attempts,
+                    fetch_retry_interval_seconds=args.fetch_retry_interval_seconds,
                 )
             else:
                 result = daily_batch.show(

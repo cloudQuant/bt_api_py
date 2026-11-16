@@ -668,7 +668,7 @@ def _batch_intent(root, batch_id, expected_sha=None):
         or intent["date_role"] != "REQUEST_DATE_NOT_EFFECTIVE_DATE"
         or type(intent["budget_seconds"]) not in (int, float)
         or not math.isfinite(intent["budget_seconds"])
-        or not 0 < intent["budget_seconds"] <= 600
+        or not 0 < intent["budget_seconds"] <= 86400
         or type(intent["baseline"]) is not dict
         or type(intent["policy"]) is not dict
     ):

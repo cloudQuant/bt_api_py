@@ -27,6 +27,8 @@ from bt_api_py.trading_calendar_store import TradingCalendarStore, _scope_key
 FS = runs.TRUSTED_LOCAL_POSIX
 LABEL = {"environment": "SIMULATION_ONLY", "source_authentication": "NOT_PROVEN"}
 _FETCH_RETRY_LIMIT = 3
+_DEFAULT_RETRY_INTERVAL = 600.0
+_MAX_BATCH_BUDGET = 86400.0
 # A refused claim left no descriptor, intent or result; retrying the same
 # observation ID is safe only after a read-back proves that nothing was written.
 # CLAIM_UNCERTAIN is the real-AKShare descriptor shape; BUDGET_EXHAUSTED and
@@ -59,10 +61,22 @@ def _now_utc():
 def _retry_policy(value):
     """Return the bounded attempt count; ``None`` selects the documented default."""
     if value is None:
-        return 2
+        return 3
     if type(value) is not int or not 1 <= value <= _FETCH_RETRY_LIMIT:
         raise ValueError("invalid fetch retry policy")
     return value
+
+
+def _retry_interval(value):
+    if value is None:
+        return _DEFAULT_RETRY_INTERVAL
+    if (
+        type(value) not in (int, float)
+        or not math.isfinite(value)
+        or not 0 < value <= _MAX_BATCH_BUDGET
+    ):
+        raise ValueError("invalid fetch retry interval")
+    return float(value)
 
 
 def _unknown_fetch_result(reason):
@@ -99,7 +113,9 @@ def _classify_fetch(value, unused):
     return "NOT_RETRIABLE", "DEFINITE_OR_UNCLASSIFIED"
 
 
-def _fetch_with_retry(*, fetch, max_attempts, unused):
+def _fetch_with_retry(
+    *, fetch, max_attempts, unused, interval, deadline, clock=time.monotonic, wait=time.sleep
+):
     """Run the source fetch at most ``max_attempts`` times; fail closed.
 
     Returns ``(value, attempts, outcome)``. Every attempt records an attempt
@@ -108,8 +124,24 @@ def _fetch_with_retry(*, fetch, max_attempts, unused):
     """
     if type(max_attempts) is not int or not 1 <= max_attempts <= _FETCH_RETRY_LIMIT:
         raise ValueError("invalid fetch retry policy")
+    interval = _retry_interval(interval)
     attempts = []
     value = None
+
+    def pause_before_retry():
+        # Count from completion of the previous attempt, and tolerate early wakes.
+        due = clock() + interval
+        if due >= deadline:
+            return "RETRY_BUDGET_EXHAUSTED"
+        while True:
+            now = clock()
+            if now >= deadline:
+                return "RETRY_BUDGET_EXHAUSTED"
+            if now >= due:
+                break
+            wait(due - now)
+        return None if unused() else "UNKNOWN_OUTCOME"
+
     while len(attempts) < max_attempts:
         attempt = len(attempts) + 1
         stamp = _now_utc().isoformat(timespec="microseconds").replace("+00:00", "Z")
@@ -131,6 +163,9 @@ def _fetch_with_retry(*, fetch, max_attempts, unused):
                 }
             )
             if proven and attempt < max_attempts:
+                stopped = pause_before_retry()
+                if stopped:
+                    return _unknown_fetch_result("FETCH_OUTCOME_UNKNOWN"), attempts, stopped
                 continue
             return (
                 _unknown_fetch_result("FETCH_OUTCOME_UNKNOWN"),
@@ -149,25 +184,34 @@ def _fetch_with_retry(*, fetch, max_attempts, unused):
         )
         if outcome == "TRANSIENT_PRECOMMIT":
             if attempt < max_attempts:
+                stopped = pause_before_retry()
+                if stopped:
+                    if stopped != "RETRY_BUDGET_EXHAUSTED":
+                        value = _unknown_fetch_result("FETCH_OUTCOME_UNKNOWN")
+                    return value, attempts, stopped
                 continue
             return value, attempts, "TRANSIENT_EXHAUSTED"
         return value, attempts, outcome
     return (_unknown_fetch_result("FETCH_OUTCOME_UNKNOWN"), attempts, "UNKNOWN_OUTCOME")
 
 
-def _retry_summary(records, max_attempts):
+def _retry_summary(records, max_attempts, interval):
     """Aggregate per-scope attempt metadata for the caller-facing result."""
     return {
         "max_attempts": max_attempts,
+        "interval_seconds": interval,
         "retried": sum(1 for item in records if len(item["attempts"]) > 1),
         "outcome_unknown": sum(1 for item in records if item["outcome"] == "UNKNOWN_OUTCOME"),
         "exhausted": sum(1 for item in records if item["outcome"] == "TRANSIENT_EXHAUSTED"),
+        "budget_exhausted": sum(
+            1 for item in records if item["outcome"] == "RETRY_BUDGET_EXHAUSTED"
+        ),
         "attempts": records,
         "clock": "LOCAL_CLOCK_UNVERIFIED",
     }
 
 
-def _record_fetch_retry(root, batch_id, records, max_attempts):
+def _record_fetch_retry(root, batch_id, records, max_attempts, interval):
     """Persist attempt count, reason codes and timestamps outside the fixed evidence schema.
 
     The batch evidence row shape is a frozen contract; attempts live in their own
@@ -178,6 +222,7 @@ def _record_fetch_retry(root, batch_id, records, max_attempts):
         **LABEL,
         "batch_id": batch_id,
         "max_attempts": max_attempts,
+        "interval_seconds": interval,
         "scopes": records,
         "clock": "LOCAL_CLOCK_UNVERIFIED",
     }
@@ -347,10 +392,11 @@ def run(
     run_id,
     scopes,
     supplement=None,
-    budget_seconds=600,
+    budget_seconds=1800,
     identity_bundle=None,
     requested_date=None,
     fetch_retry=None,
+    fetch_retry_interval_seconds=None,
 ):
     """Capture scopes once; an explicit date is caller-declared Asia/Shanghai, not effective date.
 
@@ -363,12 +409,15 @@ def run(
     committed identity reserves observation IDs only; it authenticates no source.
 
     ``fetch_retry`` bounds the per-scope AKShare attempt count (1-3; ``None``
-    keeps the default of two). Only a documented transient that a read-back
-    proves left no descriptor, intent or result is repeated; unknown or
+    defaults to three: the initial attempt and two retries). The interval defaults
+    to 600 seconds and is measured from the previous attempt ending. Only a
+    documented transient that a read-back proves left no descriptor, intent
+    or result is repeated; unknown or
     committed outcomes are never retried and stay UNKNOWN.
     """
     try:
         fetch_attempts = _retry_policy(fetch_retry)
+        fetch_interval = _retry_interval(fetch_retry_interval_seconds)
     except ValueError:
         return {**LABEL, "status": "NOT_COMMITTED", "reason": "INVALID_FETCH_RETRY"}
     explicit = identity_bundle is not None or requested_date is not None
@@ -399,7 +448,7 @@ def run(
             or not 2 <= len(scopes) <= 8
             or type(budget_seconds) not in (int, float)
             or not math.isfinite(budget_seconds)
-            or not 0 < budget_seconds <= 600
+            or not 0 < budget_seconds <= _MAX_BATCH_BUDGET
         ):
             raise ValueError
         for item in scopes:
@@ -704,14 +753,15 @@ def run(
         records, templates, captures, retry_records = [], [], [], []
 
         def retry_report():
-            summary = _retry_summary(retry_records, fetch_attempts)
+            summary = _retry_summary(retry_records, fetch_attempts, fetch_interval)
             if any(
                 len(item["attempts"]) > 1
-                or item["outcome"] in {"UNKNOWN_OUTCOME", "TRANSIENT_EXHAUSTED"}
+                or item["outcome"]
+                in {"UNKNOWN_OUTCOME", "TRANSIENT_EXHAUSTED", "RETRY_BUDGET_EXHAUSTED"}
                 for item in retry_records
             ):
                 summary["record"] = _record_fetch_retry(
-                    root, batch_id, retry_records, fetch_attempts
+                    root, batch_id, retry_records, fetch_attempts, fetch_interval
                 )
             else:
                 summary["record"] = "NOT_NECESSARY"
@@ -790,6 +840,8 @@ def run(
                 fetched, retry_attempts, retry_outcome = _fetch_with_retry(
                     fetch=fetch_once,
                     max_attempts=fetch_attempts,
+                    interval=fetch_interval,
+                    deadline=deadline,
                     unused=lambda oid=oid: _observation_id_unused(root, oid),
                 )
                 row = {

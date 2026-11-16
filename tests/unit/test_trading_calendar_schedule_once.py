@@ -69,7 +69,9 @@ def declared_result(kwargs, status):
 def test_once_pending_blocks_cross_midnight_and_batch_runs_outside_store_lock(
     tmp_path, monkeypatch
 ):
-    root, _, _, path = setup_root(tmp_path)
+    root, _, config, path = setup_root(tmp_path)
+    config.update(fetch_max_attempts=2, fetch_retry_interval_seconds=7)
+    path.write_text(json.dumps(config))
     clock_calls = []
 
     def clock():
@@ -94,6 +96,8 @@ def test_once_pending_blocks_cross_midnight_and_batch_runs_outside_store_lock(
     assert first["status"] == "UNKNOWN" and len(calls) == 1 and clock_calls == [1]
     assert first["requested_date"] == "2026-11-14"
     assert calls[0]["requested_date"].isoformat() == "2026-11-14"
+    assert calls[0]["fetch_retry"] == 2
+    assert calls[0]["fetch_retry_interval_seconds"] == 7
     monkeypatch.setattr(schedule, "_now_utc", lambda: pytest.fail("pending reread clock"))
     repeated = call(path)
     assert repeated["status"] == "UNKNOWN"
@@ -1417,3 +1421,15 @@ def test_inspect_active_rechecks_indexed_scope_under_existing_lock(tmp_path):
     result = execute(env, _active_read_command(root))
     assert result["status"] == "PENDING_REVIEW" and result["operation_id"] == first["operation_id"]
     assert _snapshot_tree(root) == before
+
+
+def test_schedule_retry_config_validation_and_bounds(tmp_path):
+    _, _, config, _ = setup_root(tmp_path)
+    config.update(budget_seconds=1800, fetch_max_attempts=3, fetch_retry_interval_seconds=600)
+    schedule._validate_config(config)
+    for key, value in (("fetch_max_attempts", 4), ("fetch_max_attempts", True),
+                       ("fetch_retry_interval_seconds", 0), ("fetch_retry_interval_seconds", float("nan")),
+                       ("budget_seconds", 86401)):
+        invalid = dict(config, **{key: value})
+        with pytest.raises(ValueError):
+            schedule._validate_config(invalid)

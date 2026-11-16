@@ -183,7 +183,9 @@ def _validate_config(config):
     }
     if (
         type(config) is not dict
-        or set(config) not in (fields, fields | {"supplement"})
+        or not fields
+        <= set(config)
+        <= fields | {"supplement", "fetch_max_attempts", "fetch_retry_interval_seconds"}
         or config["schema"] != _CONFIG
         or config["environment"] != "SIMULATION_ONLY"
         or type(config["root"]) is not str
@@ -204,7 +206,22 @@ def _validate_config(config):
         or not 2 <= len(config["scopes"]) <= 8
         or type(config["budget_seconds"]) not in (int, float)
         or not math.isfinite(config["budget_seconds"])
-        or not 0 < config["budget_seconds"] <= 600
+        or not 0 < config["budget_seconds"] <= batch._MAX_BATCH_BUDGET
+        or (
+            "fetch_max_attempts" in config
+            and (
+                type(config["fetch_max_attempts"]) is not int
+                or not 1 <= config["fetch_max_attempts"] <= batch._FETCH_RETRY_LIMIT
+            )
+        )
+        or (
+            "fetch_retry_interval_seconds" in config
+            and (
+                type(config["fetch_retry_interval_seconds"]) not in (int, float)
+                or not math.isfinite(config["fetch_retry_interval_seconds"])
+                or not 0 < config["fetch_retry_interval_seconds"] <= batch._MAX_BATCH_BUDGET
+            )
+        )
     ):
         raise ValueError("invalid schedule config")
 
@@ -2205,6 +2222,8 @@ def run_once(*, config_file, filesystem):
                 scopes=config["scopes"],
                 supplement=config.get("supplement"),
                 budget_seconds=config["budget_seconds"],
+                fetch_retry=config.get("fetch_max_attempts"),
+                fetch_retry_interval_seconds=config.get("fetch_retry_interval_seconds"),
                 identity_bundle=identities,
                 requested_date=requested_date,
             )
@@ -2647,7 +2666,7 @@ def _store_trading_days(content, venue):
     return tuple(sorted(days))
 
 
-def _health_operation(db, fd, chain, root, operation_id):
+def _health_operation(db, fd, chain, root, operation_id, venue):
     """Classify one effective operation as a successful or failed update check."""
     row = _ledger_row(db, operation_id, root)
     if row[2] != "TERMINAL":
@@ -2663,17 +2682,80 @@ def _health_operation(db, fd, chain, root, operation_id):
         "outcome": terminal["outcome"],
         "batch_status": terminal["batch_status"],
     }
+    if terminal["outcome"] not in _HEALTH_SUCCESS_OUTCOMES:
+        return "NO_SUCCESS", "CHECK_NO_SUCCESS", detail
+
+    pending = row[0]
+    returned = _returned(fd, chain, pending, row[1])
+    if returned is None or returned[1] != row[3]:
+        raise ValueError("returned evidence unavailable")
+    shown = _batch_show_readonly(pending, locked=(fd, chain))
+    intent, evidence = shown["intent"], shown["evidence"]
+    scopes, identities = pending["config"]["scopes"], pending["identity_bundle"]["observations"]
+    rows, checks = evidence["observations"], shown["scope_checks"]["scopes"]
     if (
-        terminal["outcome"] in _HEALTH_SUCCESS_OUTCOMES
-        and terminal["batch_status"] == "COMPLETE"
+        shown["evidence_sha256"] != returned[0]["batch_evidence_sha256"]
+        or intent["batch_id"] != pending["identity_bundle"]["batch_id"]
+        or intent["run_id"] != pending["identity_bundle"]["run_id"]
+        or intent["requested_date"] != pending["requested_date"]
+        or [
+            {"observation_id": item["observation_id"], "scope_sha256": item["scope_sha256"]}
+            for item in intent["observations"]
+        ] != identities
+        or [
+            {key: item[key] for key in ("contract", "target", "assumptions", "alignment", "timeout")}
+            for item in intent["observations"]
+        ] != scopes
+        or evidence["schema"] not in {
+            "bt_api.calendar-daily-batch-evidence/3",
+            "bt_api.calendar-daily-batch-evidence/4",
+        }
+        or terminal["batch_status"]
+        != ("COMPLETE" if evidence["schema"].endswith("/3") else "PARTIAL")
+        or type(scopes) is not list
+        or type(rows) is not list
+        or type(checks) is not list
+        or type(identities) is not list
+        or not 2 <= len(scopes) == len(rows) == len(checks) == len(identities) <= 8
     ):
+        raise ValueError("scope evidence mismatch")
+    venue_results = []
+    for scope, observed, check, identity in zip(scopes, rows, checks, identities, strict=True):
+        if (
+            observed["target"] != scope["target"]
+            or observed["contract"] != scope["contract"]
+            or observed["observation_id"] != identity["observation_id"]
+            or check["target"] != scope["target"]
+            or check["requested_contract"] != scope["contract"]
+        ):
+            raise ValueError("scope identity mismatch")
+        status = observed["observation_status"]
+        if status == "SUCCESS":
+            if (
+                observed["observation_state"] != "COMMITTED"
+                or observed["projection_state"] != "VISIBLE_UNAUTHENTICATED"
+                or observed.get("check_status", "SUCCESS") != "SUCCESS"
+                or observed.get("disposition", "UPDATED_AKSHARE") != "UPDATED_AKSHARE"
+            ):
+                raise ValueError("success evidence unavailable")
+        elif status in mixed._DEFINITE_FAILURES:
+            if (
+                observed.get("check_status") != "FAILED"
+                or observed.get("disposition") not in {"RETAINED_AKSHARE", "MOCK_FALLBACK"}
+            ):
+                raise ValueError("failure evidence unavailable")
+        else:
+            raise ValueError("unknown scope outcome")
+        if scope["target"]["venue"] == venue:
+            venue_results.append(status == "SUCCESS")
+    if not venue_results:
+        return "NO_SUCCESS", "VENUE_NOT_CHECKED", detail
+    if all(venue_results):
         return "SUCCESS", "CHECK_SUCCEEDED", detail
-    if terminal["batch_status"] == "PARTIAL":
-        return "NO_SUCCESS", "PARTIAL_CHECK", detail
-    return "NO_SUCCESS", "CHECK_NO_SUCCESS", detail
+    return "NO_SUCCESS", "VENUE_CHECK_FAILED", detail
 
 
-def _health_day(db, fd, chain, root, day):
+def _health_day(db, fd, chain, root, day, venue):
     listed = db.execute(
         "SELECT operation_id FROM operations WHERE requested_date=? AND effective=1 "
         "ORDER BY operation_id",
@@ -2691,7 +2773,7 @@ def _health_day(db, fd, chain, root, day):
     operations = []
     for (operation_id,) in listed:
         try:
-            status, reason, detail = _health_operation(db, fd, chain, root, operation_id)
+            status, reason, detail = _health_operation(db, fd, chain, root, operation_id, venue)
         except Exception:
             status, reason, detail = "UNKNOWN", "CHECK_EVIDENCE_UNAVAILABLE", {}
         statuses.append(status)
@@ -2714,7 +2796,7 @@ def _health_day(db, fd, chain, root, day):
 def inspect_check_health(
     *, root, venue, as_of_date=None, filesystem, threshold=_HEALTH_THRESHOLD
 ):
-    """Report whether the last two trading days lacked a successful update check.
+    """Report whether the threshold trading days lacked a successful venue check.
 
     Trading days come from the calendar store's CURRENT snapshot, not wall-clock
     weekdays; the caller-declared date or the unverified local clock bounds the
@@ -2726,7 +2808,8 @@ def inspect_check_health(
     if (
         filesystem != FS
         or venue not in _HEALTH_VENUES
-        or threshold != _HEALTH_THRESHOLD
+        or type(threshold) is not int
+        or not 1 <= threshold <= _HEALTH_MAX_TRADING_DAYS
         or (as_of_date is not None and type(as_of_date) is not date)
     ):
         return {**LABEL, "status": "UNKNOWN", "reason": "INVALID_INPUT"}
@@ -2769,7 +2852,7 @@ def inspect_check_health(
     try:
         with _store_lock(root, readonly=True) as (_, fd, chain, _):  # noqa: SIM117
             with _ledger(root, fd, chain, readonly=True) as db:
-                days = [_health_day(db, fd, chain, root, day) for day in window]
+                days = [_health_day(db, fd, chain, root, day, venue) for day in window]
     except Exception:
         return {
             **LABEL,
@@ -2785,7 +2868,11 @@ def inspect_check_health(
     if any(row["status"] == "UNKNOWN" for row in days):
         status, reason = "UNKNOWN", "CHECK_HISTORY_UNCERTAIN"
     elif all(row["status"] == "NO_SUCCESS" for row in days):
-        status, reason = "WARNING", "TWO_CONSECUTIVE_TRADING_DAYS_NO_SUCCESS"
+        status, reason = "WARNING", (
+            "TWO_CONSECUTIVE_TRADING_DAYS_NO_SUCCESS"
+            if threshold == 2
+            else "CONSECUTIVE_TRADING_DAYS_NO_SUCCESS"
+        )
     else:
         status, reason = "OK", "WITHIN_THRESHOLD"
     return {
@@ -2826,6 +2913,7 @@ def main(argv=None):
     parser.add_argument("--operation-id")
     parser.add_argument("--venue")
     parser.add_argument("--as-of-date")
+    parser.add_argument("--threshold", type=int)
     parser.add_argument("--trusted-local-posix", action="store_true", required=True)
     try:
         args = parser.parse_args(argv)
@@ -2836,6 +2924,7 @@ def main(argv=None):
                 or args.operation_id
                 or args.venue
                 or args.as_of_date
+                or args.threshold is not None
             ):
                 parser.error("invalid arguments")
         elif args.action in ("inspect-active", "scan-publications"):
@@ -2845,6 +2934,7 @@ def main(argv=None):
                 or args.operation_id is not None
                 or args.venue
                 or args.as_of_date
+                or args.threshold is not None
             ):
                 parser.error("invalid arguments")
         elif args.action == "check-health":
@@ -2853,6 +2943,10 @@ def main(argv=None):
                 or args.venue not in _HEALTH_VENUES
                 or args.config is not None
                 or args.operation_id is not None
+                or (
+                    args.threshold is not None
+                    and not 1 <= args.threshold <= _HEALTH_MAX_TRADING_DAYS
+                )
             ):
                 parser.error("invalid arguments")
             if args.as_of_date is not None:
@@ -2868,6 +2962,7 @@ def main(argv=None):
             or not args.operation_id
             or args.venue
             or args.as_of_date
+            or args.threshold is not None
         ):
             parser.error("invalid arguments")
     except ValueError:
@@ -2886,6 +2981,7 @@ def main(argv=None):
                 as_of_date=(
                     None if args.as_of_date is None else date.fromisoformat(args.as_of_date)
                 ),
+                threshold=_HEALTH_THRESHOLD if args.threshold is None else args.threshold,
                 filesystem=FS,
             )
         else:

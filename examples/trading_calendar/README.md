@@ -6,7 +6,7 @@ D67-19 要求每天 Asia/Shanghai 20:30 触发，包括周末和节假日，不�
 
 `bt_api_py.trading_calendar_schedule_once` 是一次性模拟入口：启动前保存原 operation ID、批次身份和上海请求日期；上次结果不明或仍待审核时保留 pending，不会仅因跨日重新采集。需要已经初始化并具有当前模拟版本的可信本地 POSIX 根目录、原始模拟运行 ID、2 至 8 个不重叠的范围、补充输入和运行预算。实际运行可能访问 AKShare，真实来源不因此获得验证；不能把 mock 或请求日期当作真实交易所安排或生效日。
 
-入口不安装计划任务，不自动发送通知或重试。它只约束本入口的协作运行，不阻止旧程序、其他根或直接调用底层采集接口；未知状态须按原 ID 核查，不按 PID、超时或文件缺失盲目重试。旧调度遗留记录、初始化持久化不明、异常数据库／路径等可能需要人工处理；真实定时、断电和跨平台尚未验收。
+入口不安装计划任务或自动发送通知，也不自动重跑结果不明的批次。可证明未写入的临时采集失败按下述有界策略重试。它只约束本入口的协作运行，不阻止旧程序、其他根或直接调用底层采集接口；未知状态须按原 ID 核查，不按 PID、超时或文件缺失盲目重试。旧调度遗留记录、初始化持久化不明、异常数据库／路径等可能需要人工处理；真实定时、断电和跨平台尚未验收。
 
 独立通知程序可使用原任务的 `operation_id` 核对一次已发布的自动更新；以下为不发送邮件的检查示意，操作方须填入自己的路径和原 ID：
 
@@ -29,6 +29,18 @@ D67-19 要求每天 Asia/Shanghai 20:30 触发，包括周末和节假日，不�
 
 配置使用 `bt_api.calendar-schedule-once-config/1`，必需字段为 `schema`、`environment`（必须为 `SIMULATION_ONLY`）、绝对路径 `root`、稳定 `job_key`、`original_run_id`、有序 `scopes` 和 `budget_seconds`；可选的 `supplement` 必须为绝对路径，省略时使用 `<root>/supplement.yaml`，显式空值或无效路径不会回退到默认值。`scopes` 与下方 `--scope-json` 格式相同，按 `(venue, kind, product, mock_contract, valid_from, valid_to)` 升序排列。请求日期由本机 UTC 时钟转换为上海自然日，并标记为未验证；原人工待审保留 pending，确认后须按同一 operation ID 核查／结案。操作方需要留存输出与原 ID；锁忙或记录缺失时可能只能得到 UNKNOWN，不能据此创建新 ID 重跑。
 
+预算和重试字段的示意如下，须与其余必需字段一起配置：
+
+```json
+{
+  "budget_seconds": 1800,
+  "fetch_max_attempts": 3,
+  "fetch_retry_interval_seconds": 600
+}
+```
+
+`fetch_max_attempts` 为总尝试次数（1–3，省略为 3，即首次加两次重试），`fetch_retry_interval_seconds` 为从上次尝试结束起的间隔（大于 0 且不超过 86400，省略为 600 秒）。`budget_seconds` 必填，大于 0 且不超过 86400 秒；1800 秒为容纳两次默认等待及处理时间的示例，并不保证多范围均能重试。显式较短预算保持原值，剩余时间不足时停止等待并报告；本地文件操作不受硬截止约束。只有核实未留下 descriptor、intent 或结果的指定临时失败可重试；已提交或结果未知的采集不会自动重试。
+
 仅供核对 CLI 参数的不可执行示意（尖括号和范围 JSON 均须由操作方配置，不能复制运行）：
 
 ```text
@@ -38,11 +50,13 @@ D67-19 要求每天 Asia/Shanghai 20:30 触发，包括周末和节假日，不�
   --scope-json <第一个范围的 JSON 对象>
   --scope-json <第二个范围的 JSON 对象>
   --supplement <补充输入文件的绝对路径>
-  --batch-budget <大于 0 且不超过 600 的秒数>
+  --batch-budget <大于 0 且不超过 86400 的秒数>
+  --fetch-max-attempts <总尝试次数 1–3>
+  --fetch-retry-interval-seconds <大于 0 且不超过 86400 的秒数>
   --trusted-local-posix
 ```
 
-`--scope-json` 可重复 2–8 次；每个对象必须提供 `contract`、`target`、`assumptions`、`alignment` 和 `timeout`，且与初始化的模拟范围及证据匹配；`alignment` 当前须为 `REPEAT_OVER_MOCK_OWNER_DAY_MAPPING`。`--supplement` 可省略，此时读取根目录下 `supplement.yaml`；文件及基线必须存在。`--batch-budget` 默认 600 秒，不是文件系统或整个执行的硬截止。`--trusted-local-posix` 是调用方对目录条件的显式声明，并不使 Windows 文件系统得到支持。
+`--scope-json` 可重复 2–8 次；每个对象必须提供 `contract`、`target`、`assumptions`、`alignment` 和 `timeout`，且与初始化的模拟范围及证据匹配；`alignment` 当前须为 `REPEAT_OVER_MOCK_OWNER_DAY_MAPPING`。`--supplement` 可省略，此时读取根目录下 `supplement.yaml`；文件及基线必须存在。`--batch-budget` 默认 1800 秒；两个采集重试参数分别默认 3 次和 600 秒。预算不是文件系统或整个执行的硬截止。`--trusted-local-posix` 是调用方对目录条件的显式声明，并不使 Windows 文件系统得到支持。
 
 应保留完整标准输出及原始 batch、run、review、publication 和 version ID，按输出状态处理人工审核和结果不明；退出码单独不足以判定成功。可用 `mock-batch-show --calendar-root <同一根目录> --run-id <批次输出的 run_id> --batch-id <原 batch_id> --trusted-local-posix` 检查原批次，其 `VISIBLE_UNAUTHENTICATED` 也不证明来源或提交最终成功；结果仍不明时停止并人工核查，不盲目重跑、重新发布或伪造 ID。上述核查不是已自动接线的恢复流程。
 
