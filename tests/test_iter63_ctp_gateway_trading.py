@@ -1407,7 +1407,7 @@ def _read_profile(tmp_path, monkeypatch, *, read_principals=None, account_key=No
     read_settings = module.CtpGatewayAccountReadSettings(
         tmp_path / "account.sqlite",
         "account-state",
-        (AccountResourceKey("future", "cross"),),
+        (AccountResourceKey("future", "futures"),),
         tmp_path / "identity.sqlite",
         issuer_id,
         (MarketInstrumentKey("ctp", "SHFE", "simnow", "future", "rb2612", "rb2612"),),
@@ -1442,6 +1442,19 @@ def _read_profile(tmp_path, monkeypatch, *, read_principals=None, account_key=No
         )
 
     return build, settings, config, authority, grants, read_settings
+
+
+def test_account_read_coverage_rejected_before_acquisition(tmp_path, monkeypatch):
+    from bt_api_base.account_protocol import AccountResourceKey
+
+    build, _, _, _, _, read = _read_profile(tmp_path, monkeypatch)
+    calls = []
+    monkeypatch.setattr(module, "_load_ctp_types", lambda: calls.append("provider"))
+    with pytest.raises(CtpGatewayTradingError, match="^INVALID_ACCOUNT_READ_SETTINGS$"):
+        build(read=replace(read, required_coverage=(AccountResourceKey("future", "main"),)),
+              feed_factory=lambda: calls.append("feed"))
+    assert calls == []
+    assert not (tmp_path / "read-registry.sqlite").exists()
 
 
 def test_account_read_settings_require_explicit_scope_and_distinct_journal(tmp_path, monkeypatch):

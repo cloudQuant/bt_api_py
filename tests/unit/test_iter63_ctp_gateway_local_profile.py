@@ -961,7 +961,7 @@ def _observation(doc, tmp_path, observers):
     return {"read_journal_path": str(tmp_path / "account-read.sqlite"),
             "observation_identity_path": str(tmp_path / "observation-identity.sqlite"),
             "expected_observation_issuer_id": "issuer-a", "state_scope": "account-state",
-            "required_coverage": [{"product_type": "future", "margin_pool": "main"}],
+            "required_coverage": [{"product_type": "future", "margin_pool": "futures"}],
             "observers": observers}
 
 
@@ -1002,7 +1002,7 @@ def test_simnow_account_observation_section_is_optional_and_strict(tmp_path, mon
     assert (read.journal_path, read.observation_identity_path) == (
         str(tmp_path / "account-read.sqlite"), str(tmp_path / "observation-identity.sqlite"))
     assert (read.state_scope, read.expected_observation_issuer_id) == ("account-state", "issuer-a")
-    assert read.required_coverage == (AccountResourceKey("future", "main"),)
+    assert read.required_coverage == (AccountResourceKey("future", "futures"),)
     assert read.observation_instruments == tuple(MarketInstrumentKey.from_dict(item)
                                                  for item in doc["returns"]["instruments"])
     # The request budget defaults to 6 s here, not the 2 s of the settings class: a full read is

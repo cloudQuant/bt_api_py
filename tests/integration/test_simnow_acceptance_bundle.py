@@ -9,8 +9,8 @@ from bt_api_risk.pretrade.policy import validate_policy_v2_document
 from bt_api_py.simnow_acceptance_bootstrap import bootstrap_simnow_acceptance
 
 
-def sample(root):
-    return bootstrap_simnow_acceptance(root=root, credentials={"broker_id": "broker-synthetic", "user_id": "user-synthetic", "password": "password-synthetic", "auth_code": "auth", "app_id": "app", "td_front": "tcp://td.invalid:1", "md_front": "tcp://md.invalid:2"}, instrument={"venue": "SHFE", "native_symbol": "rb2701", "multiplier": "10", "tick_size": "1", "margin_pool": "main"}, strategy_uuid="c0988d05-a46a-4248-a3b9-729e15c78483")
+def sample(root, *, margin_pool="futures"):
+    return bootstrap_simnow_acceptance(root=root, credentials={"broker_id": "broker-synthetic", "user_id": "user-synthetic", "password": "password-synthetic", "auth_code": "auth", "app_id": "app", "td_front": "tcp://td.invalid:1", "md_front": "tcp://md.invalid:2"}, instrument={"venue": "SHFE", "native_symbol": "rb2701", "multiplier": "10", "tick_size": "1", "margin_pool": margin_pool}, strategy_uuid="c0988d05-a46a-4248-a3b9-729e15c78483")
 
 
 def test_parse_and_compose_without_connecting(tmp_path, monkeypatch):

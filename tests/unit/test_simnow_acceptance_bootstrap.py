@@ -83,3 +83,11 @@ def test_rejects_directory_inside_git_worktree(tmp_path):
     with pytest.raises(bootstrap.SimnowBootstrapError, match="^SIMNOW_BOOTSTRAP_FAILED$"):
         sample(root)
     assert not list(root.iterdir())
+
+
+def test_inconsistent_instrument_coverage_creates_no_files(tmp_path):
+    root = tmp_path.resolve() / "private"
+    root.mkdir(mode=0o700)
+    with pytest.raises(bootstrap.SimnowBootstrapError, match="^SIMNOW_BOOTSTRAP_FAILED$"):
+        sample(root, margin_pool="main")
+    assert not list(root.iterdir())

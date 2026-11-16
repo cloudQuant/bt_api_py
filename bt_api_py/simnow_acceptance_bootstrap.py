@@ -98,6 +98,11 @@ def bootstrap_simnow_acceptance(*, root: str | os.PathLike, credentials: Mapping
                 or any(type(v) is not str or not v or v != v.strip() for v in (*credentials.values(), *instrument.values()))
                 or str(uuid.UUID(strategy_uuid)) != strategy_uuid):
             raise ValueError
+        from bt_api_base.account_protocol import AccountResourceKey
+        from bt_api_ctp.account_resource_coverage import CTP_ACCOUNT_RESOURCE_COVERAGE
+
+        if (AccountResourceKey("future", instrument["margin_pool"]),) != CTP_ACCOUNT_RESOURCE_COVERAGE:
+            raise ValueError
         ports = (gateway_port, risk_port, monitor_ingress_port, monitor_heartbeat_port)
         if any(type(p) is not int or not 1 <= p <= 65535 for p in ports) or len(set(ports)) != 4:
             raise ValueError

@@ -101,7 +101,7 @@ def _server(
         from bt_api_base.market_protocol import MarketInstrumentKey
 
         should_block, blocked, resume, issuer_id = read_control
-        resource_key = AccountResourceKey("future", "cross")
+        resource_key = AccountResourceKey("future", "futures")
         count = [0]
 
         def read_account(session, *, generation, timeout):
@@ -494,7 +494,7 @@ def test_dual_port_read_uses_owner_and_slow_query_does_not_block_status(tmp_path
             "store.account",
             account_ref=scope,
             expected_account=key,
-            required_coverage=(AccountResourceKey("future", "cross"),),
+            required_coverage=(AccountResourceKey("future", "futures"),),
             expected_scope_ref="scope-a",
             require_open_orders=True,
         )

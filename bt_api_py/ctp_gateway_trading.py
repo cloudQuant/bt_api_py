@@ -982,6 +982,14 @@ def build_ctp_gateway_trading_profile(
         )
     ):
         raise CtpGatewayTradingError("INVALID_ACCOUNT_READ_SETTINGS")
+    if account_read_settings is not None:
+        try:
+            from bt_api_ctp.account_resource_coverage import CTP_ACCOUNT_RESOURCE_COVERAGE
+
+            if frozenset(account_read_settings.required_coverage) != frozenset(CTP_ACCOUNT_RESOURCE_COVERAGE):
+                raise ValueError
+        except Exception:
+            raise CtpGatewayTradingError("INVALID_ACCOUNT_READ_SETTINGS") from None
     if market_settings is not None:
         if type(market_settings) is not CtpGatewayMarketSettings:
             raise CtpGatewayTradingError("INVALID_MARKET_SETTINGS")

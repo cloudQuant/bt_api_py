@@ -570,7 +570,7 @@ def _account_observation(value, principals, grants, *, instruments, account_oper
          "observation_identity_path": "/absolute/path/observation-identity.sqlite",
          "expected_observation_issuer_id": "<issuer id of that identity store>",
          "state_scope": "account-state",
-         "required_coverage": [{"product_type": "future", "margin_pool": "main"}],
+         "required_coverage": [{"product_type": "future", "margin_pool": "futures"}],
          "observers": [{"identity": <service identity>, "curve_public_key": "...",
                         "resources": [<registry resource on service.account_read>]}],
          "operator_reads": [{"principal_ref": "<an operator of the controls section>",
