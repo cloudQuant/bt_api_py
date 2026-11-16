@@ -126,3 +126,105 @@ def validate_calendar_response(value):
     if len(json.dumps(value, ensure_ascii=True, separators=(",", ":")).encode()) > _MAX_BYTES:
         raise ValueError("INVALID_CALENDAR_RESPONSE")
     return deepcopy(value)
+
+
+_WINDOWS_SCOPE = frozenset({"mode", "route", "venue", "kind", "product", "contract", "start_utc", "end_utc"})
+
+
+def decode_calendar_windows_query(arguments):
+    """Return exact scope echo and parsed UTC half-open endpoints."""
+    if not isinstance(arguments, Mapping) or set(arguments) != _WINDOWS_SCOPE:
+        raise ValueError("INVALID_CALENDAR_REQUEST")
+    if (arguments["mode"] != "SIMULATION_ONLY" or type(arguments["mode"]) is not str
+            or any(not _id(arguments[name]) for name in ("route", "venue", "kind", "product", "contract"))
+            or arguments["kind"] not in {"future", "option"}):
+        raise ValueError("INVALID_CALENDAR_REQUEST")
+    start, end = _utc(arguments["start_utc"]), _utc(arguments["end_utc"])
+    if not start < end or end - start > timedelta(days=366):
+        raise ValueError("INVALID_CALENDAR_REQUEST")
+    return dict(arguments), start, end
+
+
+def validate_calendar_windows_response(value):
+    """Check and detach a simulated response; gaps list only observed failures."""
+    from zoneinfo import ZoneInfo
+    keys = {"schema", "scope", "registration_id", "service_epoch", "status", "reason", "binding",
+            "policy", "windows", "gaps", "source_authentication", "trade_authorization"}
+    if (type(value) is not dict or set(value) != keys
+            or value["schema"] != "sdk.gateway.calendar.windows/1"):
+        raise ValueError("INVALID_CALENDAR_RESPONSE")
+    scope, start, end = decode_calendar_windows_query(value["scope"])
+    if (not _id(value["registration_id"]) or not _id(value["service_epoch"])
+            or value["source_authentication"] != "NOT_PROVEN" or value["trade_authorization"] != "NONE"):
+        raise ValueError("INVALID_CALENDAR_RESPONSE")
+    reasons = {"COMPLETE": {"OK"}, "UNKNOWN": {"SOURCE_UNAVAILABLE", "OWNER_CHANGED", "POLICY_UNAVAILABLE",
+        "DAY_OUT_OF_RANGE", "COVERAGE_UNAVAILABLE", "OWNER_DATA_UNAVAILABLE", "CONTRADICTORY_DATA",
+        "POLICY_CONTRADICTED", "PAST_OWNER_OVERLAP", "CLOSURE_UNAVAILABLE", "INVALID_RESULT"}}
+    if value["status"] not in reasons or value["reason"] not in reasons[value["status"]]:
+        raise ValueError("INVALID_CALENDAR_RESPONSE")
+    binding, policy, windows = value["binding"], value["policy"], value["windows"]
+    if binding is not None:
+        synthetic = {"schema": "sdk.gateway.calendar.query/1", "scope": {
+            **{k: scope[k] for k in ("mode", "route", "venue", "kind", "product", "contract")},
+            "trading_day": binding.get("bound_trading_day") if type(binding) is dict else None},
+            "registration_id": value["registration_id"], "service_epoch": value["service_epoch"],
+            "status": "UNKNOWN", "reason": "QUERY_UNAVAILABLE", "binding": binding,
+            "venue_day": {"status": "UNKNOWN", "day_status": None}, "windows": [],
+            "source_authentication": "NOT_PROVEN", "trade_authorization": "NONE"}
+        validate_calendar_response(synthetic)
+    if policy is not None:
+        fields = {"policy_id", "declaration", "max_advance_days", "max_spill_days", "first_owner_day", "last_owner_day"}
+        if (type(policy) is not dict or set(policy) != fields or not _id(policy["policy_id"])
+                or policy["declaration"] != "DEPLOYMENT_DECLARED_UNVERIFIED"
+                or type(policy["max_advance_days"]) is not int or not 0 <= policy["max_advance_days"] <= 31
+                or type(policy["max_spill_days"]) is not int or not 0 <= policy["max_spill_days"] <= 7
+                or (policy["first_owner_day"] is None) != (policy["last_owner_day"] is None)):
+            raise ValueError("INVALID_CALENDAR_RESPONSE")
+        if policy["first_owner_day"] is not None:
+            first, last = _day(policy["first_owner_day"]), _day(policy["last_owner_day"])
+            zone = ZoneInfo("Asia/Shanghai")
+            if (first != start.astimezone(zone).date() - timedelta(days=policy["max_spill_days"])
+                    or last != (end - timedelta(microseconds=1)).astimezone(zone).date() + timedelta(days=policy["max_advance_days"])
+                    or (last - first).days + 1 > 405):
+                raise ValueError("INVALID_CALENDAR_RESPONSE")
+    if type(windows) is not list or len(windows) > 128 or (value["status"] != "COMPLETE" and windows):
+        raise ValueError("INVALID_CALENDAR_RESPONSE")
+    gaps = value["gaps"]
+    if type(gaps) is not list or len(gaps) > 405 or (value["status"] == "COMPLETE" and gaps):
+        raise ValueError("INVALID_CALENDAR_RESPONSE")
+    previous_gap = None
+    for gap in gaps:
+        if (type(gap) is not dict or set(gap) != {"trading_day", "reason"}
+                or gap["reason"] not in {"OWNER_DATA_UNAVAILABLE", "CONTRADICTORY_DATA", "POLICY_CONTRADICTED", "PAST_OWNER_OVERLAP"}
+                or policy is None or policy["first_owner_day"] is None):
+            raise ValueError("INVALID_CALENDAR_RESPONSE")
+        day = _day(gap["trading_day"])
+        if not first <= day <= last or (previous_gap is not None and day <= previous_gap):
+            raise ValueError("INVALID_CALENDAR_RESPONSE")
+        previous_gap = day
+    if value["status"] == "COMPLETE":
+        if (binding is None or policy is None or policy["first_owner_day"] is None
+                or first < _day(binding["coverage_start"]) or last > _day(binding["coverage_end"])
+                or start.astimezone(ZoneInfo("Asia/Shanghai")).date()
+                   < _day(binding["bound_trading_day"]) - timedelta(days=policy["max_advance_days"])
+                or (end - timedelta(microseconds=1)).astimezone(ZoneInfo("Asia/Shanghai")).date()
+                   > _day(binding["bound_trading_day"]) + timedelta(days=366)):
+            raise ValueError("INVALID_CALENDAR_RESPONSE")
+    previous, seen = None, set()
+    for window in windows:
+        if (type(window) is not dict or set(window) != {"window_id", "phase", "trading_day", "start_utc", "end_utc"}
+                or not _id(window["window_id"]) or window["phase"] not in {"continuous", "auction"}):
+            raise ValueError("INVALID_CALENDAR_RESPONSE")
+        owner, wstart, wend = _day(window["trading_day"]), _utc(window["start_utc"]), _utc(window["end_utc"])
+        key = owner, window["window_id"]
+        if (key in seen or owner < _day(binding["bound_trading_day"]) or not first <= owner <= last
+                or not wstart < wend or wend - wstart > timedelta(days=2)
+                or wstart >= end or wend <= start or (previous is not None and wstart < previous)
+                or wstart.astimezone(zone).date() < owner - timedelta(days=policy["max_advance_days"])
+                or (wend - timedelta(microseconds=1)).astimezone(zone).date() > owner + timedelta(days=policy["max_spill_days"])):
+            raise ValueError("INVALID_CALENDAR_RESPONSE")
+        seen.add(key)
+        previous = wend
+    if len(json.dumps(value, ensure_ascii=True, separators=(",", ":")).encode()) > _MAX_BYTES:
+        raise ValueError("INVALID_CALENDAR_RESPONSE")
+    return deepcopy(value)

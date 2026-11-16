@@ -757,6 +757,15 @@ class GatewayBtApi:
             raise ValueError("CALENDAR_SCOPE_NOT_CONFIGURED")
         return self._calendar.query(route=route, venue=venue, kind=kind, product=product, contract=contract, trading_day=trading_day, timeout_seconds=timeout_seconds)
 
+    def trading_calendar_windows(self, exchange_name, *, route, venue, kind, product, contract, start_utc, end_utc, timeout_seconds=5.0):
+        """Read an explicitly enabled simulation UTC range through Gateway."""
+        self._check(exchange_name)
+        if self._calendar is None:
+            raise RuntimeError("CALENDAR_CLIENT_UNAVAILABLE")
+        if route != exchange_name:
+            raise ValueError("CALENDAR_SCOPE_NOT_CONFIGURED")
+        return self._calendar.windows(route=route, venue=venue, kind=kind, product=product, contract=contract, start_utc=start_utc, end_utc=end_utc, timeout_seconds=timeout_seconds)
+
     def get_instrument_spec(self, exchange_name, symbol, *, timeout_seconds=5.0):
         self._check(exchange_name)
         if self._instrument is None:

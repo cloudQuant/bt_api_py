@@ -7,11 +7,15 @@ import time
 from dataclasses import dataclass
 from types import MappingProxyType
 
-from bt_api_py.gateway_calendar_codec import decode_calendar_query, validate_calendar_response
+from bt_api_py.gateway_calendar_codec import (
+    decode_calendar_query, decode_calendar_windows_query,
+    validate_calendar_response, validate_calendar_windows_response,
+)
 from bt_api_py.service_runtime import RegisteredBinding
 from bt_api_py.service_runtime_thread import OwnerOperationError, ThreadedRuntimeError, _timeout, _copy_wire
 
 CALENDAR_OPERATIONS = frozenset({"calendar.query.v1"})
+CALENDAR_WINDOWS_OPERATIONS = CALENDAR_OPERATIONS | {"calendar.windows.v1"}
 
 
 def _freeze(value):
@@ -26,9 +30,11 @@ def _freeze(value):
 class GatewayCalendarClientSettings:
     mode: str
     scopes: tuple
+    range_read: bool = False
 
     def __post_init__(self):
-        if self.mode != "SIMULATION_ONLY" or type(self.scopes) is not tuple or not 1 <= len(self.scopes) <= 256:
+        if (self.mode != "SIMULATION_ONLY" or type(self.range_read) is not bool
+                or type(self.scopes) is not tuple or not 1 <= len(self.scopes) <= 256):
             raise ValueError("INVALID_CALENDAR_SETTINGS")
         normalized = []
         try:
@@ -42,6 +48,10 @@ class GatewayCalendarClientSettings:
         except Exception:
             raise ValueError("INVALID_CALENDAR_SETTINGS") from None
         object.__setattr__(self, "scopes", tuple(normalized))
+
+    @property
+    def requested_operations(self):
+        return CALENDAR_WINDOWS_OPERATIONS if self.range_read else CALENDAR_OPERATIONS
 
     def permits(self, scope):
         return tuple((key, scope[key]) for key in ("route", "venue", "kind", "product", "contract")) in self.scopes
@@ -65,6 +75,28 @@ class GatewayCalendarQueryResult:
     @classmethod
     def from_wire(cls, wire):
         value = validate_calendar_response(wire)
+        return cls(**{key: _freeze(value[key]) for key in cls.__dataclass_fields__})
+
+
+@dataclass(frozen=True)
+class GatewayCalendarWindowsResult:
+    """Detached simulation range with an explicit deployment policy declaration."""
+    schema: str
+    scope: object
+    registration_id: str
+    service_epoch: str
+    status: str
+    reason: str
+    binding: object
+    policy: object
+    gaps: tuple
+    windows: tuple
+    source_authentication: str
+    trade_authorization: str
+
+    @classmethod
+    def from_wire(cls, wire):
+        value = validate_calendar_windows_response(wire)
         return cls(**{key: _freeze(value[key]) for key in cls.__dataclass_fields__})
 
 
@@ -99,7 +131,7 @@ class GatewayCalendarOwner:
                 or b.scope_ref != self._scope_ref or b.scope.account_ref != self._account_ref
                 or b.scope != route.scope
                 or runtime.run_id != route.scope.run_id or runtime.identity != route.identity
-                or not CALENDAR_OPERATIONS <= b.operations):
+                or not self._settings.requested_operations <= b.operations):
                 raise ValueError
             return b, proof
         except Exception:
@@ -117,22 +149,27 @@ class GatewayCalendarOwner:
                     or binding.service_epoch != arguments["service_epoch"]):
                 raise OwnerOperationError("CALENDAR_OUTCOME_UNKNOWN")
             return {"valid": True}
-        if operation != "query":
+        if operation not in {"query", "windows"}:
             raise OwnerOperationError("INVALID_OWNER_ARGUMENTS")
+        if operation == "windows" and not self._settings.range_read:
+            raise OwnerOperationError("CALENDAR_RANGE_UNAVAILABLE")
+        decode = decode_calendar_query if operation == "query" else decode_calendar_windows_query
+        validate = validate_calendar_response if operation == "query" else validate_calendar_windows_response
+        remote_operation = "calendar.query.v1" if operation == "query" else "calendar.windows.v1"
         try:
-            echo, _ = decode_calendar_query(arguments)
+            echo = decode(arguments)[0]
             if not self._settings.permits(echo):
                 raise ValueError
         except Exception:
             raise OwnerOperationError("CALENDAR_SCOPE_NOT_CONFIGURED") from None
         before, proof = self._binding()
         try:
-            raw = self._runtime.call("store.calendar", "calendar.query.v1", echo,
+            raw = self._runtime.call("store.calendar", remote_operation, echo,
                                      account_ref=self._account_ref, scope_ref=self._scope_ref)
             after, proof_after = self._binding()
             if after != before or proof_after != proof:
                 raise ValueError
-            wire = validate_calendar_response(_copy_wire(raw))
+            wire = validate(_copy_wire(raw))
             if (wire["scope"] != echo or wire["registration_id"] != before.registration_id
                 or wire["service_epoch"] != before.service_epoch):
                 raise ValueError
@@ -152,6 +189,18 @@ class GatewayStrategyCalendarClient:
         self._pid, self._lock, self._pending = os.getpid(), threading.Lock(), None
 
     def query(self, *, route, venue, kind, product, contract, trading_day, timeout_seconds=5.0):
+        args = dict(mode="SIMULATION_ONLY", route=route, venue=venue, kind=kind,
+                    product=product, contract=contract, trading_day=trading_day)
+        return self._read("query", args, timeout_seconds)
+
+    def windows(self, *, route, venue, kind, product, contract, start_utc, end_utc, timeout_seconds=5.0):
+        if not self._settings.range_read:
+            raise OwnerOperationError("CALENDAR_RANGE_UNAVAILABLE")
+        args = dict(mode="SIMULATION_ONLY", route=route, venue=venue, kind=kind,
+                    product=product, contract=contract, start_utc=start_utc, end_utc=end_utc)
+        return self._read("windows", args, timeout_seconds)
+
+    def _read(self, operation, arguments, timeout_seconds):
         timeout = _timeout(timeout_seconds)
         deadline = time.monotonic() + timeout
 
@@ -163,9 +212,10 @@ class GatewayStrategyCalendarClient:
 
         if os.getpid() != self._pid:
             raise ThreadedRuntimeError("WRONG_PROCESS")
-        args, _ = decode_calendar_query(dict(mode="SIMULATION_ONLY", route=route, venue=venue,
-                                               kind=kind, product=product, contract=contract,
-                                               trading_day=trading_day))
+        decode = decode_calendar_query if operation == "query" else decode_calendar_windows_query
+        validate = validate_calendar_response if operation == "query" else validate_calendar_windows_response
+        result_type = GatewayCalendarQueryResult if operation == "query" else GatewayCalendarWindowsResult
+        args = decode(arguments)[0]
         if not self._settings.permits(args):
             raise ValueError("CALENDAR_SCOPE_NOT_CONFIGURED")
         if not self._lock.acquire(blocking=False):
@@ -173,10 +223,10 @@ class GatewayStrategyCalendarClient:
         try:
             if self._pending is None:
                 remaining()
-                self._pending = {"args": args, "query": self._runtime.submit_owner("calendar.query", args),
+                self._pending = {"operation": operation, "args": args, "query": self._runtime.submit_owner("calendar." + operation, args),
                                  "wire": None, "validation": None}
             pending = self._pending
-            if args != pending["args"]:
+            if operation != pending["operation"] or args != pending["args"]:
                 raise ThreadedRuntimeError("OWNER_OPERATION_PENDING")
             try:
                 if pending["wire"] is None:
@@ -187,7 +237,7 @@ class GatewayStrategyCalendarClient:
                 if pending["validation"] is not None:
                     pending["validation"].result(timeout_seconds=remaining())
                     pending["validation"] = None
-                wire = validate_calendar_response(pending["wire"])
+                wire = validate(pending["wire"])
                 remaining()
                 handle = self._runtime.submit_owner("calendar.validate", {
                     "registration_id": wire["registration_id"], "service_epoch": wire["service_epoch"]})
@@ -209,7 +259,7 @@ class GatewayStrategyCalendarClient:
                         or snapshot.identity != self._route.identity
                         or snapshot.run_id != self._route.scope.run_id):
                     raise OwnerOperationError("CALENDAR_OUTCOME_UNKNOWN")
-                result = GatewayCalendarQueryResult.from_wire(wire)
+                result = result_type.from_wire(wire)
                 remaining()
             except ThreadedRuntimeError as exc:
                 if exc.code not in {"OWNER_TIMEOUT_QUEUED", "OWNER_TIMEOUT_RUNNING"}:

@@ -5,17 +5,21 @@ No source authentication or trade authority is established by this service.
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import timedelta, timezone
 from threading import RLock
 
 from bt_api_base.service_protocol import WireRole
-from bt_api_py.gateway_calendar_codec import decode_calendar_query, validate_calendar_response, _id
+from bt_api_py.gateway_calendar_codec import (decode_calendar_query, validate_calendar_response,
+    decode_calendar_windows_query, validate_calendar_windows_response, _id)
 from bt_api_py.service_registry import ServiceCallContext, ServiceRegistry, ServiceResultTooLargeError
 from bt_api_py.trading_calendar_binding import SimulationCalendarBinding
 from bt_api_py.trading_calendar_store import CalendarReadBudget, TradingCalendarStore
+from bt_api_py.trading_calendar_range_simulation import CalendarRangePolicy, query_simulation_range
 
 CALENDAR_OPERATION = "calendar.query.v1"
+CALENDAR_WINDOWS_OPERATION = "calendar.windows.v1"
 
 
 class ReceiptCheckedCalendarStore:
@@ -53,10 +57,15 @@ class CalendarGrant:
 class GatewayCalendarService:
     """Owner-local binding with explicit ACL; bind/rebind are never RPC operations."""
 
-    def __init__(self, *, grants):
+    def __init__(self, *, grants, range_policies=frozenset()):
         if (type(grants) is not frozenset or not grants or len(grants) > 4096
                 or any(type(grant) is not CalendarGrant for grant in grants)):
             raise ValueError("INVALID_CALENDAR_SERVICE")
+        if (type(range_policies) is not frozenset or len(range_policies) > 4096
+                or any(type(policy) is not CalendarRangePolicy for policy in range_policies)
+                or len({policy.scope_key for policy in range_policies}) != len(range_policies)):
+            raise ValueError("INVALID_CALENDAR_RANGE_POLICIES")
+        self._range_policies = {policy.scope_key: policy for policy in range_policies}
         self._grants, self._epoch, self._registry = grants, None, None
         self._lock = RLock()
         self._closed = False
@@ -102,9 +111,12 @@ class GatewayCalendarService:
             self._revision += 1
 
     def handle(self, operation, *, context, arguments):
-        if operation != CALENDAR_OPERATION:
+        if operation not in {CALENDAR_OPERATION, CALENDAR_WINDOWS_OPERATION}:
             raise ValueError("INVALID_CALENDAR_REQUEST")
-        scope, query = decode_calendar_query(arguments)
+        if operation == CALENDAR_WINDOWS_OPERATION:
+            scope, start_utc, end_utc = decode_calendar_windows_query(arguments)
+        else:
+            scope, query = decode_calendar_query(arguments)
         if (type(context) is not ServiceCallContext or context.identity.role is not WireRole.STRATEGY_CLIENT
                 or context.identity.principal_ref != context.principal_ref
                 or context.identity.actor_ref != context.scope.strategy_ref
@@ -123,6 +135,8 @@ class GatewayCalendarService:
             raise ValueError("SCOPE_DENIED")
         if self._registry is None:
             raise ValueError("SERVICE_UNAVAILABLE")
+        if operation == CALENDAR_WINDOWS_OPERATION:
+            return self._handle_windows(context, scope, start_utc, end_utc)
         response = {"schema": "sdk.gateway.calendar.query/1", "scope": scope,
                     "registration_id": context.registration_id, "service_epoch": self._epoch,
                     "status": "UNKNOWN", "reason": "SOURCE_UNAVAILABLE", "binding": None,
@@ -207,3 +221,86 @@ class GatewayCalendarService:
         if not fits:
             raise ServiceResultTooLargeError()
         return response
+
+    def _handle_windows(self, context, scope, start_utc, end_utc):
+        response = {"schema": "sdk.gateway.calendar.windows/1", "scope": scope,
+                    "registration_id": context.registration_id, "service_epoch": self._epoch,
+                    "status": "UNKNOWN", "reason": "SOURCE_UNAVAILABLE", "binding": None,
+                    "policy": None, "windows": [], "gaps": [], "source_authentication": "NOT_PROVEN",
+                    "trade_authorization": "NONE"}
+
+        def finish():
+            if len(json.dumps(response, ensure_ascii=True, separators=(",", ":")).encode("utf-8")) > 32768:
+                raise ServiceResultTooLargeError()
+            validate_calendar_windows_response(response)
+            if not callable(context.result_fits):
+                raise ValueError("INVALID_RESULT_BUDGET")
+            fits = context.result_fits(response)
+            if type(fits) is not bool:
+                raise ValueError("INVALID_RESULT_BUDGET")
+            if not fits:
+                raise ServiceResultTooLargeError()
+            return response
+
+        key = tuple(scope[name] for name in ("route", "venue", "kind", "product", "contract"))
+        policy = self._range_policies.get(key)
+        if policy is None:
+            response["reason"] = "POLICY_UNAVAILABLE"
+            return finish()
+        response["policy"] = {"policy_id": policy.policy_id, "declaration": "DEPLOYMENT_DECLARED_UNVERIFIED",
+            "max_advance_days": policy.max_advance_days, "max_spill_days": policy.max_spill_days,
+            "first_owner_day": None, "last_owner_day": None}
+        try:
+            with self._lock:
+                binding, revision = self._binding, self._revision
+            if self._registry._closed or self._registry.service_epoch != self._epoch or binding is None:
+                return finish()
+            view = binding.capture_read_view(mode="SIMULATION_ONLY")
+            status = view.status()
+            with binding._lock:
+                binding_revision = binding._revision
+                if binding._status is not status:
+                    response["reason"] = "OWNER_CHANGED"
+                    return finish()
+            if status.route != scope["route"] or not status.calendar_ref:
+                return finish()
+            coverage = next((item for item in status.declared_coverage if item.venue == scope["venue"]), None)
+            if coverage is None:
+                response["reason"] = "COVERAGE_UNAVAILABLE"
+                return finish()
+            response["binding"] = {
+                "route": status.route, "source_generation": status.source_generation,
+                "bound_trading_day": status.bound_trading_day.isoformat(), "calendar_ref": status.calendar_ref,
+                "publication_id": status.publication_id, "content_sha256": status.content_sha256,
+                "coverage_manifest_sha256": status.coverage_manifest_sha256, "binding_sha256": status.binding_sha256,
+                "version_sha256": status.version_sha256, "coverage_status": status.coverage_status,
+                "coverage_start": coverage.start_day.isoformat(), "coverage_end": coverage.end_day.isoformat(),
+                "load_status": "STALE" if status.load_error else "CURRENT", "data_origin": status.data_origin}
+            result = query_simulation_range(view, policy, start_utc, end_utc)
+            if result.reason == "RESULT_TOO_LARGE":
+                raise ServiceResultTooLargeError()
+            response.update(status=result.status, reason=result.reason)
+            response["gaps"] = [{"trading_day": day.isoformat(), "reason": reason} for day, reason in result.gaps]
+            if result.first_owner_day is not None and result.last_owner_day is not None:
+                response["policy"]["first_owner_day"] = result.first_owner_day.isoformat()
+                response["policy"]["last_owner_day"] = result.last_owner_day.isoformat()
+            if result.status == "COMPLETE":
+                response["windows"] = [{"window_id": w.window_id, "phase": w.phase,
+                    "trading_day": w.trading_day.isoformat(),
+                    "start_utc": w.start_utc.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
+                    "end_utc": w.end_utc.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")}
+                    for w in result.windows]
+            with self._lock, binding._lock:
+                current = (self._binding is binding and self._revision == revision
+                    and binding._revision == binding_revision and binding._status is status
+                    and binding._status.source_generation == status.source_generation
+                    and not self._registry._closed and self._registry.service_epoch == self._epoch)
+            if not current:
+                response.update(status="UNKNOWN", reason="OWNER_CHANGED", binding=None, windows=[], gaps=[])
+            return finish()
+        except ServiceResultTooLargeError:
+            raise
+        except Exception:
+            response.update(status="UNKNOWN", reason="INVALID_RESULT", binding=None, windows=[], gaps=[])
+            response["policy"]["first_owner_day"] = response["policy"]["last_owner_day"] = None
+            return finish()

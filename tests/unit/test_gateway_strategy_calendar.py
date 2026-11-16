@@ -60,7 +60,7 @@ def test_calendar_port_requires_explicit_exact_service_resource(tmp_path):
     raw = _service_config("tcp://127.0.0.1:12345").to_public_dict()
     raw["components"]["gateway"]["settings"]["bind_ports"].append("service.calendar_read")
     prepared = _prepare(parse_service_config(raw))
-    assert prepared.operations_by_port["service.calendar_read"] == {"calendar.query.v1"}
+    assert prepared.operations_by_port["service.calendar_read"] == {"calendar.query.v1", "calendar.windows.v1"}
     direct, _, _ = _resources(tmp_path)
     with pytest.raises(ServiceComponentError, match="INVALID_CALENDAR_SERVICE_BINDING"):
         _build(prepared, {"binding": direct})
@@ -266,3 +266,126 @@ def test_exhausted_query_budget_defers_validation_and_rechecks_old_generation(mo
         client.query(**args, timeout_seconds=5)
     assert runtime.operations[1] == ("calendar.validate", {"registration_id": "old-registration", "service_epoch": "old-epoch"})
     assert len(runtime.operations) == 2
+
+
+def test_range_read_is_explicit_and_does_not_submit_any_operation():
+    from bt_api_py.service_runtime_thread import OwnerOperationError
+    class Runtime:
+        def submit_owner(self, *_): pytest.fail("disabled range must not submit")
+    values = parts()
+    settings = GatewayCalendarClientSettings("SIMULATION_ONLY", (scope(),))
+    assert settings.requested_operations == frozenset({"calendar.query.v1"})
+    client = GatewayStrategyCalendarClient(Runtime(), settings, route=values["route"], peer=values["peer"])
+    with pytest.raises(OwnerOperationError, match="CALENDAR_RANGE_UNAVAILABLE"):
+        client.windows(**scope(), start_utc="2026-01-01T01:00:00Z", end_utc="2026-01-01T02:00:00Z")
+    enabled = GatewayCalendarClientSettings("SIMULATION_ONLY", (scope(),), True)
+    assert enabled.requested_operations == {"calendar.query.v1", "calendar.windows.v1"}
+    with pytest.raises(ValueError, match="INVALID_CALENDAR_SETTINGS"):
+        GatewayCalendarClientSettings("SIMULATION_ONLY", (scope(),), 1)
+
+
+def test_range_and_day_calls_share_pending_without_discarding_handle():
+    class Handle:
+        def result(self, *, timeout_seconds):
+            raise ThreadedRuntimeError("OWNER_TIMEOUT_RUNNING")
+    class Runtime:
+        def __init__(self): self.operations = []
+        def submit_owner(self, operation, arguments):
+            self.operations.append(operation)
+            return Handle()
+    values = parts()
+    runtime = Runtime()
+    client = GatewayStrategyCalendarClient(runtime, GatewayCalendarClientSettings("SIMULATION_ONLY", (scope(),), True),
+        route=values["route"], peer=values["peer"])
+    day = dict(scope(), trading_day="2026-01-01")
+    window = dict(scope(), start_utc="2026-01-01T01:00:00Z", end_utc="2026-01-01T02:00:00Z")
+    with pytest.raises(ThreadedRuntimeError, match="OWNER_TIMEOUT_RUNNING"):
+        client.windows(**window)
+    with pytest.raises(ThreadedRuntimeError, match="OWNER_OPERATION_PENDING"):
+        client.query(**day)
+    with pytest.raises(ThreadedRuntimeError, match="OWNER_TIMEOUT_RUNNING"):
+        client.windows(**window)
+    assert runtime.operations == ["calendar.windows"]
+
+
+def test_public_range_read_configuration_and_session_operations():
+    raw = raw_config()
+    mounts = raw["client_config"]["clients"]["gateway"]["settings"]["bindings"]
+    mounts.append(dict(mounts[0], mount="store.calendar"))
+    raw["calendar_settings"] = {"mode": "SIMULATION_ONLY", "scopes": [scope()], "range_read": True}
+    config = parse_gateway_strategy_config(raw)
+    assert config.calendar_settings.range_read is True
+    session = config.create_session(host=Host(), cancel_host=Host(), security_profiles=parts()["security_profiles"])
+    assert session.calendar._settings.requested_operations == {"calendar.query.v1", "calendar.windows.v1"}
+    session.close()
+    raw["calendar_settings"]["range_read"] = 1
+    with pytest.raises(GatewayStrategyConfigError):
+        parse_gateway_strategy_config(raw)
+
+
+def test_range_timeout_uses_single_deadline_and_rechecks_old_epoch(monkeypatch):
+    from types import SimpleNamespace
+    import bt_api_py.gateway_strategy_calendar as calendar_module
+    from bt_api_py.service_runtime_thread import OwnerOperationError
+
+    now = [0.0]
+    monkeypatch.setattr(calendar_module, "time", SimpleNamespace(monotonic=lambda: now[0]))
+    args = dict(scope(), start_utc="2026-01-01T01:00:00Z", end_utc="2026-01-01T02:00:00Z")
+    wire = dict(schema="sdk.gateway.calendar.windows/1", scope=dict(mode="SIMULATION_ONLY", **args),
+        registration_id="old-registration", service_epoch="old-epoch", status="UNKNOWN",
+        reason="POLICY_UNAVAILABLE", binding=None, policy=None, gaps=[], windows=[],
+        source_authentication="NOT_PROVEN", trade_authorization="NONE")
+    waits = []
+    class Query:
+        def result(self, *, timeout_seconds):
+            waits.append(("query", timeout_seconds)); now[0] += 2
+            return copy.deepcopy(wire)
+    class Validation:
+        def __init__(self): self.first = True
+        def result(self, *, timeout_seconds):
+            waits.append(("validate", timeout_seconds))
+            if self.first:
+                self.first = False; now[0] += 3
+                return {"valid": True}
+            return {"valid": True}
+    class StaleValidation:
+        def result(self, *, timeout_seconds):
+            waits.append(("revalidate", timeout_seconds))
+            raise OwnerOperationError("CALENDAR_OUTCOME_UNKNOWN")
+    class Runtime:
+        def __init__(self): self.operations = []
+        def submit_owner(self, operation, arguments):
+            self.operations.append((operation, arguments))
+            if operation == "calendar.windows": return Query()
+            assert operation == "calendar.validate"
+            return Validation() if len(self.operations) == 2 else StaleValidation()
+    values = parts()
+    runtime = Runtime()
+    client = GatewayStrategyCalendarClient(runtime, GatewayCalendarClientSettings("SIMULATION_ONLY", (scope(),), True),
+        route=values["route"], peer=values["peer"])
+    with pytest.raises(ThreadedRuntimeError, match="OWNER_TIMEOUT_RUNNING"):
+        client.windows(**args, timeout_seconds=5)
+    assert waits == [("query", 5), ("validate", 3)]
+    with pytest.raises(OwnerOperationError, match="CALENDAR_OUTCOME_UNKNOWN"):
+        client.windows(**args, timeout_seconds=5)
+    assert waits == [("query", 5), ("validate", 3), ("validate", 5), ("revalidate", 5)]
+    assert [item[0] for item in runtime.operations] == ["calendar.windows", "calendar.validate", "calendar.validate"]
+    assert runtime.operations[-1][1] == {"registration_id": "old-registration", "service_epoch": "old-epoch"}
+
+
+def test_range_gap_result_is_detached_and_immutable():
+    from bt_api_py.gateway_strategy_calendar import GatewayCalendarWindowsResult
+    args = dict(mode="SIMULATION_ONLY", **scope(), start_utc="2026-01-01T01:00:00Z", end_utc="2026-01-01T02:00:00Z")
+    wire = dict(schema="sdk.gateway.calendar.windows/1", scope=args,
+        registration_id="registration", service_epoch="epoch", status="UNKNOWN",
+        reason="OWNER_DATA_UNAVAILABLE", binding=None,
+        policy={"policy_id": "policy", "declaration": "DEPLOYMENT_DECLARED_UNVERIFIED",
+                "max_advance_days": 0, "max_spill_days": 0,
+                "first_owner_day": "2026-01-01", "last_owner_day": "2026-01-01"},
+        gaps=[{"trading_day": "2026-01-01", "reason": "OWNER_DATA_UNAVAILABLE"}], windows=[],
+        source_authentication="NOT_PROVEN", trade_authorization="NONE")
+    result = GatewayCalendarWindowsResult.from_wire(wire)
+    wire["gaps"][0]["reason"] = "mutated"
+    assert result.gaps[0]["reason"] == "OWNER_DATA_UNAVAILABLE"
+    with pytest.raises(TypeError): result.gaps[0]["reason"] = "mutated"
+    with pytest.raises(TypeError): result.policy["policy_id"] = "mutated"

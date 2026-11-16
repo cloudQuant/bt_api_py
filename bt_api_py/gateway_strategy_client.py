@@ -522,7 +522,7 @@ class GatewayStrategyClientSession:
             from bt_api_py.gateway_strategy_calendar import GatewayCalendarClientSettings
             if type(calendar_settings) is not GatewayCalendarClientSettings:
                 raise ValueError("INVALID_CALENDAR_SETTINGS")
-            frozen_calendar = GatewayCalendarClientSettings(calendar_settings.mode, tuple(dict(item) for item in calendar_settings.scopes))
+            frozen_calendar = GatewayCalendarClientSettings(calendar_settings.mode, tuple(dict(item) for item in calendar_settings.scopes), calendar_settings.range_read)
         operation_map = {route_copy.mount: requested_operations}
         if frozen_account is not None:
             operation_map["store.account"] = frozen_account.requested_operations
@@ -536,7 +536,7 @@ class GatewayStrategyClientSession:
                 | frozen_instrument.requested_operations
             )
         if frozen_calendar is not None:
-            operation_map["store.calendar"] = frozenset({"calendar.query.v1"})
+            operation_map["store.calendar"] = frozen_calendar.requested_operations
         if frozen_market is not None:
             operation_map["store.market"] = frozen_market.requested_operations
         base_scope = WireScope(

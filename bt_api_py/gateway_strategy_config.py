@@ -357,8 +357,8 @@ def _decode(raw):
     raw_calendar = raw.get("calendar_settings")
     calendar = None
     if "calendar_settings" in raw:
-        raw_calendar = _mapping(raw_calendar, {"mode", "scopes"})
-        calendar = GatewayCalendarClientSettings(raw_calendar["mode"], tuple(_list(raw_calendar["scopes"])))
+        raw_calendar = _mapping(raw_calendar, {"mode", "scopes"}, {"range_read"})
+        calendar = GatewayCalendarClientSettings(raw_calendar["mode"], tuple(_list(raw_calendar["scopes"])), raw_calendar.get("range_read", False))
         if any(dict(item)["route"] != exchange for item in calendar.scopes):
             raise ValueError
     _validate_client(client, binding, route, peer, operations, account, market, instrument, calendar)

@@ -20,6 +20,8 @@ from threading import Lock
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
+from bt_api_base.trading_calendar_owner_bounds import SimulationCalendarOwnerBounds
+
 from bt_api_py.trading_calendar_store import CalendarSnapshot as StoreSnapshot
 
 SIMULATION_ONLY = "SIMULATION_ONLY"
@@ -97,6 +99,14 @@ class QueryResult:
     result: Any
     simulation_provenance: dict[str, Any] | None = None
     declared_mock_provenance: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True)
+class OwnerBoundsQueryResult:
+    """A scope observation and the exact binding captured alongside it."""
+
+    binding: BindingStatus
+    bounds: SimulationCalendarOwnerBounds | SimulationUnknown
 
 
 @dataclass(frozen=True)
@@ -912,6 +922,40 @@ class SimulationCalendarReadView:
         return _VenueDayView(self.__snapshot, self.__status, self.__content).query_venue_day(
             mode=mode, venue=venue, trading_day=trading_day
         )
+
+    def owner_day_bounds(
+        self, *, mode: str, venue: str, kind: str, product: str, contract: str
+    ) -> OwnerBoundsQueryResult:
+        """Read an observation from this view's captured simulation snapshot."""
+        def unknown(reason: str) -> OwnerBoundsQueryResult:
+            return OwnerBoundsQueryResult(
+                self.__status, SimulationUnknown("UNKNOWN", reason, self.__status.calendar_ref)
+            )
+
+        scope = {"venue": venue, "kind": kind, "product": product, "contract": contract}
+        if mode != SIMULATION_ONLY or type(mode) is not str:
+            return unknown("INVALID_MODE")
+        if any(not _text(v) for v in scope.values()) or kind not in ("future", "option"):
+            return unknown("INVALID_QUERY_SCOPE")
+        if self.__snapshot is None or not self.__status.calendar_ref:
+            return unknown("BINDING_UNAVAILABLE")
+        if not any(row.venue == venue for row in self.__status.declared_coverage):
+            return unknown("VENUE_NOT_DECLARED")
+        try:
+            result = self.__snapshot.owner_day_bounds(**scope)
+            if type(result) is not SimulationCalendarOwnerBounds:
+                return unknown("PROVIDER_RESULT_INVALID")
+            SimulationCalendarOwnerBounds.__post_init__(result)
+            if (
+                result.calendar_ref != self.__status.calendar_ref
+                or any(getattr(result, key) != value for key, value in scope.items())
+            ):
+                return unknown("PROVIDER_RESULT_INVALID")
+            if result.status != "COMPLETE":
+                return unknown("SCOPE_BOUNDS_UNAVAILABLE")
+            return OwnerBoundsQueryResult(self.__status, result)
+        except Exception:
+            return unknown("SCOPE_BOUNDS_UNAVAILABLE")
 
 
 def _load_simulation_snapshot(

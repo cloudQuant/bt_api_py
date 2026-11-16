@@ -144,7 +144,7 @@ def _bound_receipt_time_valid(received_ns: int, started_ns: int, deadline: float
 # remote discovery cannot introduce new actions into a proxy.
 PORT_OPERATIONS = MappingProxyType(
     {
-        "service.calendar_read": frozenset({"calendar.query.v1"}),
+        "service.calendar_read": frozenset({"calendar.query.v1", "calendar.windows.v1"}),
         "service.execution_delegate": frozenset(
             {"execution.child.release_policy_check"}
         ),
@@ -3006,6 +3006,9 @@ class ServiceClientRuntime:
                     )
                 raise error
             operations = wanted
+        elif port == "service.calendar_read":
+            # Existing day-only consumers do not implicitly acquire range reads.
+            operations = operations.intersection({"calendar.query.v1"})
         elif port == "service.direct_write":
             operations = operations.difference(
                 {"direct.parent.acceptance_order", "direct.events.read_after", "direct.events.progress", "direct.events.ack",
