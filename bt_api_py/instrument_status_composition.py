@@ -48,6 +48,7 @@ __all__ = (
     "CALENDAR_COMPLETE",
     "CALENDAR_UNKNOWN",
     "InstrumentStatusComposition",
+    "InstrumentStatusObservationPort",
     "InstrumentStatusScope",
     "OBSERVATION_STATES",
     "PHASE_AUCTION",
@@ -286,6 +287,43 @@ class InstrumentStatusScope:
             raise ValueError("scope trading_day must be a date")
         if not _identifier(self.session_generation):
             raise ValueError("scope session_generation must be a bounded identifier")
+
+
+class InstrumentStatusObservationPort:
+    """Read-only adapter from a provider view reader to the Store port contract.
+
+    ``view_reader(venue, instrument)`` returns the provider's current
+    ``InstrumentStatusView`` for that identity, or ``None`` for an explicit
+    absence.  It must be a pure read: no connection, no order, no clock-derived
+    ordering.  A missing, raising or foreign-type answer becomes an explicit
+    absence (``None``) and is never replaced by a guessed status; the compose
+    step then reports the absence and can never make the answer ``TRADABLE``
+    without a current, scope-matching observation.
+
+    The adapter is intentionally provider-neutral: it holds no route, file
+    path, credential or account value and adds no authority of its own.
+    """
+
+    def __init__(self, view_reader: object) -> None:
+        if not callable(view_reader):
+            raise ValueError("instrument status view reader must be callable")
+        self._view_reader = view_reader
+
+    def observation(self, scope: object) -> object:
+        """Return the provider view for the exact scope, or ``None``."""
+
+        if type(scope) is not InstrumentStatusScope:
+            return None
+        try:
+            return self._view_reader(scope.venue, scope.instrument)
+        except Exception:
+            # The provider cannot answer: an explicit absence, never a guess.
+            # Log one finite code only; never the provider text, exception,
+            # identity or account value.
+            from bt_api_base.logging_factory import get_logger
+
+            get_logger("api").warning("ctp_instrument_status_port_read_unavailable")
+            return None
 
 
 @dataclass(frozen=True)

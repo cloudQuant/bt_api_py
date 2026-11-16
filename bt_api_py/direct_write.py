@@ -439,6 +439,24 @@ class DirectWriteCoordinator:
                 self._providers[exchange_name] = provider
             return provider
 
+    def instrument_status_port(self, exchange_name: str) -> Any:
+        """Return a read-only instrument-status port for one route, or ``None``.
+
+        The provider owns the native callback ledger; the SDK owns the neutral
+        port shape consumed by callers of
+        :func:`bt_api_py.instrument_status_composition.compose_instrument_status`.
+        No provider method is added here and no provider that lacks the read is
+        given one: an unsupported route yields ``None`` and the caller keeps
+        its status gate inactive.
+        """
+        provider = self.provider(exchange_name)
+        view_reader = getattr(provider, "instrument_status_view", None)
+        if not callable(view_reader):
+            return None
+        from bt_api_py.instrument_status_composition import InstrumentStatusObservationPort
+
+        return InstrumentStatusObservationPort(view_reader)
+
     def close(self) -> None:
         """Close every created provider that owns resources (e.g. a monitor thread).
 
