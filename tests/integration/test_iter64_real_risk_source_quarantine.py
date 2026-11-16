@@ -209,7 +209,7 @@ def _write_risk_fixture(root: Path, keys, gateway_endpoint: str, risk_endpoint: 
         _private_write(key_dir / (name + ".public"), public.decode("ascii") + "\n")
         _private_write(key_dir / (name + ".secret"), secret.decode("ascii") + "\n")
     _private_write(root / "risk_policy.yaml", (
-        "schema: bt_api_risk.policy.v1\n"
+        "schema: bt_api_risk.policy.v2\n"
         "policy_id: it-64-09\n"
         "account: {route: CTP___FUTURE, account_scope: " + ACCOUNT + "}\n"
         "per_order:\n  max_quantity: {strategy-a: {rb: \"2\"}}\n"

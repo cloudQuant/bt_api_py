@@ -25,9 +25,22 @@ import time
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
 import zmq
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
-from tests.unit.test_iter64_risk_service_component import V2_POLICY_BLOCKED
+
+# The counters-less v2 policy now publishes and activates (decision B-1).  This
+# scenario is still blocked at the observation gate: the synthetic Gateway
+# journal is below schema 19, so the account-observer ACK handoff is refused
+# (ACCOUNT_OBSERVER_HANDOFF_UNAVAILABLE) and Risk reports
+# ``observation_ack_unproven``.  Keep it collected and strict-xfailed so the
+# fixture upgrade surfaces as XPASS.
+OBSERVATION_ACK_BLOCKED = pytest.mark.xfail(
+    strict=True,
+    reason="observation_ack_unproven: the synthetic Gateway journal is below "
+           "schema 19, so the account-observer ACK handoff is unavailable; "
+           "policy activation itself succeeds for the counters-less v2 fixture",
+)
 
 ACCOUNT, DOMAIN, RUN = "account-a", "paper:demo", "strategy-run"
 TRADING_DAY = "20300101"
@@ -424,7 +437,7 @@ def _risk_files(root: Path, keys: dict, gateway_endpoint: str, risk_endpoint: st
         _write_key(key_dir / (name + ".public"), public, secret=False)
         _write_key(key_dir / (name + ".secret"), secret, secret=True)
     (root / "risk_policy.yaml").write_text(
-        "schema: bt_api_risk.policy.v1\n"
+        "schema: bt_api_risk.policy.v2\n"
         "policy_id: it-64-09\n"
         "account: {route: CTP___FUTURE, account_scope: " + ACCOUNT + "}\n"
         "per_order:\n  max_quantity: {strategy-a: {rb: \"2\"}}\n"
@@ -599,7 +612,7 @@ def _request(key, client_order_id, quantity="1"):
                         quantity_unit="lots", exchange_id="SHFE")
 
 
-@V2_POLICY_BLOCKED
+@OBSERVATION_ACK_BLOCKED
 def test_strategy_order_through_the_risk_process_reaches_the_gateway_and_settles(tmp_path):
     from bt_api_base.gateway_direct_protocol import GatewayCommandBinding
 

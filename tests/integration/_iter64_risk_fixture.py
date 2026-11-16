@@ -716,7 +716,7 @@ def until(read, done, seconds=15.0, step=0.05):
 
 
 BASE_POLICY = (
-    "schema: bt_api_risk.policy.v1\n"
+    "schema: bt_api_risk.policy.v2\n"
     "policy_id: it-64-09-scenarios\n"
     "account: {route: CTP___FUTURE, account_scope: " + ACCOUNT + "}\n"
     "per_order:\n"

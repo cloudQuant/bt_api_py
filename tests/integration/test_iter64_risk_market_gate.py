@@ -38,12 +38,20 @@ from bt_api_base.market_protocol import MarketInstrumentKey, MarketSubscriptionK
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 
 from tests.integration import _iter64_recovery_support as support
-from tests.unit.test_iter64_risk_service_component import V2_POLICY_BLOCKED
 
-# Both scenarios start a Risk host that bootstraps a v1 policy file; the product
-# accepts only v2 documents and v2 activation remains blocked by
-# RULE_R04_V2_UNAVAILABLE pending the iteration-64 R-04/R-11 decision.
-pytestmark = V2_POLICY_BLOCKED
+# The counters-less v2 policy now activates (decision B-1).  These scenarios
+# are still blocked before placement: the Risk host needs the Gateway market
+# source factory and the synthetic CTP profile cannot provide it
+# (STRICT_MARKET_FACTORY_UNAVAILABLE -> RISK_SERVICE_GATEWAY_MARKET_UNAVAILABLE).
+# Keep them collected and strict-xfailed so a wired market factory surfaces as
+# XPASS.
+MARKET_FACTORY_BLOCKED = pytest.mark.xfail(
+    strict=True,
+    reason="RISK_SERVICE_GATEWAY_MARKET_UNAVAILABLE: the synthetic CTP profile "
+           "cannot provide the strict market factory; policy activation now "
+           "succeeds for the counters-less v2 fixture",
+)
+pytestmark = MARKET_FACTORY_BLOCKED
 
 ACCOUNT = AccountKey("ctp", "simnow", "simnow", "account", "9999")  # with a sub-account
 SCOPE = ACCOUNT.account_key_id
@@ -340,7 +348,7 @@ def _risk_files(root, keys, rpc, market, risk_endpoint):
         secret_path.write_bytes(secret + b"\n")
         os.chmod(secret_path, 0o600)
     (root / "risk_policy.yaml").write_text(
-        "schema: bt_api_risk.policy.v1\npolicy_id: it-64-market-gate\n"
+        "schema: bt_api_risk.policy.v2\npolicy_id: it-64-market-gate\n"
         "account: {route: CTP___FUTURE, account_scope: " + SCOPE + "}\n"
         "per_order:\n  max_quantity: {strategy-a: {IF2612: \"2\", IH2612: \"2\"}}\n"
         "self_trade: {enabled: false, on_unverifiable: deny}\n",

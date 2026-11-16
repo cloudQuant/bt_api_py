@@ -625,7 +625,7 @@ def risk_files(root: Path, keys: dict, strategy_count: int, gateway_endpoint: st
     strategies = [strategy_identity(i) for i in range(strategy_count)]
     caps = ", ".join(s.actor_ref + ": {rb: \"" + max_quantity + "\"}" for s in strategies)
     (root / "risk_policy.yaml").write_text(
-        "schema: bt_api_risk.policy.v1\n"
+        "schema: bt_api_risk.policy.v2\n"
         "policy_id: it-64-recovery\n"
         "account: {route: CTP___FUTURE, account_scope: " + ACCOUNT + "}\n"
         "per_order:\n  max_quantity: {" + caps + "}\n"

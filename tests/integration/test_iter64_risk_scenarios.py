@@ -27,17 +27,27 @@ from tests.integration._iter64_risk_fixture import (
 
 A, B, C = (STRATEGIES[name].actor_ref for name in ("a", "b", "c"))
 
-# The scenario host bootstraps ``BASE_POLICY`` (a v1 document) at start.  The
-# product is v2-policy-only, so the host refuses it (RISK_SERVICE_POLICY_INVALID
-# from ``policy_schema_unsupported``), and v2 activation itself is blocked by
-# RULE_R04_V2_UNAVAILABLE pending the iteration-64 R-04/R-11 decision.  Keep the
-# scenarios collected and strict-xfailed so the approved activation surfaces as
-# XPASS.  Tests already carrying a ``skip`` GAP marker stay skipped.
-pytestmark = pytest.mark.xfail(
+# The counters-less v2 policy now publishes, loads and activates (decision
+# B-1), so the retired v1 fixture is gone.  The remaining blockers are not the
+# policy schema: (1) the synthetic Gateway journal is built below schema 19, so
+# the account-observer ACK handoff is refused
+# (ACCOUNT_OBSERVER_HANDOFF_UNAVAILABLE) and Risk reports
+# ``observation_ack_unproven``; (2) behind it, the BT v1 facade refuses a new
+# reservation locally (first-creation proof, ``RISK_OUTCOME_UNKNOWN``).  Keep
+# the scenarios collected and strict-xfailed so either fixture upgrade or a
+# wired proof surfaces as XPASS.  Tests with a ``skip`` GAP marker stay skipped.
+NOT_POLICY_BLOCKED = pytest.mark.xfail(
     strict=True,
-    reason="RULE_R04_V2_UNAVAILABLE: v2 policy activation is blocked pending the "
-           "iteration-64 R-04/R-11 decision; the Risk host refuses the fixture's v1 "
-           "policy (RISK_SERVICE_POLICY_INVALID)",
+    reason="observation_ack_unproven and the BT v1 facade first-creation proof: "
+           "the synthetic Gateway journal is below schema 19 (observer ACK "
+           "handoff unavailable) and facade reservations still return local "
+           "UNKNOWN; v2 policy activation itself succeeds (decision B-1)",
+)
+COUNTERS_BLOCKED = pytest.mark.xfail(
+    strict=True,
+    reason="policy_r04_v2_unavailable: a v2 policy with counters still needs the "
+           "unconnected R-04 v2 rule evaluation; B-1 covers counters-less "
+           "documents only",
 )
 
 
@@ -78,6 +88,7 @@ def _placed(result):
     return result.get("dispatch", {}).get("answer", {}) or {}
 
 
+@NOT_POLICY_BLOCKED
 def test_r01_quantity_cap_refuses_locally_and_caps_are_per_strategy(env):
     commands_before = env.gateway_commands()
     refused = env.call("a", "place", key="a-big", cid="a-big", quantity="2")
@@ -109,6 +120,7 @@ def _denied(result, phase):
     return part.get("risk_denied")
 
 
+@NOT_POLICY_BLOCKED
 def test_r05_default_refuses_after_replay_without_complete_active_order_proof(make_env):
     # Removing the explicit opt-out selects the product's default-enabled R-05.
     policy = BASE_POLICY.replace("self_trade: {enabled: false, on_unverifiable: deny}\n", "")
@@ -121,6 +133,7 @@ def test_r05_default_refuses_after_replay_without_complete_active_order_proof(ma
     assert env.gateway_commands() == before
 
 
+@COUNTERS_BLOCKED
 def test_r04_refuses_without_complete_day_counter_coverage(make_env):
     env = make_env(policy=R04_POLICY)
     before = env.gateway_commands()
@@ -163,7 +176,18 @@ def test_r05_self_trade_with_risk_orders_of_all_strategies_and_a_bypass_order(en
     assert env.gateway_cancels() == []
 
 
-R04_POLICY = BASE_POLICY + "counters:\n  orders: {warn: 2, block: 3}\n"
+R04_POLICY = BASE_POLICY + (
+    # A v2 document with counters must name the R-04 implementation too.  The
+    # binding is only schema validation here: activation refuses every
+    # counters-bearing policy until the v2 rule evaluation is connected (B-1
+    # covers only counters-less documents).
+    "counters:\n  orders: {warn: 2, block: 3}\n"
+    "r04_binding:\n"
+    "  implementation: 'trusted.rules:R04'\n"
+    "  implementation_version: 1\n"
+    "  claim_contract_version: 2\n"
+    "  observation_contract_version: 2\n"
+)
 
 
 @pytest.mark.skip(reason="GAP: Gateway full-day order/cancel coverage proof not available")
@@ -249,6 +273,7 @@ def test_r04_block_latches_contract_stop_new_at_the_gateway_and_survives_restart
     assert rows[("rb", "order")] == "4", rows  # a-1, b-1, a-2 (the Nth), a-close
 
 
+@NOT_POLICY_BLOCKED
 def test_d64_02_risk_stopped_refuses_place_and_cancel_still_reaches_the_gateway(env, request):
     working = env.call("a", "place", key="a-work", cid="a-work", price="10")
     assert _placed(working).get("outcome") == "DISPATCHED", working
@@ -299,6 +324,7 @@ def test_d64_02_risk_stopped_refuses_place_and_cancel_still_reaches_the_gateway(
     assert sorted(dispatched) == sorted(["a-work", attempts[-1]]), dispatched
 
 
+@NOT_POLICY_BLOCKED
 def test_d64_02_unconfirmed_unregister_retains_original_runtime_and_refuses(env):
     working = env.call("a", "place", key="a-work", cid="a-work", price="10")
     assert _placed(working).get("outcome") == "DISPATCHED", working
@@ -320,6 +346,7 @@ def test_d64_02_unconfirmed_unregister_retains_original_runtime_and_refuses(env)
     assert env.call("a", "risk_runtime_status") == snapshot
 
 
+@NOT_POLICY_BLOCKED
 def test_inv64_10_bypass_order_is_accepted_by_the_gateway_and_observed_by_risk(env):
     import json
     import sqlite3
@@ -360,6 +387,7 @@ def test_inv64_10_bypass_order_is_accepted_by_the_gateway_and_observed_by_risk(e
     assert permits == (0,)  # Risk never authorized it: the bypass is only observed
 
 
+@NOT_POLICY_BLOCKED
 def test_inv64_02_gateway_and_strategy_processes_never_load_risk(make_env):
     import multiprocessing
 
@@ -389,7 +417,14 @@ def test_inv64_02_gateway_and_strategy_processes_never_load_risk(make_env):
     assert set(report[3]) <= set(WATCHED)
 
 
-V1_POLICY = BASE_POLICY + "counters:\n  orders: {warn: 5, block: 5}\n"
+COUNTER_POLICY = BASE_POLICY + (
+    "counters:\n  orders: {warn: 5, block: 5}\n"
+    "r04_binding:\n"
+    "  implementation: 'trusted.rules:R04'\n"
+    "  implementation_version: 1\n"
+    "  claim_contract_version: 2\n"
+    "  observation_contract_version: 2\n"
+)
 
 
 def _policy_document(text):
@@ -398,6 +433,7 @@ def _policy_document(text):
     return yaml.safe_load(text)
 
 
+@NOT_POLICY_BLOCKED
 def test_policy_tightening_refuses_preexisting_reservation_at_dispatch(make_env):
     # Other-rule-only slice: R-05 is explicitly disabled, no R-04 policy.
     env = make_env(policy=BASE_POLICY)
@@ -417,13 +453,14 @@ def test_policy_tightening_refuses_preexisting_reservation_at_dispatch(make_env)
 
 @pytest.mark.skip(reason="GAP: latch half requires missing full-day counter coverage")
 def test_d64_12_published_tightening_refuses_a_reserved_order_at_dispatch(make_env):
-    env = make_env(policy=V1_POLICY)
+    env = make_env(policy=COUNTER_POLICY)
     reserved = env.call("b", "reserve", key="b-2", cid="b-2", quantity="2", price="10")
     assert reserved["state"] == "RESERVED" and reserved["answer"]["policy_version"] == "1"
     assert env.gateway_commands()["b-2"][2] == "RESERVED"
     read = env.admin("risk.policy.read")
     assert read["status"] == "OBSERVED" and read["version"] == 1, read
-    tightened = _policy_document(V1_POLICY.replace('strategy-b: {rb: "2"', 'strategy-b: {rb: "1"'))
+    tightened = _policy_document(
+        COUNTER_POLICY.replace('strategy-b: {rb: "2"', 'strategy-b: {rb: "1"'))
     published = env.admin("risk.policy.publish", {
         "expected_version": 1, "document": tightened, "reason": "tighten B rb cap",
         "exchange_rules_text": None})
@@ -438,7 +475,7 @@ def test_d64_12_published_tightening_refuses_a_reserved_order_at_dispatch(make_e
     assert status["state"] == "RELEASED" and status["policy_version"] == "1", status
     # A latch in a family makes a loosening of that family refused.
     latch_policy = _policy_document(
-        V1_POLICY.replace('strategy-b: {rb: "2"', 'strategy-b: {rb: "1"')
+        COUNTER_POLICY.replace('strategy-b: {rb: "2"', 'strategy-b: {rb: "1"')
         .replace("{warn: 5, block: 5}", "{warn: 1, block: 1}"))
     assert env.admin("risk.policy.publish", {
         "expected_version": 2, "document": latch_policy, "reason": "tighten R-04",
@@ -447,7 +484,7 @@ def test_d64_12_published_tightening_refuses_a_reserved_order_at_dispatch(make_e
     assert _placed(breach).get("outcome") == "DISPATCHED", breach
     latches = env.admin("risk.latch.list", {"active_only": True})["latches"]
     assert [row["control"] for row in latches] == ["counters"], latches
-    loosened = _policy_document(V1_POLICY.replace('strategy-b: {rb: "2"', 'strategy-b: {rb: "1"'))
+    loosened = _policy_document(COUNTER_POLICY.replace('strategy-b: {rb: "2"', 'strategy-b: {rb: "1"'))
     with_reason = env.admin("risk.policy.publish", {
         "expected_version": 3, "document": loosened, "reason": "loosen R-04 back",
         "exchange_rules_text": None})
@@ -502,6 +539,7 @@ def _registered(runtime):
     return bool(snapshot.healthy) and any(binding.active for binding in snapshot.bindings)
 
 
+@NOT_POLICY_BLOCKED
 def test_inv64_12_identity_binding_idempotency_and_operator_operations(env):
     from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 
@@ -709,6 +747,7 @@ def test_d64_11_cancel_rule_cancels_working_targets_once_and_retries_after_an_ou
     assert "a-hc" not in env.gateway_cancels()
 
 
+@NOT_POLICY_BLOCKED
 def test_place_right_after_a_risk_restart_keeps_original_key_safe(env):
     # STALE_EPOCH proves this invocation was not sent, not that no earlier host
     # used the same key. Keep the original key UNKNOWN unless Risk answers.

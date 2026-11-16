@@ -21,12 +21,22 @@ import pytest
 
 from bt_api_py.risk_service_host import FAULT_EXIT_CODE
 from tests.integration import _iter64_recovery_support as support
-from tests.unit.test_iter64_risk_service_component import V2_POLICY_BLOCKED
 
-# Every loopback scenario starts the Risk host, which bootstraps a v1 policy
-# document.  The product is v2-only and v2 activation is blocked by
-# RULE_R04_V2_UNAVAILABLE pending the iteration-64 R-04/R-11 decision.
-pytestmark = V2_POLICY_BLOCKED
+# The counters-less v2 policy now publishes and activates (decision B-1), so
+# policy activation no longer blocks these scenarios.  What still blocks them
+# is the synthetic Gateway journal: it is built at schema 12, and the current
+# account-observer ACK refuses an offer it cannot bind to the authenticated
+# registration owner (schema < 19, ACCOUNT_OBSERVER_HANDOFF_UNAVAILABLE).  Risk
+# therefore reports ``observation_ack_unproven`` and these checks never reach
+# the crash points.  Keep them collected and strict-xfailed so the fixture
+# upgrade surfaces as XPASS.
+OBSERVATION_ACK_BLOCKED = pytest.mark.xfail(
+    strict=True,
+    reason="observation_ack_unproven: the synthetic Gateway journal is below "
+           "schema 19, so the account-observer ACK handoff is unavailable; "
+           "policy activation itself succeeds for the counters-less v2 fixture",
+)
+pytestmark = OBSERVATION_ACK_BLOCKED
 
 STRATEGY = support.strategy_identity(0)
 TTL_SECONDS = 4
