@@ -19,7 +19,8 @@ from types import MethodType
 from typing import TYPE_CHECKING
 
 from bt_api_py.gateway_strategy_client import GatewayStrategyClientSession
-from bt_api_py.service_runtime_thread import _timeout
+from bt_api_py.service_runtime_cleanup import runtime_cleanup_confirmed
+from bt_api_py.service_runtime_thread import RuntimeSnapshot, ThreadedRuntimeError, _timeout
 
 if TYPE_CHECKING:
     from bt_api_py._contracts import OrderRequest
@@ -83,10 +84,16 @@ class GatewayBtApi:
         self._owns_session = owns_session
         self._pid = os.getpid()
         self._lock = threading.Lock()
+        self._close_lock = threading.Lock()
         self._state = "open"
         self._binding_object, self._route_object = session._binding, session._route
         self._binding, self._route = session.binding, session.route
         self._runtime = session.runtime
+        if type(session._strict_cleanup) is not bool:
+            raise TypeError("INVALID_CLEANUP_POLICY")
+        self._gateway_session = session
+        self._gateway_runtime = self._runtime
+        self._gateway_strict_cleanup = session._strict_cleanup
         self._command = session.command_client
         self._stream = session.execution_stream_client
         self._position = session.position_client
@@ -121,6 +128,8 @@ class GatewayBtApi:
         self._risk_uncertain_keys = set()
         self._risk_start_code = None
         self._risk_close_failures = 0
+        self._risk_cleanup_confirmed = risk_client is None
+        self._gateway_close_snapshot = None
         self._check_binding()
 
     def _check_process(self):
@@ -215,17 +224,26 @@ class GatewayBtApi:
         return [self._exchange_name]
 
     def start(self, *, timeout_seconds=5.0):
-        self._check()
-        snapshot = self._session.start(timeout_seconds=timeout_seconds)
-        if self._risk is not None:
-            # Risk failure does not disable the Gateway's independent cancel
-            # and status paths; a key's older history may still be unknown.
-            try:
-                self._risk.start(timeout_seconds=timeout_seconds)
-            except Exception as error:
-                code = getattr(error, "code", None)
-                self._risk_start_code = code if type(code) is str else type(error).__name__
-        return snapshot
+        if not self._close_lock.acquire(blocking=False):
+            self._check()
+            raise RuntimeError("GATEWAY_LIFECYCLE_BUSY")
+        try:
+            self._check()
+            snapshot = self._session.start(timeout_seconds=timeout_seconds)
+            # A concurrent close fences the facade even when Gateway start is
+            # still in progress. Do not proceed to start Risk after that fence.
+            self._check()
+            if self._risk is not None:
+                # Risk failure does not disable the Gateway's independent cancel
+                # and status paths; a key's older history may still be unknown.
+                try:
+                    self._risk.start(timeout_seconds=timeout_seconds)
+                except Exception as error:
+                    code = getattr(error, "code", None)
+                    self._risk_start_code = code if type(code) is str else type(error).__name__
+            return snapshot
+        finally:
+            self._close_lock.release()
 
     @property
     def risk_selected(self):
@@ -270,33 +288,110 @@ class GatewayBtApi:
         with self._lock:
             return self._state
 
+    @property
+    def cleanup_confirmed(self):
+        """Whether facade-owned resources have completed their close contracts.
+
+        A borrowed Gateway session is outside this facade's ownership. The
+        non-strict Gateway contract does not confirm remote unregister; its
+        snapshot still carries the detailed cleanup observations.
+        """
+        self._check_process()
+        with self._lock:
+            return self._state == "closed" and (
+                not self._owns_session or not self._gateway_strict_cleanup
+                or (self._strict_gateway_binding_current()
+                    and self._gateway_session._closed_snapshot is self._gateway_close_snapshot
+                    and self._gateway_session._cleanup_uncertain is False)
+            )
+
+    def _strict_gateway_binding_current(self):
+        session = self._gateway_session
+        return (
+            self._session is session and self._runtime is self._gateway_runtime
+            and session._runtime is self._gateway_runtime
+            and session._original_runtime is self._gateway_runtime
+            and session._strict_cleanup is True
+        )
+
     def close(self, *, timeout_seconds=5.0):
         """Close this facade; a borrowed session and its host remain open.
 
-        Return the unmodified runtime snapshot. Runtime closure does not imply
-        clean unregister, account readiness, or permission to trade.
+        Return the unmodified Gateway runtime snapshot once Risk cleanup is
+        confirmed. Risk cleanup failure raises a finite error after independently
+        attempting Gateway closure. Runtime closure does not imply account
+        readiness or permission to trade.
         """
         self._check_process()
         _timeout(timeout_seconds)
         with self._lock:
-            already_closed = self._state == "closed"
-            if not already_closed:
-                self._state = "closing" if self._owns_session else "closed"
-        if not already_closed and self._risk is not None:
-            try:
-                self._risk.close(timeout_seconds=timeout_seconds)
-            except Exception:
-                # Counted and retried by the next close; the Gateway session
-                # closes regardless and a second Risk run would be refused.
-                self._risk_close_failures += 1
-        if already_closed or not self._owns_session:
-            return self._runtime.status()
-        # No facade lock is held while the original runtime waits for cleanup.
-        result = self._runtime.close(timeout_seconds=timeout_seconds)
-        if result.state == "closed" and not result.thread_alive:
-            with self._lock:
-                self._state = "closed"
-        return result
+            if (self._state != "closed"
+                    or (self._owns_session and self._gateway_strict_cleanup
+                        and not self._strict_gateway_binding_current())):
+                self._state = "closing"
+        if not self._close_lock.acquire(blocking=False):
+            raise ThreadedRuntimeError("CLEANUP_FAILED")
+        try:
+            if not self._risk_cleanup_confirmed:
+                try:
+                    risk_result = self._risk.close(timeout_seconds=timeout_seconds)
+                    self._risk_cleanup_confirmed = (
+                        type(risk_result) is RuntimeSnapshot
+                        and type(risk_result.bindings) is tuple and not risk_result.bindings
+                        and type(risk_result.cleanup_failures) is int
+                        and risk_result.cleanup_failures == 0
+                        and runtime_cleanup_confirmed(risk_result)
+                    )
+                except Exception:
+                    self._risk_cleanup_confirmed = False
+                if not self._risk_cleanup_confirmed:
+                    self._risk_close_failures += 1
+            if not self._owns_session:
+                result = self._runtime.status()
+                gateway_done = True
+            elif self._gateway_strict_cleanup and not self._strict_gateway_binding_current():
+                raise ThreadedRuntimeError("CLEANUP_FAILED") from None
+            elif self._gateway_close_snapshot is not None:
+                result = self._gateway_close_snapshot
+                gateway_done = True
+            elif self._gateway_strict_cleanup:
+                # The strict session owns the one-shot cleanup and its retained
+                # uncertain resources; do not bypass it through the runtime.
+                result = self._gateway_session.close(timeout_seconds=timeout_seconds)
+                never_started = (
+                    result.identity is None and result.run_id is None
+                    and result.strict_unregister_ack is None
+                ) if type(result) is RuntimeSnapshot else False
+                gateway_done = (
+                    self._strict_gateway_binding_current()
+                    and type(result) is RuntimeSnapshot
+                    and self._gateway_session._closed_snapshot is result
+                    and self._gateway_session._cleanup_uncertain is False
+                    and (result.strict_unregister_ack is True or never_started)
+                    and type(result.bindings) is tuple and not result.bindings
+                    and type(result.cleanup_failures) is int and result.cleanup_failures == 0
+                    and runtime_cleanup_confirmed(result)
+                )
+                if gateway_done:
+                    self._gateway_close_snapshot = result
+            else:
+                # Do not hold the state lock while the original runtime waits.
+                result = self._gateway_runtime.close(timeout_seconds=timeout_seconds)
+                gateway_done = (
+                    type(result) is RuntimeSnapshot
+                    and result.state in ("closed", "failed")
+                    and result.thread_alive is False
+                )
+                if gateway_done:
+                    self._gateway_close_snapshot = result
+            if gateway_done and self._risk_cleanup_confirmed:
+                with self._lock:
+                    self._state = "closed"
+            if not self._risk_cleanup_confirmed:
+                raise ThreadedRuntimeError("CLEANUP_FAILED") from None
+            return result
+        finally:
+            self._close_lock.release()
 
     def risk_first_send_reserve_contract(self):
         """Bind the local first-send-ticket call contract, without I/O.
