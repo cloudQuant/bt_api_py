@@ -1,17 +1,33 @@
-"""Unit-test fixture providers registered at collection start.
+"""Unit-test fixtures and per-test process-state isolation.
 
-A few unit modules declare ``pytest_plugins`` on the test module itself and rely
-on fixtures defined by another test module. Pytest imports a test module only
-when its collection node is visited, and ``FixtureManager.parsefactories`` skips
-a module object it has already parsed. When the provider module is collected
-before the consumer, the later plugin registration is therefore a no-op and the
-fixtures are invisible. Registering the providers here, from a conftest loaded
-before any test module is collected, makes availability independent of file
-collection order.
+The cross-module provider modules are registered through ``pytest_plugins`` in
+the repository-root conftest: pytest rejects that declaration in a non-top-level
+conftest. This file only carries fixtures and hooks.
 """
 
-pytest_plugins = (
-    "tests.unit.test_trading_calendar_interruption_prepare_simulation",
-    "tests.unit.test_iter64_gateway_risk_v2_direct_origin_source",
-    "tests.unit.test_iter64_gateway_risk_control_port",
-)
+import sys
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _fresh_risk_fence_process_state():
+    """Give each unit test a fresh Risk fence process image.
+
+    ``bt_api_risk.risk_order_journal`` keeps a provisional-owner registry and a
+    quarantine set for the whole process and production never clears them: a
+    refused entry (today, the pending ``FENCE_ENTRY_UNTRUSTED`` subclass
+    boundary) is meant to poison that process, not the next test.  Resetting
+    after the test lets each case observe its own in-process guard while a
+    single refusal cannot cascade into ``FENCE_ENTRY_OWNER_ACTIVE`` for every
+    later fence in the same pytest worker (iteration-65 handoff section 10.5).
+    """
+    yield
+    module = sys.modules.get("bt_api_risk.risk_order_journal")
+    if module is None:
+        return
+    with module._FENCE_PROVISIONAL_GUARD:
+        module._FENCE_PROVISIONAL_OWNERS.clear()
+        module._FENCE_ENTRY_QUARANTINED_KEYS.clear()
+        module._FENCE_ENTRY_QUARANTINED_ALL = False
+        module._FENCE_ENTRY_UNCERTAIN.clear()

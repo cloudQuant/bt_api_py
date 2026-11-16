@@ -15,6 +15,15 @@ from pathlib import Path
 
 import pytest
 
+# Fixture providers registered before any test module is collected. Pytest
+# rejects ``pytest_plugins`` in a non-top-level conftest, so they live here;
+# the unit-level conftest only carries fixtures/hooks.
+pytest_plugins = (
+    "tests.unit.test_trading_calendar_interruption_prepare_simulation",
+    "tests.unit.test_iter64_gateway_risk_v2_direct_origin_source",
+    "tests.unit.test_iter64_gateway_risk_control_port",
+)
+
 # Add project root to Python path
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
