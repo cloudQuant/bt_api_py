@@ -281,6 +281,12 @@ class GatewayDirectOwner:
         if os.getpid() != self._pid:
             raise GatewayDirectOwnerError("PROCESS_BOUNDARY")
 
+    @property
+    def service_call_queue_timeout_seconds(self) -> float:
+        """Configured queue wait budget; it does not establish service readiness."""
+        self._check_pid()
+        return self._max_wait
+
     def _bind_dispatch_lifecycle(self, coordinator, *, account_scope, generation) -> None:
         """Attach the owner lifecycle writer before the composition seals coverage."""
         from bt_api_py.gateway_dispatch_claim import GatewayDispatchClaimCoordinator

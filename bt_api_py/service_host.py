@@ -3673,7 +3673,7 @@ class ServiceHost:
         """Fix one trusted local composition on its native owner thread."""
         from bt_api_gateway.direct_command_journal import GatewayDirectCommandJournal
         from bt_api_py._gateway_owner_guard_binding import _GatewayOwnerGuardBinding
-        from bt_api_py.gateway_direct_owner import GatewayDirectOwner
+        from bt_api_py.gateway_direct_owner import GatewayDirectOwner, GatewayOwnerServiceCallError
         from bt_api_py.gateway_direct_service import GatewayDirectServiceBinding
 
         binding = resources.values.get("binding")
@@ -3737,10 +3737,27 @@ class ServiceHost:
                 finally:
                     owner._condition.release()
 
+        handle = None
         try:
             # Do not hold the Registry lock (or the publication lock) while
             # waiting. A running callback is not cancelled by result timeout.
-            owner.submit_service_call(bind_on_owner).result(timeout_seconds=5.0)
+            handle = owner.submit_service_call(bind_on_owner)
+            handle.result(timeout_seconds=owner.service_call_queue_timeout_seconds)
+        except GatewayOwnerServiceCallError as error:
+            codes = {
+                "SERVICE_CALL_TIMEOUT_QUEUED": "GATEWAY_OWNER_GUARD_TIMEOUT_QUEUED",
+                "SERVICE_CALL_TIMEOUT_RUNNING": "GATEWAY_OWNER_GUARD_TIMEOUT_RUNNING",
+                "SERVICE_CALL_EXPIRED": "GATEWAY_OWNER_GUARD_EXPIRED",
+                "SERVICE_CALL_NOT_READY": "GATEWAY_OWNER_GUARD_NOT_READY",
+                "SERVICE_CALL_QUEUE_FULL": "GATEWAY_OWNER_GUARD_QUEUE_FULL",
+            }
+            code = error.code if type(error) is GatewayOwnerServiceCallError else None
+            if code == "SERVICE_CALL_TIMEOUT_QUEUED" and handle is not None:
+                try:
+                    handle.cancel()
+                except Exception:
+                    pass  # no cancellation confirmation is inferred
+            raise ServiceHostError(codes.get(code, "GATEWAY_OWNER_GUARD_BINDING_INVALID")) from None
         except Exception:
             raise ServiceHostError("GATEWAY_OWNER_GUARD_BINDING_INVALID") from None
 
