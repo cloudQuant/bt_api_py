@@ -22,6 +22,7 @@ import json
 import logging
 import sys
 import threading
+import time
 from collections.abc import Callable, Mapping
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
@@ -38,6 +39,16 @@ from bt_api_base.gateway_direct_protocol import (
     validate_gateway_native_identity,
 )
 from bt_api_base.service_protocol import WireRole
+from bt_api_gateway.control_wire import (
+    CONTROL_GRANT_KINDS,
+    CONTROL_MODES,
+    CONTROL_OPERATION_FIELDS,
+    CONTROL_OPERATIONS,
+    CONTROL_ORIGIN_PREFIXES,
+    CONTROL_RUNTIME_OPERATIONS,
+    CONTROL_WIRE_SCHEMA_VERSION,
+    CONTROL_WRITE_OPERATIONS,
+)
 from bt_api_gateway.direct_cancel_journal import GatewayDirectCancelJournal
 from bt_api_gateway.direct_command_journal import (
     DirectCommandJournalError,
@@ -67,12 +78,10 @@ _LOG = logging.getLogger(__name__)
 STORAGE_OPERATIONS = frozenset({"direct.reserve", "direct.release", "direct.command_status"})
 SUPPORTED_OPERATIONS = STORAGE_OPERATIONS | {"direct.dispatch"}
 CANCEL_OPERATIONS = frozenset({"direct.cancel", "direct.cancel_status"})
-CONTROL_WRITE_OPERATIONS = frozenset({"direct.control.apply", "direct.control.resume", "direct.control.drain_target", "direct.control.reconcile", "direct.control.cancel_scope"})
-CONTROL_OPERATIONS = CONTROL_WRITE_OPERATIONS | {"direct.control.identity", "direct.control.status", "direct.control.targets", "direct.control.list", "direct.control.resume_status", "direct.control.target_status", "direct.control.cancel_scope_status"}
-# Modes a control grant may apply (G64-03); a cancel-only operation is granted by its own
-# operation names (direct.control.cancel_scope, direct.control.cancel_scope_status).
-CONTROL_MODES = frozenset({"STOP_NEW", "FREEZE", "DRAIN"})
-CONTROL_GRANT_KINDS = frozenset({"operator", "risk"})
+# CONTROL_WRITE_OPERATIONS, CONTROL_OPERATIONS, CONTROL_MODES and
+# CONTROL_GRANT_KINDS are the frozen wire vocabulary imported above; the names
+# stay importable from this module because existing callers use it.
+
 STRATEGY_POSITION_OPERATIONS = frozenset({"direct.strategy_position", "direct.strategy_close_capacity"})
 STRATEGY_FINANCIAL_OPERATIONS = frozenset({'direct.strategy_financial'})
 ACCOUNT_COMPARISON_OPERATIONS = frozenset({"account.strategy_net_comparison"})
@@ -213,15 +222,56 @@ class GatewayDirectGrant:
 
 
 @dataclass(frozen=True, slots=True)
+class GatewayRuntimeControlProof:
+    """The explicit D66-08 proof installed with a Runtime control grant.
+
+    A Runtime principal is a limited proxy, never an operator. Its grant is
+    accepted only with all of the following, installed server-side:
+
+    * ``delegation_id``: a stable identity of this operator-to-Runtime
+      delegation. It names the delegation in the audit line and in a replayed
+      request, so two delegations are never confused.
+    * ``operator_ref``: the trusted operator on whose active request the
+      Runtime acts. It is a comparison/audit value, never authorization read
+      from a payload; the composition refuses a proof naming an operator that
+      is not installed in the same trusted bundle.
+    * ``expires_at``: an absolute, finite expiry in the trusted host wall clock
+      (the same clock the service uses for ``time.time``; not a journal TTL).
+      There is no default; a grant without it or past it is refused.
+    * ``revoked``: a revoked proof is refused. Revocation is also implemented
+      by replacing or removing the installed grant: the handler re-checks that
+      the mapping still holds the exact grant object it authorized.
+
+    Replay is the durable journal's operation id: the same cause and same
+    release operation return the recorded result and never a second effect.
+    """
+    delegation_id: str
+    operator_ref: str
+    expires_at: float
+    revoked: bool = False
+
+    def __post_init__(self) -> None:
+        if (not _ref(self.delegation_id) or not _ref(self.operator_ref)
+                or type(self.expires_at) not in (int, float)
+                or isinstance(self.expires_at, bool) or not math.isfinite(self.expires_at)
+                or type(self.revoked) is not bool):
+            raise ValueError("INVALID_RUNTIME_CONTROL_PROOF")
+
+
+@dataclass(frozen=True, slots=True)
 class GatewayControlGrant:
     """Installed server-side control authorization, never supplied by a peer.
 
     ``kind`` names who holds it, and with it the origin of the causes it applies:
-    ``operator`` (a person, ``operator:<hash>``) or ``risk`` (the Risk service,
-    ``risk:<hash>``, G64-03). ``modes`` are the modes ``direct.control.apply`` may
-    use; ``instrument_scope`` lets an account-wide holder name one contract. A
-    ``risk`` grant never holds ``direct.control.resume``: Risk never releases a
-    cause (D64-21).
+    ``operator`` (a person, ``operator:<hash>``), ``risk`` (the Risk service,
+    ``risk:<hash>``, G64-03) or ``runtime`` (the Runtime service's limited proxy,
+    ``runtime:<hash>``, D66-08). ``modes`` are the modes ``direct.control.apply``
+    may use; ``instrument_scope`` lets an account-wide holder name one contract.
+    A ``risk`` grant never holds ``direct.control.resume``: Risk never releases a
+    cause (D64-21). A ``runtime`` grant is strategy-scoped, holds only
+    ``direct.control.apply``, ``direct.control.status`` and
+    ``direct.control.resume``, and requires an explicit
+    :class:`GatewayRuntimeControlProof`; it never acquires operator authority.
     """
     actor_ref: str
     account_scope_allowed: bool
@@ -230,6 +280,7 @@ class GatewayControlGrant:
     kind: str = "operator"
     modes: frozenset[str] = CONTROL_MODES
     instrument_scope: bool = False
+    runtime_proof: GatewayRuntimeControlProof | None = None
 
     def __post_init__(self):
         if (not _ref(self.actor_ref) or type(self.account_scope_allowed) is not bool
@@ -242,6 +293,20 @@ class GatewayControlGrant:
                 or type(self.instrument_scope) is not bool
                 or (self.instrument_scope and not self.account_scope_allowed)
                 or (self.kind == "risk" and "direct.control.resume" in self.operations)):
+            raise ValueError("INVALID_CONTROL_GRANT")
+        if self.kind == "runtime":
+            # D66-08: a Runtime is a strategy-scoped limited proxy. It never
+            # holds an account-wide or contract scope, never acquires the
+            # operator's read/list/reconcile/cancel operations, and only runs
+            # with an explicit, unexpired proof.
+            if (self.runtime_proof is None
+                    or type(self.runtime_proof) is not GatewayRuntimeControlProof
+                    or not self.operations <= CONTROL_RUNTIME_OPERATIONS
+                    or self.account_scope_allowed
+                    or not self.strategies
+                    or self.instrument_scope):
+                raise ValueError("INVALID_CONTROL_GRANT")
+        elif self.runtime_proof is not None:
             raise ValueError("INVALID_CONTROL_GRANT")
 
 
@@ -507,6 +572,9 @@ class GatewayDirectServiceBinding:
         cancel_enabled: bool = False,
         control: object | None = None,
         control_grants: Mapping[str, GatewayControlGrant] | None = None,
+        # The trusted host wall clock used only for a Runtime proof's absolute
+        # ``expires_at`` (a configured calendar time, not a journal TTL).
+        control_clock: Callable[[], float] | None = None,
         market_gate_required: bool = False,
         strategy_financial_enabled: bool = False,
         strategy_origin_source: object | None = None,
@@ -584,6 +652,11 @@ class GatewayDirectServiceBinding:
                 raise ValueError("INVALID_CONTROL_GRANTS")
         elif control_grants is not None:
             raise ValueError("INVALID_CONTROL_BINDING")
+        if control_clock is not None and not callable(control_clock):
+            raise TypeError("INVALID_CONTROL_CLOCK")
+        # A Runtime proof's expiry is an absolute calendar time from the
+        # trusted host. The journal clock is monotonic and cannot compare it.
+        self._control_clock = control_clock or time.time
         self._control = control
         self._control_grants = MappingProxyType(control_grants or {})
         self._journal = journal
@@ -711,20 +784,25 @@ class GatewayDirectServiceBinding:
         if ((strategy is None and not grant.account_scope_allowed and not strategy_argument)
                 or (strategy is not None and strategy not in grant.strategies)):
             return _reject("SCOPE_DENIED")
-        fields = {
-            "direct.control.identity": set(),
-            "direct.control.apply": {"cause_id", "mode"},
-            "direct.control.resume": {"cause_id", "expected_version", "operation_id"},
-            "direct.control.reconcile": {"cause_id"},
-            "direct.control.status": {"cause_id"},
-            "direct.control.targets": {"cause_id", "after", "limit"},
-            "direct.control.list": {"after", "limit"},
-            "direct.control.resume_status": {"operation_id"},
-            "direct.control.target_status": {"cause_id", "operation_id"},
-            "direct.control.drain_target": {"cause_id", "reservation_id"},
-            "direct.control.cancel_scope": {"operation_id", "limit"},
-            "direct.control.cancel_scope_status": {"operation_id", "after", "limit"},
-        }[operation]
+        if grant.kind == "runtime":
+            # D66-08: a Runtime acts only as a limited proxy under an explicit,
+            # server-installed proof. Anything unproven is refused before any
+            # read or durable effect, with a finite code.
+            proof = grant.runtime_proof
+            clock = self._control_clock
+            if (type(proof) is not GatewayRuntimeControlProof or proof.revoked
+                    or not callable(clock)):
+                return _reject("RUNTIME_PROOF_UNAVAILABLE")
+            try:
+                now = clock()
+            except Exception:
+                return _reject("RUNTIME_PROOF_UNAVAILABLE")
+            if (type(now) not in (int, float) or isinstance(now, bool)
+                    or not math.isfinite(now)):
+                return _reject("RUNTIME_PROOF_UNAVAILABLE")
+            if now >= proof.expires_at:
+                return _reject("RUNTIME_PROOF_EXPIRED")
+        fields = set(CONTROL_OPERATION_FIELDS[operation])
         expected_journal_id = arguments.get('expected_journal_id')
         expected_generation = arguments.get('expected_generation')
         allowed_fields = fields | {'expected_journal_id'} if operation in {'direct.control.apply', 'direct.control.resume', 'direct.control.drain_target', 'direct.control.cancel_scope'} else fields
@@ -823,8 +901,9 @@ class GatewayDirectServiceBinding:
         # This operator as the journal names it: the origin of a cause it applies and, on a
         # journal with the release audit, the releaser of a cause it releases. One derivation
         # from the authenticated registration for both.
-        # A Risk principal's causes are named "risk:" with the same derivation (G64-03).
-        operator_ref = ('risk:' if grant.kind == 'risk' else 'operator:') + hashlib.sha256(json.dumps(
+        # A Risk principal's causes are named "risk:" (G64-03) and a Runtime principal's
+        # "runtime:" (D66-08), each with the same derivation.
+        operator_ref = CONTROL_ORIGIN_PREFIXES[grant.kind] + hashlib.sha256(json.dumps(
             [context.principal_ref, identity.actor_ref], separators=(',', ':')).encode()).hexdigest()
         if 'instrument' in arguments:
             requested_scope = ('instrument', instrument)
@@ -842,13 +921,19 @@ class GatewayDirectServiceBinding:
             # audit installed, who released it. This line names who did what in every case:
             # authenticated principal and actor, registration, cause and operation.
             # It is a warning so that it appears in the operator's log at the default level.
+            # A Runtime action additionally names its stable delegation and the trusted
+            # operator on whose request it acts (D66-08: audited as "operator via Runtime").
+            proof = grant.runtime_proof if grant.kind == 'runtime' else None
             _LOG.warning(
                 "%s control %s: cause %s (%s, scope %s%s) version %s by principal %s actor %s "
-                "registration %s%s", 'Risk' if grant.kind == 'risk' else 'Operator', action,
+                "registration %s%s%s", 'Risk' if grant.kind == 'risk' else
+                ('Runtime' if grant.kind == 'runtime' else 'Operator'), action,
                 cause['cause_id'], cause['mode'], cause['scope_kind'],
                 ' ' + cause['scope_value'] if cause['scope_value'] else '', cause['version'],
                 context.principal_ref, identity.actor_ref, context.registration_id,
-                '' if operation_id is None else ' operation ' + operation_id)
+                '' if operation_id is None else ' operation ' + operation_id,
+                '' if proof is None else ' delegation ' + proof.delegation_id
+                + ' operator ' + proof.operator_ref)
 
         def scope_check(cause):
             # A contract cause (D63-59) concerns every strategy of the account: only a
@@ -902,7 +987,8 @@ class GatewayDirectServiceBinding:
                             checked_strategy_binding(recheck)
                         else:
                             recheck()
-                        result = {'status': 'OBSERVED', 'schema_version': 1,
+                        result = {'status': 'OBSERVED',
+                                  'schema_version': CONTROL_WIRE_SCHEMA_VERSION,
                                   'account_scope': self._journal.account_scope,
                                   'journal_id': self._journal.journal_id}
                         if scoped_identity_binding:
@@ -1124,6 +1210,13 @@ class GatewayDirectServiceBinding:
                     recheck()
                     return result
             cause = control.get(arguments['cause_id'])
+            # D66-08: a Runtime principal releases only the causes it applied
+            # itself (its own "runtime:" origin). Operator, Risk, system,
+            # Monitor and another Runtime's causes stay untouched; a replay
+            # with the same operation id still returns the recorded result.
+            if (operation == "direct.control.resume" and grant.kind == 'runtime'
+                    and cause['origin'] != operator_ref):
+                return _reject('SCOPE_DENIED')
             scope_check(cause)
             if operation == "direct.control.reconcile":
                 with permit.scope() as recheck:

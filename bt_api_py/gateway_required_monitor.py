@@ -11,11 +11,14 @@ import os
 import threading
 import time
 import uuid
-from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Callable
 
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
+from bt_api_gateway.monitor_heartbeat_wire import (
+    build_monitor_heartbeat_request,
+    monitor_heartbeat_ack_matches,
+)
 
 # Who released a Monitor cause when the Gateway did it itself on a valid heartbeat
 # (automatic_resume), as stored on a journal with the release audit.
@@ -275,8 +278,14 @@ class RequiredMonitor:
                     sent = time.monotonic_ns()
                     deadline = sent + int(self.settings.timeout_seconds * 1_000_000_000)
                     heartbeat_id = uuid.uuid4().hex
-                    request = {"schema_version": 1, "relay_epoch": binding.registration_id,
-                               "heartbeat_id": heartbeat_id, "sent_at_ns": sent}
+                    # The frozen wire contract (bt_api_gateway.monitor_heartbeat_wire):
+                    # an exact request field set, a versioned schema and an ACK that
+                    # repeats it plus this Monitor's configured principal.
+                    request = build_monitor_heartbeat_request(
+                        relay_epoch=binding.registration_id,
+                        heartbeat_id=heartbeat_id,
+                        sent_at_ns=sent,
+                    )
                     response = runtime.call(self.settings.mount, "monitor.heartbeat", request,
                                             account_ref=self.settings.scope.account_ref,
                                             scope_ref=binding.scope_ref)
@@ -284,8 +293,9 @@ class RequiredMonitor:
                     if (time.monotonic_ns() >= deadline or after.registration_id != binding.registration_id
                             or after.service_epoch != binding.service_epoch
                             or self._owner.binding() != owner_binding
-                            or not isinstance(response, Mapping)
-                            or dict(response) != {**request, "monitor_principal": self.settings.monitor_identity.principal_ref}):
+                            or not monitor_heartbeat_ack_matches(
+                                request, response,
+                                self.settings.monitor_identity.principal_ref)):
                         raise RuntimeError("MONITOR_ACK_INVALID")
                     self._record_startup("COMPATIBLE")
                     proof = (self.generation, binding.registration_id, binding.service_epoch, heartbeat_id)

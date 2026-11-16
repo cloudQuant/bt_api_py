@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import stat
 import time
@@ -284,7 +285,11 @@ def _strategy_ledger_external_baseline(value):
 
 def _controls(value, principals, grants):
     """Operator emergency-stop grants: application clients with control operations only."""
-    from bt_api_py.gateway_direct_service import CONTROL_OPERATIONS, GatewayControlGrant
+    from bt_api_py.gateway_direct_service import (
+        CONTROL_OPERATIONS,
+        GatewayControlGrant,
+        GatewayRuntimeControlProof,
+    )
 
     drain = None
     if type(value) is dict and "drain" in value:
@@ -344,28 +349,54 @@ def _controls(value, principals, grants):
             or not value["operators"]):
         _invalid()
     control = {}
+    pending_control = []
+    seen_principals = set()
     for operator in value["operators"]:
-        # Optional (G64-03): "kind" ("operator", the default, or "risk" for the Risk service's
-        # control principal), "modes" (the apply modes it may use; required for "risk"; an
-        # operator without it keeps all three) and "instrument_scope" (bool, default false: it
-        # may name one contract; needs account_scope_allowed). A "risk" principal never holds
-        # direct.control.resume (D64-21): such a bundle is refused.
-        optional = tuple(name for name in ("kind", "modes", "instrument_scope")
+        # Optional (G64-03): "kind" ("operator", the default, "risk" for the Risk service's
+        # control principal, or "runtime" for the Runtime service's D66-08 limited proxy),
+        # "modes" (the apply modes it may use; required for "risk"; an operator without it
+        # keeps all three) and "instrument_scope" (bool, default false: it may name one
+        # contract; needs account_scope_allowed). A "risk" principal never holds
+        # direct.control.resume (D64-21). A "runtime" principal must carry an explicit
+        # "runtime_proof" naming an operator installed in this same bundle; it is
+        # strategy-scoped and may not acquire operator operations. Such a bundle is refused
+        # otherwise.
+        optional = tuple(name for name in ("kind", "modes", "instrument_scope", "runtime_proof")
                          if type(operator) is dict and name in operator)
         operator = _mapping(operator, ("identity", "curve_public_key", "resources",
                                        "account_scope_allowed", "strategies") + optional)
         identity = _identity(operator["identity"])
         public = _curve(operator["curve_public_key"])
         kind = operator.get("kind", "operator")
-        if (identity.role is not WireRole.APPLICATION_CLIENT or identity.principal_ref in grants
+        if (identity.role is not WireRole.APPLICATION_CLIENT
+                or identity.principal_ref in seen_principals
                 or public in principals or type(operator["resources"]) is not list
                 or not operator["resources"] or type(operator["account_scope_allowed"]) is not bool
                 or type(operator["strategies"]) is not list
-                or kind not in ("operator", "risk") or (kind == "risk" and "modes" not in operator)
+                or kind not in ("operator", "risk", "runtime")
+                or (kind == "risk" and "modes" not in operator)
+                or (kind == "runtime" and "runtime_proof" not in operator)
+                or (kind != "runtime" and "runtime_proof" in operator)
                 or ("modes" in operator and (type(operator["modes"]) is not list or not operator["modes"]))
                 or type(operator.get("instrument_scope", False)) is not bool):
             _invalid()
+        seen_principals.add(identity.principal_ref)
         modes = _string_set(operator["modes"]) if "modes" in operator else None
+        runtime_proof = None
+        if kind == "runtime":
+            declared = operator["runtime_proof"]
+            extra = ("revoked",) if type(declared) is dict and "revoked" in declared else ()
+            declared = _mapping(declared, ("delegation_id", "operator_ref", "expires_at") + extra)
+            expires_at = declared["expires_at"]
+            if (type(expires_at) not in (int, float) or isinstance(expires_at, bool)
+                    or not math.isfinite(expires_at) or type(declared.get("revoked", False)) is not bool):
+                _invalid()
+            try:
+                runtime_proof = GatewayRuntimeControlProof(
+                    _string(declared["delegation_id"]), _string(declared["operator_ref"]),
+                    float(expires_at), revoked=declared.get("revoked", False))
+            except ValueError:
+                _invalid()
         entries, operations = [], set()
         for item in operator["resources"]:
             item = _mapping(item, ("instance_id", "port", "scope_ref", "scope", "operations"))
@@ -377,12 +408,23 @@ def _controls(value, principals, grants):
             operations |= item_operations
         principals[public] = identity.principal_ref
         grants[identity.principal_ref] = (PrincipalGrant(identity, tuple(entries)),)
+        pending_control.append(
+            (identity, operator, frozenset(operations), kind, modes, runtime_proof))
+    # A Runtime proof names a trusted operator of this same bundle; a name that is
+    # not installed here proves nothing and is refused before anything is served.
+    installed_operator_refs = frozenset(
+        identity.actor_ref for identity, _operator, _operations, entry_kind, _modes, _proof
+        in pending_control if entry_kind == "operator")
+    for identity, operator, operations, kind, modes, runtime_proof in pending_control:
+        if kind == "runtime" and runtime_proof.operator_ref not in installed_operator_refs:
+            _invalid()
         try:
             control[identity.principal_ref] = GatewayControlGrant(
                 identity.actor_ref, operator["account_scope_allowed"],
-                frozenset(_string(item) for item in operator["strategies"]), frozenset(operations),
+                frozenset(_string(item) for item in operator["strategies"]), operations,
                 kind=kind, **({} if modes is None else {"modes": modes}),
-                instrument_scope=operator.get("instrument_scope", False))
+                instrument_scope=operator.get("instrument_scope", False),
+                **({} if runtime_proof is None else {"runtime_proof": runtime_proof}))
         except ValueError:
             _invalid()
     return control, value["upgrade_controls_from_v9"], drain, lease_drain, release_audit

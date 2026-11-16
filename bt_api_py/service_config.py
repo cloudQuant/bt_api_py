@@ -248,6 +248,12 @@ _CLIENT_ALIAS_MOUNTS: Final[dict[str, frozenset[str]]] = {
             "upstream.telemetry",
         }
     ),
+    # The Runtime service is an application client of the Gateway control port
+    # (D66-08 / 66.07). It may bind only the direct-write mount on which
+    # direct.control.* is served, never a market or order-entry mount. A client
+    # without this binding cannot reach the control port; the service still
+    # answers CONTROL_UNAVAILABLE when its control surface is not configured.
+    "runtime": frozenset({"application.direct_write"}),
 }
 
 _COMPONENT_PORTS: Final[dict[str, dict[str | None, frozenset[str]]]] = {
