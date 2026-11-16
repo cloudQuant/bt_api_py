@@ -352,8 +352,9 @@ def test_matched_make_order_persists_then_submits_and_never_reaches_direct(db, f
     )
 
     assert isinstance(result, ExecutionRoutingResult)
-    assert result.outcome is ExecutionRoutingOutcome.EXECUTION_ACCEPTED
-    assert result.parent_ref == "parent-1"
+    assert result.outcome is ExecutionRoutingOutcome.EXECUTION_UNKNOWN
+    assert result.code == "EXECUTION_UNVERIFIED_REPLY"
+    assert result.parent_ref is None
     assert result.request_id and len(result.request_sha256) == 64
     # The durable PREPARED row existed before the one remote call.
     assert observed["row"] is not None and observed["row"][3] is None
@@ -452,8 +453,8 @@ def test_unknown_reply_is_projected_without_a_direct_send(db, fake_facade):
     )
 
     assert result.outcome is ExecutionRoutingOutcome.EXECUTION_UNKNOWN
-    assert result.code == "EXECUTION_INVALID_REPLY"
-    assert result.execution_state == "REGISTERING"
+    assert result.code == "EXECUTION_UNVERIFIED_REPLY"
+    assert result.execution_state is None
     assert fake_facade.events == []
 
 
@@ -501,7 +502,8 @@ def test_matched_cancel_routes_to_the_execution_cancel_port(db, fake_facade):
         host_scope="scope-1",
     )
 
-    assert result.outcome is ExecutionRoutingOutcome.EXECUTION_CANCEL_ACCEPTED
+    assert result.outcome is ExecutionRoutingOutcome.EXECUTION_UNKNOWN
+    assert result.code == "EXECUTION_UNVERIFIED_REPLY"
     assert len(port.cancel_calls) == 1
     payload = port.cancel_calls[0]
     assert payload["request_id"] == placed.request_id
@@ -525,7 +527,8 @@ def test_routed_cancel_accepts_an_explicit_stable_request_key(db, fake_facade):
         request_key="request-1",
     )
 
-    assert result.outcome is ExecutionRoutingOutcome.EXECUTION_CANCEL_ACCEPTED
+    assert result.outcome is ExecutionRoutingOutcome.EXECUTION_UNKNOWN
+    assert result.code == "EXECUTION_UNVERIFIED_REPLY"
     assert port.cancel_calls[0]["request_id"] == placed.request_id
     assert fake_facade.events == []
 
@@ -622,7 +625,8 @@ def test_cancel_target_looks_up_the_key_and_never_resends(db):
     first = router.cancel_target(target)
     second = router.cancel_target(target)
 
-    assert first.outcome is ExecutionRoutingOutcome.EXECUTION_CANCEL_ACCEPTED
+    assert first.outcome is ExecutionRoutingOutcome.EXECUTION_UNKNOWN
+    assert first.code == "EXECUTION_UNVERIFIED_REPLY"
     assert second == first
     assert len(port.cancel_calls) == 1
     assert first.request_id == routed.request_id

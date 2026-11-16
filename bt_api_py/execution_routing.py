@@ -16,7 +16,7 @@ and an ``EXECUTION_UNKNOWN`` outcome; replay returns that outcome and does not
 resend.
 
 The module imports neither ``bt_api_execution`` nor a provider package. The
-port is supplied by trusted composition and may be a fake. Nothing here proves
+port may be a fake; no reply currently has source-bound proof. Nothing here proves
 Gateway acceptance, Risk approval, venue state, or account authorization: a
 local PREPARED row is a local fact only.
 """
@@ -28,7 +28,6 @@ import json
 import re
 import sqlite3
 import time
-from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -64,7 +63,6 @@ _MAX_PARAMS_BYTES = 65_536
 _MAX_PAYLOAD_BYTES = 1_048_576
 _MAX_RULES = 1024
 _MAX_INSTRUMENTS = 4096
-_MAX_CHILDREN = 4096
 _MAX_NS = 1 << 63
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
@@ -909,12 +907,6 @@ def _order_type_value(value: object) -> str | None:
     return None
 
 
-def _count(value: object) -> int | None:
-    if type(value) is not int or isinstance(value, bool) or value < 0:
-        return None
-    return value
-
-
 def _candidate_configuration(candidate: RouteCandidate) -> str:
     try:
         data = json.loads(candidate.snapshot)
@@ -924,37 +916,6 @@ def _candidate_configuration(candidate: RouteCandidate) -> str:
         return value
     except Exception:
         _fail("EXECUTION_LOCAL_RECORD_FAILED")
-
-
-def _reply_fields(reply: object) -> tuple[str | None, str | None, str | None, str | None]:
-    try:
-        if isinstance(reply, Mapping):
-            status = reply.get("status")
-            outcome = reply.get("outcome")
-            if status is not None and outcome is not None and status != outcome:
-                return None, None, None, None
-            status = status if status is not None else outcome
-            code = reply.get("code")
-            parent_ref = reply.get("parent_ref")
-            state = reply.get("state")
-        else:
-            status = getattr(reply, "outcome", None)
-            if status is None:
-                status = getattr(reply, "status", None)
-            code = getattr(reply, "code", None)
-            parent_ref = getattr(reply, "parent_ref", None)
-            state = getattr(reply, "state", None)
-    except Exception:
-        return None, None, None, None
-    if status is not None and type(status) is not str:
-        status = None
-    if code is not None and type(code) is not str:
-        code = None
-    if parent_ref is not None and type(parent_ref) is not str:
-        parent_ref = None
-    if state is not None and type(state) is not str:
-        state = None
-    return status, code, parent_ref, state
 
 
 class ExecutionOrderRouter:
@@ -1174,101 +1135,22 @@ class ExecutionOrderRouter:
             execution_state=execution_state,
         )
 
-    def _submit_result(
-        self, reply: object, *, request_id: str, request_sha256: str
-    ) -> ExecutionRoutingResult:
-        status, code, parent_ref, state = _reply_fields(reply)
-        if status == "ACCEPTED":
-            return self._result(
-                ExecutionRoutingOutcome.EXECUTION_ACCEPTED,
-                request_id=request_id,
-                request_sha256=request_sha256,
-                parent_ref=parent_ref,
-            )
-        if status == "LOCAL_RECEIVED":
-            return self._result(
-                ExecutionRoutingOutcome.EXECUTION_LOCAL_RECEIPT,
-                request_id=request_id,
-                request_sha256=request_sha256,
-                parent_ref=parent_ref,
-            )
-        if status in {"REJECTED", "LOCAL_REJECTED"}:
-            return self._result(
-                ExecutionRoutingOutcome.EXECUTION_REJECTED,
-                code=code or "EXECUTION_REJECTED",
-                request_id=request_id,
-                request_sha256=request_sha256,
-                parent_ref=parent_ref,
-            )
-        if status == "NOT_SENT":
-            return self._result(
-                ExecutionRoutingOutcome.EXECUTION_UNAVAILABLE,
-                code=code or "EXECUTION_UNAVAILABLE",
-                request_id=request_id,
-                request_sha256=request_sha256,
-            )
-        if status == "UNKNOWN":
-            return self._result(
-                ExecutionRoutingOutcome.EXECUTION_UNKNOWN,
-                code=code or "EXECUTION_UNKNOWN",
-                request_id=request_id,
-                request_sha256=request_sha256,
-                execution_state=state or status,
-            )
+    def _unverified_result(self, *, request_id: str, request_sha256: str) -> ExecutionRoutingResult:
+        # No installed port provides source-bound reply proof.  Do not read its
+        # self-reported fields, even when they match the locally stored request.
         return self._result(
             ExecutionRoutingOutcome.EXECUTION_UNKNOWN,
-            code="EXECUTION_INVALID_REPLY",
+            code="EXECUTION_UNVERIFIED_REPLY",
             request_id=request_id,
             request_sha256=request_sha256,
-            execution_state=state or status,
-        )
-
-    def _cancel_result(
-        self, reply: object, *, request_id: str, request_sha256: str
-    ) -> ExecutionRoutingResult:
-        status, code, parent_ref, state = _reply_fields(reply)
-        if status in {"ACCEPTED", "CANCEL_REQUESTED", "CANCEL_ACCEPTED"}:
-            return self._result(
-                ExecutionRoutingOutcome.EXECUTION_CANCEL_ACCEPTED,
-                request_id=request_id,
-                request_sha256=request_sha256,
-                parent_ref=parent_ref,
-                execution_state=state,
-            )
-        if status in {"REJECTED", "LOCAL_REJECTED"}:
-            return self._result(
-                ExecutionRoutingOutcome.EXECUTION_REJECTED,
-                code=code or "EXECUTION_REJECTED",
-                request_id=request_id,
-                request_sha256=request_sha256,
-            )
-        if status == "NOT_SENT":
-            return self._result(
-                ExecutionRoutingOutcome.EXECUTION_UNAVAILABLE,
-                code=code or "EXECUTION_CANCEL_UNAVAILABLE",
-                request_id=request_id,
-                request_sha256=request_sha256,
-            )
-        return self._result(
-            ExecutionRoutingOutcome.EXECUTION_UNKNOWN,
-            code=code or "EXECUTION_UNKNOWN",
-            request_id=request_id,
-            request_sha256=request_sha256,
-            execution_state=state,
         )
 
     def _stored_result(
         self, raw: str, *, request_id: str, request_sha256: str
     ) -> ExecutionRoutingResult:
-        data = _validate_result(raw)
-        return self._result(
-            ExecutionRoutingOutcome(data["status"]),
-            code=data["code"],
-            request_id=request_id,
-            request_sha256=request_sha256,
-            parent_ref=data["parent_ref"],
-            execution_state=data["execution_state"],
-        )
+        # Older rows have no proof that their outcomes or codes were local.
+        _validate_result(raw)
+        return self._unverified_result(request_id=request_id, request_sha256=request_sha256)
 
     def _check_replay(self, intent: GatewayOrderIntent, record: _ParentRecord) -> None:
         self._check_replay_digest(record, intent.digest, self._seed(intent))
@@ -1317,14 +1199,8 @@ class ExecutionOrderRouter:
         except sqlite3.Error:
             _rollback(db)
             raise ExecutionRoutingError("EXECUTION_UNKNOWN") from None
-        data = _validate_result(stored)
-        return self._result(
-            ExecutionRoutingOutcome(data["status"]),
-            code=data["code"],
-            request_id=result.request_id,
-            request_sha256=result.request_sha256,
-            parent_ref=data["parent_ref"],
-            execution_state=data["execution_state"],
+        return self._stored_result(
+            stored, request_id=result.request_id, request_sha256=result.request_sha256
         )
 
     def _port_callable(self, name: str):
@@ -1504,7 +1380,7 @@ class ExecutionOrderRouter:
                 request_sha256=digest,
             )
         try:
-            reply = submit(json.loads(payload))
+            submit(json.loads(payload))
         except Exception:
             result = self._result(
                 ExecutionRoutingOutcome.EXECUTION_UNKNOWN,
@@ -1513,7 +1389,7 @@ class ExecutionOrderRouter:
                 request_sha256=digest,
             )
             return self._store_and_return(identity, result)
-        result = self._submit_result(reply, request_id=request_id, request_sha256=digest)
+        result = self._unverified_result(request_id=request_id, request_sha256=digest)
         return self._store_and_return(identity, result)
 
     def cancel(self, intent: object) -> ExecutionRoutingResult:
@@ -1565,14 +1441,10 @@ class ExecutionOrderRouter:
                 self._check_replay_digest(record, intent_digest, seed)
             if record.cancel_result is not None:
                 _commit(db)
-                data = _validate_result(record.cancel_result)
-                return self._result(
-                    ExecutionRoutingOutcome(data["status"]),
-                    code=data["code"],
+                return self._stored_result(
+                    record.cancel_result,
                     request_id=record.request_id,
                     request_sha256=record.request_sha256,
-                    parent_ref=data["parent_ref"],
-                    execution_state=data["execution_state"],
                 )
             if record.cancel_operation_id == operation_id:
                 _commit(db)
@@ -1602,18 +1474,15 @@ class ExecutionOrderRouter:
             _rollback(db)
             raise
         payload_data = json.loads(record.payload)
-        remote_parent_ref = None
-        if record.result is not None:
-            remote_parent_ref = _validate_result(record.result)["parent_ref"]
         payload = {
             "request_id": record.request_id,
             "parent_ref": payload_data["spec"]["parent_ref"],
-            "remote_parent_ref": remote_parent_ref,
+            "remote_parent_ref": None,
             "request_sha256": record.request_sha256,
             "operation_id": operation_id,
         }
         try:
-            reply = self._port_callable("cancel")(payload)
+            self._port_callable("cancel")(payload)
         except Exception:
             result = self._result(
                 ExecutionRoutingOutcome.EXECUTION_UNKNOWN,
@@ -1622,8 +1491,8 @@ class ExecutionOrderRouter:
                 request_sha256=record.request_sha256,
             )
             return self._store_cancel_and_return(identity, result)
-        result = self._cancel_result(
-            reply, request_id=record.request_id, request_sha256=record.request_sha256
+        result = self._unverified_result(
+            request_id=record.request_id, request_sha256=record.request_sha256
         )
         return self._store_cancel_and_return(identity, result)
 
@@ -1646,14 +1515,8 @@ class ExecutionOrderRouter:
         except Exception:
             _rollback(db)
             raise ExecutionRoutingError("EXECUTION_UNKNOWN") from None
-        data = _validate_result(stored)
-        return self._result(
-            ExecutionRoutingOutcome(data["status"]),
-            code=data["code"],
-            request_id=result.request_id,
-            request_sha256=result.request_sha256,
-            parent_ref=data["parent_ref"],
-            execution_state=data["execution_state"],
+        return self._stored_result(
+            stored, request_id=result.request_id, request_sha256=result.request_sha256
         )
 
     def status(self, intent: object) -> ExecutionRoutingStatus:
@@ -1675,9 +1538,13 @@ class ExecutionOrderRouter:
         cancel_outcome = None
         cancel_code = None
         if record.cancel_result is not None:
-            cancel = _validate_result(record.cancel_result)
-            cancel_outcome = cancel["status"]
-            cancel_code = cancel["code"]
+            cancel = self._stored_result(
+                record.cancel_result,
+                request_id=record.request_id,
+                request_sha256=record.request_sha256,
+            )
+            cancel_outcome = cancel.outcome.value
+            cancel_code = cancel.code
         status_method = self._port_callable("status")
         if status_method is None:
             return ExecutionRoutingStatus(
@@ -1693,7 +1560,7 @@ class ExecutionOrderRouter:
                 cancel_code=cancel_code,
             )
         try:
-            reply = status_method(record.request_id)
+            status_method(record.request_id)
         except Exception:
             return ExecutionRoutingStatus(
                 routed=True,
@@ -1706,81 +1573,16 @@ class ExecutionOrderRouter:
                 cancel_outcome=cancel_outcome,
                 cancel_code=cancel_code,
             )
-        projected = _project_status(reply, record)
-        if projected is None:
-            return ExecutionRoutingStatus(
-                routed=True,
-                outcome=ExecutionRoutingOutcome.EXECUTION_UNKNOWN,
-                request_id=record.request_id,
-                request_sha256=record.request_sha256,
-                parent_ref=local.parent_ref,
-                configuration_id=record.configuration_id,
-                code="EXECUTION_INVALID_REPLY",
-                cancel_outcome=cancel_outcome,
-                cancel_code=cancel_code,
-            )
         return ExecutionRoutingStatus(
             routed=True,
-            outcome=local.outcome,
+            outcome=ExecutionRoutingOutcome.EXECUTION_UNKNOWN,
             request_id=record.request_id,
             request_sha256=record.request_sha256,
-            parent_ref=projected["parent_ref"] or local.parent_ref,
             configuration_id=record.configuration_id,
-            execution_state=projected["state"],
-            children=projected["children"],
-            unknown_children=projected["unknown_children"],
-            code=local.code,
+            code="EXECUTION_UNVERIFIED_REPLY",
             cancel_outcome=cancel_outcome,
             cancel_code=cancel_code,
         )
-
-
-def _project_status(reply: object, record: _ParentRecord) -> dict | None:
-    if not isinstance(reply, Mapping):
-        return None
-    request_id = reply.get("request_id")
-    if request_id is not None and request_id != record.request_id:
-        return None
-    request_sha256 = reply.get("request_sha256")
-    if request_sha256 is not None and request_sha256 != record.request_sha256:
-        return None
-    state = reply.get("state", reply.get("status"))
-    if state is not None and type(state) is not str:
-        return None
-    parent_ref = reply.get("parent_ref")
-    if parent_ref is not None and type(parent_ref) is not str:
-        return None
-    raw_children = reply.get("children", ())
-    if type(raw_children) not in (list, tuple) or len(raw_children) > _MAX_CHILDREN:
-        return None
-    children = []
-    for child in raw_children:
-        if not isinstance(child, Mapping):
-            return None
-        child_id = child.get("child_id")
-        child_state = child.get("state")
-        if _text(child_id) is None or _text(child_state) is None:
-            return None
-        row = {"child_id": child_id, "state": child_state}
-        for name in ("quantity", "reservation_id", "last_error"):
-            value = child.get(name)
-            if value is not None and type(value) is not str:
-                return None
-            row[name] = value
-        attempts = child.get("attempts")
-        if attempts is not None and _count(attempts) is None:
-            return None
-        row["attempts"] = attempts
-        children.append(row)
-    raw_unknown = reply.get("unknown_children", ())
-    if type(raw_unknown) not in (list, tuple) or any(_text(item) is None for item in raw_unknown):
-        return None
-    return {
-        "state": state,
-        "parent_ref": parent_ref,
-        "children": tuple(children),
-        "unknown_children": tuple(raw_unknown),
-    }
 
 
 def route_order(router: ExecutionOrderRouter | None, intent: object, direct):

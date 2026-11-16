@@ -199,8 +199,8 @@ def test_matched_request_persists_identity_before_submit(db):
     port = RecordingPort(on_submit=on_submit)
     result = make_router(db, port).route(make_intent())
 
-    assert result.outcome is ExecutionRoutingOutcome.EXECUTION_ACCEPTED
-    assert result.parent_ref == "parent-1"
+    assert result.outcome is ExecutionRoutingOutcome.EXECUTION_UNKNOWN
+    assert result.parent_ref is None
     assert result.request_id and len(result.request_sha256) == 64
     assert port.submit_calls and port.events == ["submit"]
 
@@ -399,12 +399,12 @@ def test_cancel_for_a_matched_parent_routes_to_execution(db):
     routed = router.route(make_intent())
 
     first = router.cancel(make_intent())
-    assert first.outcome is ExecutionRoutingOutcome.EXECUTION_CANCEL_ACCEPTED
+    assert first.outcome is ExecutionRoutingOutcome.EXECUTION_UNKNOWN
     assert len(port.cancel_calls) == 1
     payload = port.cancel_calls[0]
     assert payload["request_id"] == routed.request_id
     assert payload["parent_ref"] == json.loads(parent_row(db)[2])["spec"]["parent_ref"]
-    assert payload["remote_parent_ref"] == "parent-1"
+    assert payload["remote_parent_ref"] is None
     assert payload["request_sha256"] == routed.request_sha256
     assert payload["operation_id"].startswith("sdk-cancel-v1:")
 
@@ -445,7 +445,7 @@ def test_cancel_reply_loss_is_unknown_and_not_retried(db):
     assert len(port.cancel_calls) == 1
 
 
-def test_status_projects_parent_children_and_local_identity(db):
+def test_status_keeps_local_identity_but_does_not_project_unverified_parent_or_children(db):
     port = RecordingPort()
     router = make_router(db, port)
     routed = router.route(make_intent())
@@ -470,12 +470,12 @@ def test_status_projects_parent_children_and_local_identity(db):
 
     status = router.status(make_intent())
     assert status.routed is True
-    assert status.outcome is ExecutionRoutingOutcome.EXECUTION_ACCEPTED
+    assert status.outcome is ExecutionRoutingOutcome.EXECUTION_UNKNOWN
     assert status.request_id == routed.request_id
     assert status.request_sha256 == routed.request_sha256
-    assert status.parent_ref == "parent-1"
-    assert status.execution_state == "ACCEPTED"
-    assert status.children[0]["child_id"] == "child-1"
+    assert status.parent_ref is None
+    assert status.execution_state is None
+    assert status.children == ()
     assert status.unknown_children == ()
 
 
@@ -501,7 +501,7 @@ def test_status_rejects_a_foreign_reply(db):
     status = make_router(db, port).status(make_intent())
 
     assert status.outcome is ExecutionRoutingOutcome.EXECUTION_UNKNOWN
-    assert status.code == "EXECUTION_INVALID_REPLY"
+    assert status.code == "EXECUTION_UNVERIFIED_REPLY"
     assert status.execution_state is None
 
 
@@ -541,7 +541,7 @@ def test_local_receipt_is_not_projected_as_acceptance(db):
     port = RecordingPort(reply={"status": "LOCAL_RECEIVED"})
     result = make_router(db, port).route(make_intent())
 
-    assert result.outcome is ExecutionRoutingOutcome.EXECUTION_LOCAL_RECEIPT
+    assert result.outcome is ExecutionRoutingOutcome.EXECUTION_UNKNOWN
     assert result.parent_ref is None
     assert result.request_id
     assert len(port.submit_calls) == 1
@@ -559,15 +559,15 @@ def test_observation_object_replies_are_mapped_fail_closed(db):
         db, RecordingPort(reply=ObservationReply("NOT_SENT", "ROUTE_UNAVAILABLE"))
     )
     first = not_sent.route(make_intent())
-    assert first.outcome is ExecutionRoutingOutcome.EXECUTION_UNAVAILABLE
-    assert first.code == "ROUTE_UNAVAILABLE"
+    assert first.outcome is ExecutionRoutingOutcome.EXECUTION_UNKNOWN
+    assert first.code == "EXECUTION_UNVERIFIED_REPLY"
 
     unknown = make_router(
         db, RecordingPort(reply=ObservationReply("UNKNOWN", "CALL_OUTCOME_UNKNOWN"))
     )
     second = unknown.route(make_intent(request_key="request-2"))
     assert second.outcome is ExecutionRoutingOutcome.EXECUTION_UNKNOWN
-    assert second.code == "CALL_OUTCOME_UNKNOWN"
+    assert second.code == "EXECUTION_UNVERIFIED_REPLY"
     assert second.request_id != first.request_id
 
 
@@ -576,8 +576,8 @@ def test_in_flight_parent_state_is_unknown_not_accepted(db):
     result = make_router(db, port).route(make_intent())
 
     assert result.outcome is ExecutionRoutingOutcome.EXECUTION_UNKNOWN
-    assert result.code == "EXECUTION_INVALID_REPLY"
-    assert result.execution_state == "REGISTERING"
+    assert result.code == "EXECUTION_UNVERIFIED_REPLY"
+    assert result.execution_state is None
 
 
 class FakeGateway:
@@ -642,8 +642,8 @@ def test_composed_execution_service_orders_submit_then_gateway(db, tmp_path):
     journal, gateway, service = _service(tmp_path, events)
     try:
         result = make_router(db, ServicePort(service, db, events)).route(make_intent())
-        assert result.outcome is ExecutionRoutingOutcome.EXECUTION_ACCEPTED
-        assert result.parent_ref is not None
+        assert result.outcome is ExecutionRoutingOutcome.EXECUTION_UNKNOWN
+        assert result.parent_ref is None
         assert events == ["submit", "gateway.register"]
         assert gateway.calls[0]["request_sha256"] == result.request_sha256
         row = journal.get_parent(result.request_id)
@@ -660,7 +660,7 @@ def test_composed_execution_service_orders_submit_then_risk_then_gateway(db, tmp
         result = make_router(db, ServicePort(service, db, events), risk_selected=True).route(
             make_intent()
         )
-        assert result.outcome is ExecutionRoutingOutcome.EXECUTION_ACCEPTED
+        assert result.outcome is ExecutionRoutingOutcome.EXECUTION_UNKNOWN
         assert events == ["submit", "risk.reserve", "gateway.register"]
         assert gateway.calls[0]["spec"]["risk_selected"] is True
         assert risk.calls[0]["request_id"] == result.request_id
@@ -693,14 +693,14 @@ def test_composed_execution_status_projects_parent_state(db, tmp_path):
     try:
         routed = router.route(make_intent())
         status = router.status(make_intent())
-        assert routed.outcome is ExecutionRoutingOutcome.EXECUTION_ACCEPTED
+        assert routed.outcome is ExecutionRoutingOutcome.EXECUTION_UNKNOWN
         assert status.routed is True
         assert status.request_id == routed.request_id
         assert status.request_sha256 == routed.request_sha256
-        assert status.execution_state == "ACCEPTED"
+        assert status.execution_state is None
         assert status.children == ()
         assert status.unknown_children == ()
-        assert status.code is None
+        assert status.code == "EXECUTION_UNVERIFIED_REPLY"
     finally:
         journal.close()
 
@@ -710,9 +710,146 @@ def test_composed_execution_without_cancel_fails_closed(db, tmp_path):
     journal, _, service = _service(tmp_path, events)
     router = make_router(db, ServicePort(service, db, events))
     try:
-        assert router.route(make_intent()).outcome is ExecutionRoutingOutcome.EXECUTION_ACCEPTED
+        assert router.route(make_intent()).outcome is ExecutionRoutingOutcome.EXECUTION_UNKNOWN
         result = router.cancel(make_intent())
         assert result.outcome is ExecutionRoutingOutcome.EXECUTION_UNAVAILABLE
         assert result.code == "EXECUTION_CANCEL_UNAVAILABLE"
     finally:
         journal.close()
+
+
+@pytest.mark.parametrize(
+    "reply_status, mismatch",
+    [
+        ("ACCEPTED", None),
+        ("LOCAL_RECEIVED", None),
+        ("REJECTED", None),
+        ("LOCAL_REJECTED", None),
+        ("NOT_SENT", None),
+        ("ACCEPTED", "request_id"),
+        ("ACCEPTED", "request_sha256"),
+        ("ACCEPTED", "parent_ref"),
+        ("ACCEPTED", "old_reply"),
+    ],
+)
+def test_unverified_submit_reply_cannot_bind_to_request_or_trigger_retry(
+    db, reply_status, mismatch
+):
+    direct_calls = []
+    port = RecordingPort()
+
+    def on_submit(request):
+        row = parent_row(db)
+        reply = {
+            "status": reply_status,
+            "request_id": row[0],
+            "request_sha256": row[1],
+            "parent_ref": request["spec"]["parent_ref"],
+            "state": "ACCEPTED",
+            "code": "PORT_ASSERTION",
+        }
+        if mismatch == "request_id":
+            reply["request_id"] = "foreign-request"
+        elif mismatch == "request_sha256":
+            reply["request_sha256"] = "0" * 64
+        elif mismatch == "parent_ref":
+            reply["parent_ref"] = "foreign-parent"
+        elif mismatch == "old_reply":
+            reply.update(request_id="old-request", request_sha256="f" * 64, parent_ref="old-parent")
+        port.submit_reply = reply
+
+    port.on_submit = on_submit
+    router = make_router(db, port)
+    first = route_order(router, make_intent(), lambda: direct_calls.append("direct"))
+    second = route_order(router, make_intent(), lambda: direct_calls.append("direct"))
+    row = parent_row(db)
+    assert first == second
+    assert first.outcome is ExecutionRoutingOutcome.EXECUTION_UNKNOWN
+    assert first.code == "EXECUTION_UNVERIFIED_REPLY"
+    assert first.request_id == row[0] and first.request_sha256 == row[1]
+    assert first.parent_ref is None and first.execution_state is None
+    assert len(port.submit_calls) == 1 and direct_calls == []
+    assert port.submit_calls[0] == json.loads(row[2])
+
+
+def test_public_observation_is_not_source_proof(db):
+    from bt_api_py.execution_parent_client import ExecutionParentObservation
+
+    observation = ExecutionParentObservation(
+        "NOT_SENT", "other-request", "0" * 64, code="REQUEST_NOT_SENT"
+    )
+    port = RecordingPort(reply=observation)
+    router = make_router(db, port)
+    result = router.route(make_intent())
+    assert result.outcome is ExecutionRoutingOutcome.EXECUTION_UNKNOWN
+    assert result.code == "EXECUTION_UNVERIFIED_REPLY"
+    assert router.route(make_intent()) == result
+    assert len(port.submit_calls) == 1
+
+
+@pytest.mark.parametrize("reply_status", ["ACCEPTED", "LOCAL_REJECTED", "NOT_SENT"])
+def test_unverified_cancel_reply_remains_unknown_without_retry(db, reply_status):
+    port = RecordingPort(cancel_reply={"status": reply_status, "code": "PORT_CODE"})
+    router = make_router(db, port)
+    routed = router.route(make_intent())
+    first = router.cancel(make_intent())
+    assert first.outcome is ExecutionRoutingOutcome.EXECUTION_UNKNOWN
+    assert first.code == "EXECUTION_UNVERIFIED_REPLY"
+    assert first.request_id == routed.request_id
+    assert first.request_sha256 == routed.request_sha256
+    assert router.cancel(make_intent()) == first
+    assert len(port.submit_calls) == len(port.cancel_calls) == 1
+
+
+def test_legacy_unverified_stored_results_and_status_cannot_promote(db):
+    port = RecordingPort()
+    router = make_router(db, port)
+    routed = router.route(make_intent())
+    legacy = json.dumps(
+        {
+            "status": "EXECUTION_ACCEPTED",
+            "code": "OLD_PORT_CODE",
+            "parent_ref": "old-parent",
+            "execution_state": "ACCEPTED",
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    legacy_cancel = json.dumps(
+        {
+            "status": "EXECUTION_CANCEL_ACCEPTED",
+            "code": "OLD_PORT_CODE",
+            "parent_ref": "old-parent",
+            "execution_state": "ACCEPTED",
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    db.execute(
+        "UPDATE execution_parent_requests_v1 SET result=?, cancel_result=?, cancel_operation_id=?",
+        (legacy, legacy_cancel, "old-operation"),
+    )
+    port.status_reply = {
+        "status": "ACCEPTED",
+        "state": "ACCEPTED",
+        "request_id": routed.request_id,
+        "request_sha256": routed.request_sha256,
+        "parent_ref": "old-parent",
+        "children": [{"child_id": "old-child", "state": "SENT"}],
+    }
+    replay = router.route(make_intent())
+    cancel = router.cancel(make_intent())
+    status = router.status(make_intent())
+    assert (
+        replay.outcome
+        is cancel.outcome
+        is status.outcome
+        is ExecutionRoutingOutcome.EXECUTION_UNKNOWN
+    )
+    assert replay.parent_ref is cancel.parent_ref is status.parent_ref is None
+    assert status.execution_state is None and status.children == ()
+    assert status.cancel_outcome == "EXECUTION_UNKNOWN"
+    assert status.cancel_code == "EXECUTION_UNVERIFIED_REPLY"
+    assert len(port.submit_calls) == 1 and port.cancel_calls == []
