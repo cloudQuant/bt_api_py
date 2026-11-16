@@ -1,0 +1,165 @@
+{
+  "schema": "bt_api_py.runtime_operator.v1",
+  "runtime_config_file": "/opt/bt-runtime/runtime.yaml",
+  "subject_token_file": "/opt/bt-runtime/secrets/subject-tokens.json",
+  "gateway": {
+    "identity": {
+      "principal_ref": "runtime-principal",
+      "actor_ref": "runtime-app"
+    },
+    "expected_peer": {
+      "principal_ref": "gateway-principal",
+      "actor_ref": "gateway-service"
+    },
+    "timeout_seconds": 5,
+    "routes": [
+      {
+        "unit": "example",
+        "strategy_uuid": "11111111-1111-4111-8111-111111111111",
+        "route": {
+          "service_id": "gateway-service",
+          "instance_id": "gateway-instance",
+          "scope_ref": "strategy-scope",
+          "execution_domain_ref": "example-domain",
+          "account_ref": "account-placeholder"
+        },
+        "client_config": {
+          "client_config_schema_version": 1,
+          "process_role": "application_client",
+          "registration": {
+            "application_ref": "runtime-app"
+          },
+          "clients": {
+            "gateway": {
+              "config_schema_version": 1,
+              "settings": {
+                "bindings": [
+                  {
+                    "mount": "application.direct_write",
+                    "service_id": "gateway-service",
+                    "instance_id": "gateway-instance",
+                    "scope_ref": "strategy-scope",
+                    "account_ref": "account-placeholder",
+                    "transport_ref": "gateway"
+                  }
+                ],
+                "options": {
+                  "request_timeout_ms": 1000
+                }
+              }
+            }
+          },
+          "communication": {
+            "config_schema_version": 1,
+            "profiles": {
+              "gateway": {
+                "backend": "zmq",
+                "config_schema_version": 1,
+                "endpoints": {
+                  "rpc_connect": "tcp://127.0.0.1:29111"
+                },
+                "security_profile_ref": "runtime-gateway-key"
+              }
+            }
+          }
+        },
+        "client_config_fingerprint": "67544ef7cd3c9b0465211a25fe22a8a6ec283b7ebab76ad521295c25af403c25",
+        "curve_keys": {
+          "server_public": "/opt/bt-runtime/keys/gateway-server.public",
+          "client_public": "/opt/bt-runtime/keys/gateway-client.public",
+          "client_secret": "/opt/bt-runtime/keys/gateway-client.secret"
+        },
+        "delegation": {
+          "delegation_id": "external-delegation-id",
+          "operator_ref": "alice",
+          "expires_at": 2000000000,
+          "revoked": false
+        }
+      }
+    ]
+  },
+  "monitor": {
+    "identity": {
+      "principal_ref": "runtime-principal",
+      "actor_ref": "runtime-service"
+    },
+    "expected_peer": {
+      "principal_ref": "monitor-principal",
+      "actor_ref": "monitor-service"
+    },
+    "execution_domain_ref": "example-domain",
+    "account_ref": "account-placeholder",
+    "scope_ref": "monitor-scope",
+    "run_id": "runtime-instance-id",
+    "timeout_seconds": 2,
+    "client_config": {
+      "service_config_schema_version": 1,
+      "process_role": "service",
+      "service_id": "runtime-service",
+      "scope_ref": "runtime-root",
+      "transport_ref": "unused",
+      "registration_policy_ref": "policy",
+      "service_requirements_ref": "requirements",
+      "components": {
+        "monitor": {
+          "config_schema_version": 2,
+          "settings": {
+            "instance_id": "unused-instance",
+            "bind_ports": [
+              "service.telemetry_ingress"
+            ],
+            "options": {
+              "role": "gateway_heartbeat"
+            }
+          }
+        }
+      },
+      "clients": {
+        "monitor": {
+          "config_schema_version": 1,
+          "settings": {
+            "bindings": [
+              {
+                "mount": "upstream.telemetry",
+                "service_id": "monitor-service",
+                "instance_id": "monitor-instance",
+                "scope_ref": "monitor-scope",
+                "transport_ref": "remote"
+              }
+            ],
+            "options": {
+              "request_timeout_ms": 1000,
+              "heartbeat_interval_seconds": 5
+            }
+          }
+        }
+      },
+      "communication": {
+        "config_schema_version": 1,
+        "profiles": {
+          "unused": {
+            "backend": "zmq",
+            "config_schema_version": 1,
+            "endpoints": {
+              "rpc_bind": "tcp://127.0.0.1:1"
+            },
+            "security_profile_ref": "unused"
+          },
+          "remote": {
+            "backend": "zmq",
+            "config_schema_version": 1,
+            "endpoints": {
+              "rpc_connect": "tcp://127.0.0.1:29112"
+            },
+            "security_profile_ref": "runtime-monitor-key"
+          }
+        }
+      }
+    },
+    "curve_keys": {
+      "server_public": "/opt/bt-runtime/keys/monitor-server.public",
+      "client_public": "/opt/bt-runtime/keys/monitor-client.public",
+      "client_secret": "/opt/bt-runtime/keys/monitor-client.secret"
+    }
+  }
+}

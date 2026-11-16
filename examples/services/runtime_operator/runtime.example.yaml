@@ -1,0 +1,28 @@
+schema: bt_api_runtime/v1
+home: /opt/bt-runtime/state
+api:
+  transport: http_json
+  bind: 127.0.0.1
+  port: 29110
+  identity_mechanism: subject_token
+operators:
+  - name: alice
+    role: operator
+    units: [example]
+monitor_events:
+  enabled: true
+units:
+  - name: example
+    kind: strategy
+    dir: /opt/example/strategy
+    entry: run.py
+    python: /opt/example/python
+    access: gateway
+    heartbeat_interval_s: 1
+    start_timeout_s: 30
+    stop:
+      graceful_timeout_s: 30
+      kill_timeout_s: 10
+      drain_timeout_s: 5
+    gateway:
+      account_dir: /opt/example/gateway

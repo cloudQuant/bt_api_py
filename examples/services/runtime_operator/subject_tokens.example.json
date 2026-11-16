@@ -1,0 +1,9 @@
+{
+  "schema": "bt_api_py.runtime_subject_tokens.v1",
+  "tokens": [
+    {
+      "operator": "alice",
+      "token": "REPLACE-WITH-UNIQUE-PRIVATE-RANDOM-TOKEN"
+    }
+  ]
+}
