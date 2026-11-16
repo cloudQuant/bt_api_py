@@ -278,10 +278,15 @@ def test_v12_trading_profile_cannot_compare_without_source_bound_cut(tmp_path, m
 
 
 def test_v17_trading_profile_does_not_invent_origins_without_baseline(tmp_path, monkeypatch):
-    """A configured origin source cannot replace the missing venue cut."""
+    """Real CTP Python session with synthetic native I/O cannot invent a venue cut."""
+    import importlib
     import time
-    from types import SimpleNamespace
-
+    from pathlib import Path
+    from bt_api_base.account_protocol import AccountKey
+    from bt_api_ctp.ctp.client import CtpNativeStopReceipt, TraderClient
+    from bt_api_ctp.feeds.live_ctp_feed import CtpRequestDataFuture
+    from bt_api_ctp.gateway_session import CtpGatewaySession
+    import bt_api_py.ctp_gateway_trading as trading
     from tests import test_iter63_ctp_gateway_trading as fixtures
     from tests.test_iter63_ctp_gateway_trading import _authenticated_reserve
     from bt_api_py.ctp_gateway_local_profile import _strategy_origin_source_factory
@@ -291,24 +296,56 @@ def test_v17_trading_profile_does_not_invent_origins_without_baseline(tmp_path, 
     monkeypatch.setattr(fixtures.FakeReturnMaintenance, "ledger_continuous",
                         lambda self: bool(returns_complete), raising=False)
     monkeypatch.setattr(fixtures.FakeReturnMaintenance, "query", lambda self: None, raising=False)
-    monkeypatch.setattr(fixtures.FakeSession, "return_buffer", SimpleNamespace(
-        status=lambda: SimpleNamespace(last_sequence=4, gap=False, gap_reason=None, record_count=0)),
-        raising=False)
+    begin_read = CtpGatewaySession.begin_read_account
 
-    def read_account(self, *, generation, timeout):
+    def observe_read(self, *, generation, timeout):
         reads.append(generation)
-        return SimpleNamespace(observation_id="synthetic-read", positions=(), open_orders=(),
-                               positions_complete=True, open_orders_complete=True)
+        return begin_read(self, generation=generation, timeout=timeout)
 
-    monkeypatch.setattr(fixtures.FakeSession, "read_account", read_account, raising=False)
+    monkeypatch.setattr(CtpGatewaySession, "begin_read_account", observe_read)
     from tests.unit import test_iter63_gateway_direct_service as direct_fixtures
 
     plain_order = direct_fixtures._order
     # The ledger journal refuses an order that does not say open or close.
     exchange = ["SHFE"]
     monkeypatch.setattr(direct_fixtures, "_order", lambda **fields: dict(
-        plain_order(**fields), offset="open", exchange_id=exchange[0]))
-    _, settings, config, authority, grants, _ = make(tmp_path, monkeypatch, write_enabled=True)
+        plain_order(**fields), symbol="rb2612", offset="open", exchange_id=exchange[0]))
+    real_loader = trading._load_ctp_types
+    key = AccountKey("ctp", "simnow", "simnow", "account", "9999")
+    _, settings, config, authority, grants, _ = make(tmp_path, monkeypatch, write_enabled=True, account_key=key)
+    monkeypatch.setattr(trading, "_load_ctp_types", real_loader)
+    from bt_api_py.gateway_direct_service import GatewayDirectGrant
+    from tests.test_iter63_ctp_gateway_trading import CLIENT_A
+
+    grants = {CLIENT_A.principal_ref: GatewayDirectGrant(CLIENT_A.actor_ref, frozenset({"rb2612"}))}
+    ctp_tests = Path(__file__).resolve().parents[2] / "bt_api" / "bt_api_ctp" / "tests"
+    monkeypatch.syspath_prepend(str(ctp_tests))
+    helper = importlib.import_module("test_iter62_settlement_readback_on_write")
+    natives, sessions = [], []
+    connect = CtpGatewaySession.connect
+
+    def observe_connect(session, **kwargs):
+        sessions.append(session)
+        return connect(session, **kwargs)
+
+    monkeypatch.setattr(CtpGatewaySession, "connect", observe_connect)
+
+    def start(trader, **kwargs):
+        native = helper._NativeApi()
+        native.client = trader
+        trader._api = native
+        helper._login(trader, native, session_id=19)
+        natives.append(native)
+
+    monkeypatch.setattr(TraderClient, "start", start)
+    monkeypatch.setattr(TraderClient, "stop_and_wait", lambda trader, **kw: CtpNativeStopReceipt(
+        trader.connection_generation, False, True, True, False, False))
+
+    def feed():
+        return CtpRequestDataFuture(None, broker_id="9999", user_id="account", password="synthetic",
+            td_front="tcp://offline-neutral-td.invalid:30001", md_front="tcp://offline-neutral-md.invalid:30011",
+            auto_settlement_confirm=False, ctp_env_profile="config_front_pair", ctp_environment="simnow",
+            trusted_flow_root=str(settings.trusted_flow_root), flow_account_scope=key.account_key_id)
     raw = config.to_public_dict()
     opts = raw['components']['gateway']['settings']['options']
     opts.update(control_enabled=True, strategy_ledger_enabled=True, account_extensions_enabled=True,
@@ -328,19 +365,24 @@ def test_v17_trading_profile_does_not_invent_origins_without_baseline(tmp_path, 
     instrument = MarketInstrumentKey("ctp", "SHFE", "simnow", "future", "rb2612", "rb2612")
     profile = build_ctp_gateway_trading_profile(config, authority, tmp_path/'ledger-registry.sqlite',
         profile_ref='ledger-write-test', settings=settings, grants=grants,
-        request_feed_factory=lambda: None, market_stream_factory=lambda *_: None,
+        request_feed_factory=feed, market_stream_factory=lambda *_: None,
         assert_admitted=lambda _: True, return_settings=CtpGatewayReturnSettings((instrument,)),
         control_grants={'operator-p': GatewayControlGrant('operator-a', True, frozenset(), ops)},
         upgrade_controls_from_v9=True, upgrade_strategy_ledger_from_v10=True,
         upgrade_account_extensions_from_v11=True, upgrade_parent_authority_from_v12=True,
         upgrade_account_facts_financial_from_v13=True, upgrade_actor_stream_from_v14=True,
         upgrade_strategy_origin_from_v15=True, upgrade_control_cancel_from_v16=True,
-        # The strategy's orders name the symbol "rb" on SHFE (the fixture's grant).
-        strategy_origin_source_factory=_strategy_origin_source_factory(
-            (MarketInstrumentKey("ctp", "SHFE", "simnow", "future", "rb", "rb"),)))
+        strategy_origin_source_factory=_strategy_origin_source_factory((instrument,)))
     deployment = profile.deployment_factory()
-    resources = deployment._provide_resources('gateway', 'gateway-a', opts, authority.scope)
+    from bt_api_py.service_components import ServiceResourceConstructionError
     try:
+        resources = deployment._provide_resources('gateway', 'gateway-a', opts, authority.scope)
+    except ServiceResourceConstructionError as error:
+        error.resources.close()
+        raise
+    registry = None
+    try:
+        assert len(sessions) == 1 and type(sessions[0]) is CtpGatewaySession
         binding = resources.values['binding']
         journal = binding._journal
         assert journal._schema_version == 17 and journal._strategy_ledger_ports is not None
@@ -349,7 +391,7 @@ def test_v17_trading_profile_does_not_invent_origins_without_baseline(tmp_path, 
             with journal._transaction() as db:
                 return db.execute('SELECT count(*) FROM strategy_position_baseline').fetchone()[0]
 
-        _, reserve = _authenticated_reserve(binding, settings.account_scope)
+        registry, reserve = _authenticated_reserve(binding, settings.account_scope)
         # Returns are not complete yet: no baseline, and no order is admitted.
         time.sleep(0.2)
         assert baselines() == 0 and reads == []
@@ -366,6 +408,9 @@ def test_v17_trading_profile_does_not_invent_origins_without_baseline(tmp_path, 
                 return db.execute("SELECT count(*) FROM direct_strategy_origins").fetchone()[0]
 
         assert binding._owner.submit_service_call(origins).result(timeout_seconds=2) == 0
-        assert fixtures.FakeSession.instances[-1].provider.sends == []
+        assert len(natives) == 1
+        assert {"insert", "cancel", "confirm_settlement"}.isdisjoint(natives[0].calls)
     finally:
+        if registry is not None:
+            registry.close()
         resources.close()
