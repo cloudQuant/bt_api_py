@@ -710,7 +710,7 @@ def test_round_trip_uses_bounded_wait_outside_request_timings():
     assert result["settlement_wait_budget_seconds"] == measure._SETTLEMENT_WAIT_SECONDS
 
 
-def test_missing_worker_result_is_incomplete_and_workers_are_reaped(monkeypatch):
+def test_missing_worker_result_fails_closed_and_workers_are_reaped(monkeypatch):
     class FakeQueue(queue.Queue):
         def close(self):
             pass
@@ -734,6 +734,7 @@ def test_missing_worker_result_is_incomplete_and_workers_are_reaped(monkeypatch)
     class FakeContext:
         Queue = FakeQueue
         Event = staticmethod(multiprocessing.Event)
+        Lock = staticmethod(multiprocessing.Lock)
 
         def Process(self, **_kwargs):
             return FakeProcess()
@@ -747,12 +748,20 @@ def test_missing_worker_result_is_incomplete_and_workers_are_reaped(monkeypatch)
         keys = {}
         sessions = [FakeSession()]
         context = FakeContext()
+        _cleanup_unknown = False
+
+        def __init__(self):
+            self._workers = []
+            self._worker_resources = []
 
         def working(self):
             return {}
 
         def permit_evidence(self):
             return []
+
+        def close_sessions(self):
+            pass
 
         def close_risk_clients(self):
             pass
@@ -765,19 +774,40 @@ def test_missing_worker_result_is_incomplete_and_workers_are_reaped(monkeypatch)
             return {"measurement_status": "OBSERVED"}
 
     rig = FakeRig()
-    result = measure.phase_claim_processes(rig, 2, 2, readiness_timeout=0.01,
-                                           result_timeout=0.01)
-    assert result["workers_ready"] == 0
-    assert result["worker_results"] == 0
-    assert result["claims"] == 0
-    assert result["measurement_status"] == "INCOMPLETE"
+    with pytest.raises(measure.MeasurementCleanupError) as error:
+        measure.phase_claim_processes(rig, 2, 2, readiness_timeout=0.01,
+                                       result_timeout=0.01)
+    # No worker result was observed: the phase fails closed even though both
+    # child processes are reaped, because exit is not client cleanup evidence.
+    assert error.value.categories == ["worker_cleanup_unknown"]
+    assert len(rig._workers) == 2 and all(not worker.is_alive() for worker in rig._workers)
+    assert rig._worker_result_evidence["received_count"] == 0
+    assert rig._worker_result_evidence["unreceived_or_unverified"] == "UNKNOWN"
 
     rows = [{"index": i, "first": 1.0, "last": 2.0, "latencies": [10],
              "outcomes": {"DISPATCHED": 1}, "reserve_outcomes": {"RESERVED": 2},
              "keys": [f"order-{i}"], "warmup_key": f"warm-{i}",
-             "warmup_outcome": "DISPATCHED", "error": None} for i in range(2)]
-    responses = iter(([0, 1], rows))
-    monkeypatch.setattr(measure, "_queue_until", lambda *_args: next(responses))
+             "warmup_outcome": "DISPATCHED", "error": None,
+             "admission_status": "RELEASED", "abort_status": "NOT_REQUESTED"}
+            for i in range(2)]
+    responses = iter(([(0, "READY"), (1, "READY")], rows))
+
+    def collect(_source, _count, _timeout, items=None, _stop=None):
+        value = next(responses)
+        if items is None:
+            return value
+        items.extend(value)
+        return items
+
+    monkeypatch.setattr(measure, "_queue_until", collect)
+
+    def cleanup(_workers):
+        # Simulate explicit reaping while the original process objects and
+        # queues stay retained for the process-memory evidence.
+        rig._workers.clear()
+        return [], 0
+
+    monkeypatch.setattr(measure, "_cleanup_workers", cleanup)
     observed = []
 
     def settle(orders, **_kwargs):
@@ -788,6 +818,8 @@ def test_missing_worker_result_is_incomplete_and_workers_are_reaped(monkeypatch)
     result = measure.phase_claim_processes(rig, 2, 1, readiness_timeout=0.01,
                                            result_timeout=0.01)
     assert set(observed) == {(0, "warm-0"), (1, "warm-1"), (0, "order-0"), (1, "order-1")}
+    assert result["readiness_gate"]["decision"] == "RELEASED"
+    assert result["readiness_gate"]["admitted_workers"] == 2
     assert result["measurement_status"] == "OBSERVED"
 
 
@@ -1105,3 +1137,105 @@ def test_constructor_failure_closes_its_started_gateway(monkeypatch, tmp_path):
     with pytest.raises(RuntimeError, match="startup failure"):
         measure.Rig(tmp_path, 1, observation_poll="0.1", ttl_seconds=20)
     assert gateway.stopped
+
+
+def test_stats_never_invents_numbers_without_samples():
+    assert measure._stats([]) == {"n": 0}
+    sampled = measure._stats([1.0, 2.0])
+    assert sampled["n"] == 2
+    assert sampled["p50_ms"] == 1.0 and sampled["p99_ms"] == 2.0
+    assert sampled["max_ms"] == 2.0 and sampled["mean_ms"] == 1.5
+
+
+@pytest.mark.parametrize(("cleanup", "expected"), [
+    ({"status": "COMPLETE", "categories": []}, "OBSERVED"),
+    ({"status": "INCOMPLETE", "categories": ["gateway_stop_failed"]}, "INCOMPLETE"),
+    ({"status": "UNKNOWN", "categories": ["cleanup_unknown"]}, "INCOMPLETE"),
+    (None, "INCOMPLETE"),
+])
+def test_overall_status_is_incomplete_for_unfinished_cleanup(cleanup, expected):
+    result = {"round_trips": {"measurement_status": "OBSERVED"}}
+    if cleanup is not None:
+        result["cleanup"] = cleanup
+    assert measure._overall_measurement_status(result) == expected
+
+
+def test_overall_status_is_incomplete_for_any_failed_phase():
+    assert measure._overall_measurement_status({
+        "cleanup": {"status": "COMPLETE", "categories": []},
+        "claims": [{"phase_failed": "TimeoutError", "measurement_status": "INCOMPLETE"}],
+    }) == "INCOMPLETE"
+
+
+def test_phase_conditions_carry_environment_and_incomplete_markdown_is_explicit():
+    result = {
+        "evidence": "INTEGRATION_SIM",
+        "machine": {"platform": "fake", "machine": "fake"},
+        "config": {"orders": 1},
+        "load_average": {},
+        "cleanup": {"status": "INCOMPLETE", "categories": ["gateway_stop_failed"]},
+        "round_trips": {"measurement_status": "INCOMPLETE",
+                        "direct_reserve": {"n": 0}, "direct_dispatch": {"n": 0},
+                        "risk_reserve": {"n": 0}, "risk_dispatch": {"n": 0}},
+        "claim_throughput": [],
+        "observation_lag": {"measurement_status": "INCOMPLETE",
+                            "gateway_ingest_to_risk_terminal": {"n": 0}, "not_observed": 3},
+        "slow_disk": {}, "risk_restart": [], "gateway_restart": {},
+        "measurement_status": "INCOMPLETE",
+    }
+    block = measure._with_conditions(dict(result["round_trips"]), result,
+                                     stage="round_trips", orders=1)
+    assert block["conditions"] == {
+        "stage": "round_trips",
+        "evidence": "INTEGRATION_SIM",
+        "machine": result["machine"],
+        "config": result["config"],
+        "load_average": measure._load(),
+        "orders": 1,
+    }
+    text = measure._markdown(result)
+    assert "Cleanup:" in text and "INCOMPLETE" in text
+    # A block with no samples shows n=0 and no fabricated percentiles.
+    assert "| Direct Gateway reserve | 0 | None | None | None |" in text
+
+
+def test_main_attaches_conditions_to_every_phase_block(monkeypatch, tmp_path):
+    class FakeRig:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def start_risk(self):
+            return 0
+
+        def prime(self):
+            pass
+
+        def fresh_risk(self, **_kwargs):
+            pass
+
+        def close(self):
+            pass
+
+    def failed(*_args, **_kwargs):
+        return {"phase_failed": "Synthetic", "measurement_status": "INCOMPLETE"}
+
+    monkeypatch.setattr(measure, "Rig", FakeRig)
+    for name in ("phase_round_trips", "phase_claim_processes", "phase_observation_lag",
+                 "phase_risk_restart", "phase_gateway_restart"):
+        monkeypatch.setattr(measure, name, failed)
+    assert measure.main(["--out", str(tmp_path), "--orders", "1", "--per-client", "1",
+                         "--lag-samples", "1", "--slow-disk-ms", "0"]) == 1
+    result = __import__("json").loads((tmp_path / "risk_service_measurements.json").read_text())
+    blocks = [(result["round_trips"], "round_trips")]
+    blocks += [(item, "claims") for item in result["claim_throughput"]]
+    blocks += [(result["observation_lag"], "observation_lag")]
+    blocks += [(item, "risk_restart") for item in result["risk_restart"]]
+    blocks += [(result["slow_disk"]["0ms"], "slow_disk")]
+    blocks += [(result["gateway_restart"], "gateway_restart")]
+    for block, stage in blocks:
+        assert block["conditions"]["stage"] == stage
+        assert block["conditions"]["evidence"] == result["evidence"]
+        assert block["conditions"]["machine"] == result["machine"]
+        assert block["conditions"]["config"] == result["config"]
+        assert isinstance(block["conditions"]["load_average"], list)
+    assert result["measurement_status"] == "INCOMPLETE"

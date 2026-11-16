@@ -30,7 +30,6 @@ import multiprocessing
 import os
 import platform
 import queue
-import signal
 import sqlite3
 import statistics
 import subprocess
@@ -96,6 +95,26 @@ def _timed(call):
     return result, (time.perf_counter() - started) * 1000.0
 
 
+def _conditions(result: dict, *, stage: str, **extra) -> dict:
+    """Environment/conditions for one sample block; never derived from samples."""
+    conditions = {
+        "stage": stage,
+        "evidence": result.get("evidence"),
+        "machine": result.get("machine"),
+        "config": result.get("config"),
+        "load_average": _load(),
+    }
+    conditions.update(extra)
+    return conditions
+
+
+def _with_conditions(value, result: dict, *, stage: str, **extra):
+    """Attach conditions to a completed phase block; a failed phase keeps its code."""
+    if type(value) is dict:
+        value.setdefault("conditions", _conditions(result, stage=stage, **extra))
+    return value
+
+
 def _load() -> list[float]:
     try:
         return [round(value, 2) for value in os.getloadavg()]
@@ -136,12 +155,44 @@ class MeasurementCleanupError(RuntimeError):
         self.categories = categories
 
 
+# Deterministic categories name a cleanup step whose outcome is known to be a
+# failure; UNKNOWN categories name a state whose owner is genuinely unproven.
+# Keeping the distinction lets the report say which cleanup facts exist and
+# which ones are still missing instead of folding both into UNKNOWN.
+_CLEANUP_CATEGORY_KIND = {
+    "risk_clients_close_failed": "INCOMPLETE",
+    "risk_host_stop_not_clean": "INCOMPLETE",
+    "risk_host_stop_failed": "INCOMPLETE",
+    "strategy_session_close_failed": "INCOMPLETE",
+    "gateway_stop_failed": "INCOMPLETE",
+    "worker_wakeup_failed": "UNKNOWN",
+    "worker_cleanup_unknown": "UNKNOWN",
+    "cleanup_unknown": "UNKNOWN",
+    "unknown_cleanup_failure": "UNKNOWN",
+    "construction_not_confirmed": "UNKNOWN",
+    "constructor_cleanup_not_confirmed": "UNKNOWN",
+}
+
+
+def _cleanup_status(categories: list[str]) -> str:
+    """COMPLETE only for no categories; UNKNOWN if any category is unproven."""
+    if not categories:
+        return "COMPLETE"
+    kinds = {_CLEANUP_CATEGORY_KIND.get(category, "UNKNOWN") for category in categories}
+    return "UNKNOWN" if "UNKNOWN" in kinds else "INCOMPLETE"
+
+
 def _cleanup_result(error: BaseException | None) -> dict:
     if error is None:
         return {"status": "COMPLETE", "categories": []}
     if type(error) is MeasurementCleanupError:
-        return {"status": "UNKNOWN", "categories": error.categories}
-    return {"status": "UNKNOWN", "categories": ["unknown_cleanup_failure"]}
+        categories = list(error.categories)
+    elif type(error) is MeasurementResourceError:
+        # A fixed resource category is not an uncategorized failure.
+        categories = [error.category]
+    else:
+        categories = ["unknown_cleanup_failure"]
+    return {"status": _cleanup_status(categories), "categories": categories}
 
 
 # Keep failure evidence independently of exception attributes: arbitrary
@@ -183,7 +234,7 @@ def _record_cleanup_error(error: BaseException, detail: dict) -> None:
         for category in detail.get("categories", []):
             if category not in categories:
                 categories.append(category)
-        detail = {"status": "UNKNOWN", "categories": categories}
+        detail = {"status": _cleanup_status(categories), "categories": categories}
     _MEASUREMENT_CLEANUP_FAILURES.append((error, detail))
     try:
         error.measurement_cleanup_error = detail
@@ -201,17 +252,40 @@ def _cleanup_detail(error: BaseException):
         return None
 
 
-def _closed_client(client) -> None:
-    """Require a strict stopped snapshot, not merely a returned close call."""
+_CLIENT_CLOSE_TIMEOUT_SECONDS = 5.0
+# One strict receipt check plus one bounded escalation attempt.  A client is an
+# in-process runtime, so there is no kill to force; the second bounded close is
+# the whole escalation, and a second unconfirmed receipt stays UNPROVEN.
+_CLIENT_CLOSE_ATTEMPTS = 2
+
+
+def _close_receipt_confirmed(snapshot) -> bool:
     from bt_api_py.service_runtime_cleanup import runtime_cleanup_confirmed
     from bt_api_py.service_runtime_thread import RuntimeSnapshot
 
-    snapshot = client.close(timeout_seconds=5)
-    if (type(snapshot) is not RuntimeSnapshot or snapshot.strict_unregister_ack is not True
-            or type(snapshot.bindings) is not tuple or snapshot.bindings
-            or type(snapshot.cleanup_failures) is not int or snapshot.cleanup_failures != 0
-            or not runtime_cleanup_confirmed(snapshot)):
-        raise RuntimeError("client cleanup not confirmed")
+    return (type(snapshot) is RuntimeSnapshot
+            and snapshot.strict_unregister_ack is True
+            and type(snapshot.bindings) is tuple and not snapshot.bindings
+            and type(snapshot.cleanup_failures) is int and snapshot.cleanup_failures == 0
+            and runtime_cleanup_confirmed(snapshot))
+
+
+def _closed_client(client) -> dict:
+    """Require a strict stopped snapshot; escalate once, never wait unbounded."""
+    attempts = 0
+    while attempts < _CLIENT_CLOSE_ATTEMPTS:
+        attempts += 1
+        try:
+            snapshot = client.close(timeout_seconds=_CLIENT_CLOSE_TIMEOUT_SECONDS)
+        except BaseException as error:
+            if not isinstance(error, Exception):
+                raise
+            if attempts >= _CLIENT_CLOSE_ATTEMPTS:
+                raise RuntimeError("client cleanup not confirmed") from None
+            continue
+        if _close_receipt_confirmed(snapshot):
+            return {"receipt": "CONFIRMED", "attempts": attempts}
+    raise RuntimeError("client cleanup not confirmed")
 
 
 # Hold partially constructed or uncertain rigs; do not allow finalization to
@@ -228,9 +302,14 @@ def _safe_error_name(error: BaseException) -> str:
 
 
 def _risk_stop_observation(value, *, operation: str, after_forced_kill: bool = False) -> dict:
-    """Project only a bounded return from the synthetic Risk stop helper."""
+    """Project only a bounded return from the synthetic Risk stop helper.
+
+    The helper itself is bounded (terminate, reap wait, kill, reap wait).  It
+    returns ``None`` when it had to force the kill, so the exit code is
+    explicitly unproven rather than an invented integer.
+    """
     if value is None:
-        result, exit_code = "unknown", None
+        result, exit_code = "timeout_forced_kill", None
     elif type(value) is int and -255 <= value <= 255:
         result, exit_code = "observed_exit", value
     else:
@@ -329,7 +408,8 @@ class Rig:
         try:
             self.gateway_owner.close()
         except BaseException as error:
-            _record_cleanup_error(error, {"status": "UNKNOWN", "categories": ["gateway_stop_failed"]})
+            _record_cleanup_error(error, {"status": "INCOMPLETE",
+                                          "categories": ["gateway_stop_failed"]})
             raise
         self.gateway = None
         self.gateway_owner = None
@@ -347,7 +427,7 @@ class Rig:
                 raise RuntimeError("strategy session not healthy")
 
     def close_sessions(self) -> None:
-        if self._cleanup_unknown:
+        if getattr(self, "_cleanup_unknown", False) and self.sessions:
             raise MeasurementResourceError("cleanup_unknown")
         while self.sessions:
             session = self.sessions[0]
@@ -362,7 +442,8 @@ class Rig:
             self._cleanup_unknown = False
 
     def start_risk(self, *, launcher=None, extra_env=None) -> float:
-        if self._cleanup_unknown or self.risk is not None:
+        if (getattr(self, "_cleanup_unknown", False)
+                or getattr(self, "risk", None) is not None):
             raise MeasurementResourceError("cleanup_unknown")
         started = time.perf_counter()
         if self.ready_file.exists():
@@ -417,7 +498,7 @@ class Rig:
                         self.clients.pop()
                     except BaseException:
                         _record_cleanup_error(error, {
-                            "status": "UNKNOWN", "categories": ["risk_clients_close_failed"]
+                            "status": "INCOMPLETE", "categories": ["risk_clients_close_failed"]
                         })
                         raise error from None
                     self._cleanup_unknown = False
@@ -446,6 +527,8 @@ class Rig:
 
     def fresh_risk(self, *, launcher=None, extra_env=None) -> None:
         """A new Risk process on the same files, observation verified, delegates warm."""
+        # A previous claim phase's gate evidence must not outlive its phase.
+        self._worker_gate_evidence = None
         self.stop_risk()
         self.start_risk(launcher=launcher, extra_env=extra_env)
         if self.wait_verified(90) is None:
@@ -475,7 +558,9 @@ class Rig:
                                              {"warmups": outcomes, "settlement": settlement})
 
     def close_risk_clients(self) -> None:
-        if self._cleanup_unknown:
+        # Nothing to close is a no-op even if another component is unknown, so
+        # close() can still run its bounded risk-stop escalation.
+        if getattr(self, "_cleanup_unknown", False) and (self.clients or self.operator is not None):
             raise MeasurementResourceError("cleanup_unknown")
         while self.clients or self.operator is not None:
             client = self.clients[0] if self.clients else self.operator
@@ -501,38 +586,67 @@ class Rig:
             after_forced_kill=getattr(self, "_timed_out_risk", None) is self.risk,
         )
         observations.append(observation)
+        if observation["result"] == "timeout_forced_kill":
+            # A later cleanup observation must disclose that this handle was
+            # already force-killed once.
+            self._timed_out_risk = self.risk
         return observation
 
-    def stop_risk(self, *, kill=False) -> float:
+    def _stop_risk_bounded(self, *, operation: str) -> float:
+        """One bounded stop attempt; retain the handle unless a clean exit is proven."""
         started = time.perf_counter()
-        if self._cleanup_unknown:
+        if self.risk is None:
+            return time.perf_counter() - started
+        prior_unknown = getattr(self, "_cleanup_unknown", False)
+        # The synthetic helper bounds the whole escalation: terminate, wait,
+        # kill on timeout, then a bounded reap.  No exception text is kept.
+        self._cleanup_unknown = True
+        try:
+            value = self.support.stop_risk(self.risk)
+        except BaseException:
+            self._record_risk_stop(object(), operation=operation)
+            raise
+        observation = self._record_risk_stop(value, operation=operation)
+        if observation["result"] != "observed_exit" or observation["exit_code"] != 0:
+            # Nonzero or forced exits have no clean close proof; keep the
+            # handle and files for the caller to report as a fixed category.
+            raise MeasurementResourceError("risk_host_stop_not_clean")
+        self.risk = None
+        self._cleanup_unknown = prior_unknown
+        return time.perf_counter() - started
+
+    def stop_risk(self, *, kill=False) -> float:
+        if getattr(self, "_cleanup_unknown", False):
             raise MeasurementResourceError("cleanup_unknown")
         if kill:
             # No explicit close proof exists after SIGKILL, so do not run
             # this fault scenario or proceed with a replacement host.
             raise MeasurementResourceError("cleanup_unknown")
         self.close_risk_clients()
-        if self.risk is None:
-            return time.perf_counter() - started
-        # The support helper may kill on timeout.  Request a graceful stop
-        # once but keep the child and files until a close receipt exists.
-        self._cleanup_unknown = True
-        if self.risk.poll() is None:
-            self.risk.send_signal(signal.SIGTERM)
-            with contextlib.suppress(subprocess.TimeoutExpired):
-                self.risk.wait(timeout=30)
-        self._record_risk_stop(object(), operation="stop")
-        raise MeasurementResourceError("risk_host_stop_not_clean")
+        return self._stop_risk_bounded(operation="stop")
 
     def close(self) -> None:
-        if self._cleanup_unknown or self._workers or self._worker_resources:
+        # An uncertain worker owner has no bounded stop primitive here; keep
+        # every handle and report the fixed uncertainty category.
+        if getattr(self, "_workers", []) or getattr(self, "_worker_resources", []):
+            self._cleanup_unknown = True
+            raise MeasurementCleanupError(["worker_cleanup_unknown"])
+        # A prior failed bounded Risk stop must not block its own cleanup
+        # escalation, but no new phase or service start may follow it.
+        try:
+            self.close_risk_clients()
+            if self.risk is not None:
+                self._stop_risk_bounded(operation="cleanup")
+            self.close_sessions()
+            if self.gateway is not None:
+                self.stop_gateway()
+        except MeasurementResourceError as error:
+            self._cleanup_unknown = True
+            raise MeasurementCleanupError([error.category]) from None
+        # A forced stop or any other unproven owner state must not be reported
+        # as a complete cleanup even when no further close call can help.
+        if getattr(self, "_cleanup_unknown", False):
             raise MeasurementCleanupError(["cleanup_unknown"])
-        self.close_risk_clients()
-        if self.risk is not None:
-            self.stop_risk()
-        self.close_sessions()
-        if self.gateway is not None:
-            self.stop_gateway()
         # Queue shutdown is not acknowledged by the existing harness either.
         if getattr(self, "messages", None) is not None or getattr(self, "controls", None) is not None:
             self._cleanup_unknown = True
@@ -896,8 +1010,76 @@ def phase_round_trips(rig: Rig, orders: int) -> dict:
     }
 
 
+class _ClaimGate:
+    """One-way readiness transition shared by the parent and claim workers.
+
+    The parent decides exactly once, under one lock, whether the start barrier
+    is released or the phase is aborted.  A worker reads that same guarded
+    state immediately before its measured dispatches.  Once released, a late
+    abort is refused and reported (``RELEASE_ALREADY_DECIDED``) instead of
+    being silently lost between a check and a dispatch.
+    """
+
+    PENDING = "PENDING"
+    RELEASED = "RELEASED"
+    ABORTED = "ABORTED"
+
+    def __init__(self, lock, abort, release):
+        self._lock = lock
+        self._abort = abort
+        self._release = release
+
+    def _state_locked(self) -> str:
+        if self._abort.is_set():
+            return self.ABORTED
+        if self._release.is_set():
+            return self.RELEASED
+        return self.PENDING
+
+    def decide(self, all_ready: bool) -> str:
+        """The parent's single guarded release/abort decision."""
+        with self._lock:
+            state = self._state_locked()
+            if state != self.PENDING:
+                return state
+            if not all_ready:
+                self._abort.set()
+                return self.ABORTED
+            self._release.set()
+            return self.RELEASED
+
+    def admit(self) -> str:
+        """A worker may dispatch measured claims only on an explicit admission."""
+        with self._lock:
+            return self._state_locked()
+
+    def abort(self) -> str:
+        """Abort only while the decision is still pending; otherwise report it."""
+        with self._lock:
+            state = self._state_locked()
+            if state != self.PENDING:
+                return state
+            self._abort.set()
+            return self.ABORTED
+
+    def state(self) -> str:
+        with self._lock:
+            return self._state_locked()
+
+    @classmethod
+    def detached(cls, abort, release):
+        """Fallback for direct in-process worker calls without a phase gate."""
+        import threading
+
+        # A caller's barrier object may only expose wait(); only a real
+        # state-carrying event can double as the one-way release state.
+        if not hasattr(release, "is_set"):
+            release = threading.Event()
+        return cls(threading.Lock(), abort if abort is not None else threading.Event(), release)
+
+
 def _claim_worker(index, gateway_endpoint, risk_endpoint, keys, journal_id, per_client,
-                  ready, start, results, abort=None):
+                  ready, start, results, abort=None, gate=None):
     """One strategy process: its own Gateway session (write claim) and Risk client."""
     from tests.integration import _iter64_recovery_support as support
 
@@ -908,8 +1090,10 @@ def _claim_worker(index, gateway_endpoint, risk_endpoint, keys, journal_id, per_
     first = last = None
     error_name = None
     abort_status = "NOT_REQUESTED"
+    admission_status = "NOT_REQUESTED"
     failure_report_status = "NOT_REQUESTED"
     warmup_key = warmup_outcome = None
+    gate = gate if gate is not None else _ClaimGate.detached(abort, start)
     try:
         if abort is not None and abort.is_set():
             raise RuntimeError("claim phase aborted")
@@ -949,13 +1133,15 @@ def _claim_worker(index, gateway_endpoint, risk_endpoint, keys, journal_id, per_
             raise RuntimeError("warmup dispatch incomplete")
         ready.put((index, "READY"))
         if not start.wait(120):
+            admission_status = "BARRIER_TIMEOUT"
             raise TimeoutError("claim start barrier timed out")
-        if abort is not None and abort.is_set():
-            raise RuntimeError("claim phase aborted")
+        # The admission is the guarded readiness/abort check; the dispatches
+        # below are covered by it and need no separate unsynchronised check.
+        admission_status = gate.admit()
+        if admission_status != _ClaimGate.RELEASED:
+            raise RuntimeError("claim phase not admitted")
         first = time.time()
         for key, answer in prepared:
-            if abort is not None and abort.is_set():
-                raise RuntimeError("claim phase aborted")
             started = time.perf_counter()
             dispatched_keys.append(key)  # preserve an attempt even if its reply is lost
             result = client.dispatch(key, permit_id=answer.permit_id,
@@ -970,8 +1156,13 @@ def _claim_worker(index, gateway_endpoint, risk_endpoint, keys, journal_id, per_
         abort_status = "UNKNOWN"
         if abort is not None:
             try:
-                abort.set()
-                abort_status = "SET"
+                outcome = gate.abort()
+                if outcome == _ClaimGate.ABORTED:
+                    abort_status = "SET"
+                elif outcome == _ClaimGate.RELEASED:
+                    # The measured window was already released; the abort
+                    # cannot be applied and is reported instead of assumed.
+                    abort_status = "RELEASE_ALREADY_DECIDED"
             except BaseException:
                 pass
         try:
@@ -994,6 +1185,7 @@ def _claim_worker(index, gateway_endpoint, risk_endpoint, keys, journal_id, per_
                      "reserve_attempts": reserve_attempts,
                      "warmup_key": warmup_key, "warmup_outcome": warmup_outcome,
                      "error": error_name, "abort_status": abort_status,
+                     "admission_status": admission_status,
                      "failure_report_status": failure_report_status})
 
 
@@ -1007,9 +1199,24 @@ def _join_workers(workers, timeout: float) -> list:
 
 def _cleanup_workers(workers) -> tuple[list, int]:
     remaining = _join_workers(workers, 12)
-    # Workers own client registrations. Never force a timed-out worker or
-    # interpret process exit as proof of its client cleanup.
-    return remaining, 0
+    forced = 0
+    for worker in list(remaining):
+        # Only an explicitly owned child process is signalled.  Arbitrary
+        # handles (and the clients they own) stay untouched: their cleanup
+        # evidence is UNKNOWN, not inferred from process termination.
+        if not isinstance(worker, multiprocessing.process.BaseProcess):
+            continue
+        try:
+            worker.terminate()
+            worker.join(5)
+        except Exception:  # noqa: S112 - the retained handle is reported, not cleaned
+            # The handle is retained and reported; termination is not cleanup
+            # proof for the client it owned.
+            continue
+        forced += 1
+        if not worker.is_alive():
+            remaining.remove(worker)
+    return remaining, forced
 
 
 def _queue_until(source, count: int, timeout: float, items=None, stop=None) -> list:
@@ -1050,6 +1257,7 @@ def _all_workers_ready(rows, concurrency: int) -> bool:
 def phase_claim_processes(rig: Rig, concurrency: int, per_client: int, *,
                           readiness_timeout: float = 180, result_timeout: float = 180) -> dict:
     """Concurrent claims from ``concurrency`` strategy processes (one client each)."""
+    rig._worker_gate_evidence = None
     working_at_start = rig.working()
     permits_at_start = rig.permit_evidence()
     rig.close_risk_clients()
@@ -1065,14 +1273,23 @@ def phase_claim_processes(rig: Rig, concurrency: int, per_client: int, *,
     rig._worker_resources.append(abort)
     start = rig.context.Event()
     rig._worker_resources.append(start)
+    release = rig.context.Event()
+    rig._worker_resources.append(release)
+    # One lock guards the readiness/abort transition for the parent and every
+    # worker; no unsynchronised abort check may precede a measured dispatch.
+    gate_lock = rig.context.Lock()
+    rig._worker_resources.append(gate_lock)
+    gate = _ClaimGate(gate_lock, abort, release)
     rig._cleanup_unknown = False
     workers = [rig.context.Process(target=_claim_worker, args=(
         i, rig.gateway_endpoint, rig.risk_endpoint, rig.keys, rig.journal_id, per_client,
-        ready, start, results, abort)) for i in range(concurrency)]
+        ready, start, results, abort, gate)) for i in range(concurrency)]
     rig._worker_result_rows = []
     started, ready_rows, rows, cleanup_remaining, forced = [], [], rig._worker_result_rows, [], 0
     start_released = False
     abort_attempted = abort_confirmed = wake_attempted = False
+    gate_decision = "UNKNOWN"
+    gate_abort_outcomes: list[str] = []
     try:
         for worker in workers:
             # Register before the start call, which can be interrupted after
@@ -1088,16 +1305,15 @@ def phase_claim_processes(rig: Rig, concurrency: int, per_client: int, *,
         )
         all_ready = _all_workers_ready(ready_rows, concurrency)
         if not all_ready:
+            # Mark the abort as attempted before the guarded decision: if the
+            # abort itself fails, do not retry it from the finally block.
             abort_attempted = True
-            abort.set()
-            abort_confirmed = True
-        else:
-            aborted = abort.is_set()
-            if type(aborted) is not bool:
-                raise RuntimeError("invalid worker abort state")
-            if aborted:
-                all_ready = False
-                abort_attempted = abort_confirmed = True
+        # One guarded decision: release the measured window or abort it.  A
+        # worker-side abort that already won is returned as ABORTED.
+        gate_decision = gate.decide(all_ready)
+        all_ready = gate_decision == _ClaimGate.RELEASED
+        if not all_ready:
+            abort_confirmed = gate_decision == _ClaimGate.ABORTED
         wake_attempted = True
         start.set()
         start_released = True
@@ -1107,8 +1323,9 @@ def phase_claim_processes(rig: Rig, concurrency: int, per_client: int, *,
                      if all_ready else 1, rows)
         if len(rows) < len(workers) and not abort_attempted:
             abort_attempted = True
-            abort.set()
-            abort_confirmed = True
+            outcome = gate.abort()
+            gate_abort_outcomes.append(outcome)
+            abort_confirmed = outcome == _ClaimGate.ABORTED
     finally:
         primary_error = sys.exc_info()[1]
         wake_error = cleanup_error = None
@@ -1118,8 +1335,9 @@ def phase_claim_processes(rig: Rig, concurrency: int, per_client: int, *,
                 # not start the pending measured dispatches.
                 if not abort_attempted:
                     abort_attempted = True
-                    abort.set()
-                    abort_confirmed = True
+                    outcome = gate.abort()
+                    gate_abort_outcomes.append(outcome)
+                    abort_confirmed = outcome == _ClaimGate.ABORTED
                 if not abort_confirmed or (wake_attempted and not start_released):
                     wake_error = primary_error
                 elif not wake_attempted:
@@ -1134,10 +1352,17 @@ def phase_claim_processes(rig: Rig, concurrency: int, per_client: int, *,
         finally:
             # Current worker replies do not carry strict unregister evidence.
             # Retain the original processes and queues, even after a clean exit.
-            rig._worker_queues = (ready, results, start, abort)
+            rig._worker_queues = (ready, results, start, abort, release)
             rig._worker_result_evidence = {
                 "retention": "PROCESS_MEMORY_ONLY", "expected_count": concurrency,
                 "received_count": len(rows), "unreceived_or_unverified": "UNKNOWN",
+            }
+            rig._worker_gate_evidence = {
+                "decision": gate_decision,
+                "abort_requests": list(gate_abort_outcomes),
+                "admitted": sum(1 for row in rows
+                                if row.get("admission_status") == _ClaimGate.RELEASED),
+                "expected": concurrency,
             }
             if rig._workers:
                 rig._cleanup_unknown = True
@@ -1145,11 +1370,10 @@ def phase_claim_processes(rig: Rig, concurrency: int, per_client: int, *,
             cleanup = _cleanup_result(cleanup_error)
             cleanup["categories"] = list(cleanup["categories"])
             if wake_error is not None:
-                cleanup["status"] = "UNKNOWN"
                 cleanup["categories"].append("worker_wakeup_failed")
             if rig._workers:
-                cleanup["status"] = "UNKNOWN"
                 cleanup["categories"].append("worker_cleanup_unknown")
+            cleanup["status"] = _cleanup_status(cleanup["categories"])
             _record_cleanup_error(primary_error, cleanup)
         elif cleanup_error is not None:
             if rig._workers:
@@ -1178,7 +1402,12 @@ def phase_claim_processes(rig: Rig, concurrency: int, per_client: int, *,
     settled = rig.settle(attempted, required_risk_orders=attempted)
     errors = [row["error"] for row in rows if row["error"] is not None]
     exitcodes = [worker.exitcode for worker in started]
-    complete = (all_ready and len(rows) == concurrency
+    admissions = [{"strategy_index": row["index"],
+                   "admission": row.get("admission_status", "UNKNOWN"),
+                   "abort": row.get("abort_status", "UNKNOWN")} for row in rows]
+    admitted = sum(1 for row in admissions if row["admission"] == _ClaimGate.RELEASED)
+    complete = (all_ready and gate_decision == _ClaimGate.RELEASED
+                and admitted == concurrency and len(rows) == concurrency
                 and not errors and not cleanup_remaining and not forced
                 and all(code == 0 for code in exitcodes)
                 and all(row["warmup_outcome"] == "DISPATCHED" for row in rows)
@@ -1200,6 +1429,14 @@ def phase_claim_processes(rig: Rig, concurrency: int, per_client: int, *,
         "successful_claims_per_second": round(outcomes.get("DISPATCHED", 0) / wall, 2)
         if wall else None,
         "claim_latency": _stats(latencies),
+        "readiness_gate": {
+            "decision": gate_decision,
+            "admitted_workers": admitted,
+            "expected_workers": concurrency,
+            "worker_admissions": admissions,
+            "abort_requests_after_decision": gate_abort_outcomes,
+            "release_requires_admission": True,
+        },
         "outcomes": outcomes,
         "reserve_outcomes_including_warmup": reserve_outcomes,
         "worker_reserve_attempts": [{"strategy_index": row["index"],
@@ -1508,6 +1745,7 @@ def _markdown(result: dict) -> str:
     lines.append("Machine: " + ", ".join(f"{k}={v}" for k, v in result["machine"].items()))
     lines.append("Load average (1/5/15 min) by phase: " + json.dumps(result["load_average"]))
     lines.append("Config: " + json.dumps(result["config"], sort_keys=True))
+    lines.append("Cleanup: " + json.dumps(result.get("cleanup", {}), sort_keys=True))
     lines.append("Result: " + result.get("measurement_status", "INCOMPLETE"))
     lines.append("")
     lines.append("| Measurement | n | p50 ms | p99 ms | max ms |")
@@ -1543,12 +1781,19 @@ def _markdown(result: dict) -> str:
         if "phase_failed" in slow:
             lines.append(failed("Slow disk " + name, slow))
             continue
+        statuses = {slow.get("round_trips", {}).get("measurement_status"),
+                    slow.get("claim_throughput", {}).get("measurement_status")}
+        status = "OBSERVED" if statuses == {"OBSERVED"} else "INCOMPLETE"
         for label, key in (("reserve", "risk_reserve"), ("dispatch", "risk_dispatch")):
-            lines.append(row(f"Slow disk {name}: Risk {label}", slow["round_trips"].get(key)))
+            lines.append(row(f"Slow disk {name}: Risk {label} ({status})",
+                             slow["round_trips"].get(key)))
         item = slow["claim_throughput"]
-        lines.append(row(f"Slow disk {name}: claim, {item['concurrency']} client processes "
-                         f"({item['claims_per_second']} claims/s, outcomes {item['outcomes']})",
-                         item["claim_latency"]))
+        if "phase_failed" in item:
+            lines.append(failed(f"Slow disk {name}: claim", item))
+        else:
+            lines.append(row(f"Slow disk {name}: claim, {item['concurrency']} client processes "
+                             f"({item['claims_per_second']} claims/s, outcomes {item['outcomes']}, "
+                             f"{status})", item["claim_latency"]))
     lines.append("")
     lines.append("| Restart | runs (seconds: ready file / status available / observation verified) |")
     lines.append("| --- | --- |")
@@ -1560,13 +1805,15 @@ def _markdown(result: dict) -> str:
                          f"{r['process_start_to_status_available_seconds']} / "
                          f"{r['process_start_to_observation_verified_seconds']}"
                          for r in item["runs"])
-        lines.append(f"| Risk {item['mode']} then start | {runs} |")
+        lines.append(f"| Risk {item['mode']} then start ({item.get('measurement_status')}) "
+                     f"| {runs} |")
     g = result.get("gateway_restart", {})
     if "phase_failed" in g:
         lines.append(f"| Gateway stop+start | phase failed: {g['phase_failed']} {g.get('code')} |")
     elif g:
         lines.append(f"| Gateway stop+start ({g['in_flight_reserved']} reserved, "
-                     f"{g['in_flight_dispatched']} sent in flight) | Gateway ready "
+                     f"{g['in_flight_dispatched']} sent in flight, "
+                     f"{g.get('measurement_status')}) | Gateway ready "
                      f"{g['gateway_start_to_ready_seconds']}; Risk observation verified after "
                      f"{g['after_gateway_ready_to_observation_verified_seconds']}; first new order "
                      f"dispatched after "
@@ -1585,9 +1832,21 @@ def _guard(phase, *, substage=None):
     """Run one phase; a failure is recorded as its result instead of ending the run."""
     try:
         return phase()
-    except (MeasurementCleanupError, MeasurementResourceError):
+    except MeasurementCleanupError:
         # An uncertain owner must not be followed by another phase or start.
         raise
+    except MeasurementResourceError as error:
+        if error.category == "cleanup_unknown" or _cleanup_detail(error) is not None:
+            # An unknown owner or a failed cleanup forbids another phase.
+            raise
+        # A fixed, deterministic failure (for example a non-clean Risk stop)
+        # is recorded with its finite code so the run can still report the
+        # phases it already measured.
+        result = {"phase_failed": _safe_error_name(error), "code": error.category,
+                  "measurement_status": "INCOMPLETE"}
+        if substage is not None:
+            result["substage"] = substage()
+        return result
     except Exception as error:
         if _cleanup_detail(error) is not None:
             # A failed cleanup forbids proceeding to another measurement phase.
@@ -1609,6 +1868,16 @@ def _incomplete(value) -> bool:
     if isinstance(value, list):
         return any(_incomplete(item) for item in value)
     return False
+
+
+def _overall_measurement_status(result: dict) -> str:
+    """OBSERVED only for complete phases and a completed cleanup."""
+    cleanup = result.get("cleanup", {})
+    phases = {key: value for key, value in result.items() if key != "measurement_status"}
+    incomplete = (_incomplete(phases)
+                  or type(cleanup) is not dict
+                  or cleanup.get("status") != "COMPLETE")
+    return "INCOMPLETE" if incomplete else "OBSERVED"
 
 
 def _positive_int(value: str) -> int:
@@ -1704,7 +1973,9 @@ def main(argv=None) -> int:
             rig.prime()
             stage = result["active_stage"] = "round_trips"
             save()
-            result["round_trips"] = _guard(lambda: phase_round_trips(rig, args.orders))
+            result["round_trips"] = _with_conditions(
+                _guard(lambda: phase_round_trips(rig, args.orders)),
+                result, stage="round_trips", orders=args.orders, strategies=strategies)
             result["load_average"]["after_round_trips"] = _load()
             save()
             result["claim_throughput"] = []
@@ -1715,7 +1986,9 @@ def main(argv=None) -> int:
                     rig.fresh_risk()
                     return phase_claim_processes(rig, concurrency, args.per_client)
 
-                result["claim_throughput"].append(_guard(claim_phase))
+                result["claim_throughput"].append(_with_conditions(
+                    _guard(claim_phase), result, stage="claims",
+                    concurrency=concurrency, per_client=args.per_client))
                 result["load_average"]["after_claims_" + str(concurrency)] = _load()
                 save()
             stage = result["active_stage"] = "observation_lag"
@@ -1724,13 +1997,19 @@ def main(argv=None) -> int:
                 rig.fresh_risk()
                 return phase_observation_lag(rig, args.lag_samples)
 
-            result["observation_lag"] = _guard(lag_phase)
+            result["observation_lag"] = _with_conditions(
+                _guard(lag_phase), result, stage="observation_lag",
+                samples=args.lag_samples)
             save()
             stage = result["active_stage"] = "risk_restart"
             save()
             result["risk_restart"] = [
-                _guard(lambda: phase_risk_restart(rig, 3, kill=False, verify_timeout=60)),
-                _guard(lambda: phase_risk_restart(rig, 2, kill=True, verify_timeout=60)),
+                _with_conditions(
+                    _guard(lambda: phase_risk_restart(rig, 3, kill=False, verify_timeout=60)),
+                    result, stage="risk_restart", mode="SIGTERM", runs=3),
+                _with_conditions(
+                    _guard(lambda: phase_risk_restart(rig, 2, kill=True, verify_timeout=60)),
+                    result, stage="risk_restart", mode="SIGKILL", runs=2),
             ]
             result["load_average"]["after_restarts"] = _load()
             save()
@@ -1748,7 +2027,10 @@ def main(argv=None) -> int:
                     claims = phase_claim_processes(rig, 3, max(5, args.per_client // 2))
                     return {"round_trips": trips, "claim_throughput": claims}
 
-                result["slow_disk"][delay + "ms"] = _guard(slow_phase)
+                result["slow_disk"][delay + "ms"] = _with_conditions(
+                    _guard(slow_phase), result, stage="slow_disk",
+                    commit_delay_ms=delay, orders=max(20, args.orders // 4),
+                    concurrency=3, per_client=max(5, args.per_client // 2))
                 save()
             stage = result["active_stage"] = "gateway_restart"
             gateway_progress = {"substage": "fresh_risk"}
@@ -1763,15 +2045,17 @@ def main(argv=None) -> int:
                 rig.fresh_risk()
                 return phase_gateway_restart(rig, 5, 90, checkpoint=checkpoint)
 
-            result["gateway_restart"] = _guard(
-                gateway_phase, substage=lambda: gateway_progress["substage"]
-            )
+            result["gateway_restart"] = _with_conditions(
+                _guard(gateway_phase, substage=lambda: gateway_progress["substage"]),
+                result, stage="gateway_restart", in_flight=5, recover_timeout_seconds=90)
             result.pop("active_substage", None)
             result["load_average"]["end"] = _load()
         except BaseException as error:
             result["failure"] = {"stage": stage, "type": _safe_error_name(error)}
             if rig is not None and hasattr(rig, "_worker_result_evidence"):
                 result["worker_result_evidence"] = rig._worker_result_evidence
+            if rig is not None and getattr(rig, "_worker_gate_evidence", None) is not None:
+                result["worker_gate_evidence"] = rig._worker_gate_evidence
             cleanup_detail = _cleanup_detail(error)
             if cleanup_detail is not None:
                 result["phase_cleanup"] = (cleanup_detail if type(cleanup_detail) is dict
@@ -1811,8 +2095,7 @@ def main(argv=None) -> int:
             result["cleanup"] = _cleanup_result(None)
             save()
     result.pop("active_stage", None)
-    final_phases = {k: v for k, v in result.items() if k != "measurement_status"}
-    result["measurement_status"] = "INCOMPLETE" if _incomplete(final_phases) else "OBSERVED"
+    result["measurement_status"] = _overall_measurement_status(result)
     (out / "risk_service_measurements.json").write_text(
         json.dumps(result, indent=2, sort_keys=True), encoding="utf-8")
     (out / "risk_service_measurements.md").write_text(_markdown(result), encoding="utf-8")

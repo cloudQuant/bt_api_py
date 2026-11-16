@@ -2,7 +2,9 @@
 
 import importlib.util
 import json
+import multiprocessing
 import sys
+import threading
 from collections import deque
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -60,7 +62,8 @@ def test_strict_success_discards_only_confirmed_client():
     assert rig._cleanup_unknown is True
     with pytest.raises(measure.MeasurementResourceError):
         rig.close_risk_clients()
-    assert unknown.calls == 1
+    # One strict receipt check plus one bounded escalation, then unproven.
+    assert unknown.calls == 2
 
 
 def test_failed_client_blocks_downstream_close_and_keeps_handle():
@@ -101,9 +104,11 @@ def test_client_start_error_survives_failed_close(primary_type, cleanup_type):
     with pytest.raises(type(primary)) as caught:
         measure._guard(rig.open_risk_clients)
     assert caught.value is primary
-    assert rig.clients == [client] and rig._cleanup_unknown and client.calls == 1
+    expected_calls = 1 if cleanup_type is KeyboardInterrupt else 2
+    assert rig.clients == [client] and rig._cleanup_unknown
+    assert client.calls == expected_calls
     assert measure._cleanup_detail(primary) == {
-        "status": "UNKNOWN", "categories": ["risk_clients_close_failed"]
+        "status": "INCOMPLETE", "categories": ["risk_clients_close_failed"]
     }
     measure._record_cleanup_error(primary, {"status": "UNKNOWN", "categories": ["cleanup_unknown"]})
     assert measure._cleanup_detail(primary)["categories"] == ["risk_clients_close_failed", "cleanup_unknown"]
@@ -128,22 +133,24 @@ def test_gateway_without_bound_owner_never_implies_cleanup_or_forced_kill():
     assert rig.gateway is gateway and rig._cleanup_unknown
 
 
-def test_risk_stop_does_not_call_forcing_helper_or_forget_process():
+def test_risk_stop_uses_one_bounded_escalation_and_keeps_the_handle():
     calls = []
-    process = SimpleNamespace(poll=lambda: None,
-                              send_signal=lambda sig: calls.append(sig),
-                              wait=lambda **kw: 0,
-                              kill=lambda: pytest.fail("kill"),
-                              terminate=lambda: pytest.fail("terminate"))
+    process = SimpleNamespace()
     rig = _rig(risk=process)
-    rig.support = SimpleNamespace(stop_risk=lambda _: pytest.fail("forcing helper"))
-    with pytest.raises(measure.MeasurementResourceError):
+    rig.support = SimpleNamespace(stop_risk=lambda child: calls.append(child) or None)
+    with pytest.raises(measure.MeasurementResourceError, match="risk_host_stop_not_clean"):
         rig.stop_risk()
-    assert calls == [measure.signal.SIGTERM]
+    assert calls == [process]
     assert rig.risk is process and rig._cleanup_unknown
+    assert rig.risk_stop_observations == [{
+        "operation": "stop", "result": "timeout_forced_kill", "exit_code": None,
+        "after_forced_kill": False,
+    }]
+    # A phase-level stop never retries from an uncertain owner; only close()
+    # runs the bounded cleanup escalation.
     with pytest.raises(measure.MeasurementResourceError):
         rig.stop_risk()
-    assert calls == [measure.signal.SIGTERM]
+    assert calls == [process]
 
 
 def test_kill_fault_is_refused_and_guard_propagates():
@@ -280,8 +287,8 @@ def test_gateway_uncertainty_propagates_original_and_stops_guard(stage, error_ty
         measure._guard(phase)
     assert caught.value is primary
     assert measure._cleanup_detail(primary) == {
-        "status": "UNKNOWN", "categories": ["gateway_stop_failed" if stage == "close"
-                                             else "cleanup_unknown"]
+        "status": "INCOMPLETE" if stage == "close" else "UNKNOWN",
+        "categories": ["gateway_stop_failed" if stage == "close" else "cleanup_unknown"],
     }
     assert rig.gateway is process and rig.gateway_owner is owner and rig._cleanup_unknown
     with pytest.raises(measure.MeasurementResourceError):
@@ -289,12 +296,14 @@ def test_gateway_uncertainty_propagates_original_and_stops_guard(stage, error_ty
     assert actions == [stage]
 
 
-def test_workers_are_never_forced(monkeypatch):
+def test_arbitrary_worker_handles_are_never_forced(monkeypatch):
+    calls = []
     worker = SimpleNamespace(join=lambda _: None, is_alive=lambda: True,
-                             terminate=lambda: pytest.fail("terminate"),
-                             kill=lambda: pytest.fail("kill"))
+                             terminate=lambda: calls.append("terminate"),
+                             kill=lambda: calls.append("kill"))
     remaining, forced = measure._cleanup_workers([worker])
     assert remaining == [worker] and forced == 0
+    assert calls == []
 
 
 def test_work_location_saved_before_create_even_if_create_fails():
@@ -327,10 +336,17 @@ def _claim_rig():
     rig = _rig()
     worker = SimpleNamespace(start=lambda: None)
     queues = [object(), object()]
-    rig.events = [SimpleNamespace(set=lambda: None, is_set=lambda: False),
-                  SimpleNamespace(set=lambda: None)]
+    flags = {"aborted": False, "released": False}
+
+    def event(flag):
+        return SimpleNamespace(set=lambda: flags.__setitem__(flag, True),
+                               is_set=lambda: flags[flag])
+
+    # abort, start barrier and one-way release state share the phase lock.
+    rig.events = [event("aborted"), SimpleNamespace(set=lambda: None), event("released")]
     events = list(rig.events)
     rig.context = SimpleNamespace(Queue=lambda: queues.pop(0), Event=lambda: events.pop(0),
+                                  Lock=lambda: threading.Lock(),
                                   Process=lambda **_kwargs: worker)
     rig.working = lambda: {}
     rig.permit_evidence = lambda: []
@@ -359,7 +375,7 @@ def test_claim_primary_error_survives_worker_cleanup(monkeypatch, primary_type, 
         measure._guard(lambda: measure.phase_claim_processes(rig, 1, 1))
     assert caught.value is primary
     assert rig._workers == [worker] and rig._cleanup_unknown
-    assert len(rig._worker_resources) == 4
+    assert len(rig._worker_resources) == 6
     assert primary.measurement_cleanup_error == {
         "status": "UNKNOWN",
         "categories": (["unknown_cleanup_failure"] if cleanup_fails else [])
@@ -709,7 +725,7 @@ def test_interrupted_claim_aborts_then_wakes_before_join(monkeypatch):
     assert rig._workers == [worker] and rig._cleanup_unknown
 
 
-def test_interruption_after_release_still_aborts_without_releasing_twice(monkeypatch):
+def test_interruption_after_release_reports_refused_abort_without_releasing_twice(monkeypatch):
     rig, worker = _claim_rig()
     actions = []
     rig.events[0].set = lambda: actions.append("abort")
@@ -727,7 +743,11 @@ def test_interruption_after_release_still_aborts_without_releasing_twice(monkeyp
     with pytest.raises(KeyboardInterrupt) as caught:
         measure.phase_claim_processes(rig, 1, 1)
     assert caught.value is primary
-    assert actions == ["wake", "abort", "join"]
+    # The measured window was already released; the late abort is refused and
+    # recorded instead of being applied to a non-atomic check.
+    assert actions == ["wake", "join"]
+    assert rig._worker_gate_evidence["decision"] == "RELEASED"
+    assert rig._worker_gate_evidence["abort_requests"] == ["RELEASED"]
     assert rig._workers == [worker] and rig._cleanup_unknown
 
 
@@ -756,7 +776,11 @@ def test_partial_claim_collection_aborts_before_cleanup(monkeypatch, short_stage
     with pytest.raises(measure.MeasurementCleanupError):
         measure.phase_claim_processes(rig, 2, 1)
     assert actions == (["abort", "wake", "join"] if short_stage == "ready"
-                       else ["wake", "abort", "join"])
+                       else ["wake", "join"])
+    assert rig._worker_gate_evidence["decision"] == (
+        "ABORTED" if short_stage == "ready" else "RELEASED")
+    assert rig._worker_gate_evidence["abort_requests"] == (
+        [] if short_stage == "ready" else ["RELEASED"])
     assert rig._worker_result_rows == [partial_row]
     assert rig._worker_result_evidence == {
         "retention": "PROCESS_MEMORY_ONLY", "expected_count": 2,
@@ -1138,3 +1162,270 @@ def test_interruption_after_ready_enqueue_sets_abort(monkeypatch):
     assert ready_rows == [(0, "READY"), (0, "FAILED")]
     assert state["aborted"] and results[0]["abort_status"] == "SET"
     assert results[0]["error"] == "KeyboardInterrupt"
+
+
+class _RecordingLock:
+    """Real lock that counts acquisitions, so removing a guard is visible."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self.entries = 0
+
+    def __enter__(self):
+        self._lock.acquire()
+        self.entries += 1
+        return self
+
+    def __exit__(self, *_exc):
+        self._lock.release()
+        return False
+
+
+def _gate():
+    abort, release = threading.Event(), threading.Event()
+    lock = _RecordingLock()
+    return measure._ClaimGate(lock, abort, release), abort, release, lock
+
+
+def test_claim_gate_release_is_one_way_and_refuses_late_abort():
+    gate, abort, release, lock = _gate()
+    assert gate.state() == "PENDING"
+    assert gate.admit() == "PENDING"
+    assert gate.decide(True) == "RELEASED"
+    assert gate.admit() == "RELEASED"
+    # A set/abort after the release decision is refused, not applied late.
+    assert gate.abort() == "RELEASED"
+    assert abort.is_set() is False
+    assert gate.decide(False) == "RELEASED"
+    # Every transition (state, admit, decide, abort, decide) used the phase lock.
+    assert lock.entries == 6
+
+
+def test_claim_gate_abort_wins_before_release_and_is_one_way():
+    gate, abort, release, lock = _gate()
+    assert gate.abort() == "ABORTED"
+    assert gate.decide(True) == "ABORTED"
+    assert gate.admit() == "ABORTED"
+    assert release.is_set() is False
+    assert lock.entries == 3
+
+
+def test_claim_gate_is_shared_with_a_spawned_worker_process():
+    context = multiprocessing.get_context("spawn")
+    lock, abort, release = context.Lock(), context.Event(), context.Event()
+    gate = measure._ClaimGate(lock, abort, release)
+    results = context.Queue()
+    assert gate.decide(True) == "RELEASED"
+    child = context.Process(target=_gate_child, args=(lock, abort, release, results))
+    child.start()
+    try:
+        child.join(60)
+        assert child.exitcode == 0
+        # The settled one-way state is visible in another process, so a
+        # worker cannot observe a stale PENDING after the release decision.
+        assert results.get(timeout=10) == "RELEASED"
+    finally:
+        if child.is_alive():
+            child.terminate()
+            child.join(10)
+        results.close()
+        results.cancel_join_thread()
+
+
+def _gate_child(lock, abort, release, results):
+    import importlib.util
+    from pathlib import Path
+
+    script = (Path(__file__).resolve().parents[2]
+              / "scripts" / "measure_iter64_risk_service.py")
+    spec = importlib.util.spec_from_file_location("iter64_gate_child", script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    results.put(module._ClaimGate(lock, abort, release).admit())
+
+
+def test_claim_gate_decision_and_abort_never_both_win():
+    for _ in range(50):
+        gate, abort, release, _lock = _gate()
+        barrier = threading.Barrier(2)
+        outcomes = {}
+
+        def decision(gate=gate, barrier=barrier, outcomes=outcomes):
+            barrier.wait()
+            outcomes["decide"] = gate.decide(True)
+
+        def aborting(gate=gate, barrier=barrier, outcomes=outcomes):
+            barrier.wait()
+            outcomes["abort"] = gate.abort()
+
+        threads = [threading.Thread(target=decision), threading.Thread(target=aborting)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        assert outcomes in ({"decide": "RELEASED", "abort": "RELEASED"},
+                            {"decide": "ABORTED", "abort": "ABORTED"})
+        assert not (abort.is_set() and release.is_set())
+        assert abort.is_set() is (outcomes["decide"] == "ABORTED")
+        assert release.is_set() is (outcomes["decide"] == "RELEASED")
+
+
+class _WorkerClient:
+    def __init__(self, dispatched, *, fail_after_warmup=False):
+        self.dispatched = dispatched
+        self.fail_after_warmup = fail_after_warmup
+        self.calls = 0
+
+    def start(self, **_kwargs):
+        pass
+
+    def reserve(self, *_args, **_kwargs):
+        answer = SimpleNamespace(outcome="RESERVED", permit_id="p", reservation_id="r",
+                                 view_digest="digest")
+        return SimpleNamespace(outcome="ANSWERED", answer=answer)
+
+    def dispatch(self, key, **_kwargs):
+        self.calls += 1
+        if self.fail_after_warmup and self.calls > 1:
+            raise RuntimeError("private dispatch failure")
+        self.dispatched.append(key)
+        return SimpleNamespace(outcome="ANSWERED", answer=SimpleNamespace(outcome="DISPATCHED"))
+
+    def close(self, **_kwargs):
+        pass
+
+
+def _worker_support(monkeypatch, client):
+    support = SimpleNamespace(strategy_session=lambda *_args: client,
+                              risk_client=lambda *_args: client,
+                              order_request=lambda *_args: object())
+    fake_integration = ModuleType("tests.integration")
+    fake_integration._iter64_recovery_support = support
+    monkeypatch.setitem(sys.modules, "tests.integration", fake_integration)
+
+
+@pytest.mark.parametrize("admission", ["ABORTED", "PENDING"])
+def test_worker_does_not_dispatch_without_a_guarded_admission(monkeypatch, admission):
+    dispatched, ready_rows, rows = [], [], []
+    _worker_support(monkeypatch, _WorkerClient(dispatched))
+    gate = SimpleNamespace(admit=lambda: admission, abort=lambda: "ABORTED")
+    abort = SimpleNamespace(is_set=lambda: False, set=lambda: None)
+    measure._claim_worker(0, "fake", "fake", {}, "fake", 1,
+                          SimpleNamespace(put=ready_rows.append),
+                          SimpleNamespace(wait=lambda _timeout: True),
+                          SimpleNamespace(put=rows.append), abort, gate)
+    assert ready_rows == [(0, "READY"), (0, "FAILED")]
+    # Only the warm-up dispatch preceded the barrier; no measured claim was sent.
+    assert len(dispatched) == 1
+    assert rows[0]["keys"] == []
+    assert rows[0]["admission_status"] == admission
+    assert rows[0]["error"] == "RuntimeError"
+
+
+def test_worker_dispatches_only_after_guarded_release(monkeypatch):
+    dispatched, ready_rows, rows = [], [], []
+    _worker_support(monkeypatch, _WorkerClient(dispatched))
+    gate = SimpleNamespace(admit=lambda: "RELEASED", abort=lambda: "RELEASED")
+    abort = SimpleNamespace(is_set=lambda: False, set=lambda: None)
+    measure._claim_worker(0, "fake", "fake", {}, "fake", 2,
+                          SimpleNamespace(put=ready_rows.append),
+                          SimpleNamespace(wait=lambda _timeout: True),
+                          SimpleNamespace(put=rows.append), abort, gate)
+    assert ready_rows == [(0, "READY")]
+    assert rows[0]["admission_status"] == "RELEASED"
+    assert len(rows[0]["keys"]) == 2 and len(dispatched) == 3
+
+
+def test_worker_records_late_abort_refused_after_release(monkeypatch):
+    dispatched, ready_rows, rows = [], [], []
+    _worker_support(monkeypatch, _WorkerClient(dispatched, fail_after_warmup=True))
+    gate = SimpleNamespace(admit=lambda: "RELEASED", abort=lambda: "RELEASED")
+    abort = SimpleNamespace(is_set=lambda: False, set=lambda: pytest.fail("late abort applied"))
+    measure._claim_worker(0, "fake", "fake", {}, "fake", 2,
+                          SimpleNamespace(put=ready_rows.append),
+                          SimpleNamespace(wait=lambda _timeout: True),
+                          SimpleNamespace(put=rows.append), abort, gate)
+    assert ready_rows == [(0, "READY"), (0, "FAILED")]
+    assert rows[0]["admission_status"] == "RELEASED"
+    assert rows[0]["abort_status"] == "RELEASE_ALREADY_DECIDED"
+    assert rows[0]["error"] == "RuntimeError"
+    assert len(rows[0]["keys"]) == 1
+    assert rows[0]["keys"][0].startswith("tp-0-1-")
+
+
+@pytest.mark.parametrize(("error", "expected"), [
+    (None, {"status": "COMPLETE", "categories": []}),
+    (measure.MeasurementCleanupError(["gateway_stop_failed"]),
+     {"status": "INCOMPLETE", "categories": ["gateway_stop_failed"]}),
+    (measure.MeasurementCleanupError(["risk_host_stop_not_clean"]),
+     {"status": "INCOMPLETE", "categories": ["risk_host_stop_not_clean"]}),
+    (measure.MeasurementCleanupError(["risk_clients_close_failed", "worker_cleanup_unknown"]),
+     {"status": "UNKNOWN", "categories": ["risk_clients_close_failed", "worker_cleanup_unknown"]}),
+    (measure.MeasurementCleanupError(["cleanup_unknown"]),
+     {"status": "UNKNOWN", "categories": ["cleanup_unknown"]}),
+    (measure.MeasurementResourceError("risk_host_stop_not_clean"),
+     {"status": "INCOMPLETE", "categories": ["risk_host_stop_not_clean"]}),
+    (measure.MeasurementResourceError("cleanup_unknown"),
+     {"status": "UNKNOWN", "categories": ["cleanup_unknown"]}),
+    (RuntimeError("private cleanup detail"),
+     {"status": "UNKNOWN", "categories": ["unknown_cleanup_failure"]}),
+])
+def test_cleanup_result_distinguishes_deterministic_and_unknown(error, expected):
+    result = measure._cleanup_result(error)
+    assert result == expected
+    assert "private" not in str(result)
+
+
+def test_closed_client_escalates_once_then_confirms():
+    snapshots = iter([_snapshot(strict=False), _snapshot()])
+
+    class Client:
+        calls = 0
+
+        def close(self, **_kwargs):
+            Client.calls += 1
+            return next(snapshots)
+
+    assert measure._closed_client(Client()) == {"receipt": "CONFIRMED", "attempts": 2}
+    assert Client.calls == 2
+
+
+def test_closed_client_stops_after_one_bounded_escalation():
+    class Client:
+        calls = 0
+
+        def close(self, **_kwargs):
+            Client.calls += 1
+            return _snapshot(strict=False)
+
+    with pytest.raises(RuntimeError, match="not confirmed"):
+        measure._closed_client(Client())
+    assert Client.calls == 2
+
+
+def test_closed_client_never_swallows_interruption():
+    class Client:
+        calls = 0
+
+        def close(self, **_kwargs):
+            Client.calls += 1
+            raise KeyboardInterrupt()
+
+    with pytest.raises(KeyboardInterrupt):
+        measure._closed_client(Client())
+    assert Client.calls == 1
+
+
+def test_risk_stop_exception_records_unknown_and_keeps_handle():
+    rig = _rig(risk=object())
+    error = RuntimeError("private stop detail")
+    rig.support = SimpleNamespace(stop_risk=lambda _child: (_ for _ in ()).throw(error))
+    with pytest.raises(RuntimeError) as caught:
+        rig.stop_risk()
+    assert caught.value is error
+    assert rig.risk is not None and rig._cleanup_unknown
+    assert rig.risk_stop_observations == [{
+        "operation": "stop", "result": "unknown", "exit_code": None,
+        "after_forced_kill": False,
+    }]
+    assert "private" not in str(rig.risk_stop_observations)
