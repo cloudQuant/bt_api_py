@@ -13,9 +13,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
+
 from bt_api_py.risk_service_config import RiskServiceConfigError, load_document, resolve_path
 
 SCHEMA = "bt_api_monitor.service.v1"
+SCHEMA_V2 = "bt_api_monitor.service.v2"
 _MAX_CONFIG_BYTES = 1_048_576
 # MonitorIngressTarget aliases MonitorReadTarget, whose event allowlist is
 # bounded to 16 entries. Keep offline validation independent of that package.
@@ -161,6 +164,16 @@ class Listener:
 
 
 @dataclass(frozen=True)
+class MonitorProducerBinding:
+    binding_ref: str
+    source_ref: str
+    identity: WireIdentity
+    scope: WireScope
+    outbox_scope: str
+    event_types: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class MonitorServiceConfig:
     storage_directory: Path
     execution_domain_ref: str
@@ -169,6 +182,7 @@ class MonitorServiceConfig:
     event_types: tuple[str, ...]
     ingress: Listener
     heartbeat: Listener
+    producer_bindings: tuple[MonitorProducerBinding, ...] = ()
 
 
 def _path(value: object, base: Path) -> Path:
@@ -219,10 +233,87 @@ def _listener(value: object, base: Path) -> Listener:
     )
 
 
-def parse_monitor_service_config(document: object, *, path: Path) -> MonitorServiceConfig:
-    top = _map(document, {"schema", "scope", "storage", "ingress", "heartbeat"})
-    if top["schema"] != SCHEMA:
+def _producer_bindings(value, ingress, domain, account, outbox_scope, allowed_types):
+    if type(value) is not list or not 1 <= len(value) <= 1024:
         raise MonitorServiceConfigError()
+    bindings = []
+    refs = set()
+    authorizations = set()
+    identities = {(p.principal_ref, p.actor_ref) for p in ingress.principals}
+    try:
+        host_scope = WireScope(domain, account_ref=account)
+    except (TypeError, ValueError):
+        raise MonitorServiceConfigError() from None
+    scope_keys = {
+        "execution_domain_ref",
+        "account_ref",
+        "account_refs",
+        "strategy_ref",
+        "run_id",
+        "manual_book_ref",
+        "portfolio_ref",
+        "group_id",
+        "leg_id",
+    }
+    for raw in value:
+        item = _map(
+            raw, {"binding_ref", "source_ref", "identity", "scope", "outbox_scope", "event_types"}
+        )
+        ident = _map(item["identity"], {"principal_ref", "actor_ref"})
+        principal, actor = _text(ident["principal_ref"]), _text(ident["actor_ref"])
+        if (principal, actor) not in identities:
+            raise MonitorServiceConfigError()
+        raw_scope = _map(item["scope"], scope_keys)
+        if type(raw_scope["account_refs"]) is not list or raw_scope["account_refs"]:
+            raise MonitorServiceConfigError()
+        normalized = {
+            key: (_text(v) if v is not None else None)
+            for key, v in raw_scope.items()
+            if key != "account_refs"
+        }
+        try:
+            scope = WireScope(**normalized, account_refs=())
+            identity = WireIdentity(WireRole.SERVICE, principal, actor)
+        except (TypeError, ValueError):
+            raise MonitorServiceConfigError() from None
+        if scope != host_scope:
+            raise MonitorServiceConfigError()
+        binding_ref, source_ref = _text(item["binding_ref"]), _text(item["source_ref"])
+        target_scope = _text(item["outbox_scope"])
+        event_types = item["event_types"]
+        if type(event_types) is not list or not 1 <= len(event_types) <= _MAX_EVENT_TYPES:
+            raise MonitorServiceConfigError()
+        types = tuple(_text(t) for t in event_types)
+        if (
+            binding_ref in refs
+            or target_scope != outbox_scope
+            or len(set(types)) != len(types)
+            or not set(types) <= set(allowed_types)
+        ):
+            raise MonitorServiceConfigError()
+        if any(
+            any(0x80 <= ord(char) <= 0x9F for char in text)
+            for text in (binding_ref, source_ref, target_scope, *types)
+        ):
+            raise MonitorServiceConfigError()
+        entries = {(identity, scope, event_type) for event_type in types}
+        if entries & authorizations:
+            raise MonitorServiceConfigError()
+        refs.add(binding_ref)
+        authorizations.update(entries)
+        bindings.append(
+            MonitorProducerBinding(binding_ref, source_ref, identity, scope, target_scope, types)
+        )
+    return tuple(bindings)
+
+
+def parse_monitor_service_config(document: object, *, path: Path) -> MonitorServiceConfig:
+    if type(document) is not dict or document.get("schema") not in (SCHEMA, SCHEMA_V2):
+        raise MonitorServiceConfigError()
+    keys = {"schema", "scope", "storage", "ingress", "heartbeat"}
+    if document["schema"] == SCHEMA_V2:
+        keys.add("producer_bindings")
+    top = _map(document, keys)
     base = Path(path).resolve().parent
     scope = _map(top["scope"], {"execution_domain_ref", "account_ref"})
     storage = _map(top["storage"], {"directory", "outbox_scope", "event_types"})
@@ -244,14 +335,23 @@ def parse_monitor_service_config(document: object, *, path: Path) -> MonitorServ
     ):
         if getattr(ingress, attr) == getattr(heartbeat, attr):
             raise MonitorServiceConfigError()
+    domain = _text(scope["execution_domain_ref"])
+    account = _text(scope["account_ref"])
+    outbox_scope = _text(storage["outbox_scope"])
+    bindings = ()
+    if top["schema"] == SCHEMA_V2:
+        bindings = _producer_bindings(
+            top["producer_bindings"], ingress, domain, account, outbox_scope, types
+        )
     return MonitorServiceConfig(
         _path(storage["directory"], base),
-        _text(scope["execution_domain_ref"]),
-        _text(scope["account_ref"]),
-        _text(storage["outbox_scope"]),
+        domain,
+        account,
+        outbox_scope,
         types,
         ingress,
         heartbeat,
+        bindings,
     )
 
 

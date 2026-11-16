@@ -461,6 +461,25 @@ rules, or trading are ready. Protected file handling currently requires POSIX.
 Local acceptance covers authenticated loopback processes and persistence, not
 an actual CTP account or the complete five-component deployment.
 
+For per-producer event authorization, explicitly select
+`schema: bt_api_monitor.service.v2` and add 1–1024 `producer_bindings`. Each entry
+has exactly `binding_ref`, `source_ref`, `identity`, `scope`, `outbox_scope` and
+`event_types`. Identity contains an existing ingress principal's `principal_ref`
+and `actor_ref`; the Host uses SERVICE without delegation. Scope must spell out
+all nine WireScope fields: this Host currently requires its exact domain and
+account, `account_refs: []`, and null strategy/run/manual-book/portfolio/group/leg
+fields. Each binding selects 1–16 event types already granted to the same
+outbox; overlapping producer/scope/type bindings are rejected. This adds no
+principal, target or strategy scope grant. Version 1 configuration keeps its
+original shape, without `producer_bindings`.
+
+V2 producers send `schema_version: 2` with explicit `binding_ref` and
+`source_ref`. The receiver retains full scope and producer metadata with a
+separate ID namespace. Ordinary v1 IDs remain unchanged, but the reserved
+`gateway.recovery.journal.v1` type and any type selected by a v2 binding require
+v2 requests. Intake ACKs do not prove payload semantics or completed alert
+evaluation; a source relay and duration evaluator require separate composition.
+
 A shutdown or startup rollback that cannot confirm cleanup reports
 `MONITOR_CLEANUP_PENDING` and retains the original host and resources. The CLI
 keeps its signal handlers installed; a later SIGINT or SIGTERM retries cleanup

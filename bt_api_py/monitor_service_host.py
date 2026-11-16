@@ -257,6 +257,20 @@ class MonitorServiceHost:
                 operation = "events.append" if role == "ingress" else "monitor.heartbeat"
                 if role == "ingress":
                     resources = {"outbox": outbox, "targets": {scope: target}}
+                    if self.config.producer_bindings:
+                        from bt_api_monitor.service_ingress import MonitorIngressProducerBinding
+
+                        resources["producer_bindings"] = tuple(
+                            MonitorIngressProducerBinding(
+                                binding.binding_ref,
+                                binding.source_ref,
+                                binding.identity,
+                                binding.scope,
+                                binding.outbox_scope,
+                                binding.event_types,
+                            )
+                            for binding in self.config.producer_bindings
+                        )
                 else:
                     identities = frozenset(
                         (WireIdentity(WireRole.SERVICE, p.principal_ref, p.actor_ref), scope)

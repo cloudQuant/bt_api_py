@@ -743,6 +743,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             module_name="bt_api_monitor.service_ingress",
             operations_attribute=("MONITOR_INGRESS_OPERATIONS",),
             resource_keys=frozenset({"outbox", "targets"}),
+            optional_resource_keys=frozenset({"producer_bindings"}),
             public_ports=MappingProxyType(
                 {"service.telemetry_ingress": frozenset({"events.append"})}
             ),
@@ -2690,6 +2691,16 @@ def build_component(
                     constructor = getattr(module, "MonitorIngressService", None)
                     constructor_options = dict(prepared.options)
                     constructor_options.pop("role", None)
+                    if "producer_bindings" in values:
+                        bindings = values["producer_bindings"]
+                        binding_type = getattr(module, "MonitorIngressProducerBinding", None)
+                        if (
+                            type(bindings) is not tuple
+                            or binding_type is None
+                            or any(type(item) is not binding_type for item in bindings)
+                        ):
+                            raise ServiceComponentError("MONITOR_PRODUCER_BINDINGS_INVALID")
+                        constructor_options["producer_bindings"] = bindings
                     adapter = constructor(
                         values["outbox"], values["targets"], **constructor_options
                     )
