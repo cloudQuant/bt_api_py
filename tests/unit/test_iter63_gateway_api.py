@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import threading
+import time
 from dataclasses import replace
 from decimal import Decimal
 from types import SimpleNamespace
@@ -289,7 +290,13 @@ def test_owned_close_timeout_preserves_handle_and_retry(monkeypatch):
         def __init__(self, *args, **kwargs):
             self.identity = kwargs["identity"]
             self.run_id = kwargs["run_id"]
-            self.bindings = ()
+            self.bindings = (SimpleNamespace(
+                registration_id="registration", service_epoch="epoch", active=True,
+                mount="broker.direct_write", service_id="gateway", instance_id="instance",
+                scope_ref="scope", scope=replace(kwargs["scope_resolver"]("scope"),
+                                                  strategy_ref="strategy", run_id=self.run_id),
+                operations=frozenset({"direct.events.progress"}), required=True,
+                lease_deadline=time.monotonic() + 60),)
             self.healthy = True
             self.cleanup_failures = self.unregister_uncertainties = 0
 
@@ -305,6 +312,7 @@ def test_owned_close_timeout_preserves_handle_and_retry(monkeypatch):
         def close(self):
             entered.set()
             release.wait(5)
+            self.bindings = ()
 
     monkeypatch.setattr(module, "ServiceClientRuntime", Raw)
     monkeypatch.setattr(module, "ZmqTransportFactory", lambda profiles: object())
