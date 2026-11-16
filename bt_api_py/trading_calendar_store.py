@@ -6,6 +6,9 @@ The caller must validate venue semantics, source coverage and release authority.
 This provisional envelope is independent of the as-yet-unfrozen 67.01 schema.
 Only cooperating writers on a trusted local POSIX filesystem are supported; external
 deletion or replacement of lock, intent, or directory entries violates that model.
+Windows can read an existing store under an ``msvcrt`` one-byte shared lock
+(``read_current_with_consistent_receipts``); that branch has no native Windows
+evidence and writers remain POSIX-only, so a Windows host observes but never mutates.
 History requires a caller-attested UTC error bound at every observation; the
 default is untrusted. It checks a system boot ID and requires a shared monotonic
 clock across processes in that boot. Wall/monotonic deltas must agree within
@@ -49,8 +52,13 @@ from bt_api_py.trading_calendar_migration_barrier import check_migration_barrier
 
 try:
     import fcntl
-except ImportError:  # pragma: no cover - Windows is explicitly unsupported
+except ImportError:  # pragma: no cover - Windows uses msvcrt for the read lock
     fcntl = None
+
+try:
+    import msvcrt
+except ImportError:  # pragma: no cover - POSIX has no msvcrt
+    msvcrt = None
 
 _ID = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}\Z")
 _HASH = re.compile(r"[0-9a-f]{64}\Z")
@@ -94,6 +102,31 @@ _INTENT = "bt_api.calendar-store.intent/1"
 _RECEIPT = "bt_api.calendar-store.receipt/1"
 _RECEIPT_TIMED = "bt_api.calendar-store.receipt/2"
 _CLOCK_TOLERANCE_NS = 1_000_000_000
+_READ_LOCK_RANGE = 1
+
+
+def _posix_read_barrier_available() -> bool:
+    """Whether the directory-identity POSIX read barrier can run here."""
+    return fcntl is not None and all(
+        hasattr(os, name) for name in ("O_NOFOLLOW", "O_DIRECTORY", "O_NONBLOCK")
+    )
+
+
+def _windows_read_barrier_available() -> bool:
+    """Whether ``msvcrt`` can take the one-byte shared read lock.
+
+    ``msvcrt`` is absent on POSIX, so the Windows read path is unreachable
+    there.  Tests inject a fake ``msvcrt`` module to exercise the same code
+    path without a Windows host; the real Windows branch stays unexercised by
+    this checkout's test run.
+    """
+    return (
+        msvcrt is not None
+        and callable(getattr(msvcrt, "locking", None))
+        and hasattr(msvcrt, "LK_NBRLCK")
+        and hasattr(msvcrt, "LK_UNLCK")
+    )
+
 
 
 class CalendarStoreError(Exception):
@@ -2608,19 +2641,28 @@ class TradingCalendarStore:
         """Read CURRENT with a structurally consistent local receipt chain.
 
         This is a non-creating, non-recovering operation on an existing trusted,
-        cooperating local POSIX store.  The shared lock coordinates with store
+        cooperating local store.  The shared lock coordinates with store
         writers, but receipts have no independent hash or identity anchor: a
         forged receipt with another legal observation is not detected. Neither
         data sources, identities, clocks nor runtime bindings are authenticated.
-        Durability, hostile path replacement, network
-        filesystems and non-POSIX behavior are not established.
+        Durability, hostile path replacement, network filesystems and
+        non-POSIX/non-Windows behavior are not established.
+
+        POSIX uses ``flock`` plus ``O_NOFOLLOW``/``dir_fd`` identity checks.
+        Windows has neither; the same read runs under ``msvcrt``'s one-byte
+        shared lock and rechecks entry identity with ``lstat``/``fstat``.
+        Without either primitive this fails closed.
         """
         if budget is not None and type(budget) is not CalendarReadBudget:
             raise CalendarStoreError("invalid calendar read budget")
-        if fcntl is None or not all(
-            hasattr(os, name) for name in ("O_NOFOLLOW", "O_DIRECTORY", "O_NONBLOCK")
-        ):
-            raise CalendarStoreError("current receipt consistency unavailable")
+        if _posix_read_barrier_available():
+            return self._read_current_with_posix_barrier(budget)
+        if _windows_read_barrier_available():
+            return self._read_current_with_windows_barrier(budget)
+        raise CalendarStoreError("current receipt consistency unavailable")
+
+    def _read_current_with_posix_barrier(self, budget):
+        """Read CURRENT under the POSIX directory identity and shared ``flock``."""
         root_fd = None
         lock_fd = None
         locked = False
@@ -2707,6 +2749,140 @@ class TradingCalendarStore:
             if root_fd is not None:
                 with contextlib.suppress(OSError):
                     os.close(root_fd)
+
+    def _read_current_with_windows_barrier(self, budget):
+        """Read CURRENT under ``msvcrt``'s one-byte shared read lock.
+
+        Windows has no ``flock``, ``O_NOFOLLOW``, ``O_DIRECTORY`` or ``dir_fd``.
+        The read therefore takes ``LK_NBRLCK`` on byte zero of ``.lock`` (a
+        writer would take ``LK_NBLCK`` on the same byte) and rechecks the root
+        and lock identity with ``lstat``/``fstat`` before and after the reads.
+        Writers in this slice remain POSIX-only, so a Windows host can observe a
+        real store but never mutate it.  Every failure - a held lock, a replaced
+        entry, a missing ``msvcrt`` primitive - is the same finite
+        ``CalendarStoreError``; nothing is created or repaired.
+        """
+        lock_fd = None
+        locked = False
+        total = 0
+
+        def bounded_read(path: Path) -> bytes:
+            nonlocal total
+            remaining = budget.max_total_bytes - total
+            if remaining <= 0:
+                raise CalendarStoreError("calendar total read budget exceeded")
+            data = self._read_windows_bounded(path, min(budget.max_file_bytes, remaining))
+            total += len(data)
+            return data
+
+        read = self._read_windows if budget is None else bounded_read
+        max_publications = None if budget is None else budget.max_publications
+        try:
+            root_entry = self.root.lstat()
+            if stat.S_ISLNK(root_entry.st_mode) or not stat.S_ISDIR(root_entry.st_mode):
+                raise CalendarStoreError("invalid store root")
+            lock_path = self.root / ".lock"
+            lock_entry = lock_path.lstat()
+            if stat.S_ISLNK(lock_entry.st_mode) or not stat.S_ISREG(lock_entry.st_mode):
+                raise CalendarStoreError("invalid lock")
+            lock_fd = os.open(lock_path, os.O_RDONLY | getattr(os, "O_BINARY", 0))
+            lock_info = os.fstat(lock_fd)
+            if (
+                not stat.S_ISREG(lock_info.st_mode)
+                or (lock_info.st_dev, lock_info.st_ino)
+                != (lock_entry.st_dev, lock_entry.st_ino)
+            ):
+                raise CalendarStoreError("invalid lock")
+            os.lseek(lock_fd, 0, os.SEEK_SET)
+            msvcrt.locking(lock_fd, msvcrt.LK_NBRLCK, _READ_LOCK_RANGE)
+            locked = True
+            self._layout()
+            if self._pending_exists() or self._policy_change_pending():
+                raise CalendarStoreError("pending store operation")
+            pointer = read(self.root / "CURRENT.json")
+            snapshot = self._load(pointer, _reader=read, _max_publications=max_publications)
+            self._validate_chain_receipts(
+                pointer, _reader=read, _max_publications=max_publications
+            )
+            reread = self._load(pointer, _reader=read, _max_publications=max_publications)
+            root_after = self.root.lstat()
+            lock_after = lock_path.lstat()
+            if (
+                (root_after.st_dev, root_after.st_ino)
+                != (root_entry.st_dev, root_entry.st_ino)
+                or (lock_after.st_dev, lock_after.st_ino)
+                != (lock_entry.st_dev, lock_entry.st_ino)
+                or read(self.root / "CURRENT.json") != pointer
+            ):
+                raise CalendarStoreError("store identity changed")
+            if reread != snapshot:
+                raise CalendarStoreError("current snapshot changed")
+            if self._pending_exists() or self._policy_change_pending():
+                raise CalendarStoreError("pending store operation")
+            return ReceiptConsistentCurrent(snapshot)
+        except (OSError, CalendarStoreError, ValueError, RecursionError) as exc:
+            raise CalendarStoreError("current receipt consistency unavailable") from exc
+        finally:
+            if lock_fd is not None:
+                with contextlib.suppress(OSError):
+                    if locked:
+                        msvcrt.locking(lock_fd, msvcrt.LK_UNLCK, _READ_LOCK_RANGE)
+                with contextlib.suppress(OSError):
+                    os.close(lock_fd)
+
+    def _read_windows_bounded(self, path: Path, limit: int | None) -> bytes:
+        """Read a stable regular file without POSIX ``O_NOFOLLOW``/``dir_fd``.
+
+        ``lstat`` rejects a symlink or non-regular entry before it is opened,
+        and the opened handle's identity plus size/mtime/ctime are rechecked
+        after the read.  ``limit`` is ``None`` for the historical unbounded
+        read; a finite limit rejects an oversized file before reading it.
+        """
+        before = path.lstat()
+        if stat.S_ISLNK(before.st_mode) or not stat.S_ISREG(before.st_mode):
+            raise CalendarStoreError("store entry is not a regular file")
+        if limit is not None and before.st_size > limit:
+            raise CalendarStoreError("policy file invalid or too large")
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_BINARY", 0))
+        try:
+            opened = os.fstat(fd)
+            if (
+                not stat.S_ISREG(opened.st_mode)
+                or (opened.st_dev, opened.st_ino)
+                != (before.st_dev, before.st_ino)
+            ):
+                raise CalendarStoreError("store entry changed")
+            with os.fdopen(fd, "rb", closefd=False) as stream:
+                data = stream.read() if limit is None else stream.read(limit + 1)
+            after = os.fstat(fd)
+            if (
+                (limit is not None and len(data) > limit)
+                or len(data) != before.st_size
+                or (
+                    after.st_dev,
+                    after.st_ino,
+                    after.st_size,
+                    after.st_mtime_ns,
+                    after.st_ctime_ns,
+                )
+                != (
+                    before.st_dev,
+                    before.st_ino,
+                    before.st_size,
+                    before.st_mtime_ns,
+                    before.st_ctime_ns,
+                )
+            ):
+                raise CalendarStoreError("policy file changed during read")
+            return data
+        finally:
+            os.close(fd)
+
+    def _read_windows(self, path: Path) -> bytes:
+        return self._read_windows_bounded(path, None)
+
+    def _read_bounded_windows(self, path: Path, limit: int) -> bytes:
+        return self._read_windows_bounded(path, limit)
 
     def read_publication_policy(self, publication_id: str) -> dict[str, Any] | None:
         """Read hash-bound declarations from a proved publication, never authenticate them."""
