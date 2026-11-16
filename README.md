@@ -911,3 +911,92 @@ This propagation and the existing BT pending consistency checks do not install t
 complete Broker/Store event consumer or update Strategy Order/Trade objects by
 themselves. Source, installed-package, synthetic process and real-account evidence
 remain separate; see the Iteration 63 R30 review for the exact delivered scope.
+
+### CTP Gateway simulation calendar configuration
+
+The protected CTP operator resource bundle may contain an optional `calendars`
+object. It is required exactly when the Gateway component binds
+`service.calendar_read`. The object is strict: supply all six fields shown below;
+each grant and range policy also requires exactly its shown fields. Values in this
+example are fictional, and matching strategy identities, account scopes, and
+read-only Registry resource grants must be configured separately.
+
+```json
+{
+  "root": "calendars",
+  "mode": "SIMULATION_ONLY",
+  "route": "CTP___FUTURE",
+  "grants": [{
+    "principal_ref": "example-principal", "execution_domain_ref": "example-domain",
+    "account_ref": "example-account", "strategy_ref": "example-strategy",
+    "run_id": "example-run", "route": "CTP___FUTURE", "venue": "SIM",
+    "kind": "future", "product": "x", "contract": "x2601"
+  }],
+  "range_policies": [{
+    "policy_id": "example-policy", "route": "CTP___FUTURE", "venue": "SIM",
+    "kind": "future", "product": "x", "contract": "x2601",
+    "max_advance_days": 0, "max_spill_days": 0
+  }],
+  "simulation_bootstrap": {"trading_day": "2026-01-01"}
+}
+```
+
+The root is resolved relative to the protected resource file, not the launch file
+or working directory. A range policy's exact route and instrument scope must be
+covered by a calendar grant and Registry `calendar.windows.v1` permission; day
+queries require `calendar.query.v1`. The calendar grant identifies one run and
+does not grant any order or native trading capability. A matching Registry
+resource may name that exact run, or leave its run unset; it cannot authorize a
+calendar grant for a different fixed run. Product and contract are
+explicit calendar scopes, not inferred from CTP symbols.
+
+Bootstrap pins the current receipt-checked calendar version at startup to the
+explicit day. Its `operator-simulation-...` generation is created locally for
+that process and is not a CTP session generation. Changes to CURRENT do not update
+the running view; restart loads the then-current version using the configured day.
+With `simulation_bootstrap: null`, or an unavailable or invalid snapshot, reads
+remain UNKNOWN. The `package_seed` root may be declared only without bootstrap;
+this process never installs a seed. Responses describe simulation only, with
+source authentication not proven and no trade authorization.
+
+### Atomic Execution parent listener (currently unready)
+
+The SDK entry point `python -m bt_api_py.execution_parent_service_host --config /absolute/path/parent.json` starts the selected `atomic_intake` ServiceHost with its AccountJournalHost, atomic intake, explicit strategy grants and separate service action grant. The JSON file and CURVE key files must be private, owner-controlled regular files (mode `0600` on POSIX, no symlinks or hard links); the journal directory and the separate registry directory must already exist, be private, and not overlap. The listener accepts a loopback IPv4 TCP endpoint only. The stable storage UUID and exact account/strategy/run binding must be supplied by the operator; they do not authenticate an account or establish an old-writer fence. A local lease is not such a fence. The current Atomic service reports **UNREADY** and refuses registration; this does not establish parent submission, provider or trading capability.
+
+The JSON schema is exact: unknown fields and duplicate keys are rejected. The following is a structure example, not credentials or a ready-to-run deployment. Replace every illustrative reference and supply distinct key files. `service` is a normal parsed SDK ServiceConfig with exactly one Execution `atomic_intake` component and no outbound clients.
+
+```json
+{
+  "schema": "bt_api_execution.parent_service.v1",
+  "service": {
+    "service_config_schema_version": 1, "process_role": "service",
+    "service_id": "execution-service", "scope_ref": "root-scope",
+    "transport_ref": "listener", "registration_policy_ref": "registration-policy",
+    "service_requirements_ref": "requirements",
+    "components": {"execution": {"config_schema_version": 2, "settings": {
+      "instance_id": "execution-a", "bind_ports": ["service.execution_parent"],
+      "options": {"role": "atomic_intake"}}}},
+    "communication": {"config_schema_version": 1, "profiles": {"listener": {
+      "backend": "zmq", "config_schema_version": 1,
+      "endpoints": {"rpc_bind": "tcp://127.0.0.1:18971"}, "security_profile_ref": "listener-key"}}}
+  },
+  "service_identity": {"role": "service", "principal_ref": "execution-principal", "actor_ref": "execution-service"},
+  "authority_versions": {"scope": "v1", "security": "v1", "registration_policy": "v1", "requirements": "v1"},
+  "execution_scope": {"provider": "ctp", "environment": "simnow", "account_ref": "account-a", "strategy_id": "strategy-a"},
+  "wire_scope": {"execution_domain_ref": "paper", "account_ref": "account-a", "strategy_ref": "strategy-a", "run_id": "run-a"},
+  "storage": {"journal_root": "/private/example/journal", "registry_path": "/private/example/registry/registry.sqlite", "storage_id": "00000000-0000-4000-8000-000000000001"},
+  "server_keys": {"public_key_file": "/private/example/server.pub", "secret_key_file": "/private/example/server.key"},
+  "strategy_grants": [{
+    "identity": {"role": "strategy_client", "principal_ref": "strategy-principal", "actor_ref": "strategy-a"},
+    "scope_ref": "strategy-scope", "revision": "v1",
+    "instruments": [{"provider": "ctp", "venue": "SHFE", "environment": "simnow", "product_type": "future", "instrument_id": "rb", "native_symbol": "rb"}],
+    "operations": ["execution.parent.submit", "execution.parent.query"], "public_key_file": "/private/example/client.pub"
+  }],
+  "action_grant": {"revision": "v1", "instruments": [{"provider": "ctp", "venue": "SHFE", "environment": "simnow", "product_type": "future", "instrument_id": "rb", "native_symbol": "rb"}], "plan_versions": ["v1"], "actions": ["accept", "query"]},
+  "schedule_build_id": "build-a",
+  "algorithm_policies": [{"plan_version": "v1", "schedules": [{"name": "PASS", "version": 1, "params": {}, "max_retry": 0}]}],
+  "lease": {"owner": "local-owner", "ttl_ns": 300000000000}
+}
+```
+
+A first `SIGINT` or `SIGTERM` requests bounded close on the original owner thread. If cleanup is unknown, the process reports `EXECUTION_PARENT_CLEANUP_PENDING`, retains the original resources, and waits for another signal to retry. Status messages are finite labels and do not include configuration or key values.

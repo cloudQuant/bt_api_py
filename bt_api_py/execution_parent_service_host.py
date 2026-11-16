@@ -1,0 +1,374 @@
+"""Operator-composed Atomic parent listener; readiness is independently fenced.
+
+The local journal lease does not prove an older writer has stopped. With the
+current AtomicIntakeService this listener remains unready and cannot admit a
+parent. Configuration is trusted local input, never a source of account facts.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import signal
+import stat
+import time
+import uuid
+from dataclasses import dataclass, replace
+from pathlib import Path
+
+from bt_api_base.market_protocol import MarketInstrumentKey
+from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
+from bt_api_execution.account_journal_host import AccountJournalHost
+from bt_api_execution.algorithm_config import ScheduleRegistry
+from bt_api_execution.algorithm_policy import AlgorithmPolicy, AllowedSchedule
+from bt_api_execution.atomic_submission_intake import AtomicSubmissionIntake
+from bt_api_execution.contracts import ExecutionScope
+from bt_api_execution.service_atomic_intake import AtomicIntakeService
+
+from .execution_action_grant import ExecutionActionGrant
+from .execution_parent_grant import ExecutionParentGrant, OPERATIONS, PORT
+from .execution_read_service_host import _check_existing, _directory, _endpoint, _identity, _path, _text
+from .monitor_service_config import read_bounded
+from .service_components import ComponentResources
+from .service_config import parse_service_config
+from .service_host import ServiceHost, TrustedServiceAuthority
+from .service_registry import PrincipalGrant, ResourceGrant
+
+SCHEMA = 'bt_api_execution.parent_service.v1'
+
+
+class ParentServiceError(ValueError):
+    pass
+
+
+def _map(value, fields):
+    if type(value) is not dict or set(value) != set(fields):
+        raise ParentServiceError('INVALID_CONFIGURATION')
+    return value
+
+
+def _list(value, limit=128):
+    if type(value) is not list or not 1 <= len(value) <= limit:
+        raise ParentServiceError('INVALID_CONFIGURATION')
+    return value
+
+
+def _unique_strings(value):
+    rows = _list(value)
+    result = frozenset(_text(item) for item in rows)
+    if len(result) != len(rows):
+        raise ParentServiceError('INVALID_CONFIGURATION')
+    return result
+
+
+def _instruments(value, local):
+    rows = _list(value, 1024)
+    result = frozenset(MarketInstrumentKey.from_dict(item) for item in rows)
+    if (len(result) != len(rows)
+            or any(i.provider != local.provider or i.environment != local.environment for i in result)):
+        raise ParentServiceError('INVALID_CONFIGURATION')
+    return result
+
+
+@dataclass(frozen=True)
+class ParentConfig:
+    service: object
+    identity: WireIdentity
+    local_scope: ExecutionScope
+    wire_scope: WireScope
+    journal_root: Path
+    registry_path: Path
+    storage_id: str
+    server_public: Path
+    server_secret: Path
+    principal_keys: tuple
+    parent_grants: tuple
+    action_grant: ExecutionActionGrant
+    policies: tuple
+    build_id: str
+    lease_owner: str
+    lease_ttl_ns: int
+    versions: tuple
+
+
+def parse_config(raw):
+    try:
+        top = _map(raw, ('schema', 'service', 'service_identity', 'authority_versions',
+                         'execution_scope', 'wire_scope', 'storage', 'server_keys',
+                         'strategy_grants', 'action_grant', 'schedule_build_id',
+                         'algorithm_policies', 'lease'))
+        if top['schema'] != SCHEMA:
+            raise ValueError
+        service = parse_service_config(top['service'])
+        manifest = service.to_public_dict()
+        if service.clients or set(service.components) != {'execution'}:
+            raise ValueError
+        settings = manifest['components']['execution']['settings']
+        if settings['bind_ports'] != [PORT] or settings['options'] != {'role': 'atomic_intake'}:
+            raise ValueError
+        instance_id = settings['instance_id']
+        profile = manifest['communication']['profiles'][service.transport_ref]
+        if (set(manifest['communication']['profiles']) != {service.transport_ref}
+                or profile['backend'] != 'zmq' or set(profile['endpoints']) != {'rpc_bind'}):
+            raise ValueError
+        _endpoint(profile['endpoints']['rpc_bind'])
+        identity = _identity(top['service_identity'], WireRole.SERVICE)
+        if identity.actor_ref != service.service_id:
+            raise ValueError
+        versions = _map(top['authority_versions'], ('scope', 'security', 'registration_policy', 'requirements'))
+        versions = tuple(_text(versions[k]) for k in ('scope', 'security', 'registration_policy', 'requirements'))
+        local = _map(top['execution_scope'], ('provider', 'environment', 'account_ref', 'strategy_id'))
+        local = ExecutionScope(**{k: _text(v) for k, v in local.items()})
+        wire = _map(top['wire_scope'], ('execution_domain_ref', 'account_ref', 'strategy_ref', 'run_id'))
+        wire = WireScope(_text(wire['execution_domain_ref']), account_ref=_text(wire['account_ref']),
+                         strategy_ref=_text(wire['strategy_ref']), run_id=_text(wire['run_id']))
+        if (wire.account_ref, wire.strategy_ref) != (local.account_ref, local.strategy_id):
+            raise ValueError
+        storage = _map(top['storage'], ('journal_root', 'registry_path', 'storage_id'))
+        journal_root, registry_path = _path(storage['journal_root']), _path(storage['registry_path'])
+        if (journal_root == registry_path.parent or journal_root in registry_path.parents
+                or registry_path.parent in journal_root.parents):
+            raise ValueError
+        storage_id = _text(storage['storage_id'])
+        if str(uuid.UUID(storage_id)) != storage_id:
+            raise ValueError
+        keys = _map(top['server_keys'], ('public_key_file', 'secret_key_file'))
+        server_public, server_secret = _path(keys['public_key_file']), _path(keys['secret_key_file'])
+        action = _map(top['action_grant'], ('revision', 'instruments', 'plan_versions', 'actions'))
+        action_grant = ExecutionActionGrant(instance_id, identity, wire.account_ref, wire.strategy_ref,
+            wire.execution_domain_ref, _text(action['revision']), _instruments(action['instruments'], local),
+            _unique_strings(action['plan_versions']), _unique_strings(action['actions']))
+        if not action_grant.actions <= {'accept', 'query'}:
+            raise ValueError
+        grants, principal_keys = [], []
+        for row in _list(top['strategy_grants']):
+            row = _map(row, ('identity', 'scope_ref', 'revision', 'instruments', 'operations', 'public_key_file'))
+            caller = _identity(row['identity'], WireRole.STRATEGY_CLIENT)
+            if caller.actor_ref != wire.strategy_ref or caller.principal_ref == identity.principal_ref:
+                raise ValueError
+            operations = _unique_strings(row['operations'])
+            instruments = _instruments(row['instruments'], local)
+            if operations != OPERATIONS or not instruments <= action_grant.instruments:
+                raise ValueError
+            grants.append(ExecutionParentGrant(instance_id, _text(row['scope_ref']), caller,
+                wire.account_ref, wire.strategy_ref, wire.execution_domain_ref, _text(row['revision']),
+                instruments, operations))
+            principal_keys.append((caller.principal_ref, _path(row['public_key_file'])))
+        if len({g.identity.principal_ref for g in grants}) != len(grants):
+            raise ValueError
+        build_id = _text(top['schedule_build_id'])
+        registry = ScheduleRegistry()
+        policies, seen = [], set()
+        for row in _list(top['algorithm_policies']):
+            row = _map(row, ('plan_version', 'schedules'))
+            plan_version = _text(row['plan_version'])
+            if plan_version in seen or plan_version not in action_grant.plan_versions:
+                raise ValueError
+            seen.add(plan_version)
+            rules = []
+            for rule in _list(row['schedules']):
+                rule = _map(rule, ('name', 'version', 'params', 'max_retry'))
+                allowed = AllowedSchedule.from_params(rule['name'], rule['version'], rule['params'], rule['max_retry'])
+                if (allowed.name, allowed.version) not in registry._definitions or allowed in rules:
+                    raise ValueError
+                rules.append(allowed)
+            policies.append(AlgorithmPolicy(wire.account_ref, wire.strategy_ref, wire.execution_domain_ref,
+                                            plan_version, build_id, tuple(rules)))
+        lease = _map(top['lease'], ('owner', 'ttl_ns'))
+        ttl = lease['ttl_ns']
+        if type(ttl) is not int or not 1_000_000 <= ttl <= 300_000_000_000:
+            raise ValueError
+        paths = [server_public, server_secret, *(p for _, p in principal_keys), registry_path]
+        if len(set(paths)) != len(paths) or any(p == journal_root or journal_root in p.parents for p in paths):
+            raise ValueError
+        return ParentConfig(service, identity, local, wire, journal_root, registry_path, storage_id,
+                            server_public, server_secret, tuple(principal_keys), tuple(grants), action_grant,
+                            tuple(policies), build_id, _text(lease['owner']), ttl, versions)
+    except Exception:
+        raise ParentServiceError('INVALID_CONFIGURATION') from None
+
+
+def load_config(path):
+    def unique(items):
+        result = {}
+        for key, value in items:
+            if key in result:
+                raise ValueError
+            result[key] = value
+        return result
+    try:
+        config_path = _path(path)
+        config = parse_config(json.loads(read_bounded(config_path, 1024 * 1024, protected=True).decode('utf-8'),
+            object_pairs_hook=unique, parse_constant=lambda _: (_ for _ in ()).throw(ValueError())))
+        if (config_path in (config.registry_path, config.server_public, config.server_secret,
+                            *(key for _, key in config.principal_keys))
+                or config_path == config.journal_root or config.journal_root in config_path.parents):
+            raise ValueError
+        return config
+    except Exception:
+        raise ParentServiceError('INVALID_CONFIGURATION') from None
+
+
+def _load_keys(config):
+    import zmq
+    from zmq.utils import z85
+    paths = (config.server_public, config.server_secret, *(p for _, p in config.principal_keys))
+    result, inodes = [], set()
+    for path in paths:
+        data = read_bounded(path, 4096, protected=True).strip()
+        info = path.stat(follow_symlinks=False)
+        if (info.st_dev, info.st_ino) in inodes or len(data) != 40 or len(z85.decode(data)) != 32:
+            raise ParentServiceError('INVALID_KEYS')
+        inodes.add((info.st_dev, info.st_ino))
+        result.append(data)
+    if zmq.curve_public(result[1]) != result[0] or len(set([result[0], *result[2:]])) != len(result) - 1:
+        raise ParentServiceError('INVALID_KEYS')
+    return result
+
+
+def _check_paths(config):
+    _directory(config.journal_root)
+    _directory(config.registry_path.parent)
+    try:
+        info = config.registry_path.stat(follow_symlinks=False)
+    except FileNotFoundError:
+        pass
+    else:
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
+                or info.st_mode & 0o077 or info.st_nlink != 1):
+            raise ParentServiceError('INVALID_STORAGE')
+    _check_existing(config)
+
+
+def _prepare_registry(config):
+    """Ensure a new SQLite registry has private permissions from its first open."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+    try:
+        fd = os.open(config.registry_path, flags, 0o600)
+    except FileExistsError:
+        return
+    else:
+        os.close(fd)
+
+
+class ParentServiceHost:
+    """Single-use owner of the original Host and journal; close is retryable."""
+    def __init__(self, config):
+        if type(config) is not ParentConfig:
+            raise ParentServiceError('INVALID_CONFIGURATION')
+        self.config, self.host, self.journal = config, None, None
+        self.state = 'new'
+
+    def start(self):
+        if self.state != 'new':
+            raise ParentServiceError('INVALID_STATE')
+        self.state = 'close_uncertain'
+        try:
+            config = self.config
+            _check_paths(config)
+            keys = _load_keys(config)
+            _prepare_registry(config)
+            grants = {g.identity.principal_ref: (PrincipalGrant(g.identity, (ResourceGrant(
+                g.instance_id, PORT, g.scope_ref, replace(config.wire_scope, run_id=None), g.operations),)),)
+                for g in config.parent_grants}
+            principal_map = {key: principal for (principal, _), key in zip(config.principal_keys, keys[2:])}
+            service = config.service
+            profile = service.communication['profiles'][service.transport_ref]
+            authority = TrustedServiceAuthority(config.identity, config.wire_scope, service.scope_ref,
+                config.versions[0], profile['security_profile_ref'], config.versions[1],
+                service.registration_policy_ref, config.versions[2], service.service_requirements_ref,
+                config.versions[3], keys[0], keys[1], principal_map, grants)
+
+            def provider(*_args):
+                journal = AccountJournalHost(root=str(config.journal_root), scope=config.local_scope,
+                                             storage_id=config.storage_id)
+                self.journal = journal
+                try:
+                    lease = journal.acquire_intake_lease(config.local_scope, config.lease_owner,
+                                                        ttl_ns=config.lease_ttl_ns)
+                    intake = AtomicSubmissionIntake(host=journal, targets={config.wire_scope: config.local_scope},
+                        lease=lease, schedule_registry=ScheduleRegistry(), schedule_build_id=config.build_id,
+                        algorithm_policies=config.policies)
+                    adapter = AtomicIntakeService(config.action_grant.instance_id, intake,
+                        config.parent_grants, (config.action_grant,), config.identity)
+                    return ComponentResources.owned({'service': adapter}, ready=lambda: True, close=journal.close)
+                except BaseException:
+                    journal.close()
+                    self.journal = None
+                    raise
+
+            self.host = ServiceHost(service, authority, config.registry_path, provider)
+            self.host.start()
+            self.state = 'running'
+        except BaseException:
+            try:
+                self.close()
+            except BaseException:
+                pass
+            raise ParentServiceError('START_FAILED') from None
+
+    def poll(self):
+        if self.state != 'running' or self.host is None:
+            raise ParentServiceError('LISTENER_UNAVAILABLE')
+        self.host.serve_once(100)
+        return 'READY' if self.host.healthy else 'UNREADY'
+
+    def close(self):
+        if self.state == 'closed':
+            return
+        self.state = 'close_uncertain'
+        try:
+            if self.host is not None:
+                self.host.close()
+                self.host = None
+            if self.journal is not None:
+                self.journal.close()
+                self.journal = None
+        except BaseException:
+            raise ParentServiceError('CLEANUP_UNKNOWN') from None
+        self.state = 'closed'
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', required=True)
+    args = parser.parse_args(argv)
+    try:
+        host = ParentServiceHost(load_config(args.config))
+        signals, failed = 0, False
+        def stop(_signum, _frame):
+            nonlocal signals
+            signals += 1
+        previous = {sig: signal.signal(sig, stop) for sig in (signal.SIGINT, signal.SIGTERM)}
+        try:
+            try:
+                host.start()
+                print('EXECUTION_PARENT_LISTENER_UNREADY' if not host.host.healthy else
+                      'EXECUTION_PARENT_LISTENER_READY', flush=True)
+                while not signals:
+                    host.poll()
+            except Exception:
+                failed = True
+            finally:
+                while True:
+                    before = signals
+                    try:
+                        host.close()
+                        break
+                    except Exception:
+                        failed = True
+                        print('EXECUTION_PARENT_CLEANUP_PENDING', flush=True)
+                        while signals == before:
+                            time.sleep(0.1)
+        finally:
+            for sig, handler in previous.items():
+                signal.signal(sig, handler)
+        print('EXECUTION_PARENT_FAILED' if failed else 'EXECUTION_PARENT_STOPPED', flush=True)
+        return int(failed)
+    except Exception:
+        print('EXECUTION_PARENT_FAILED', flush=True)
+        return 1
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

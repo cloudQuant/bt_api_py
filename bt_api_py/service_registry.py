@@ -71,6 +71,7 @@ from .execution_parent_replay import (
 _EXECUTION_RELEASE_PORT = 'service.execution_delegate'
 _EXECUTION_RELEASE_CHECK = 'execution.child.release_policy_check'
 _EXECUTION_RELEASE_OPERATIONS = frozenset({_EXECUTION_RELEASE_CHECK})
+_CALENDAR_READ_OPERATIONS = frozenset({"calendar.query.v1", "calendar.windows.v1"})
 
 
 def _execution_release_local_policy_handler(_context, _arguments):
@@ -1010,6 +1011,23 @@ def validate_capabilities_and_grants(
                             scope=resource.scope,
                             operation="owner.reduce",
                         )
+                    )
+                    and not (
+                        entry.identity.role is WireRole.STRATEGY_CLIENT
+                        and entry.identity.delegate_ref is None
+                        and resource.port == "service.calendar_read"
+                        and resource.scope == WireScope(
+                            resource.scope.execution_domain_ref,
+                            account_ref=resource.scope.account_ref,
+                            strategy_ref=entry.identity.actor_ref,
+                            run_id=resource.scope.run_id,
+                        )
+                        and resource.scope.account_ref is not None
+                        and resource.scope.strategy_ref is not None
+                        and bool(resource.operations)
+                        and resource.operations <= _CALENDAR_READ_OPERATIONS
+                        and capability.operations <= _CALENDAR_READ_OPERATIONS
+                        and not capability.write_operations
                     )
                 ):
                     raise ValueError("exact run grants exceed an allowed owner operation")
@@ -4523,9 +4541,12 @@ class ServiceRegistry:
         )
 
     @staticmethod
-    def _scope_matches(template: WireScope, requested: WireScope, identity: WireIdentity) -> bool:
+    def _scope_matches(template: WireScope, requested: WireScope, identity: WireIdentity, *, port=None) -> bool:
         if identity.role is WireRole.STRATEGY_CLIENT:
-            if template.strategy_ref is None or template.run_id is not None:
+            if template.run_id is not None:
+                return (port == "service.calendar_read" and template.account_ref is not None
+                        and template.strategy_ref == identity.actor_ref and requested == template)
+            if template.strategy_ref is None:
                 return False
             if requested.strategy_ref is None or requested.run_id is None:
                 return False
@@ -5074,7 +5095,7 @@ class ServiceRegistry:
         return grant
 
     def _resource_scope_matches(self, resource, requested, identity):
-        if self._scope_matches(resource.scope, requested, identity):
+        if self._scope_matches(resource.scope, requested, identity, port=resource.port):
             return True
         if (identity.role is not WireRole.SERVICE or resource.port != 'service.direct_write'
                 or not resource.operations or not resource.operations <= (_GATEWAY_ALL_DELEGATE_OPERATIONS | _GATEWAY_PARENT_OPERATIONS)

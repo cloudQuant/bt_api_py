@@ -750,10 +750,11 @@ def _load_resources(config, *, trading):
     try:
         keys = ("schema_version", "registry_path", "settings", "credentials", "authority", "clients",
                 "market") + (("returns",) if trading else ())
-        raw = _protected_json(os.environ.get(_RESOURCE_ENV))
+        resource_path = os.environ.get(_RESOURCE_ENV)
+        raw = _protected_json(resource_path)
         # A trading bundle may add a "clock" section (trusted SNTP policy).
         optional = ({"clock", "controls", "strategy_ledger", "strategy_financial", "delegation", "execution_subject_scopes", "required_monitor",
-                     "account_observation"} if trading else set())
+                     "account_observation"} if trading else set()) | {"calendars"}
         if type(raw) is not dict or not set(keys) <= set(raw) <= set(keys) | optional:
             _invalid()
         if type(raw["schema_version"]) is not int or raw["schema_version"] != 1:
@@ -825,6 +826,13 @@ def _load_resources(config, *, trading):
                 account_operators=frozenset(principal for principal, grant in (control_grants or {}).items()
                                             if grant.account_scope_allowed))
         authority = TrustedServiceAuthority(**authority_raw, principals=principals, grants=grants)
+        from bt_api_py.ctp_gateway_calendar_config import parse_calendar_settings, validate_calendar_settings
+        calendar_settings = (parse_calendar_settings(
+            raw["calendars"], config_file=resource_path, config=config,
+            authority=authority, account_scope=settings.account_scope,
+        ) if "calendars" in raw else None)
+        validate_calendar_settings(calendar_settings, config=config, authority=authority,
+                                   account_scope=settings.account_scope)
         required_monitor = None
         if "required_monitor" in raw:
             from bt_api_py.ctp_gateway_monitor_config import build_required_monitor_settings
@@ -917,6 +925,7 @@ def _load_resources(config, *, trading):
                 parent_authority_factory=None if parent_settings is None else _parent_authority_factory(),
                 account_read_settings=read_settings,
                 account_read_principals=read_principals,
+                calendar_settings=calendar_settings,
                 control_release_audit_enabled=release_audit is not None,
                 upgrade_control_release_audit=release_audit is True,
                 **drain_options,
@@ -924,6 +933,7 @@ def _load_resources(config, *, trading):
         return CtpGatewayTrustedResources(
             authority, _string(raw["registry_path"]), settings, direct,
             request_feed_factory, market_stream_factory, lambda _record: False, market_settings=market,
+            calendar_settings=calendar_settings,
         )
     except CtpLocalProfileError:
         raise

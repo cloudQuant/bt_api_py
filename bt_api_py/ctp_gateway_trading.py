@@ -407,6 +407,7 @@ def _validate_config(
     delegation_settings: object | None,
     parent_settings: object | None,
     acceptance_grants: tuple,
+    calendar_settings: object | None,
 ) -> str:
     if type(config) is not ServiceConfig or type(authority) is not TrustedServiceAuthority:
         raise CtpGatewayTradingError("INVALID_TRADING_CONFIGURATION")
@@ -495,6 +496,7 @@ def _validate_config(
                 frozenset({"service.direct_write"})
                 | ({"service.account_read"} if read_settings is not None else set())
                 | ({"service.market_source"} if market_settings is not None else set())
+                | ({"service.calendar_read"} if calendar_settings is not None else set())
             )
             or len(item["bind_ports"]) != len(set(item["bind_ports"]))
             or type(cancel_enabled) is not bool
@@ -562,6 +564,7 @@ def _validate_config(
                             "service.direct_write",
                             "service.account_read",
                             "service.market_source",
+                            "service.calendar_read",
                         }
                         or resource.scope_ref != config.scope_ref
                         or scope.execution_domain_ref != authority.scope.execution_domain_ref
@@ -674,6 +677,11 @@ def _validate_config(
                         )
                     ):
                         raise ValueError
+                    elif resource.port == "service.calendar_read":
+                        # Only the separately validated simulation read grants are admitted;
+                        # this port grants no direct, account, market or native write access.
+                        if calendar_settings is None:
+                            raise ValueError
             ports = {resource.port for entry in entries for resource in entry.resources}
             if (principal in grants or principal in control_grants or principal in delegate_principals or principal in parent_principals or principal in acceptance_principals) != ("service.direct_write" in ports) or (
                 principal in read_principals
@@ -818,6 +826,7 @@ def build_ctp_gateway_trading_profile(
     upgrade_control_cancel_from_v16: bool = False,
     upgrade_account_fact_recovery_from_v17: bool = False,
     upgrade_account_event_recovery_from_v18: bool = False,
+    calendar_settings: object | None = None,
     strategy_financial_source_factory: Callable[..., object] | None = None,
     strategy_financial_settings: object | None = None,
     strategy_ledger_external_baseline: object | None = None,
@@ -1024,6 +1033,12 @@ def build_ctp_gateway_trading_profile(
             for key in market_settings.key_universe
         ):
             raise CtpGatewayTradingError("INVALID_MARKET_SETTINGS")
+    from bt_api_py.ctp_gateway_calendar_config import validate_calendar_settings
+    try:
+        validate_calendar_settings(calendar_settings, config=config, authority=authority,
+                                   account_scope=settings.account_scope)
+    except Exception:
+        raise CtpGatewayTradingError("INVALID_CALENDAR_CONFIGURATION") from None
     instance = _validate_config(
         config,
         authority,
@@ -1036,6 +1051,7 @@ def build_ctp_gateway_trading_profile(
         delegation_settings,
         parent_settings,
         acceptance_grants,
+        calendar_settings,
     )
     cancel_enabled = config.components["gateway"]["settings"]["options"].get(
         "cancel_enabled", False
@@ -2202,6 +2218,9 @@ def build_ctp_gateway_trading_profile(
 
         def close_resources():
             nonlocal hub_closed, proxy_closed
+            calendar_service = holder.get("calendar_service")
+            if calendar_service is not None:
+                calendar_service.close()
             owner._fence_dispatch_shutdown()
             closing.set()
             monitor = holder.get("required_monitor")
@@ -2244,6 +2263,9 @@ def build_ctp_gateway_trading_profile(
                 raise CtpGatewayTradingError("TRADING_OWNER_CLOSE_UNCONFIRMED")
 
         try:
+            if calendar_settings is not None:
+                from bt_api_py.ctp_gateway_calendar_config import create_calendar_service
+                holder["calendar_service"] = create_calendar_service(calendar_settings)
             startup_deadline = time.monotonic() + settings.startup_timeout_seconds
             if owner.start(settings.startup_timeout_seconds) is not True:
                 session_failure = holder.get("session_failure")
@@ -2509,6 +2531,8 @@ def build_ctp_gateway_trading_profile(
                 )
                 holder["instrument_service"] = instrument_service
                 values["instrument_service"] = instrument_service
+            if calendar_settings is not None:
+                values["calendar_service"] = holder["calendar_service"]
             return ComponentResources.owned(values, ready=ready, close=close_resources)
         except BaseException as error:
             partial = ComponentResources.owned(

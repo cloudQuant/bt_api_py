@@ -37,6 +37,7 @@ _CTP_CONFIGURATION_ERROR_CODES = frozenset({
     "INVALID_ACCOUNT_FACTS_CONFIGURATION",
     "INVALID_ACCOUNT_FACT_RECOVERY_CONFIGURATION",
     "INVALID_ACCOUNT_READ_SETTINGS",
+    "INVALID_CALENDAR_CONFIGURATION",
     "INVALID_ACTOR_STREAM_CONFIGURATION",
     "INVALID_CANCEL_STREAM_CONFIGURATION",
     "INVALID_CLOCK_CONFIGURATION",
@@ -114,6 +115,7 @@ class CtpGatewayTrustedResources:
     strategy_ledger_comparison_refresh_seconds: float | None = None
     control_release_audit_enabled: bool = False
     upgrade_control_release_audit: bool = False
+    calendar_settings: object | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         from bt_api_py.gateway_parent_acceptance_service import GatewayParentAcceptanceGrant
@@ -192,6 +194,7 @@ def create_ctp_gateway_profile_factory(
                 resources.strategy_ledger_comparison_refresh_seconds),
             control_release_audit_enabled=resources.control_release_audit_enabled,
             upgrade_control_release_audit=resources.upgrade_control_release_audit,
+            calendar_settings=resources.calendar_settings,
             cancel_only=cancel_only,
         )
         return profile.deployment_factory()
