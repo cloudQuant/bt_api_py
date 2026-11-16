@@ -327,6 +327,11 @@ SURFACED_CONSTRUCTION_CODES = frozenset({
     # section do not fit; the operator restores the section or permits the upgrade.
     "CONTROL_RELEASE_AUDIT_MISMATCH",
     "CONTROL_RELEASE_AUDIT_UPGRADE_REQUIRED",
+    # CTP startup failed with a known, value-free session error. A still
+    # blocked connection or an unknown exception retains the generic result.
+    "CTP_SESSION_CONSTRUCT_FAILED",
+    "CTP_SESSION_CONNECT_FAILED",
+    "CTP_SESSION_CONNECT_TIMEOUT",
 })
 
 

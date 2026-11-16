@@ -717,6 +717,9 @@ _SURFACED_GUARD_CODES = ("SESSION_RECONCILIATION_REQUIRED", "SESSION_ALREADY_OWN
 # (``controls.release_audit``): the journal has the release audit and the bundle does
 # not name it, or the bundle names it and the journal's upgrade is not permitted.
 _SURFACED_JOURNAL_CODES = ("CONTROL_RELEASE_AUDIT_MISMATCH", "CONTROL_RELEASE_AUDIT_UPGRADE_REQUIRED")
+_SURFACED_CTP_SESSION_CODES = (
+    "CTP_SESSION_CONSTRUCT_FAILED", "CTP_SESSION_CONNECT_FAILED", "CTP_SESSION_CONNECT_TIMEOUT",
+)
 
 
 def _market_gate_latency(settings, market_settings) -> float:
@@ -1531,19 +1534,28 @@ def build_ctp_gateway_trading_profile(
                         "observation_instruments": account_read_settings.observation_instruments,
                     }
                 )
-                session = session_type(
-                    settings.account_key,
-                    request_feed_factory,
-                    market_stream_factory,
-                    trusted_flow_root=settings.trusted_flow_root,
-                    flow_account_scope=settings.account_scope,
-                    source_ref=settings.market_source_ref,
-                    entitlement_ref=settings.market_entitlement_ref,
-                    connect_timeout_seconds=settings.connect_timeout_seconds,
-                    stop_timeout_seconds=settings.session_stop_timeout_seconds,
-                    queue_capacity=settings.session_queue_capacity,
-                    **observation_options,
-                )
+                from bt_api_ctp.account_provider import CtpAccountSessionProviderError
+                from bt_api_ctp.gateway_session import CtpGatewaySessionError
+                try:
+                    session = session_type(
+                        settings.account_key,
+                        request_feed_factory,
+                        market_stream_factory,
+                        trusted_flow_root=settings.trusted_flow_root,
+                        flow_account_scope=settings.account_scope,
+                        source_ref=settings.market_source_ref,
+                        entitlement_ref=settings.market_entitlement_ref,
+                        connect_timeout_seconds=settings.connect_timeout_seconds,
+                        stop_timeout_seconds=settings.session_stop_timeout_seconds,
+                        queue_capacity=settings.session_queue_capacity,
+                        **observation_options,
+                    )
+                except Exception as error:
+                    if ((type(error) is CtpGatewaySessionError and error.code == "INVALID_CONFIGURATION")
+                            or (type(error) is CtpAccountSessionProviderError
+                                and error.code in {"INVALID_PROVIDER_CONFIGURATION", "INVALID_ACCOUNT_KEY"})):
+                        holder['session_failure'] = ("CTP_SESSION_CONSTRUCT_FAILED", time.monotonic())
+                    raise
                 # Only the exact provider session can bind this owner-scoped
                 # capability. It applies the hook to each freshly validated
                 # MD stream before that stream starts its native client.
@@ -1553,7 +1565,25 @@ def build_ctp_gateway_trading_profile(
                         holder['dispatch_claim_coordinator'], account_scope=settings.account_scope,
                         service_generation=generation)
                     holder['dispatch_claim_wired'].add('ctp.md_stream.source_change')
-                session.connect(generation=generation, timeout=settings.connect_timeout_seconds)
+                try:
+                    session.connect(generation=generation, timeout=settings.connect_timeout_seconds)
+                except Exception as error:
+                    code = None
+                    if type(error) is TimeoutError:
+                        code = "CTP_SESSION_CONNECT_TIMEOUT"
+                    elif ((type(error) is CtpGatewaySessionError
+                           and error.code in {"SESSION_NOT_CONNECTED", "SESSION_CHANGED", "INVALID_CONFIGURATION",
+                                              "SESSION_ALREADY_STARTED", "MARKET_DISPATCH_BINDING_INVALID",
+                                              "MARKET_DISPATCH_BINDING_UNAVAILABLE"})
+                          or (type(error) is CtpAccountSessionProviderError
+                              and error.code in {"SESSION_NOT_CONNECTED", "SESSION_SCOPE_UNTRUSTED", "QUERY_FAILED",
+                                                 "INVALID_PROVIDER_CONFIGURATION", "INVALID_ACCOUNT_KEY"})):
+                        code = "CTP_SESSION_CONNECT_FAILED"
+                    if code is not None:
+                        # The timestamp proves an actual exception was observed;
+                        # a still-blocked native connect is not a connect failure.
+                        holder['session_failure'] = (code, time.monotonic())
+                    raise
                 holder["session"] = session
                 from bt_api_ctp.ctp.client import TraderClient
                 trader = getattr(session, '_trader', None)
@@ -2208,8 +2238,12 @@ def build_ctp_gateway_trading_profile(
         try:
             startup_deadline = time.monotonic() + settings.startup_timeout_seconds
             if owner.start(settings.startup_timeout_seconds) is not True:
+                session_failure = holder.get("session_failure")
+                session_code = (session_failure[0] if type(session_failure) is tuple
+                                and len(session_failure) == 2 and session_failure[1] <= startup_deadline
+                                else None)
                 raise CtpGatewayTradingError(
-                    holder.get("startup_code") or "TRADING_OWNER_START_FAILED"
+                    holder.get("startup_code") or session_code or "TRADING_OWNER_START_FAILED"
                 )
             journal = holder["journal"]
             if required_monitor is not None:
@@ -2480,6 +2514,8 @@ def build_ctp_gateway_trading_profile(
                 surfaced = error.code
             elif type(error) is CtpGatewayTradingError and error.code in _SURFACED_JOURNAL_CODES:
                 # The bundle's controls.release_audit section does not fit the journal.
+                surfaced = error.code
+            elif type(error) is CtpGatewayTradingError and error.code in _SURFACED_CTP_SESSION_CODES:
                 surfaced = error.code
             raise ServiceResourceConstructionError(partial, monitor_incompatible=(
                 type(error) is CtpGatewayTradingError and error.code == "MONITOR_INCOMPATIBLE"
