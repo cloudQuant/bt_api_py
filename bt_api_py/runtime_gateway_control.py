@@ -127,7 +127,9 @@ class RuntimeGatewayControlBridge:
             runtime = ThreadedServiceClientRuntime(
                 lambda c=config, i=client_identity, s=route.scope, p=expected_gateway, f=factory:
                 ServiceClientRuntime(c, identity=i, scope_resolver=lambda _: s, peer_resolver=lambda _: p,
-                                     transport_factory=f, requested_operations={'application.direct_write': _OPERATIONS}))
+                                     transport_factory=f, requested_operations={'application.direct_write': _OPERATIONS},
+                                     require_unregister_ack=True),
+                require_unregister_ack=True)
             bound = BoundCallRoute(client_identity, route.scope, route.scope_ref, route.service_id,
                                    route.instance_id, expected_gateway)
             self._entries[strategy] = (route, binding.proof, runtime, bound)
@@ -163,7 +165,11 @@ class RuntimeGatewayControlBridge:
             for _, _, runtime, _ in self._entries.values():
                 try:
                     result = runtime.close(timeout_seconds=self._timeout)
-                    if result.thread_alive or result.cleanup_failures or result.unregister_uncertainties:
+                    counts = (result.cleanup_failures, result.unregister_uncertainties,
+                              result.unknown_registration_count, result.owner_cleanup_uncertainties)
+                    if (type(result.state) is not str or result.state != 'closed'
+                            or result.thread_alive is not False
+                            or any(type(value) is not int or value != 0 for value in counts)):
                         failed = True
                 except Exception:
                     failed = True
