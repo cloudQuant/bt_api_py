@@ -1,6 +1,7 @@
 """SDK owner to ZMQ local lineage, using no socket, network or owner thread."""
 
 import hashlib
+import threading
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -29,6 +30,11 @@ def wired(raw, monkeypatch):  # noqa: F811 -- imported pytest fixture.
     monkeypatch.setattr(ServiceClientRuntime, '_rpc', _REAL_RPC)
     monkeypatch.setattr(runtime_module, 'validate_reply', lambda *args, **kwargs: None)
     raw._cleanup_unknown = None
+    # The shared fixture constructs the runtime via __new__; initialize the
+    # fields used by the real RPC's live-parent capability invalidation.
+    raw._live_parent_capabilities_lock = threading.RLock()
+    raw._live_parent_capabilities = {}
+    raw._registration_mounts = None
     raw._startup_rollback = False
     raw._degraded, raw._degradation_codes = 0, []
     raw._config = {'communication': {'profiles': {'transport': {'options': {'request_timeout_ms': 1000}}}}}
