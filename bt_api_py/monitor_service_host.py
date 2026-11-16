@@ -8,10 +8,14 @@ it says nothing about producers, alert processing or trading readiness.
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import signal
 import stat
+import threading
+import time
 from collections.abc import Sequence
+from contextlib import suppress
 from pathlib import Path
 
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
@@ -33,6 +37,25 @@ class MonitorServiceError(RuntimeError):
     def __init__(self, code: str) -> None:
         self.code = code
         super().__init__(code)
+
+
+def _close_owned_host(host: ServiceHost) -> None:
+    # ServiceHost's general-purpose warning includes component instance names.
+    # The standalone CLI exposes only its own finite cleanup diagnostic.
+    logger = logging.getLogger("bt_api_py.service_host")
+    owner_thread = threading.get_ident()
+
+    def private_warning(record):
+        return not (
+            record.thread == owner_thread
+            and record.msg == "ServiceHost close incomplete: %s"
+        )
+
+    logger.addFilter(private_warning)
+    try:
+        return host.close()
+    finally:
+        logger.removeFilter(private_warning)
 
 
 def _storage(path: Path) -> None:
@@ -208,6 +231,8 @@ class MonitorServiceHost:
     def __init__(self, config: MonitorServiceConfig) -> None:
         self.config = config
         self._hosts: list[ServiceHost] = []
+        self._closed_hosts: set[ServiceHost] = set()
+        self._resources: list[object] = []
         self.state = "new"
 
     def start(self) -> None:
@@ -223,7 +248,9 @@ class MonitorServiceHost:
         old_umask = os.umask(0o077)
         try:
             outbox = DurableOutbox(self.config.storage_directory / "events.sqlite")
+            self._resources.append(outbox)
             target = MonitorIngressTarget(self.config.outbox_scope, self.config.event_types)
+            self._resources.append(target)
             for role in ("ingress", "heartbeat"):
                 listener = getattr(self.config, role)
                 raw = _host_config(listener, role)
@@ -240,6 +267,7 @@ class MonitorServiceHost:
                             monitor_principal=listener.principal_ref, targets=identities
                         )
                     }
+                self._resources.append(resources)
                 host = ServiceHost(
                     raw,
                     _authority(raw, listener, scope, keys[role], operation),
@@ -251,10 +279,10 @@ class MonitorServiceHost:
                 self._hosts.append(host)
                 host.start()
             self.state = "ready"
-        except Exception:
+        except BaseException:
             try:
                 self.close()
-            except Exception:
+            except BaseException:
                 raise MonitorServiceError("MONITOR_START_CLEANUP_FAILED") from None
             self.state = "failed"
             raise MonitorServiceError("MONITOR_START_FAILED") from None
@@ -270,14 +298,49 @@ class MonitorServiceHost:
     def close(self) -> None:
         failed = False
         for host in reversed(self._hosts):
+            if host in self._closed_hosts:
+                if (type(host) is ServiceHost and host._state == "closed"
+                        and host._last_cleanup_failures == ()):
+                    continue
+                self._closed_hosts.discard(host)
             try:
-                if host.state not in {"closed", "failed"}:
-                    host.close()
-            except Exception:
+                # Only the owned implementation's successful close, followed
+                # by its explicit cleanup state, confirms this owner is closed.
+                if type(host) is not ServiceHost or _close_owned_host(host) is not None:
+                    failed = True
+                    continue
+                if host._state != "closed" or host._last_cleanup_failures != ():
+                    failed = True
+                    continue
+                self._closed_hosts.add(host)
+            except BaseException:
                 failed = True
         self.state = "close_failed" if failed else "closed"
         if failed:
+            _RETAINED_HOSTS.add(self)
             raise MonitorServiceError("MONITOR_CLOSE_FAILED")
+        _RETAINED_HOSTS.discard(self)
+
+
+# A caller can lose its reference after a failed start or close. The original
+# owners remain reachable until that same MonitorServiceHost confirms cleanup.
+_RETAINED_HOSTS: set[MonitorServiceHost] = set()
+
+
+def _close_confirmed(host: MonitorServiceHost) -> bool:
+    """Close the original aggregate and check every owner's confirmation."""
+    try:
+        if type(host) is not MonitorServiceHost or host.close() is not None:
+            return False
+        return (
+            host.state == "closed"
+            and len(host._closed_hosts) == len(host._hosts)
+            and all(type(owner) is ServiceHost and owner in host._closed_hosts
+                    and owner._state == "closed" and owner._last_cleanup_failures == ()
+                    for owner in host._hosts)
+        )
+    except BaseException:
+        return False
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -288,33 +351,69 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         config = load_monitor_service_config(args.config)
-        if args.command == "validate":
-            print("MONITOR_CONFIG_VALID", flush=True)
-            return 0
-        host = MonitorServiceHost(config)
-        stopping = False
+    except Exception:
+        print("MONITOR_FAILED", flush=True)
+        return 1
+    if args.command == "validate":
+        print("MONITOR_CONFIG_VALID", flush=True)
+        return 0
+    host = MonitorServiceHost(config)
+    stopping = False
 
-        def stop(_signum, _frame):
-            nonlocal stopping
-            stopping = True
+    def stop(_signum, _frame):
+        nonlocal stopping
+        stopping = True
 
-        previous = {sig: signal.signal(sig, stop) for sig in (signal.SIGINT, signal.SIGTERM)}
+    previous = {}
+    try:
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            previous[sig] = signal.signal(sig, stop)
+    except Exception:
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
+        print("MONITOR_FAILED", flush=True)
+        return 1
+
+    failed = False
+    confirmed = False
+    try:
         try:
             host.start()
             print("MONITOR_LISTENERS_READY", flush=True)
             while not stopping:
                 host.serve_once()
-        finally:
-            try:
-                host.close()
-            finally:
-                for sig, handler in previous.items():
-                    signal.signal(sig, handler)
-        print("MONITOR_STOPPED", flush=True)
-        return 0
-    except Exception:
+        except BaseException:
+            failed = True
+        # A failed start may already have attempted rollback. Do not repeat an
+        # uncertain close until the operator signals a retry.
+        pending = host.state == "close_failed"
+        if not pending:
+            stopping = False
+            pending = not _close_confirmed(host)
+        if pending:
+            _RETAINED_HOSTS.add(host)
+            with suppress(Exception):
+                print("MONITOR_CLEANUP_PENDING", flush=True)
+            while pending:
+                if not stopping:
+                    with suppress(BaseException):
+                        time.sleep(0.1)
+                    continue
+                stopping = False
+                pending = not _close_confirmed(host)
+                if pending:
+                    _RETAINED_HOSTS.add(host)
+        _RETAINED_HOSTS.discard(host)
+        confirmed = True
+    finally:
+        if confirmed:
+            for sig, handler in previous.items():
+                signal.signal(sig, handler)
+    if failed:
         print("MONITOR_FAILED", flush=True)
         return 1
+    print("MONITOR_STOPPED", flush=True)
+    return 0
 
 
 if __name__ == "__main__":

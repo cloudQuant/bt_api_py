@@ -424,6 +424,15 @@ rules, or trading are ready. Protected file handling currently requires POSIX.
 Local acceptance covers authenticated loopback processes and persistence, not
 an actual CTP account or the complete five-component deployment.
 
+A shutdown or startup rollback that cannot confirm cleanup reports
+`MONITOR_CLEANUP_PENDING` and retains the original host and resources. The CLI
+keeps its signal handlers installed; a later SIGINT or SIGTERM retries cleanup
+on the same owners. It exits only after their close result and state are
+confirmed. An unavailable diagnostic output stream does not end this wait.
+The original storage and keys must remain available; starting a replacement
+process does not resolve uncertain cleanup. Each close attempt still depends
+on the underlying ServiceHost close operation's completion time.
+
 `bt_api_py.runtime_gateway_control.RuntimeGatewayControlBridge` connects
 Runtime's existing strategy-scoped control port to Gateway using explicit SDK
 client configurations, identities, keys and externally supplied delegation
