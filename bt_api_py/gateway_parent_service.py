@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from collections.abc import Mapping
 import json
+import re
 import threading
 
 from bt_api_base.gateway_direct_protocol import canonical_gateway_payload
@@ -24,8 +25,14 @@ SOURCE = 'direct.parent.source'
 REGISTER_V2 = 'direct.parent.register_v2'
 OPERATION_V2 = 'direct.parent.operation_v2'
 CANCEL_V2 = 'direct.parent.cancel_v2'
+# 65.03a item ①: Execution-service fault cause and its single release (D65-05).
+FAULT = 'direct.parent.fault'
+RECOVER = 'direct.parent.recover'
 V2_OPERATIONS = frozenset({REGISTER_V2, OPERATION_V2, CANCEL_V2})
-_SUPPORTED_OPERATIONS = OPERATIONS | {SOURCE} | V2_OPERATIONS
+# Both are source-bound, Execution-only operations like the v2 set above.
+FAULT_OPERATIONS = frozenset({FAULT, RECOVER})
+_SOURCE_BOUND_OPERATIONS = V2_OPERATIONS | FAULT_OPERATIONS
+_SUPPORTED_OPERATIONS = OPERATIONS | {SOURCE} | V2_OPERATIONS | FAULT_OPERATIONS
 
 
 def _ref(value):
@@ -55,7 +62,7 @@ class GatewayParentGrant:
                 or type(self.instruments) is not frozenset or not self.instruments
                 or any(type(v) is not MarketInstrumentKey for v in self.instruments)
                 or type(self.operations) is not frozenset or not self.operations or not self.operations <= _SUPPORTED_OPERATIONS
-                or (self.actor_kind == 'strategy' and self.operations & ({REGISTER, SOURCE} | V2_OPERATIONS))):
+                or (self.actor_kind == 'strategy' and self.operations & ({REGISTER, SOURCE} | _SOURCE_BOUND_OPERATIONS))):
             raise ValueError('INVALID_PARENT_GRANT')
 
 
@@ -109,6 +116,11 @@ class GatewayParentService:
             REGISTER_V2: {'spec', 'expected_source'},
             OPERATION_V2: {'account_scope', 'strategy_scope', 'parent_ref', 'registration_operation_id', 'operation_id', 'expected_source'},
             CANCEL_V2: {'account_scope', 'strategy_scope', 'parent_ref', 'registration_operation_id', 'cancel_operation_id', 'expected_version', 'expected_source'},
+            FAULT: {'account_scope', 'strategy_scope', 'parent_ref', 'registration_operation_id', 'cause_id',
+                    'expected_parent_version', 'expected_plan_version', 'expected_plan_digest', 'expected_source'},
+            RECOVER: {'account_scope', 'strategy_scope', 'parent_ref', 'registration_operation_id', 'cause_id',
+                      'recovery_id', 'expected_cause_version', 'expected_parent_version',
+                      'expected_plan_version', 'expected_plan_digest', 'expected_source'},
         }[operation]
         try:
             readiness = operation == SOURCE and 'readiness_version' in arguments
@@ -124,7 +136,7 @@ class GatewayParentService:
                 raise ValueError
             if subject_observation and (type(payload['subject_version']) is not int or payload['subject_version'] != 1):
                 raise ValueError
-            expected_source = payload.get('expected_source') if operation in V2_OPERATIONS else None
+            expected_source = payload.get('expected_source') if operation in _SOURCE_BOUND_OPERATIONS else None
             data = payload['spec'] if operation in {REGISTER, REGISTER_V2} else payload
             if type(data) is not dict:
                 raise ValueError
@@ -138,7 +150,7 @@ class GatewayParentService:
                     or scope.group_id is not None or scope.leg_id is not None
                     or data.get('account_scope') != grant.account_scope or data.get('strategy_scope') != grant.strategy_scope):
                 raise ValueError
-            if operation in V2_OPERATIONS:
+            if operation in _SOURCE_BOUND_OPERATIONS:
                 if (grant.actor_kind != 'execution' or identity.role is not WireRole.SERVICE
                         or type(expected_source) is not dict
                         or set(expected_source) != {'account_scope', 'journal_id', 'gateway_generation', 'minimum_revision'}
@@ -160,6 +172,19 @@ class GatewayParentService:
                 raise ValueError
             if operation in {CANCEL, CANCEL_V2} and (not _ref(arguments['cancel_operation_id'])
                     or type(arguments['expected_version']) is not int or arguments['expected_version'] < 1):
+                raise ValueError
+            if operation in {FAULT, RECOVER} and (
+                    not _ref(data.get('cause_id')) or not _ref(data.get('expected_plan_version'))
+                    or type(data.get('expected_plan_version')) is not str
+                    or type(data.get('expected_plan_digest')) is not str
+                    or re.fullmatch(r'[0-9a-f]{64}', data['expected_plan_digest']) is None
+                    or type(data.get('expected_parent_version')) is not int
+                    or data['expected_parent_version'] < 1):
+                raise ValueError
+            if operation == RECOVER and (
+                    not _ref(data.get('recovery_id'))
+                    or type(data.get('expected_cause_version')) is not int
+                    or data['expected_cause_version'] < 1):
                 raise ValueError
         except Exception:
             admission.close()
@@ -210,7 +235,7 @@ class GatewayParentService:
                                                             data['execution_domain_ref'], **params, **options)
                 elif operation == REGISTER_V2:
                     result = self.authority.register_parent_v2(data, expected_source, original_run=original_run, **params)
-                elif operation in {OPERATION_V2, CANCEL_V2}:
+                elif operation in {OPERATION_V2, CANCEL_V2, FAULT, RECOVER}:
                     key = (data['account_scope'], data['strategy_scope'], data['parent_ref'], data['registration_operation_id'])
 
                     def authorize_parent(parent):
@@ -221,9 +246,20 @@ class GatewayParentService:
                         result = self.authority.query_operation_v2(*key, data['operation_id'], expected_source,
                                                                    authorize_parent=authorize_parent,
                                                                    original_run=original_run, **params)
-                    else:
+                    elif operation == CANCEL_V2:
                         result = self.authority.cancel_parent_v2(*key, data['cancel_operation_id'],
                             data['expected_version'], expected_source, authorize_parent=authorize_parent, **params)
+                    elif operation == FAULT:
+                        result = self.authority.declare_parent_fault(*key, data['cause_id'],
+                            data['expected_parent_version'], data['expected_plan_version'],
+                            data['expected_plan_digest'], expected_source,
+                            authorize_parent=authorize_parent, grant_revision=grant.revision, **params)
+                    else:
+                        result = self.authority.recover_parent_fault(*key, data['cause_id'],
+                            data['recovery_id'], data['expected_cause_version'],
+                            data['expected_parent_version'], data['expected_plan_version'],
+                            data['expected_plan_digest'], expected_source,
+                            authorize_parent=authorize_parent, grant_revision=grant.revision, **params)
                 else:
                     key = (data['account_scope'], data['strategy_scope'], data['parent_ref'], data['registration_operation_id'])
                     parent = self.authority.query_parent(*key, **params)
@@ -243,7 +279,7 @@ class GatewayParentService:
                         return {'status': 'UNKNOWN'}
                     return {'status': 'OBSERVED', 'schema_version': 3, 'operation': operation,
                             'result': result, 'strategy_subject': observed_subject[0]}
-                if operation in V2_OPERATIONS:
+                if operation in _SOURCE_BOUND_OPERATIONS:
                     return {'status': 'OBSERVED', 'schema_version': 2, 'operation': operation,
                             'result': result['result'], 'source': result['source']}
                 return {'status': 'OBSERVED', 'schema_version': 1, 'operation': operation, 'result': result}

@@ -204,7 +204,7 @@ _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS = frozenset({
     "account.facts.snapshot_info", "account.facts.snapshot_read", "account.facts.snapshot_confirm",
     "account.cancel_attempts.read_after", "account.cancel_attempts.progress", "account.cancel_attempts.ack",
 })
-_GATEWAY_PARENT_OPERATIONS = frozenset({'direct.parent.register', 'direct.parent.query', 'direct.parent.cancel', 'direct.parent.operation', 'direct.parent.source', 'direct.parent.register_v2', 'direct.parent.operation_v2', 'direct.parent.cancel_v2'})
+_GATEWAY_PARENT_OPERATIONS = frozenset({'direct.parent.register', 'direct.parent.query', 'direct.parent.cancel', 'direct.parent.operation', 'direct.parent.source', 'direct.parent.register_v2', 'direct.parent.operation_v2', 'direct.parent.cancel_v2', 'direct.parent.fault', 'direct.parent.recover'})
 _GATEWAY_PARENT_READ_OPERATIONS = frozenset({'direct.parent.query', 'direct.parent.operation', 'direct.parent.source', 'direct.parent.operation_v2'})
 _GATEWAY_ACCEPTANCE_OPERATION = 'direct.parent.acceptance_order'
 _GATEWAY_PARENT_WRITE_OPERATIONS = _GATEWAY_PARENT_OPERATIONS - _GATEWAY_PARENT_READ_OPERATIONS
