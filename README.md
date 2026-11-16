@@ -418,7 +418,10 @@ python -m bt_api_py.monitor_service_host validate --config /path/to/monitor-serv
 python -m bt_api_py.monitor_service_host run --config /path/to/monitor-service.yaml
 ```
 
-Validation reads configuration only. Running opens the protected local outbox
+Validation reads configuration only. `storage.event_types` requires 1–16
+unique event names, matching the actual Monitor ingress target; an oversized
+allowlist is rejected before keys or service resources are opened.
+Running opens the protected local outbox
 and two registries; `MONITOR_LISTENERS_READY` does not mean producers, alert
 rules, or trading are ready. Protected file handling currently requires POSIX.
 Local acceptance covers authenticated loopback processes and persistence, not

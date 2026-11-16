@@ -17,6 +17,9 @@ from bt_api_py.risk_service_config import RiskServiceConfigError, load_document,
 
 SCHEMA = "bt_api_monitor.service.v1"
 _MAX_CONFIG_BYTES = 1_048_576
+# MonitorIngressTarget aliases MonitorReadTarget, whose event allowlist is
+# bounded to 16 entries. Keep offline validation independent of that package.
+_MAX_EVENT_TYPES = 16
 
 
 def _stamp(info: os.stat_result) -> tuple:
@@ -224,7 +227,7 @@ def parse_monitor_service_config(document: object, *, path: Path) -> MonitorServ
     scope = _map(top["scope"], {"execution_domain_ref", "account_ref"})
     storage = _map(top["storage"], {"directory", "outbox_scope", "event_types"})
     event_types = storage["event_types"]
-    if type(event_types) is not list or not 1 <= len(event_types) <= 128:
+    if type(event_types) is not list or not 1 <= len(event_types) <= _MAX_EVENT_TYPES:
         raise MonitorServiceConfigError()
     types = tuple(_text(t) for t in event_types)
     if len(set(types)) != len(types):
