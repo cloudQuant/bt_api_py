@@ -98,6 +98,18 @@ _STORAGE_INIT_ROOTS: dict[int, tuple[Any, ...]] = {}
 _STORAGE_ACTIVE_ROOTS: dict[int, tuple[Any, ...]] = {}
 _PROBE_GUARD = threading.Lock()
 _PROBE_STATE: dict[str, Any] = {"active": False, "uncertain": []}
+_CLEANUP_DIAGNOSTIC_REASONS = frozenset({
+    "CONCURRENT_CLEANUP_UNKNOWN", "LIFECYCLE_STATE_CHANGED",
+    "RISK_RUNTIME_CLEANUP_UNKNOWN", "RUNTIME_CLOSE_UNCONFIRMED",
+    "RUNTIME_CLOSE_EXCEPTION", "STORAGE_ENTRY_UNKNOWN", "STORAGE_INIT_UNKNOWN",
+    "DELEGATE_INIT_UNKNOWN", "STORAGE_CLEANUP_FAILED", "DELEGATE_UNRESOLVED",
+    "DELEGATE_FACTORY_STATE_CHANGED", "OBSERVER_FACTORY_STATE_CHANGED",
+    "PREVIOUS_CLEANUP_UNCONFIRMED", "PORT_CLEANUP_UNCONFIRMED",
+    "SERVICE_STATE_UNKNOWN", "SERVICE_START_UNKNOWN", "SERVICE_CLOSE_UNCONFIRMED",
+    "PORT_CLOSE_UNCONFIRMED", "STORAGE_STACK_UNCONFIRMED", "STORAGE_OWNER_UNCONFIRMED",
+    "STORAGE_CLOSE_UNCONFIRMED", "CLEANUP_EXCEPTION", "HANDLE_CLOSE_EXCEPTION",
+    "HANDLE_CLOSE_UNCONFIRMED", "SLOT_REGISTRATION_UNCONFIRMED",
+})
 _ENTRY_PROOFS_GUARD = threading.Lock()
 _ENTRY_PROOFS: weakref.WeakKeyDictionary[Any, tuple[Any, Any, Any, Any]] = weakref.WeakKeyDictionary()
 
@@ -2465,6 +2477,62 @@ def _print(value: Mapping) -> None:
     sys.stdout.flush()
 
 
+def _cleanup_wait_diagnostic(host: RiskServiceHost) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Read bounded, fixed-label observations without touching retained resources."""
+    reasons: list[str] = []
+    resources: list[str] = []
+    if not _PROBE_GUARD.acquire(blocking=False):
+        return ("UNKNOWN",), ("UNKNOWN",)
+    try:
+        if type(host) is not RiskServiceHost or type(_PROBE_STATE) is not dict:
+            return ("UNKNOWN",), ("UNKNOWN",)
+        fields = object.__getattribute__(host, "__dict__")
+        entries = _PROBE_STATE.get("uncertain")
+        if type(fields) is not dict or type(entries) is not list:
+            return ("UNKNOWN",), ("UNKNOWN",)
+        owned = (
+            ("HOST", host),
+            ("OBSERVER", fields.get("_observer_runtime")),
+            ("CONTROL", fields.get("control_runtime")),
+            ("DELEGATE_PORT", fields.get("order_port")),
+            ("MARKET", fields.get("market")),
+            ("ACCOUNT", fields.get("account")),
+            ("FINANCIAL", fields.get("financial")),
+            ("SERVICE", fields.get("service_host")),
+            ("STORAGE", fields.get("_stack")),
+            ("STORAGE", fields.get("_uncertain_storage")),
+        )
+        runtimes = fields.get("_runtimes")
+        runtimes = runtimes[:64] if type(runtimes) is list else ()
+        delegates = fields.get("_delegate_cleanup_unresolved")
+        delegates = delegates[:64] if type(delegates) is list else ()
+        for entry in entries[:128]:
+            if type(entry) is not tuple or len(entry) != 3 or entry[0] is not host:
+                continue
+            resource, reason = entry[1], entry[2]
+            reason = (reason if type(reason) is str and reason in _CLEANUP_DIAGNOSTIC_REASONS
+                      else "UNKNOWN")
+            if reason not in reasons and len(reasons) < 8:
+                reasons.append(reason)
+            category = next((name for name, value in owned
+                             if value is not None and resource is value), None)
+            if category is None:
+                if any(resource is value for value in delegates):
+                    category = "DELEGATE"
+                elif any(resource is value for value in runtimes):
+                    category = "RUNTIME"
+                else:
+                    category = "UNKNOWN"
+            if category not in resources and len(resources) < 8:
+                resources.append(category)
+    except Exception:
+        # Diagnostics must not change the existing fail-closed wait path.
+        return ("UNKNOWN",), ("UNKNOWN",)
+    finally:
+        _PROBE_GUARD.release()
+    return tuple(reasons) or ("UNKNOWN",), tuple(resources) or ("UNKNOWN",)
+
+
 def _wait_for_cleanup(host: RiskServiceHost, *, _wait: Callable[[], Any] | None = None) -> None:
     state = getattr(host, "_cleanup_state", None)
     if state == "complete":
@@ -2477,6 +2545,9 @@ def _wait_for_cleanup(host: RiskServiceHost, *, _wait: Callable[[], Any] | None 
             _LOG.warning("Risk service cleanup failed; outcome uncertain")
     _RETAINED_HOSTS.add(host)
     _LOG.error("Risk service cleanup incomplete; account fence ownership unconfirmed")
+    reasons, resources = _cleanup_wait_diagnostic(host)
+    _LOG.error("Risk cleanup diagnostic state=cleanup_uncertain reasons=%s resources=%s",
+               ",".join(reasons), ",".join(resources))
     wait = _wait if _wait is not None else threading.Event().wait
     while True:
         wait()
