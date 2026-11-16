@@ -752,7 +752,7 @@ def _load_resources(config, *, trading):
                 "market") + (("returns",) if trading else ())
         raw = _protected_json(os.environ.get(_RESOURCE_ENV))
         # A trading bundle may add a "clock" section (trusted SNTP policy).
-        optional = ({"clock", "controls", "strategy_ledger", "strategy_financial", "delegation", "execution_subject_scopes",
+        optional = ({"clock", "controls", "strategy_ledger", "strategy_financial", "delegation", "execution_subject_scopes", "required_monitor",
                      "account_observation"} if trading else set())
         if type(raw) is not dict or not set(keys) <= set(raw) <= set(keys) | optional:
             _invalid()
@@ -825,6 +825,13 @@ def _load_resources(config, *, trading):
                 account_operators=frozenset(principal for principal, grant in (control_grants or {}).items()
                                             if grant.account_scope_allowed))
         authority = TrustedServiceAuthority(**authority_raw, principals=principals, grants=grants)
+        required_monitor = None
+        if "required_monitor" in raw:
+            from bt_api_py.ctp_gateway_monitor_config import build_required_monitor_settings
+
+            required_monitor = build_required_monitor_settings(
+                raw["required_monitor"], config=config, authority=authority,
+                account_scope=settings.account_scope)
         market = None
         if raw["market"] is not None:
             market_keys = ("subscriptions", "principal_allowed_indices")
@@ -892,6 +899,7 @@ def _load_resources(config, *, trading):
                 return_settings=return_settings, market_settings=market,
                 clock_verifier_factory=verifier_factory, clock_allowed_servers=allowed_servers,
                 clock_refresh_settings=refresh, control_grants=control_grants,
+                required_monitor=required_monitor,
                 upgrade_controls_from_v9=upgrade_controls,
                 upgrade_strategy_ledger_from_v10=_strategy_ledger_upgrade(
                     raw.get("strategy_ledger")),
