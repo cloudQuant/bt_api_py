@@ -8,6 +8,7 @@ import json
 import sqlite3
 import subprocess
 import sys
+import threading
 
 import pytest
 
@@ -345,6 +346,58 @@ print(json.dumps(s.inspect_active(root=sys.argv[1],filesystem=s.FS)),flush=True)
             process.kill()
             process.wait()
     assert len((tmp_path / "calls").read_text().splitlines()) == 2
+
+
+def test_operation_change_between_snapshots_keeps_original_identity(tmp_path, monkeypatch):
+    """A closed A plus an active B must never splice A's ID onto B's identity bundle."""
+    root, env, config, path = setup_root(tmp_path, mode="manual")
+    first = execute(env, _schedule_subprocess(env, path))
+    assert first["status"] == "PENDING_REVIEW"
+    switch_mode(tmp_path, env, root, config["original_run_id"], "auto", "MOCK_stale_splice")
+    original_proof = schedule._batch_proof
+    entered, release = threading.Event(), threading.Event()
+    seen, output = [], []
+    worker = []
+
+    def blocking_batch(**kwargs):
+        seen.append(kwargs["identity_bundle"])
+        entered.set()
+        assert release.wait(30)
+        return {
+            "status": "UNKNOWN",
+            "identity_bundle": kwargs["identity_bundle"],
+            "requested_date": kwargs["requested_date"].isoformat(),
+        }
+
+    def trigger(*args, **kwargs):
+        proof = original_proof(*args, **kwargs)
+        if kwargs.get("locked") is None and not worker:
+            thread = threading.Thread(
+                target=lambda: output.append(
+                    schedule.run_once(config_file=str(path), filesystem=schedule.FS)
+                )
+            )
+            worker.append(thread)
+            thread.start()
+            assert entered.wait(30)
+        return proof
+
+    monkeypatch.setattr(schedule.batch, "run", blocking_batch)
+    monkeypatch.setattr(schedule, "_batch_proof", trigger)
+    try:
+        result = schedule.inspect_active(root=str(root), filesystem=schedule.FS)
+    finally:
+        release.set()
+        for thread in worker:
+            thread.join(30)
+
+    assert seen and seen[0] != first["identity_bundle"]
+    assert result["status"] == "UNKNOWN", result
+    assert result["reason"] == "ACTIVE_OPERATION_UNAVAILABLE", result
+    assert result["operation_id"] == first["operation_id"]
+    assert result["identity_bundle"] == first["identity_bundle"], result
+    assert output and output[0]["operation_id"] != first["operation_id"]
+    assert output[0]["identity_bundle"] == seen[0]
 
 
 def test_locked_reverification_failure_keeps_original_review(tmp_path, monkeypatch):

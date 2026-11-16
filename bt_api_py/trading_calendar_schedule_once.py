@@ -2342,6 +2342,7 @@ def inspect_active(*, root, filesystem):
         return {**LABEL, "status": "UNKNOWN", "reason": "INVALID_INPUT"}
     pending = None
     original_operation_id = None
+    original_identity_bundle = None
 
     def snapshot(*, expected_proof=None):
         nonlocal pending
@@ -2400,6 +2401,7 @@ def inspect_active(*, root, filesystem):
             }
         row, returned, _ = original
         original_operation_id = row[0]["operation_id"]
+        original_identity_bundle = row[0]["identity_bundle"]
 
         def review_started():
             return {
@@ -2459,7 +2461,12 @@ def inspect_active(*, root, filesystem):
         operation_id = original_operation_id or (pending["operation_id"] if pending else None)
         if operation_id is not None:
             result["operation_id"] = operation_id
-        if pending is not None:
+        # Never pair the captured original operation ID with a later operation's
+        # identity bundle: an A-to-B change between the two snapshots must keep A's
+        # bundle (or omit it) rather than splice A's ID onto B's identities.
+        if original_identity_bundle is not None:
+            result["identity_bundle"] = original_identity_bundle
+        elif pending is not None and pending["operation_id"] == operation_id:
             result["identity_bundle"] = pending["identity_bundle"]
         return result
 
