@@ -150,3 +150,101 @@ def test_finite_service_failures_and_unknown_remain_distinct(tmp_path, monkeypat
         assert not FakeListener.instances
     finally:
         deployment.close()
+
+
+def test_monitor_style_condition_contention_does_not_reject_binding(tmp_path, monkeypatch):
+    """Simulate another owner's service submission holding the shared condition."""
+    original = _GatewayOwnerGuardBinding.assert_bound
+    acquired, release = threading.Event(), threading.Event()
+    workers = []
+
+    def check_with_contender(holder, owner, journal):
+        original(holder, owner, journal)
+        def monitor_submit():
+            with owner._condition:
+                acquired.set()
+                assert release.wait(2)
+        worker = threading.Thread(target=monitor_submit)
+        workers.append(worker)
+        worker.start()
+        # Force the other submission's condition hold between the existing
+        # owner-resource check and the Host's final publication check.
+        assert acquired.wait(2)
+        timer = threading.Timer(0.15, release.set)
+        timer.start()
+        workers.append(timer)
+
+    monkeypatch.setattr(_GatewayOwnerGuardBinding, 'assert_bound', check_with_contender)
+    built, _, _, _, _, _ = profile(tmp_path, monkeypatch)
+    deployment = built.deployment_factory()
+    try:
+        deployment.start()
+        assert acquired.is_set()
+        assert len(deployment.service_host._gateway_owner_guard_bindings) == 1
+        assert len(FakeListener.instances) == 1 and deployment.service_host._registry.ready is True
+    finally:
+        release.set()
+        for worker in workers:
+            worker.join(2)
+        deployment.close()
+    assert all(not worker.is_alive() for worker in workers)
+
+
+def test_shutdown_revokes_binding_while_callback_waits_for_owner_condition(tmp_path, monkeypatch):
+    """Injected timeout while a monitor-style contender holds the condition."""
+    original_check = _GatewayOwnerGuardBinding.assert_bound
+    original_result = GatewayOwnerServiceCallHandle.result
+    acquired, release = threading.Event(), threading.Event()
+    workers, errors = [], []
+
+    def check_with_contender(holder, owner, journal):
+        original_check(holder, owner, journal)
+        def monitor_submit():
+            with owner._condition:
+                acquired.set()
+                assert release.wait(3)
+        worker = threading.Thread(target=monitor_submit)
+        workers.append(worker)
+        worker.start()
+        assert acquired.wait(2)
+
+    def timeout(self, *, timeout_seconds=5.0):
+        if getattr(self._task.callback, '__name__', '') == 'bind_on_owner':
+            assert acquired.wait(2)
+            raise GatewayOwnerServiceCallError('SERVICE_CALL_TIMEOUT_RUNNING')
+        return original_result(self, timeout_seconds=timeout_seconds)
+
+    monkeypatch.setattr(_GatewayOwnerGuardBinding, 'assert_bound', check_with_contender)
+    monkeypatch.setattr(GatewayOwnerServiceCallHandle, 'result', timeout)
+    built, settings, _, _, _, _ = profile(tmp_path, monkeypatch)
+    deployment = built.deployment_factory()
+    host = deployment.service_host
+    contender = LocalAccountSessionGuard(settings.guard_root, settings.account_scope, 'other')
+
+    def start():
+        try:
+            deployment.start()
+        except ServiceHostError as error:
+            errors.append(error.code)
+
+    starter = threading.Thread(target=start)
+    starter.start()
+    try:
+        assert acquired.wait(2)
+        deadline = time.monotonic() + 2
+        while host._gateway_owner_guard_active and time.monotonic() < deadline:
+            threading.Event().wait(0.005)
+        assert not host._gateway_owner_guard_active
+        assert not host._gateway_owner_guard_bindings and not FakeListener.instances
+        with pytest.raises(LocalAccountSessionGuardError):
+            contender.acquire()
+    finally:
+        release.set()
+        starter.join(3)
+        for worker in workers:
+            worker.join(3)
+    assert not starter.is_alive() and all(not worker.is_alive() for worker in workers)
+    assert errors == ['GATEWAY_OWNER_GUARD_TIMEOUT_RUNNING']
+    assert not host._gateway_owner_guard_bindings and not FakeListener.instances
+    contender.acquire()
+    contender.release()

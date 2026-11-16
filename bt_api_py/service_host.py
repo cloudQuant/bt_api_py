@@ -3694,7 +3694,10 @@ class ServiceHost:
 
         def bind_on_owner() -> None:
             holder.assert_bound(owner, journal)
-            with self._gateway_owner_guard_lock:
+            # Acquire the owner condition before the Host publication lock.
+            # Monitor and other service submissions can briefly hold this
+            # condition without invalidating the owner or its resources.
+            with owner._condition, self._gateway_owner_guard_lock:
                 holder.assert_instance(instance)
                 actual = {cap.port: cap for cap in component.capabilities}
                 registered = {port: cap for (candidate, port), cap in registry._capabilities.items()
@@ -3722,20 +3725,12 @@ class ServiceHost:
                         or any(owner is row[2] or journal is row[3] or holder is row[4]
                                for row in self._gateway_owner_guard_bindings.values())):
                     raise RuntimeError("GATEWAY_OWNER_GUARD_BINDING_INVALID")
-                # Never wait for the owner condition while holding the Host
-                # publication lock. A concurrent close either wins this race
-                # or changes the owner only after this local publication.
-                if not owner._condition.acquire(blocking=False):
+                if (owner._closing or owner._done.is_set()
+                        or owner.binding() is None or not owner.is_bound_to(journal)):
                     raise RuntimeError("GATEWAY_OWNER_GUARD_BINDING_INVALID")
-                try:
-                    if (owner._closing or owner._done.is_set()
-                            or owner.binding() is None or not owner.is_bound_to(journal)):
-                        raise RuntimeError("GATEWAY_OWNER_GUARD_BINDING_INVALID")
-                    self._gateway_owner_guard_bindings[instance] = (
-                        registry, instance, owner, journal, holder, owner._lifecycle_snapshot()
-                    )
-                finally:
-                    owner._condition.release()
+                self._gateway_owner_guard_bindings[instance] = (
+                    registry, instance, owner, journal, holder, owner._lifecycle_snapshot()
+                )
 
         handle = None
         try:
