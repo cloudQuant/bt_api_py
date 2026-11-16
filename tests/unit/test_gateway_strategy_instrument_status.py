@@ -439,3 +439,66 @@ def test_typed_client_runtime_replacement_keeps_submitted_handle(rig):
     assert client._pending is not None
     assert client.query(KEY).status == "UNAVAILABLE"
     assert shared.operations == ["instrument_status.query"]
+
+
+def test_detached_query_result_reconstructs_all_nested_dtos():
+    from bt_api_py.gateway_strategy_instrument_status import (
+        GatewayInstrumentStatusQueryResult,
+        detached_query_result,
+    )
+
+    original = GatewayInstrumentStatusQueryResult.from_wire(observed(), instrument=KEY)
+    result = detached_query_result(original, expected_instrument=KEY)
+    assert result == original
+    assert result is not original
+    assert result.instrument is not original.instrument and result.instrument is not KEY
+    assert result.projection is not original.projection
+    unavailable = GatewayInstrumentStatusQueryResult("UNAVAILABLE", KEY, code="SCOPE_DENIED")
+    copied = detached_query_result(unavailable, expected_instrument=KEY)
+    assert copied == unavailable and copied.instrument is not KEY
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("status", "UNKNOWN"),
+        ("code", "SCOPE_DENIED"),
+        ("registration_id", ""),
+        ("service_epoch", None),
+        ("owner_generation", None),
+        ("decision_eligible", True),
+        ("continuity_proven", 0),
+        ("authorizes_trading", True),
+        ("product_mapping", "PROVEN"),
+    ],
+)
+def test_detached_query_result_rejects_tampered_fields(field, value):
+    from bt_api_py.gateway_strategy_instrument_status import (
+        GatewayInstrumentStatusQueryResult,
+        detached_query_result,
+    )
+
+    original = GatewayInstrumentStatusQueryResult.from_wire(observed(), instrument=KEY)
+    object.__setattr__(original, field, value)
+    with pytest.raises(ValueError, match="INVALID_INSTRUMENT_STATUS_RESULT"):
+        detached_query_result(original, expected_instrument=KEY)
+
+
+def test_detached_query_result_rejects_nested_authorization_and_identity():
+    from bt_api_py.gateway_strategy_instrument_status import (
+        GatewayInstrumentStatusQueryResult,
+        detached_query_result,
+    )
+
+    original = GatewayInstrumentStatusQueryResult.from_wire(observed(), instrument=KEY)
+    object.__setattr__(original.projection, "authorizes_trading", True)
+    # Gateway payload() always serializes this as False, so inspect the source DTO first.
+    assert original.projection.payload()["authorizes_trading"] is False
+    with pytest.raises(ValueError, match="INVALID_INSTRUMENT_STATUS_RESULT"):
+        detached_query_result(original, expected_instrument=KEY)
+    original = GatewayInstrumentStatusQueryResult.from_wire(observed(), instrument=KEY)
+    with pytest.raises(ValueError, match="INVALID_INSTRUMENT_STATUS_RESULT"):
+        detached_query_result(original, expected_instrument=replace(KEY, product_type="option"))
+    object.__setattr__(original.projection, "reason_code", "instrument_status_closed")
+    with pytest.raises(ValueError, match="INVALID_INSTRUMENT_STATUS_RESULT"):
+        detached_query_result(original, expected_instrument=KEY)

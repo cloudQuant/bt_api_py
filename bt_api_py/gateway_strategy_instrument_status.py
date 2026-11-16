@@ -135,6 +135,62 @@ class GatewayInstrumentStatusQueryResult:
         )
 
 
+def detached_query_result(result, *, expected_instrument):
+    """Revalidate and detach a diagnostic result without granting authority."""
+    try:
+        if type(result) is not GatewayInstrumentStatusQueryResult:
+            raise ValueError
+        if type(expected_instrument) is not MarketInstrumentKey:
+            raise ValueError
+        expected = decode_query({"instrument": expected_instrument.to_dict()})
+        if type(result.instrument) is not MarketInstrumentKey:
+            raise ValueError
+        instrument = decode_query({"instrument": result.instrument.to_dict()})
+        if (
+            instrument != expected
+            or type(result.status) is not str
+            or type(result.product_mapping) is not str
+        ):
+            raise ValueError
+
+        projection = result.projection
+        if projection is not None:
+            if (
+                type(projection) is not GatewayInstrumentStatusProjection
+                or projection.authorizes_trading is not False
+                or set(vars(projection))
+                != set(GatewayInstrumentStatusProjection.__dataclass_fields__)
+            ):
+                raise ValueError
+            projection = GatewayInstrumentStatusProjection(**vars(projection))
+        checked = GatewayInstrumentStatusQueryResult(
+            status=result.status,
+            instrument=instrument,
+            code=result.code,
+            registration_id=result.registration_id,
+            service_epoch=result.service_epoch,
+            owner_generation=result.owner_generation,
+            projection=projection,
+            decision_eligible=result.decision_eligible,
+            continuity_proven=result.continuity_proven,
+            authorizes_trading=result.authorizes_trading,
+            product_mapping=result.product_mapping,
+        )
+        if checked.status == "UNAVAILABLE":
+            wire = {"status": "REQUEST_REJECTED", "code": checked.code}
+        else:
+            wire = encode_observation(
+                instrument=instrument,
+                registration_id=checked.registration_id,
+                service_epoch=checked.service_epoch,
+                owner_generation=checked.owner_generation,
+                projection=checked.projection,
+            )
+        return GatewayInstrumentStatusQueryResult.from_wire(wire, instrument=expected)
+    except Exception:
+        raise ValueError("INVALID_INSTRUMENT_STATUS_RESULT") from None
+
+
 class GatewayInstrumentStatusOwner:
     """One owner-thread bridge; no new connection or independent registration."""
 
