@@ -2287,7 +2287,9 @@ class ServiceClientRuntime:
                  or (binding.mount == "upstream.telemetry" and self.identity.role is WireRole.SERVICE
                      and "events.append" in binding.operations)
                  or (binding.mount == "upstream.instrument_products" and self.identity.role is WireRole.SERVICE
-                     and binding.operations == PORT_OPERATIONS["service.instrument_product_read"]))
+                     and binding.operations == PORT_OPERATIONS["service.instrument_product_read"])
+                 or (binding.mount == "upstream.calendar" and self.identity.role is WireRole.SERVICE
+                     and binding.operations == frozenset({"calendar.monitor.windows.v1"})))
                     and self._has_current_registration_observation(binding, _startup=startup)):
                 old_lineage = self._registration_lineage.get(id(binding))
             upstream_old = None

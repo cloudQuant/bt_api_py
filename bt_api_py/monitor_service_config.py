@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from bt_api_base.market_protocol import MarketSubscriptionKey
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 
 from bt_api_py.risk_service_config import RiskServiceConfigError, load_document, resolve_path
@@ -174,6 +175,16 @@ class MonitorProducerBinding:
 
 
 @dataclass(frozen=True)
+class RecoveryDurationConfig:
+    consumer_id: str
+    binding_ref: str
+    source_ref: str
+    scope_ref: str
+    config_version: str
+    member_key: MarketSubscriptionKey
+
+
+@dataclass(frozen=True)
 class MonitorServiceConfig:
     storage_directory: Path
     execution_domain_ref: str
@@ -183,6 +194,7 @@ class MonitorServiceConfig:
     ingress: Listener
     heartbeat: Listener
     producer_bindings: tuple[MonitorProducerBinding, ...] = ()
+    recovery_duration: tuple[RecoveryDurationConfig, ...] = ()
 
 
 def _path(value: object, base: Path) -> Path:
@@ -307,12 +319,51 @@ def _producer_bindings(value, ingress, domain, account, outbox_scope, allowed_ty
     return tuple(bindings)
 
 
+def _recovery_duration(value, bindings, outbox_scope):
+    event_type = "gateway.recovery.journal.v1"
+    producers = tuple(
+        binding for binding in bindings
+        if binding.outbox_scope == outbox_scope and event_type in binding.event_types
+    )
+    if type(value) is not list or not 1 <= len(value) <= 1024 or len(producers) != 1:
+        raise MonitorServiceConfigError()
+    result = []
+    consumers, members = set(), set()
+    for raw in value:
+        item = _map(raw, {
+            "consumer_id", "binding_ref", "source_ref", "scope_ref", "config_version", "member_key"
+        })
+        texts = tuple(_text(item[key]) for key in (
+            "consumer_id", "binding_ref", "source_ref", "scope_ref", "config_version"
+        ))
+        if not all(text.isprintable() for text in texts):
+            raise MonitorServiceConfigError()
+        try:
+            member = MarketSubscriptionKey.from_dict(item["member_key"])
+        except (TypeError, ValueError, UnicodeError):
+            raise MonitorServiceConfigError() from None
+        consumer, binding_ref, source_ref, scope_ref, config_version = texts
+        producer = producers[0]
+        member_binding = (producer.identity, producer.scope, binding_ref, source_ref, member)
+        if (consumer in consumers or member_binding in members or binding_ref != producer.binding_ref
+                or source_ref != producer.source_ref):
+            raise MonitorServiceConfigError()
+        consumers.add(consumer)
+        members.add(member_binding)
+        result.append(RecoveryDurationConfig(
+            consumer, binding_ref, source_ref, scope_ref, config_version, member
+        ))
+    return tuple(result)
+
+
 def parse_monitor_service_config(document: object, *, path: Path) -> MonitorServiceConfig:
     if type(document) is not dict or document.get("schema") not in (SCHEMA, SCHEMA_V2):
         raise MonitorServiceConfigError()
     keys = {"schema", "scope", "storage", "ingress", "heartbeat"}
     if document["schema"] == SCHEMA_V2:
         keys.add("producer_bindings")
+        if "recovery_duration" in document:
+            keys.add("recovery_duration")
     top = _map(document, keys)
     base = Path(path).resolve().parent
     scope = _map(top["scope"], {"execution_domain_ref", "account_ref"})
@@ -343,6 +394,9 @@ def parse_monitor_service_config(document: object, *, path: Path) -> MonitorServ
         bindings = _producer_bindings(
             top["producer_bindings"], ingress, domain, account, outbox_scope, types
         )
+    recovery = ()
+    if "recovery_duration" in top:
+        recovery = _recovery_duration(top["recovery_duration"], bindings, outbox_scope)
     return MonitorServiceConfig(
         _path(storage["directory"], base),
         domain,
@@ -352,6 +406,7 @@ def parse_monitor_service_config(document: object, *, path: Path) -> MonitorServ
         ingress,
         heartbeat,
         bindings,
+        recovery,
     )
 
 

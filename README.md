@@ -1385,3 +1385,32 @@ authenticated peer and registration lineage, starts its local expiry bound
 before sending, and retains pending or unknown operations. Explicit `retire()`
 releases only known terminal local entries. Synthetic owner/profile/CURVE tests
 cover these paths; native account and deployment acceptance remain separate.
+
+
+### Monitor member consumers and typed calendar reads
+
+A v2 standalone Monitor configuration may explicitly add a nonempty
+`recovery_duration` list. Each item fixes `consumer_id`, `binding_ref`,
+`source_ref`, `scope_ref`, `config_version` and a complete `member_key`. The
+Host uses its original durable outbox and complete ingress binding list, with
+one independent consumer/checkpoint per configured member. An owned background
+thread performs bounded steps. Missing mapping/calendar facts remain durable
+pending and pause that consumer; this composition currently supplies no remote
+facts and sends no alerts. Cached snapshots are explicitly historical only,
+with current state UNKNOWN. Unconfirmed worker shutdown retains the original
+worker, listeners and resources for explicit retry.
+
+When this processor is selected, the shared SQLite lock wait is 0.05 seconds
+(the unselected default remains unchanged). A busy ingress call may have an
+UNKNOWN outcome and is not an acknowledgement or safe-retry proof. SQL errors
+make the selected worker UNKNOWN and drive the Host's normal failure/cleanup
+path. The short lock wait is not a bound on all disk or operating-system I/O.
+
+`GatewayMonitorCalendarClient` reads `calendar.monitor.windows.v1` using a
+borrowed, thread-owned runtime and exact authenticated account/peer binding.
+It accepts legitimate renewal between calls, but requires the same binding
+object throughout each individual call. The immutable result retains the
+simulation and unproven-source labels. Domain/account come from the Registry
+binding; they are not echoed by the calendar wire payload. Window consistency
+relies on the Gateway's single-view fence, not a per-window cryptographic proof.
+This reader is not yet a historical ProductID/calendar fact adapter.

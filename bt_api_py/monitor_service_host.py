@@ -233,6 +233,7 @@ class MonitorServiceHost:
         self._hosts: list[ServiceHost] = []
         self._closed_hosts: set[ServiceHost] = set()
         self._resources: list[object] = []
+        self._recovery_worker = None
         self.state = "new"
 
     def start(self) -> None:
@@ -247,30 +248,32 @@ class MonitorServiceHost:
         scope = WireScope(self.config.execution_domain_ref, account_ref=self.config.account_ref)
         old_umask = os.umask(0o077)
         try:
-            outbox = DurableOutbox(self.config.storage_directory / "events.sqlite")
+            database = self.config.storage_directory / "events.sqlite"
+            outbox = (DurableOutbox(database, timeout_seconds=0.05)
+                      if self.config.recovery_duration else DurableOutbox(database))
             self._resources.append(outbox)
             target = MonitorIngressTarget(self.config.outbox_scope, self.config.event_types)
             self._resources.append(target)
+            producer_bindings = ()
+            if self.config.producer_bindings:
+                from bt_api_monitor.service_ingress import MonitorIngressProducerBinding
+
+                producer_bindings = tuple(
+                    MonitorIngressProducerBinding(
+                        binding.binding_ref, binding.source_ref, binding.identity, binding.scope,
+                        binding.outbox_scope, binding.event_types,
+                    )
+                    for binding in self.config.producer_bindings
+                )
+                self._resources.append(producer_bindings)
             for role in ("ingress", "heartbeat"):
                 listener = getattr(self.config, role)
                 raw = _host_config(listener, role)
                 operation = "events.append" if role == "ingress" else "monitor.heartbeat"
                 if role == "ingress":
                     resources = {"outbox": outbox, "targets": {scope: target}}
-                    if self.config.producer_bindings:
-                        from bt_api_monitor.service_ingress import MonitorIngressProducerBinding
-
-                        resources["producer_bindings"] = tuple(
-                            MonitorIngressProducerBinding(
-                                binding.binding_ref,
-                                binding.source_ref,
-                                binding.identity,
-                                binding.scope,
-                                binding.outbox_scope,
-                                binding.event_types,
-                            )
-                            for binding in self.config.producer_bindings
-                        )
+                    if producer_bindings:
+                        resources["producer_bindings"] = producer_bindings
                 else:
                     identities = frozenset(
                         (WireIdentity(WireRole.SERVICE, p.principal_ref, p.actor_ref), scope)
@@ -292,6 +295,13 @@ class MonitorServiceHost:
                 )
                 self._hosts.append(host)
                 host.start()
+            if self.config.recovery_duration:
+                from bt_api_py.monitor_recovery_duration_worker import RecoveryDurationWorker
+
+                self._recovery_worker = RecoveryDurationWorker(
+                    outbox, self.config.recovery_duration, producer_bindings
+                )
+                self._recovery_worker.start()
             self.state = "ready"
         except BaseException:
             try:
@@ -306,10 +316,27 @@ class MonitorServiceHost:
     def serve_once(self, timeout_ms: int = 20) -> None:
         if self.state != "ready":
             raise MonitorServiceError("MONITOR_STATE_INVALID")
+        if self._recovery_worker is not None and self._recovery_worker.failed:
+            raise MonitorServiceError("MONITOR_RECOVERY_FAILED")
         for host in self._hosts:
             host.serve_once(timeout_ms=timeout_ms)
 
+    def recovery_duration_snapshot(self, consumer_id: str) -> dict:
+        if self.state != "ready" or self._recovery_worker is None:
+            raise MonitorServiceError("MONITOR_RECOVERY_UNAVAILABLE")
+        return self._recovery_worker.snapshot(consumer_id)
+
     def close(self) -> None:
+        if self._recovery_worker is not None:
+            try:
+                stopped = (self._recovery_worker.stop() is True
+                           and self._recovery_worker.stopped is True)
+            except BaseException:
+                stopped = False
+            if not stopped:
+                self.state = "close_failed"
+                _RETAINED_HOSTS.add(self)
+                raise MonitorServiceError("MONITOR_CLOSE_FAILED")
         failed = False
         for host in reversed(self._hosts):
             if host in self._closed_hosts:
@@ -348,6 +375,7 @@ def _close_confirmed(host: MonitorServiceHost) -> bool:
             return False
         return (
             host.state == "closed"
+            and (host._recovery_worker is None or host._recovery_worker.stopped is True)
             and len(host._closed_hosts) == len(host._hosts)
             and all(type(owner) is ServiceHost and owner in host._closed_hosts
                     and owner._state == "closed" and owner._last_cleanup_failures == ()
