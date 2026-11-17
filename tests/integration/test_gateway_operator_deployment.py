@@ -8,7 +8,7 @@ import threading
 import time
 from contextlib import suppress
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 import zmq
@@ -20,10 +20,6 @@ from bt_api_gateway.event_journal import GatewayEventJournal
 from bt_api_gateway.router import GatewayCommandKind, GatewayPrincipal
 from bt_api_gateway.service_component import GatewayServiceAccountScope
 from bt_api_gateway.session_guard import LocalAccountSessionGuard
-from bt_api_okx.containers.tickers import OkxTickerData
-from bt_api_okx.feeds.live_okx.swap import OkxRequestDataSwap
-from bt_api_okx.market_history_provider import OkxMarketHistoryProvider
-from bt_api_okx.market_provider import BoundedOkxTickerQueue, OkxTickerQueueMarketProvider
 
 from bt_api_py.gateway_operator import (
     GatewayAccountSessionBinding,
@@ -44,6 +40,10 @@ from bt_api_py.service_runtime import (
     ServiceClientRuntime,
     ZmqTransportFactory,
 )
+
+if TYPE_CHECKING:
+    from bt_api_okx.market_provider import BoundedOkxTickerQueue
+
 
 _SERVICE_ID = "operator-gateway-service"
 _SERVICE_INSTANCE = "operator-gateway-instance"
@@ -194,6 +194,8 @@ class _SyntheticOkxStream:
         self.started = True
 
     def emit(self) -> None:
+        from bt_api_okx.containers.tickers import OkxTickerData
+
         self.sink.put(
             OkxTickerData(
                 {
@@ -259,6 +261,8 @@ def _market_authority(
 
 @pytest.mark.integration
 def test_operator_factory_runs_okx_projection_through_real_service_host(tmp_path: Path) -> None:
+    from bt_api_okx.market_provider import OkxTickerQueueMarketProvider
+
     rpc_bind, market_bind = _free_endpoint(), _free_endpoint()
     raw_config = _market_service_config(rpc_bind, market_bind)
     config = parse_service_config(raw_config)
@@ -388,66 +392,6 @@ class _NoSubscriptionMarketProvider:
         self.close_calls += 1
 
 
-class _SyntheticHistoryHttpLeaf(OkxRequestDataSwap):
-    def __init__(self) -> None:
-        super().__init__(None, environment="production")
-        self.http_calls: list[dict[str, Any]] = []
-        self.disconnect_calls = 0
-
-    def http_request(
-        self,
-        method: str,
-        url: str,
-        headers: Any = None,
-        body: Any = None,
-        timeout: float = 10,
-        max_retries: int = 3,
-    ) -> dict[str, Any]:
-        self.http_calls.append(
-            {
-                "thread_id": threading.get_ident(),
-                "method": method,
-                "url": url,
-                "headers": dict(headers or {}),
-                "body": body,
-                "timeout": timeout,
-                "max_retries": max_retries,
-            }
-        )
-        return {
-            "code": "0",
-            "msg": "",
-            "data": [
-                [
-                    "1767225600000",
-                    "100.0",
-                    "102.0",
-                    "99.0",
-                    "101.0",
-                    "10",
-                    "1000",
-                    "1000",
-                    "1",
-                ],
-                [
-                    "1767225660000",
-                    "101.0",
-                    "103.0",
-                    "100.0",
-                    "102.0",
-                    "12",
-                    "1200",
-                    "1200",
-                    "1",
-                ],
-            ],
-        }
-
-    def disconnect(self) -> None:
-        self.disconnect_calls += 1
-        super().disconnect()
-
-
 class _FailFirstHistoryClose:
     def __init__(self) -> None:
         self.close_calls = 0
@@ -465,6 +409,68 @@ class _FailFirstHistoryClose:
 def test_history_only_client_fetches_okx_bars_through_operator_host_without_subscribing(
     tmp_path: Path,
 ) -> None:
+    from bt_api_okx.feeds.live_okx.swap import OkxRequestDataSwap
+    from bt_api_okx.market_history_provider import OkxMarketHistoryProvider
+
+    class _SyntheticHistoryHttpLeaf(OkxRequestDataSwap):
+        def __init__(self) -> None:
+            super().__init__(None, environment="production")
+            self.http_calls: list[dict[str, Any]] = []
+            self.disconnect_calls = 0
+
+        def http_request(
+            self,
+            method: str,
+            url: str,
+            headers: Any = None,
+            body: Any = None,
+            timeout: float = 10,
+            max_retries: int = 3,
+        ) -> dict[str, Any]:
+            self.http_calls.append(
+                {
+                    "thread_id": threading.get_ident(),
+                    "method": method,
+                    "url": url,
+                    "headers": dict(headers or {}),
+                    "body": body,
+                    "timeout": timeout,
+                    "max_retries": max_retries,
+                }
+            )
+            return {
+                "code": "0",
+                "msg": "",
+                "data": [
+                    [
+                        "1767225600000",
+                        "100.0",
+                        "102.0",
+                        "99.0",
+                        "101.0",
+                        "10",
+                        "1000",
+                        "1000",
+                        "1",
+                    ],
+                    [
+                        "1767225660000",
+                        "101.0",
+                        "103.0",
+                        "100.0",
+                        "102.0",
+                        "12",
+                        "1200",
+                        "1200",
+                        "1",
+                    ],
+                ],
+            }
+
+        def disconnect(self) -> None:
+            self.disconnect_calls += 1
+            super().disconnect()
+
     rpc_bind, market_bind = _free_endpoint(), _free_endpoint()
     config = parse_service_config(_market_service_config(rpc_bind, market_bind))
     server_keys = zmq.curve_keypair()

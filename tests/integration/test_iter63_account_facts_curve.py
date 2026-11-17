@@ -6,9 +6,12 @@ from contextlib import contextmanager
 from dataclasses import replace
 from decimal import Decimal
 from types import SimpleNamespace
+import hashlib
+import sqlite3
 import traceback
 import queue
 import threading
+import time
 
 import pytest
 import zmq
@@ -60,7 +63,7 @@ def fact(*, keys, binding, venue, trade_key=('SHFE', 'trade-1'), ref='source'):
         trade_key=trade_key, side='buy', offset='open', trade_quantity='1', trade_price='10')
 
 
-def test_fact_stream_actual_curve_scope_bootstrap_live_and_ack(tmp_path):
+def test_fact_stream_actual_curve_scope_bootstrap_live_and_ack(tmp_path, monkeypatch):
     endpoint = _free_endpoint()
     server_public, server_secret = zmq.curve_keypair()
     client_public, client_secret = zmq.curve_keypair()
@@ -237,20 +240,60 @@ def test_fact_stream_actual_curve_scope_bootstrap_live_and_ack(tmp_path):
                 owner.close(10)
     thread = threading.Thread(target=serve, daemon=True)
     thread.start()
-    runtime = other_runtime = successor = replacement = None
+    runtime = other_runtime = successor = replacement = strict_runtime = None
     try:
         started = ready.get(timeout=20)
         assert started[0] == 'ready', started
         runtime = ThreadedServiceClientRuntime(lambda: ServiceClientRuntime(_dual_client(endpoint, CLIENT_A),
             identity=CLIENT_A, scope_resolver=lambda _: WireScope(DOMAIN, account_ref=ACCOUNT),
             peer_resolver=lambda _: SERVICE,
-            transport_factory=ZmqTransportFactory({'security-a': ClientCurveKeys(server_public, client_public, client_secret)}),
+            transport_factory=ZmqTransportFactory({'security-a': ClientCurveKeys(server_public, client_public, client_secret)},
+                                                  strict_single_connection=True),
             run_id='run-strategy-a', requested_operations={
                 'broker.direct_write': STORAGE_OPERATIONS, 'store.account': ACCOUNT_FACTS_OPERATIONS}))
         assert runtime.start(timeout_seconds=10).healthy
         scope = WireScope(DOMAIN, account_ref=ACCOUNT, strategy_ref=CLIENT_A.actor_ref, run_id='run-strategy-a')
         route = GatewayAccountObserverRoute('store.account', SERVICE.actor_ref, 'gateway-a', 'scope-a', scope, CLIENT_A)
         client = GatewayAccountFactsClient(runtime, route=route)
+        strict = GatewayAccountFactsClient(runtime, route=route, peer=SERVICE,
+                                           fingerprint=hashlib.sha256(server_public).hexdigest())
+        first = strict.read_after(limit=4)
+        assert first.outcome == 'OBSERVED' and first._read_token is not None
+        wrong_key = GatewayAccountFactsClient(runtime, route=route, peer=SERVICE, fingerprint='0' * 64)
+        calls = []
+        original_call = ServiceClientRuntime.call
+        def record_calls(self, mount, operation, arguments, **kwargs):
+            calls.append(operation)
+            return original_call(self, mount, operation, arguments, **kwargs)
+        with monkeypatch.context() as patch:
+            patch.setattr(ServiceClientRuntime, 'call', record_calls)
+            assert wrong_key.read_after(limit=4).outcome != 'OBSERVED'
+            assert wrong_key.confirm_snapshot('a' * 64, 'b' * 64).outcome != 'OBSERVED'
+        assert calls == []
+        assert strict.acknowledge(3, expected_epoch=first.page.progress.epoch,
+                                  read_token=first._read_token).code == 'READ_BINDING_REQUIRED'
+        def renew_after_call(self, mount, operation, arguments, **kwargs):
+            result = original_call(self, mount, operation, arguments, **kwargs)
+            if operation == 'account.facts.progress':
+                self._maintain(force=True)
+            return result
+        with monkeypatch.context() as patch:
+            patch.setattr(ServiceClientRuntime, 'call', renew_after_call)
+            runtime.call('store.account', 'account.facts.progress', {}, timeout_seconds=5)
+        assert strict.acknowledge(4, expected_epoch=first.page.progress.epoch,
+                                  read_token=first._read_token).outcome != 'OBSERVED'
+        after_renew = strict.read_after(limit=4)
+        assert after_renew.outcome == 'OBSERVED' and after_renew._read_token is not None
+        def renew_during_read(self, mount, operation, arguments, **kwargs):
+            result = original_call(self, mount, operation, arguments, **kwargs)
+            if operation == 'account.facts.read_after':
+                self._maintain(force=True)
+            return result
+        with monkeypatch.context() as patch:
+            patch.setattr(ServiceClientRuntime, 'call', renew_during_read)
+            assert strict.read_after(limit=4).outcome == 'UNKNOWN'
+        assert strict.acknowledge(4, expected_epoch=after_renew.page.progress.epoch,
+                                  read_token=after_renew._read_token).code == 'READ_BINDING_REQUIRED'
         page = client.read_after(limit=4, timeout_seconds=5)
         assert page.outcome == 'OBSERVED', page
         assert page.page.progress.bootstrap_count == 1 and page.page.has_more
@@ -286,6 +329,14 @@ def test_fact_stream_actual_curve_scope_bootstrap_live_and_ack(tmp_path):
         successor_scope = WireScope(DOMAIN, account_ref=ACCOUNT, strategy_ref=CLIENT_A.actor_ref, run_id='new-run')
         successor_client = GatewayAccountFactsClient(successor, route=GatewayAccountObserverRoute(
             'store.account', SERVICE.actor_ref, 'gateway-a', 'scope-a', successor_scope, CLIENT_A))
+        non_strict_transport = GatewayAccountFactsClient(successor, route=successor_client._route,
+            peer=SERVICE, fingerprint=hashlib.sha256(server_public).hexdigest())
+        calls = []
+        with monkeypatch.context() as patch:
+            patch.setattr(ServiceClientRuntime, 'call', record_calls)
+            assert non_strict_transport.read_after().outcome != 'OBSERVED'
+            assert non_strict_transport.snapshot_info().outcome != 'OBSERVED'
+        assert calls == []
         assert client.progress().outcome != 'OBSERVED'
         assert successor_client.acknowledge(5, expected_epoch=page.page.progress.epoch).outcome != 'OBSERVED'
         runtime.close(timeout_seconds=10)
@@ -315,7 +366,7 @@ def test_fact_stream_actual_curve_scope_bootstrap_live_and_ack(tmp_path):
         replacement = ThreadedServiceClientRuntime(lambda: ServiceClientRuntime(parse_client_config(duplicate_config),
             identity=CLIENT_A, scope_resolver=lambda _: WireScope(DOMAIN, account_ref=ACCOUNT),
             peer_resolver=lambda _: SERVICE, transport_factory=ZmqTransportFactory(
-                {'security-a': ClientCurveKeys(server_public, client_public, client_secret)}),
+                {'security-a': ClientCurveKeys(server_public, client_public, client_secret)}, strict_single_connection=True),
             run_id='third-run', requested_operations={'store.account': ACCOUNT_FACTS_OPERATIONS}))
         assert replacement.start(timeout_seconds=10).healthy
         replacement_scope = WireScope(DOMAIN, account_ref=ACCOUNT, strategy_ref=CLIENT_A.actor_ref, run_id='third-run')
@@ -359,7 +410,87 @@ def test_fact_stream_actual_curve_scope_bootstrap_live_and_ack(tmp_path):
         with pytest.raises(ServiceRuntimeError, match='AMBIGUOUS_OR_MISSING_ROUTE'):
             other_runtime.call('store.account', 'account.facts.read_after',
                 {'after_sequence': 0, 'expected_epoch': None, 'limit': 1}, timeout_seconds=2)
+        # A separate caller transaction commits before the explicit ACK; this
+        # is a local fixture and does not establish cross-store atomicity.
+        replacement.close(timeout_seconds=10)
+        replacement = None
+        strict_runtime = ThreadedServiceClientRuntime(lambda: ServiceClientRuntime(parse_client_config(duplicate_config),
+            identity=CLIENT_A, scope_resolver=lambda _: WireScope(DOMAIN, account_ref=ACCOUNT),
+            peer_resolver=lambda _: SERVICE, transport_factory=ZmqTransportFactory(
+                {'security-a': ClientCurveKeys(server_public, client_public, client_secret)}, strict_single_connection=True),
+            run_id='strict-run', requested_operations={'store.account': ACCOUNT_FACTS_OPERATIONS}))
+        assert strict_runtime.start(timeout_seconds=10).healthy
+        strict_scope = WireScope(DOMAIN, account_ref=ACCOUNT, strategy_ref=CLIENT_A.actor_ref, run_id='strict-run')
+        strict_route = GatewayAccountObserverRoute('store.account', SERVICE.actor_ref, 'gateway-a', 'scope-a', strict_scope, CLIENT_A)
+        strict_replacement = GatewayAccountFactsClient(strict_runtime, route=strict_route,
+            peer=SERVICE, fingerprint=hashlib.sha256(server_public).hexdigest())
+        late = replace(fact(keys=('late',), binding=('late',), venue='late',
+                            trade_key=('SHFE', 'late-trade')), account_scope=ACCOUNT)
+        assert started[4].submit_service_call(lambda: started[5].ingest(late)).result(timeout_seconds=5).disposition == 'UNATTRIBUTED'
+        observed = strict_replacement.read_after(after_sequence=5, expected_epoch=page.page.progress.epoch)
+        assert observed.outcome == 'OBSERVED' and len(observed.page.events) == 1 and observed._read_token is not None, observed
+        with sqlite3.connect(tmp_path / 'caller.sqlite') as db:
+            db.execute('CREATE TABLE applied (sequence INTEGER, digest TEXT)')
+            db.execute('INSERT INTO applied VALUES (?, ?)', (6, observed.page.events[0].event_digest))
+            db.commit()
+        assert strict_replacement.acknowledge(6, expected_epoch=page.page.progress.epoch,
+            read_token=observed._read_token).outcome == 'OBSERVED'
+        later = replace(fact(keys=('later',), binding=('later',), venue='later',
+                             trade_key=('SHFE', 'later-trade')), account_scope=ACCOUNT)
+        assert started[4].submit_service_call(lambda: started[5].ingest(later)).result(timeout_seconds=5).disposition == 'UNATTRIBUTED'
+        observed = strict_replacement.read_after(after_sequence=6, expected_epoch=page.page.progress.epoch)
+        assert observed.outcome == 'OBSERVED' and observed._read_token is not None
+        def lose_ack(self, mount, operation, arguments, **kwargs):
+            result = original_call(self, mount, operation, arguments, **kwargs)
+            if operation == 'account.facts.ack':
+                raise TimeoutError('synthetic reply loss after commit')
+            return result
+        with monkeypatch.context() as patch:
+            patch.setattr(ServiceClientRuntime, 'call', lose_ack)
+            assert strict_replacement.acknowledge(7, expected_epoch=page.page.progress.epoch,
+                read_token=observed._read_token).outcome == 'UNKNOWN'
+        assert strict_replacement.acknowledge(7, expected_epoch=page.page.progress.epoch,
+            read_token=observed._read_token).code == 'READ_BINDING_REQUIRED'
+        assert strict_replacement.progress().progress.acknowledged_sequence == 7
+        reoffered = strict_replacement.read_after(after_sequence=6, expected_epoch=page.page.progress.epoch)
+        assert reoffered.outcome == 'OBSERVED' and reoffered._read_token is not None
+        assert strict_replacement.acknowledge(7, expected_epoch=page.page.progress.epoch,
+            read_token=reoffered._read_token).outcome == 'OBSERVED'
+        final = replace(fact(keys=('final',), binding=('final',), venue='final',
+                             trade_key=('SHFE', 'final-trade')), account_scope=ACCOUNT)
+        assert started[4].submit_service_call(lambda: started[5].ingest(final)).result(timeout_seconds=5).disposition == 'UNATTRIBUTED'
+        pending = strict_replacement.read_after(after_sequence=7, expected_epoch=page.page.progress.epoch)
+        assert pending.outcome == 'OBSERVED' and pending._read_token is not None
+        stop.set()
+        thread.join(15)
+        assert not thread.is_alive()
+        context = zmq.Context()
+        replacement_listener = context.socket(zmq.ROUTER)
+        replacement_listener.curve_secretkey = server_secret
+        replacement_listener.curve_server = True
+        replacement_listener.bind(endpoint)
+        probe_public, probe_secret = zmq.curve_keypair()
+        probe = context.socket(zmq.DEALER)
+        probe.curve_publickey, probe.curve_secretkey, probe.curve_serverkey = probe_public, probe_secret, server_public
+        probe.connect(endpoint)
+        try:
+            probe.send(b'synthetic-probe')
+            assert replacement_listener.poll(2000, zmq.POLLIN)
+            assert replacement_listener.recv_multipart()[-1] == b'synthetic-probe'
+            time.sleep(.2)  # Allow the original TCP disconnect to be observed.
+            refused = strict_replacement.acknowledge(8, expected_epoch=page.page.progress.epoch,
+                                                      read_token=pending._read_token, timeout_seconds=.4)
+            assert refused.outcome != 'OBSERVED'
+            assert replacement_listener.poll(300, zmq.POLLIN) == 0
+            assert strict_replacement.acknowledge(8, expected_epoch=page.page.progress.epoch,
+                read_token=pending._read_token).code == 'READ_BINDING_REQUIRED'
+        finally:
+            probe.close(linger=0)
+            replacement_listener.close(linger=0)
+            context.term()
     finally:
+        if strict_runtime is not None:
+            strict_runtime.close(timeout_seconds=10)
         if replacement is not None:
             replacement.close(timeout_seconds=10)
         if successor is not None:

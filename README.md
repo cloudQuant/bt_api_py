@@ -1515,3 +1515,19 @@ UNKNOWN attempt before issuing a one-use capability and rechecks journal,
 Registry, lease and parent deadlines on consumption. It has no Risk RPC or
 dispatch path; canonical returned facts are a historical local observation,
 not continuous cross-service authorization.
+
+### Authenticated account fact pages
+
+`GatewayAccountFactsClient` can explicitly require the expected peer and CURVE
+key fingerprint. Strict reads and ACKs retain the original registration socket;
+an ACK consumes the token from that authenticated nonempty page. An uncertain
+ACK is not automatically retried. An explicit authenticated reread can issue
+a new token for an idempotent ACK of the same page. This binds a local RPC
+observation, not a committed consumer transaction or remote account completeness.
+The optional unbound reader retains its previous behavior without this proof.
+
+Gateway cut manifests provide bounded read-only pages and a stable local digest.
+They recheck the original cut, facts and prior callback evidence, and reject
+unprovable compacted history. Empty queries report only the current session day;
+this is not a native query-day proof or a replacement for pinned receipt checks.
+No R05 coverage gate or trading authority is enabled by these readers.

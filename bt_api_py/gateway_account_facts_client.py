@@ -10,12 +10,33 @@ import json
 import math
 import os
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 
 from bt_api_base.gateway_execution_stream_protocol import GatewayExecutionObservation
+from bt_api_base.service_protocol import WireIdentity, WireScope
 from bt_api_py.gateway_account_observer_client import GatewayAccountObserverClient, GatewayAccountObserverRoute
+from bt_api_py.gateway_delegate_service_client import runtime_failure
 from bt_api_py.gateway_execution_stream_client import _detach_wire, _epoch, _sequence
 from bt_api_py.service_runtime import ServiceRuntimeRequestNotSentError
+from bt_api_py.service_runtime_thread import BoundCallObservation, BoundCallResult, _BoundBindingToken
+
+
+class _FactReadToken:
+    """Process-local, single-use identity; never a serializable receipt."""
+
+    __slots__ = ()
+
+    def __copy__(self):
+        raise TypeError('READ_TOKEN_NOT_COPYABLE')
+
+    def __deepcopy__(self, _memo):
+        raise TypeError('READ_TOKEN_NOT_COPYABLE')
+
+    def __reduce__(self):
+        raise TypeError('READ_TOKEN_NOT_SERIALIZABLE')
+
+    def __reduce_ex__(self, _protocol):
+        raise TypeError('READ_TOKEN_NOT_SERIALIZABLE')
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +117,7 @@ class GatewayAccountFactResult:
     fact_status: GatewayAccountFactStatus | None = None
     snapshot_info: GatewayAccountFactSnapshotInfo | None = None
     snapshot: GatewayAccountFactSnapshot | None = None
+    _read_token: object = field(default=None, repr=False, compare=False)
 
 
 def _text(value):
@@ -141,16 +163,27 @@ def _parse_fact(item, *, account, maximum, bootstrap_count=None):
 
 
 class GatewayAccountFactsClient(GatewayAccountObserverClient):
-    """READ-only access using explicitly granted account.facts operations."""
+    """Read account facts; an authenticated page token gates explicit ACK.
 
-    def __init__(self, runtime, *, route: GatewayAccountObserverRoute):
-        super().__init__(runtime, route=route)
+    In strict mode a later read invalidates the previous token, and each ACK
+    consumes it before sending. The token binds one local observation; it is
+    not proof that the caller committed a transaction or of cross-store atomicity.
+    Strict calls require a registration on a strict single-connection transport
+    and retain its local socket lineage. This is not proof of account truth.
+    An UNKNOWN ACK is never retried automatically; an explicit authenticated
+    reread may issue a new token for an idempotent ACK of the same page.
+    Legacy unbound mode has no authenticated read token or source proof.
+    """
+
+    def __init__(self, runtime, *, route: GatewayAccountObserverRoute,
+                 peer: WireIdentity | None = None, fingerprint: str | None = None):
+        super().__init__(runtime, route=route, peer=peer, fingerprint=fingerprint)
         identity, scope = route.identity, route.scope
         self._consumer_ref = 'account-facts:' + hashlib.sha256(json.dumps([
             identity.principal_ref, identity.role.value, identity.actor_ref, scope.execution_domain_ref,
             scope.account_ref, scope.strategy_ref], separators=(',', ':'), ensure_ascii=True).encode('ascii')).hexdigest()
 
-    def _call(self, operation, arguments, timeout_seconds):
+    def _call(self, operation, arguments, timeout_seconds, *, read_token=None):
         if os.getpid() != self._pid or threading.current_thread() is not self._thread:
             raise RuntimeError('ACCOUNT_FACTS_WRONG_OWNER')
         if (type(timeout_seconds) not in (int, float) or not math.isfinite(timeout_seconds)
@@ -159,19 +192,55 @@ class GatewayAccountFactsClient(GatewayAccountObserverClient):
         if not self._lock.acquire(blocking=False):
             raise RuntimeError('ACCOUNT_FACTS_BUSY')
         try:
+            issued = None
+            if self._bound_route is not None:
+                if operation == 'account.facts.read_after':
+                    self._read_binding = None
+                elif operation == 'account.facts.ack':
+                    issued = self._read_binding
+                    if (issued is None or read_token is not issued[0] or issued[1] != issued[2]
+                            or arguments['expected_epoch'] != issued[3]
+                            or arguments['sequence'] != issued[5] or self._runtime is not issued[6]):
+                        return GatewayAccountFactResult('TRANSPORT_NOT_STARTED', code='READ_BINDING_REQUIRED')
+                    self._read_binding = None
             try:
                 registration = self._registration(operation)
             except Exception:
                 return GatewayAccountFactResult('TRANSPORT_NOT_STARTED', code='ROUTE_UNAVAILABLE')
             try:
-                result = _detach_wire(self._runtime.call(self._route.mount, operation, arguments,
-                    account_ref=self._route.scope.account_ref, scope_ref=self._route.scope_ref,
-                    timeout_seconds=timeout_seconds))
+                if self._bound_route is None:
+                    result = _detach_wire(self._runtime.call(self._route.mount, operation, arguments,
+                        account_ref=self._route.scope.account_ref, scope_ref=self._route.scope_ref,
+                        timeout_seconds=timeout_seconds))
+                    bound = None
+                else:
+                    kwargs = {'route': self._bound_route, 'timeout_seconds': timeout_seconds,
+                              'expected_server_key_fingerprint': self._expected_fingerprint}
+                    if issued is not None:
+                        kwargs.update(expected_binding=issued[1], _expected_token=issued[7])
+                    bound = self._runtime.call_bound(self._route.mount, operation, arguments, **kwargs)
+                    result = _detach_wire(bound.result) if type(bound) is BoundCallResult else None
             except ServiceRuntimeRequestNotSentError:
                 return GatewayAccountFactResult('TRANSPORT_NOT_STARTED', code='REQUEST_NOT_SENT')
-            except Exception:
-                return GatewayAccountFactResult('UNKNOWN', code='RPC_OUTCOME_UNKNOWN')
+            except Exception as error:
+                if self._bound_route is None:
+                    return GatewayAccountFactResult('UNKNOWN', code='RPC_OUTCOME_UNKNOWN')
+                outcome, code = runtime_failure(error)
+                return GatewayAccountFactResult(outcome, code=code)
             try:
+                if bound is not None:
+                    before = bound.before
+                    if (type(before) is not BoundCallObservation or type(bound.after) is not BoundCallObservation
+                            or before != bound.after or (before.registration_id, before.service_epoch) != registration
+                            or before.identity != self._route.identity or before.scope != self._route.scope
+                            or before.peer != self._bound_route.peer or before.fingerprint != self._expected_fingerprint
+                            or before.mount != self._route.mount or before.service_id != self._route.service_id
+                            or before.instance_id != self._route.instance_id or before.scope_ref != self._route.scope_ref
+                            or before.operation != operation or operation not in before.operations
+                            or before.active is not True or before.required is not True
+                            or type(before.lease_deadline) not in (int, float)
+                            or not math.isfinite(before.lease_deadline) or before.lease_deadline <= 0):
+                        raise ValueError
                 if self._registration(operation) != registration or type(result) is not dict:
                     raise ValueError
                 if result.get('status') == 'REQUEST_REJECTED':
@@ -289,7 +358,21 @@ class GatewayAccountFactsClient(GatewayAccountObserverClient):
                 if ((not events and previous < progress.bootstrap_count)
                         or (previous < progress.offered_sequence and not raw['has_more'])):
                     raise ValueError
-                return GatewayAccountFactResult('OBSERVED', page=GatewayAccountFactPage(progress, tuple(events), raw['has_more']))
+                token = None
+                if bound is not None and events:
+                    if type(bound._binding_token) is not _BoundBindingToken:
+                        raise ValueError
+                    token = _FactReadToken()
+                    snapshot = replace(bound.before, identity=WireIdentity(**vars(bound.before.identity)),
+                                       scope=WireScope(**vars(bound.before.scope)),
+                                       peer=WireIdentity(**vars(bound.before.peer)))
+                    digest = hashlib.sha256(json.dumps(result, sort_keys=True, separators=(',', ':'),
+                                                       ensure_ascii=True, allow_nan=False).encode('ascii')).hexdigest()
+                    self._read_binding = (token, bound.before, snapshot, raw['epoch'],
+                                          arguments['after_sequence'], previous, self._runtime,
+                                          bound._binding_token, digest)
+                return GatewayAccountFactResult('OBSERVED', page=GatewayAccountFactPage(progress, tuple(events), raw['has_more']),
+                                                _read_token=token)
             except Exception:
                 return GatewayAccountFactResult('UNKNOWN', code='INVALID_OR_UNAVAILABLE_REPLY')
         finally:
@@ -325,7 +408,8 @@ class GatewayAccountFactsClient(GatewayAccountObserverClient):
     def progress(self, *, timeout_seconds=5.0):
         return self._call('account.facts.progress', {}, timeout_seconds)
 
-    def acknowledge(self, sequence, *, expected_epoch, timeout_seconds=5.0):
+    def acknowledge(self, sequence, *, expected_epoch, timeout_seconds=5.0, read_token=None):
         if not _sequence(sequence) or not _epoch(expected_epoch):
             raise ValueError('INVALID_ACK')
-        return self._call('account.facts.ack', {'sequence': sequence, 'expected_epoch': expected_epoch}, timeout_seconds)
+        return self._call('account.facts.ack', {'sequence': sequence, 'expected_epoch': expected_epoch}, timeout_seconds,
+                          read_token=read_token)

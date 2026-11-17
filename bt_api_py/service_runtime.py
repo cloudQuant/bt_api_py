@@ -501,6 +501,10 @@ class BoundExecutionParentTarget(BoundServiceTarget):
             raise ValueError('INVALID_BOUND_EXECUTION_PARENT_TARGET')
 
 
+_ACCOUNT_FACTS_BOUND_OPERATIONS = frozenset({
+    'account.facts.read_after', 'account.facts.ack', 'account.facts.progress', 'account.facts.status',
+    'account.facts.snapshot_info', 'account.facts.snapshot_read', 'account.facts.snapshot_confirm',
+})
 _ACCOUNT_BOUND_OPERATION = 'direct.parent.acceptance_order'
 _MANAGEMENT_BOUND_OPERATION = 'execution.management.parent.read.v1'
 _MANAGEMENT_PLAN_BOUND_OPERATION = 'execution.management.parent.plan.read.v1'
@@ -995,6 +999,7 @@ class _BoundSendFence:
     scope_ref: str | None
     checked_at: float
     lease_deadline: float
+    strict_facts: bool = False
 
 
 @dataclass(frozen=True)
@@ -1738,6 +1743,7 @@ class ServiceClientRuntime:
         _expected_transport: object | None = None,
         _expected_peer: WireIdentity | None = None,
         _expected_fingerprint: str | None = None,
+        _require_strict_facts: bool = False,
     ) -> Mapping[str, Any] | tuple[Mapping[str, Any], object | None]:
         self._assert_owner_thread()
         self._strict_business_entry()
@@ -1745,6 +1751,9 @@ class ServiceClientRuntime:
             raise ServiceRuntimeRequestNotSentError()
         if type(include_receive_receipt) is not bool:
             raise ServiceRuntimeError("INVALID_RECEIPT_REQUEST")
+        if (type(_require_strict_facts) is not bool or (_require_strict_facts and
+                (_expected_binding is None or operation not in _ACCOUNT_FACTS_BOUND_OPERATIONS))):
+            raise ServiceRuntimeError("BOUND_ROUTE_UNAVAILABLE")
         self._require_healthy()
         if self._state != "registered":
             raise ServiceRuntimeError("SESSION_NOT_REGISTERED")
@@ -1825,7 +1834,7 @@ class ServiceClientRuntime:
                 _expected_binding, _expected_binding_values, _expected_runtime_values,
                 _expected_transport, _expected_peer, _expected_fingerprint,
                 mount, operation, account_ref, portfolio_ref, scope_ref,
-                checked_at, binding.lease_deadline,
+                checked_at, binding.lease_deadline, _require_strict_facts,
             )
         return self._rpc(
             binding.service_id,
@@ -2611,7 +2620,10 @@ class ServiceClientRuntime:
                  or (binding.mount == "upstream.instrument_products" and self.identity.role is WireRole.SERVICE
                      and binding.operations == PORT_OPERATIONS["service.instrument_product_read"])
                  or (binding.mount == "upstream.calendar" and self.identity.role is WireRole.SERVICE
-                     and binding.operations == frozenset({"calendar.monitor.windows.v1"})))
+                     and binding.operations == frozenset({"calendar.monitor.windows.v1"}))
+                 or (binding.operations & _ACCOUNT_FACTS_BOUND_OPERATIONS
+                     and type(self._factory) is ZmqTransportFactory
+                     and self._factory._require_factory_mode() is True))
                     and self._has_current_registration_observation(binding, _startup=startup)):
                 old_lineage = self._registration_lineage.get(id(binding))
             upstream_old = None
@@ -3873,6 +3885,8 @@ class ServiceClientRuntime:
         try:
             if (type(fence) is not _BoundSendFence or type(fence.binding) is not RegisteredBinding
                     or type(fence.peer) is not WireIdentity or type(fence.fingerprint) is not str
+                    or type(fence.strict_facts) is not bool
+                    or (fence.strict_facts and operation not in _ACCOUNT_FACTS_BOUND_OPERATIONS)
                     or self._monotonic_clock is not _BOUND_MONOTONIC or self._state != "registered"):
                 raise ValueError
             binding = fence.binding
@@ -4090,8 +4104,9 @@ class ServiceClientRuntime:
         if timing is not None:
             timing["request_started"] = request_started
         try:
-            if (_bound_send_fence is not None and operation in {
-                    "account.cancel_attempts.read_after", "account.cancel_attempts.ack"}):
+            if (_bound_send_fence is not None and (operation in {
+                    "account.cancel_attempts.read_after", "account.cancel_attempts.ack"}
+                    or (_bound_send_fence.strict_facts and operation in _ACCOUNT_FACTS_BOUND_OPERATIONS))):
                 # A cancellation-stream receipt must be obtained and consumed
                 # on the registration's original local socket. The transport
                 # enforces its object lineage; this SDK owner verifies the
@@ -4104,6 +4119,21 @@ class ServiceClientRuntime:
                     raise ServiceRuntimeError("BOUND_ROUTE_UNAVAILABLE")
                 transport_proof = proof[2]
                 client = transport._transport
+                strict_registration = None
+                if _bound_send_fence.strict_facts:
+                    from bt_api_transport_zmq.service_v2 import _ServiceSocketBinding, _strict_client_binding
+                    key = (binding.service_id, binding.transport_ref, binding.registration_id, binding.service_epoch)
+                    strict_registration = self._strict_registration_transports.get(key)
+                    if (type(self._factory) is not ZmqTransportFactory or self._factory._require_factory_mode() is not True
+                            or type(strict_registration) is not tuple or len(strict_registration) != 3
+                            or self._authenticated_registration_transports.get(key) is not strict_registration
+                            or strict_registration[0] is not transport or strict_registration[1] is not client
+                            or type(strict_registration[2]) is not _ServiceSocketBinding
+                            or strict_registration[2].strict_single_connection is not True
+                            or client._strict_single_connection is not True
+                            or _strict_client_binding(client) is not strict_registration[2]
+                            or not client._socket_binding_current(strict_registration[2])):
+                        raise ServiceRuntimeError("BOUND_ROUTE_UNAVAILABLE")
                 lineage = (client, transport_proof[3], transport_proof[4], transport_proof[5],
                            transport_proof[6], transport_proof[7], client._receiver)
 
@@ -4111,6 +4141,14 @@ class ServiceClientRuntime:
                     if (self._registration_lineage.get(id(binding)) is not proof
                             or not self._has_current_registration_observation(binding, _inflight=True)
                             or hashlib.sha256(client._server_key).hexdigest() != _bound_send_fence.fingerprint):
+                        raise ServiceRuntimeError("BOUND_ROUTE_UNAVAILABLE")
+                    if (_bound_send_fence.strict_facts and
+                            (self._strict_registration_transports.get(key) is not strict_registration
+                             or self._authenticated_registration_transports.get(key) is not strict_registration
+                             or self._factory._require_factory_mode() is not True
+                             or client._strict_single_connection is not True
+                             or _strict_client_binding(client) is not strict_registration[2]
+                             or not client._socket_binding_current(strict_registration[2]))):
                         raise ServiceRuntimeError("BOUND_ROUTE_UNAVAILABLE")
                     selected, selected_peer, _, _ = self._bound_send_boundary(
                         _bound_send_fence, service_id, transport_ref, scope, operation, request, effective_timeout

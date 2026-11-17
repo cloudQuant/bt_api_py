@@ -30,6 +30,7 @@ from bt_api_py.service_runtime import (
     ServiceRuntimeError,
     ServiceRuntimeRequestNotSentError,
     _ACCOUNT_BOUND_OPERATION,
+    _ACCOUNT_FACTS_BOUND_OPERATIONS,
     _LiveParentSourceCapability,
     _MANAGEMENT_BOUND_OPERATION,
     _MANAGEMENT_BY_REQUEST_BOUND_OPERATION,
@@ -257,7 +258,8 @@ def _copy_bound_observation(observation: BoundCallObservation) -> BoundCallObser
 
 class _BoundCall(_Call):
     def __init__(self, mount: str, operation: str, arguments: Any, kwargs: dict[str, Any], route: BoundCallRoute,
-                 expected_binding: BoundCallObservation | None = None, expected_token: object = None):
+                 expected_binding: BoundCallObservation | None = None, expected_token: object = None,
+                 expected_server_key_fingerprint: str | None = None):
         super().__init__(mount, operation, arguments, kwargs)
         self.route = route
         if expected_binding is not None:
@@ -265,6 +267,12 @@ class _BoundCall(_Call):
         self.expected_binding = expected_binding
         self.expected_token = expected_token
         self.original_expected_token = expected_token
+        if (expected_server_key_fingerprint is not None and
+                (type(expected_server_key_fingerprint) is not str or
+                 re.fullmatch(r"[0-9a-f]{64}", expected_server_key_fingerprint) is None)):
+            raise ValueError("INVALID_EXPECTED_FINGERPRINT")
+        self.expected_server_key_fingerprint = expected_server_key_fingerprint
+        self.original_expected_server_key_fingerprint = expected_server_key_fingerprint
         self.raw_started = False
         self.original_target = (mount, operation, kwargs["account_ref"], kwargs["portfolio_ref"],
                                 kwargs["scope_ref"], kwargs["max_reply_message_bytes"], BoundCallRoute(**vars(route)))
@@ -323,7 +331,8 @@ def _check_bound_call(call: _BoundCall) -> None:
             or not _bound_ref(call.mount) or not _bound_ref(call.operation)
             or type(call.route) is not BoundCallRoute
             or call.expected_binding != call.original_expected_binding
-            or call.expected_token is not call.original_expected_token):
+            or call.expected_token is not call.original_expected_token
+            or call.expected_server_key_fingerprint != call.original_expected_server_key_fingerprint):
         raise ValueError("BOUND_ROUTE_UNAVAILABLE")
     target = (call.mount, call.operation, call.kwargs["account_ref"], call.kwargs["portfolio_ref"],
               call.kwargs["scope_ref"], call.kwargs["max_reply_message_bytes"], BoundCallRoute(**vars(call.route)))
@@ -376,7 +385,9 @@ def _bound_observation(runtime: ServiceClientRuntime, call: _BoundCall,
         raise ValueError("BOUND_ROUTE_UNAVAILABLE")
     proof = runtime.authenticated_peer_for_binding(binding)
     if (type(proof) is not tuple or len(proof) != 2 or type(proof[0]) is not WireIdentity
-            or type(proof[1]) is not str or re.fullmatch(r"[0-9a-f]{64}", proof[1]) is None):
+            or type(proof[1]) is not str or re.fullmatch(r"[0-9a-f]{64}", proof[1]) is None
+            or (call.expected_server_key_fingerprint is not None
+                and proof[1] != call.expected_server_key_fingerprint)):
         raise ValueError("BOUND_ROUTE_UNAVAILABLE")
     peer = WireIdentity(**vars(proof[0]))
     transport = runtime._transports.get((binding.service_id, binding.transport_ref))
@@ -417,13 +428,38 @@ def _cancel_stream_lineage(runtime: ServiceClientRuntime, binding: RegisteredBin
     return proof, receiver
 
 
+def _facts_stream_lineage(runtime: ServiceClientRuntime, binding: RegisteredBinding, transport: object) -> tuple:
+    """Pin strict registration/socket evidence, not remote account continuity."""
+    from bt_api_transport_zmq.service_v2 import _ServiceSocketBinding, _strict_client_binding
+    from bt_api_py.service_runtime import ZmqTransportFactory
+
+    proof, receiver = _cancel_stream_lineage(runtime, binding, transport)
+    key = (binding.service_id, binding.transport_ref, binding.registration_id, binding.service_epoch)
+    strict = runtime._strict_registration_transports.get(key)
+    client = proof[2][2]
+    if (type(runtime._factory) is not ZmqTransportFactory or runtime._factory._require_factory_mode() is not True
+            or type(strict) is not tuple or len(strict) != 3
+            or runtime._authenticated_registration_transports.get(key) is not strict
+            or strict[0] is not transport or strict[1] is not client
+            or type(strict[2]) is not _ServiceSocketBinding or strict[2].strict_single_connection is not True
+            or client._strict_single_connection is not True or _strict_client_binding(client) is not strict[2]
+            or not client._socket_binding_current(strict[2])):
+        raise ValueError("BOUND_ROUTE_UNAVAILABLE")
+    return proof, receiver, strict
+
+
 def _execute_bound_call(runtime: Any, call: _BoundCall) -> _BoundOwnerResult:
     # Before the raw call begins, refusal is known not to have sent this call.
     try:
         binding, before, binding_values, runtime_values, transport = _bound_observation(runtime, call)
         cancel_stream = call.operation in {"account.cancel_attempts.read_after", "account.cancel_attempts.ack"}
-        lineage = _cancel_stream_lineage(runtime, binding, transport) if cancel_stream else None
+        facts_stream = (call.operation in _ACCOUNT_FACTS_BOUND_OPERATIONS
+                        and call.expected_server_key_fingerprint is not None)
+        lineage = (_facts_stream_lineage(runtime, binding, transport) if facts_stream else
+                   _cancel_stream_lineage(runtime, binding, transport) if cancel_stream else None)
         if call.operation == "account.cancel_attempts.ack" and call.expected_binding is None:
+            raise ValueError("BOUND_ROUTE_UNAVAILABLE")
+        if facts_stream and call.operation == "account.facts.ack" and call.expected_binding is None:
             raise ValueError("BOUND_ROUTE_UNAVAILABLE")
         if call.expected_binding is not None:
             token = call.expected_token
@@ -438,6 +474,11 @@ def _execute_bound_call(runtime: Any, call: _BoundCall) -> _BoundOwnerResult:
                     or (call.operation == "account.cancel_attempts.ack"
                         and token.observation.operation != "account.cancel_attempts.read_after")):
                 raise ValueError("BOUND_ROUTE_UNAVAILABLE")
+            if facts_stream and (type(token.lineage) is not tuple or len(token.lineage) != 3
+                    or any(token.lineage[i] is not lineage[i] for i in range(3))
+                    or (call.operation == "account.facts.ack"
+                        and token.observation.operation != "account.facts.read_after")):
+                raise ValueError("BOUND_ROUTE_UNAVAILABLE")
         elif call.expected_token is not None:
             raise ValueError("BOUND_ROUTE_UNAVAILABLE")
         mount, operation = call.mount, call.operation
@@ -447,11 +488,12 @@ def _execute_bound_call(runtime: Any, call: _BoundCall) -> _BoundOwnerResult:
         raise ThreadedRuntimeError("BOUND_ROUTE_UNAVAILABLE") from None
     try:
         call.raw_started = True
+        strict_kwargs = {'_require_strict_facts': True} if facts_stream else {}
         reply = runtime.call(mount, operation, arguments,
                              _expected_binding=binding, _expected_binding_values=binding_values,
                              _expected_runtime_values=runtime_values, _expected_transport=transport,
                              _expected_peer=before.peer, _expected_fingerprint=before.fingerprint,
-                             **kwargs)
+                             **kwargs, **strict_kwargs)
     except Exception:
         # Once execution of the raw path has begun, do not infer NOT_SENT from
         # an arbitrary transport or post-observation exception.
@@ -475,8 +517,12 @@ def _finish_bound_call(runtime: Any, call: _BoundCall, result: _BoundOwnerResult
                 or runtime_values != result.runtime_values or transport is not result.transport):
             raise ValueError
         if result.lineage is not None:
-            current = _cancel_stream_lineage(runtime, result.binding, transport)
-            if current[0] is not result.lineage[0] or current[1] is not result.lineage[1]:
+            current = (_facts_stream_lineage(runtime, result.binding, transport)
+                       if call.operation in _ACCOUNT_FACTS_BOUND_OPERATIONS
+                       and call.expected_server_key_fingerprint is not None
+                       else _cancel_stream_lineage(runtime, result.binding, transport))
+            if len(current) != len(result.lineage) or any(
+                    item is not expected for item, expected in zip(current, result.lineage, strict=True)):
                 raise ValueError
     except Exception:
         raise ThreadedRuntimeError("BOUND_OUTCOME_UNKNOWN") from None
@@ -876,6 +922,7 @@ class ThreadedServiceClientRuntime:
         _bound_route: BoundCallRoute | None = None,
         _expected_binding: BoundCallObservation | None = None,
         _expected_token: object = None,
+        _expected_server_key_fingerprint: str | None = None,
     ) -> Any:
         self._check_reentry()
         if operation in (_ACCOUNT_BOUND_OPERATION, _MANAGEMENT_BOUND_OPERATION, _MANAGEMENT_PLAN_BOUND_OPERATION, _MANAGEMENT_BY_REQUEST_BOUND_OPERATION):
@@ -890,7 +937,7 @@ class ThreadedServiceClientRuntime:
                 _bound_route = BoundCallRoute(**vars(_bound_route))
             except Exception:
                 raise ThreadedRuntimeError("INVALID_ARGUMENTS") from None
-        elif _expected_binding is not None or _expected_token is not None:
+        elif _expected_binding is not None or _expected_token is not None or _expected_server_key_fingerprint is not None:
             raise ThreadedRuntimeError("INVALID_ARGUMENTS")
         try:
             call_arguments = (
@@ -907,7 +954,8 @@ class ThreadedServiceClientRuntime:
                 ),
             )
             call = (_Call(*call_arguments) if _bound_route is None
-                    else _BoundCall(*call_arguments, _bound_route, _expected_binding, _expected_token))
+                    else _BoundCall(*call_arguments, _bound_route, _expected_binding, _expected_token,
+                                    _expected_server_key_fingerprint))
         except Exception:
             if _bound_route is None:
                 raise
@@ -962,6 +1010,7 @@ class ThreadedServiceClientRuntime:
                    route: BoundCallRoute | None = None, timeout_seconds: float = 5.0,
                    expected_binding: BoundCallObservation | None = None,
                    _expected_token: object = None,
+                   expected_server_key_fingerprint: str | None = None,
                    deadline_monotonic: float | None = None) -> Any:
         """Dispatch either the legacy route-bound or target-bound owner call."""
         if (route is not None or expected_binding is not None or _expected_token is not None
@@ -971,10 +1020,13 @@ class ThreadedServiceClientRuntime:
             result = self.call(mount, operation, arguments, account_ref=route.scope.account_ref,
                                portfolio_ref=route.scope.portfolio_ref, scope_ref=route.scope_ref,
                                timeout_seconds=timeout_seconds, _bound_route=route,
+                               _expected_server_key_fingerprint=expected_server_key_fingerprint,
                                _expected_binding=expected_binding, _expected_token=_expected_token)
             if type(result) is not BoundCallResult:
                 raise ThreadedRuntimeError("BOUND_OUTCOME_UNKNOWN")
             return result
+        if expected_server_key_fingerprint is not None:
+            raise ThreadedRuntimeError("INVALID_ARGUMENTS")
         return self._call_bound_target(
             mount, operation, arguments, timeout_seconds=timeout_seconds,
             deadline_monotonic=deadline_monotonic,
