@@ -73,7 +73,10 @@ def bridge_harness(tmp_path, monkeypatch, request):
     monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[2] / 'bt_api/bt_api_risk/tests'))
     from test_pretrade_attempt_v4 import new_v4, data
     from bt_api_risk.pretrade import ledger as ledger_module
+    from bt_api_risk.pretrade import engine as engine_module
     monkeypatch.setattr(ledger_module, '_source_unverified', lambda _db: False)
+    # Synthetic fixture uses a controllable clock; production requires the native wall clock.
+    monkeypatch.setattr(engine_module, '_v2_first_native_clock', lambda _ledger, _clock: True)
     real_transport = getattr(request, 'param', False) is True
     if not real_transport:
         monkeypatch.setattr(transport.zmq, 'Context', lambda **_kwargs: Context(peer))

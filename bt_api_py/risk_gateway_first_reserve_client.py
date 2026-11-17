@@ -20,6 +20,12 @@ from bt_api_py.risk_first_payload_consistency import validate_risk_first_payload
 from bt_api_py.service_registry import ServiceCallContext, ServiceDispatchAdmission
 from bt_api_py.service_runtime import BoundServiceTarget, ServiceClientRuntime, _BOUND_MONOTONIC, _bound_clock_current
 from bt_api_py.service_runtime_thread import _copy_wire, _timeout
+from bt_api_risk.pretrade.engine import PretradeEngine as _FirstEngine
+
+_FIRST_BEGIN = _FirstEngine._v2_begin_first
+_FIRST_PREPARE = _FirstEngine._v2_prepare_first_atomic
+_FIRST_POST = _FirstEngine._v2_post_first
+_FIRST_CHECK = _FirstEngine._v2_check_first
 
 
 class RiskGatewayFirstReserveError(RuntimeError):
@@ -123,6 +129,7 @@ class RiskGatewayFirstReserveBridge:
         self._verified, self._verified_value, self._verified_at = None, None, None
         self._verified_gateway = None
         self._consume_marker = None
+        self._engine_first = None
 
     def _same_owner(self):
         if (os.getpid() != self._pid or threading.current_thread() is not self._thread
@@ -160,6 +167,7 @@ class RiskGatewayFirstReserveBridge:
         txn._v2_check_now(now, permit.expires_ns, previous=permit.updated_ns)
         if txn._v4_snapshot(self._binding.permit_id) != self._snapshot:
             raise ValueError
+        return permit.expires_ns
 
     def prepare(self, values):
         if self._state != 'new':
@@ -193,13 +201,87 @@ class RiskGatewayFirstReserveBridge:
         if type(attempt) is not _Attempt or attempt is not self._attempt:
             raise ValueError
         self._same_owner()
+        from bt_api_risk.pretrade.engine import _v2_first_native_clock
+        clock_state = getattr(self._ledger._v2_clock_ns, '__self__', None)
+        if not _v2_first_native_clock(self._ledger, getattr(clock_state, 'source', None)):
+            raise ValueError
         with self._admission.scope() as check:
             check()
+            if self._engine_first is not None:
+                engine, candidate = self._engine_first
+                self._check_engine(engine)
+                deadline = engine._v2_check_first(candidate, recheck=check)
+                self._same_owner()
+                check()
+                return deadline
             with self._ledger.transaction() as txn:
-                self._record_current(txn)
+                deadline = self._record_current(txn)
                 self._same_owner()
                 check()
             check()
+        return deadline
+
+    def _check_engine(self, engine):
+        if (type(engine) is not _FirstEngine or engine._ledger is not self._ledger
+                or _FirstEngine._v2_begin_first is not _FIRST_BEGIN
+                or _FirstEngine._v2_prepare_first_atomic is not _FIRST_PREPARE
+                or _FirstEngine._v2_post_first is not _FIRST_POST
+                or _FirstEngine._v2_check_first is not _FIRST_CHECK
+                or getattr(engine._v2_begin_first, '__func__', None) is not _FIRST_BEGIN
+                or getattr(engine._v2_prepare_first_atomic, '__func__', None) is not _FIRST_PREPARE
+                or getattr(engine._v2_post_first, '__func__', None) is not _FIRST_POST
+                or getattr(engine._v2_check_first, '__func__', None) is not _FIRST_CHECK):
+            raise RiskGatewayFirstReserveError('FIRST_ATTEMPT_UNAVAILABLE')
+
+    def prepare_from_engine(self, engine, caller, view, canonical_payload, run_id):
+        """Atomically evaluate Risk and persist a first attempt under its admission.
+
+        This internal composition is not a public operation, source proof or
+        dispatch grant. Risk owns its transaction and decision; only its exact
+        native methods are accepted here.
+        """
+        from bt_api_risk.pretrade.ports import CallerIdentity
+        if self._state != 'new':
+            raise RiskGatewayFirstReserveError('FIRST_ATTEMPT_UNAVAILABLE')
+        self._state = 'unknown'
+        try:
+            self._same_owner()
+            self._check_engine(engine)
+            if (type(caller) is not CallerIdentity or caller.role != 'strategy'
+                    or caller.principal_ref != self._context.principal_ref
+                    or caller.actor_ref != self._context.identity.actor_ref
+                    or caller.strategy_refs != frozenset({self._context.scope.strategy_ref})
+                    or caller.run_id != self._context.scope.run_id or run_id != caller.run_id
+                    or 'risk.order.reserve.v2' not in caller.operations
+                    or canonical_payload != self._payload_json):
+                raise ValueError
+            with self._admission.scope() as check:
+                self._same_owner()
+                check()
+            candidate = engine._v2_begin_first(caller, view, canonical_payload, run_id,
+                                               self._binding, self._request_snapshot)
+            self._same_owner()
+            self._check_engine(engine)
+            with self._admission.scope() as check:
+                check()
+                created, snapshot = engine._v2_prepare_first_atomic(
+                    candidate, gateway_service_id=self._target_snapshot.service_id,
+                    gateway_instance_id=self._target_snapshot.instance_id, recheck=check)
+                self._same_owner()
+                check()
+            self._same_owner()
+            self._check_engine(engine)
+            post_ok = engine._v2_post_first(candidate)
+            self._same_owner()
+            if created is not True or post_ok is not True or type(snapshot) is not tuple:
+                raise ValueError
+            self._snapshot = snapshot
+            self._engine_first = (engine, candidate)
+            self._attempt = _Attempt()
+            self._state = 'prepared'
+            return self._attempt
+        except Exception:
+            raise RiskGatewayFirstReserveError('FIRST_ATTEMPT_UNAVAILABLE') from None
 
     def _take_send(self, attempt, runtime, target, request, payload):
         if (self._state != 'prepared' or runtime is not self._runtime

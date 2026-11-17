@@ -40,6 +40,7 @@ from bt_api_base.service_protocol import (
     WireRole,
     WireScope,
     encode_envelope,
+    encode_wire_value,
     validate_reply,
     wire_contract_digest,
 )
@@ -58,6 +59,7 @@ _RAW_STICKY_CLEANUP_ROOTS_LOCK = threading.RLock()
 # Assumes this module is imported before the process clock is replaced.
 _BOUND_MONOTONIC = time.monotonic
 _BOUND_MONOTONIC_NS = time.monotonic_ns
+_BOUND_RISK_WALL_NS = time.time_ns
 _EXECUTION_SLEEP_CLOCK = getattr(time, 'clock_gettime_ns', None)
 _EXECUTION_NONCE_BYTES = os.urandom
 _EXECUTION_SLEEP_CLOCK_ID = (getattr(time, 'CLOCK_MONOTONIC', None) if sys.platform == 'darwin'
@@ -900,7 +902,7 @@ class _RequestNotSentAdapter:
 
     def request_bound(self, request: WireEnvelope, *, timeout: float, deadline_monotonic: float,
                       transport: RequestReplyTransport, socket_binding: object,
-                      _trusted_request: bool = False) -> WireEnvelope:
+                      _trusted_request: bool = False, _send_wall_deadline_ns: int | None = None) -> WireEnvelope:
         # Use the transport object which was checked, even if another thread
         # changes the adapter after this check. A replacement before this check
         # is rejected without entering either transport.
@@ -914,8 +916,11 @@ class _RequestNotSentAdapter:
                         or zmq_service.ZmqServiceClient.request is not zmq_service._TRUSTED_CLIENT_REQUEST
                         or 'request' in vars(transport)):
                     raise ServiceRuntimeRequestNotSentError()
+                kwargs = {} if _send_wall_deadline_ns is None else {'_send_wall_deadline_ns': _send_wall_deadline_ns}
                 return zmq_service._TRUSTED_CLIENT_REQUEST(transport, request, timeout=timeout,
-                    deadline_monotonic=deadline_monotonic, socket_binding=socket_binding)
+                    deadline_monotonic=deadline_monotonic, socket_binding=socket_binding, **kwargs)
+            if _send_wall_deadline_ns is not None:
+                raise ServiceRuntimeRequestNotSentError()
             return transport.request(request, timeout=timeout, deadline_monotonic=deadline_monotonic,
                                      socket_binding=socket_binding)
         except RequestNotSentError as error:
@@ -1182,6 +1187,7 @@ class ServiceClientRuntime:
         self._active_live_source_marker = None
         self._risk_first_receipts: dict[_RiskFirstWireReceipt, tuple[Any, ...]] = {}
         self._risk_first_capture_marker = None
+        self._risk_first_send_context = None
         self._bindings: list[RegisteredBinding] = []
         self._registration_lineage: dict[int, tuple[Any, ...]] = {}
         self._registration_failure_generation: dict[tuple[str, str], int] = {}
@@ -2055,16 +2061,18 @@ class ServiceClientRuntime:
         from bt_api_py.risk_first_payload_consistency import validate_risk_first_payload_consistency
         validate_risk_first_payload_consistency(request, payload_copy)
         arguments = {'request': request.to_mapping(), 'payload': payload_copy}
+        encoded_arguments = encode_wire_value(arguments)
         bridge._check_sent(attempt, self, target, bridge._request_snapshot, payload)
         # Revalidate after projection and before entering the transport.  The
         # Registry scope and ledger transaction both end before network I/O.
         bridge._check_attempt(attempt)
         marker = object()
-        if self._risk_first_capture_marker is not None:
+        if self._risk_first_capture_marker is not None or self._risk_first_send_context is not None:
             raise ServiceRuntimeRequestNotSentError()
-        self._risk_first_capture_marker = marker
-        started = _BOUND_MONOTONIC()
         try:
+            self._risk_first_capture_marker = marker
+            self._risk_first_send_context = (marker, bridge, attempt, encoded_arguments)
+            started = _BOUND_MONOTONIC()
             raw, receipt = self._call_bound(
                 target_snapshot, 'direct.risk_first_reserve.v2',
                 arguments,
@@ -2073,6 +2081,7 @@ class ServiceClientRuntime:
             )
         finally:
             self._risk_first_capture_marker = None
+            self._risk_first_send_context = None
         try:
             raw = _copy_wire(raw)
             if (type(raw) is not dict or set(raw) != {'status', 'result'}
@@ -2081,6 +2090,7 @@ class ServiceClientRuntime:
                 raise ValueError
             result = GatewayRiskFirstReserveResultV2.from_mapping_for_request(raw['result'], request)
             bridge._check_sent(attempt, self, target, bridge._request_snapshot, payload)
+            bridge._check_attempt(attempt)
             current, live_binding, live_snapshot = self._risk_first_binding(target_snapshot)
             if (any(current[index] is not proof[index] for index in range(3))
                     or live_binding is not binding or live_snapshot != binding_snapshot
@@ -3956,6 +3966,11 @@ class ServiceClientRuntime:
                 and (risk_first_marker is None or risk_first_marker is not self._risk_first_capture_marker
                      or kwargs.get('_require_issued_receipt') is not True)):
             raise ServiceRuntimeRequestNotSentError()
+        if operation == 'direct.risk_first_reserve.v2':
+            context = self._risk_first_send_context
+            if type(context) is not tuple or len(context) != 4 or context[0] is not risk_first_marker:
+                raise ServiceRuntimeRequestNotSentError()
+            kwargs['_risk_first_context'] = context
         if (operation != 'direct.parent.source' or kwargs.get('_require_issued_receipt') is not True
                 or marker is None or marker is not getattr(self, '_active_live_source_marker', None)):
             self._invalidate_live_parent_capabilities()
@@ -3999,6 +4014,7 @@ class ServiceClientRuntime:
         bound_identity=None,
         deadline_monotonic=None,
         _require_issued_receipt=False,
+        _risk_first_context=None,
     ):
         self._assert_owner_thread()
         if operation in ('service.register', 'service.renew'):
@@ -4103,6 +4119,7 @@ class ServiceClientRuntime:
             started_at.append(request_started)
         if timing is not None:
             timing["request_started"] = request_started
+        wall_deadline = None
         try:
             if (_bound_send_fence is not None and (operation in {
                     "account.cancel_attempts.read_after", "account.cancel_attempts.ack"}
@@ -4166,9 +4183,42 @@ class ServiceClientRuntime:
                     request, timeout=effective_timeout
                 )
             elif _require_issued_receipt:
+                if operation == 'direct.risk_first_reserve.v2':
+                    from bt_api_py.risk_gateway_first_reserve_client import RiskGatewayFirstReserveBridge
+                    from bt_api_transport_zmq import service_v2 as zmq_service
+                    if (type(_risk_first_context) is not tuple or len(_risk_first_context) != 4
+                            or self._risk_first_send_context is not _risk_first_context
+                            or _risk_first_context[0] is not self._risk_first_capture_marker
+                            or type(_risk_first_context[1]) is not RiskGatewayFirstReserveBridge
+                            or encode_wire_value(request.payload['arguments']) != _risk_first_context[3]):
+                        raise ServiceRuntimeRequestNotSentError()
+                    bridge, attempt = _risk_first_context[1:3]
+                    # This short local check is after envelope projection and
+                    # releases Registry/SQLite before entering the transport.
+                    wall_deadline = bridge._check_attempt(attempt)
+                    if (self._risk_first_send_context is not _risk_first_context
+                            or encode_wire_value(request.payload['arguments']) != _risk_first_context[3]
+                            or type(wall_deadline) is not int or wall_deadline <= 0
+                            or time.time_ns is not _BOUND_RISK_WALL_NS
+                            or zmq_service._BOUND_WALL_NS is not _BOUND_RISK_WALL_NS
+                            or zmq_service._bound_wall_clock_current is not zmq_service._TRUSTED_BOUND_WALL_CLOCK_CHECK
+                            or not zmq_service._bound_wall_clock_current() or not _bound_clock_current()):
+                        raise ServiceRuntimeRequestNotSentError()
+                    before = _BOUND_MONOTONIC()
+                    wall_now = _BOUND_RISK_WALL_NS()
+                    if type(wall_now) is not int or wall_now >= wall_deadline:
+                        raise ServiceRuntimeRequestNotSentError()
+                    risk_deadline = math.nextafter(before + (wall_deadline - wall_now) / 1_000_000_000,
+                                                   -math.inf)
+                    deadline_monotonic = min(deadline_monotonic, risk_deadline)
+                    remaining = deadline_monotonic - _BOUND_MONOTONIC()
+                    if not math.isfinite(remaining) or remaining <= 0:
+                        raise ServiceRuntimeRequestNotSentError()
+                    effective_timeout = min(effective_timeout, remaining)
+                bound_options = {} if wall_deadline is None else {'_send_wall_deadline_ns': wall_deadline}
                 reply = bound_transport.request_bound(request, timeout=effective_timeout,
                     deadline_monotonic=deadline_monotonic, transport=bound_client,
-                    socket_binding=bound_socket_binding, _trusted_request=True)
+                    socket_binding=bound_socket_binding, _trusted_request=True, **bound_options)
             else:
                 reply = bound_transport.request_bound(request, timeout=effective_timeout,
                     deadline_monotonic=deadline_monotonic, transport=bound_client,
@@ -4183,7 +4233,10 @@ class ServiceClientRuntime:
             raise
 
         def check_bound_clock_after_reply() -> None:
-            if bound_transport is not None and not _bound_clock_current():
+            wall_invalid = (operation == 'direct.risk_first_reserve.v2' and
+                            (type(wall_deadline) is not int or time.time_ns is not _BOUND_RISK_WALL_NS
+                             or _BOUND_RISK_WALL_NS() >= wall_deadline))
+            if bound_transport is not None and (not _bound_clock_current() or wall_invalid):
                 # The request was dispatched. Retain its uncertain identity
                 # and retire the exact captured socket on this owner thread.
                 bound_client._last_uncertain_message_id = request.header.message_id

@@ -1450,8 +1450,8 @@ consume the local attempt and never trigger a resend.
 
 The returned one-use result is a historical observation. It does not confirm
 the reservation, authorize dispatch or establish continuously valid authority
-throughout a network call. This bridge is not yet installed in the Risk engine
-or service host. Production source verification and Gateway write gates remain
+throughout a network call. An explicit internal engine composition is available; the bridge is not yet
+installed in the service host. Production source verification and Gateway write gates remain
 closed; existing v3 ledgers have no automatic migration to the v4 attempt schema.
 
 ### Optional CTP observed order tracking
@@ -1531,3 +1531,9 @@ They recheck the original cut, facts and prior callback evidence, and reject
 unprovable compacted history. Empty queries report only the current session day;
 this is not a native query-day proof or a replacement for pinned receipt checks.
 No R05 coverage gate or trading authority is enabled by these readers.
+
+The first-attempt engine path rechecks built-in policy and the original permit
+and facts immediately before strict transport entry. Both Registry and ledger
+locks are released before network I/O. The earliest used fact/permit wall expiry
+and a conservative monotonic cap restrict the actual send; expiry or uncertainty
+after sending retains the original attempt and does not authorize a retry.
