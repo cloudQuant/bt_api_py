@@ -89,7 +89,7 @@ ACCOUNT_COMPARISON_OPERATIONS = frozenset({"account.strategy_net_comparison"})
 # Account-wide reads of every strategy's funds and book (G64-06), for an account operator only.
 ACCOUNT_STRATEGY_READ_OPERATIONS = frozenset({"account.strategy_financial", "account.strategy_book"})
 ACCOUNT_OBSERVER_OPERATIONS = frozenset({"account.events.read_after", "account.events.progress", "account.events.ack"})
-ACCOUNT_FACTS_OPERATIONS = frozenset({"account.facts.read_after", "account.facts.progress", "account.facts.ack", "account.facts.status", "account.facts.snapshot_info", "account.facts.snapshot_read", "account.facts.snapshot_confirm"})
+ACCOUNT_FACTS_OPERATIONS = frozenset({"account.facts.read_after", "account.facts.read_after.v2", "account.facts.progress", "account.facts.ack", "account.facts.status", "account.facts.snapshot_info", "account.facts.snapshot_read", "account.facts.snapshot_confirm"})
 ACCOUNT_CANCEL_ATTEMPT_OPERATIONS = frozenset({'account.cancel_attempts.read_after', 'account.cancel_attempts.progress', 'account.cancel_attempts.ack'})
 DELEGATED_STRATEGY_READ_OPERATIONS = frozenset({"direct.delegated_command_status", "direct.delegated_cancel_status"})
 DELEGATED_STRATEGY_CANCEL_OPERATIONS = frozenset({"direct.delegated_cancel"})

@@ -211,6 +211,7 @@ PORT_OPERATIONS = MappingProxyType(
                 "account.events.progress",
                 "account.events.ack",
                 "account.facts.read_after",
+                "account.facts.read_after.v2",
                 "account.facts.progress",
                 "account.facts.ack",
                 "account.facts.status",
@@ -504,7 +505,7 @@ class BoundExecutionParentTarget(BoundServiceTarget):
 
 
 _ACCOUNT_FACTS_BOUND_OPERATIONS = frozenset({
-    'account.facts.read_after', 'account.facts.ack', 'account.facts.progress', 'account.facts.status',
+    'account.facts.read_after', 'account.facts.read_after.v2', 'account.facts.ack', 'account.facts.progress', 'account.facts.status',
     'account.facts.snapshot_info', 'account.facts.snapshot_read', 'account.facts.snapshot_confirm',
 })
 _ACCOUNT_BOUND_OPERATION = 'direct.parent.acceptance_order'

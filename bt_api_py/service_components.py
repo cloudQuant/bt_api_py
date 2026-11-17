@@ -679,7 +679,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                             "account.strategy_net_comparison",
                             "account.strategy_financial", "account.strategy_book",
                             "account.events.read_after", "account.events.progress", "account.events.ack",
-                            "account.facts.read_after", "account.facts.progress", "account.facts.ack", "account.facts.status",
+                            "account.facts.read_after", "account.facts.read_after.v2", "account.facts.progress", "account.facts.ack", "account.facts.status",
                             "account.facts.snapshot_info", "account.facts.snapshot_read", "account.facts.snapshot_confirm",
                             "account.cancel_attempts.read_after", "account.cancel_attempts.progress", "account.cancel_attempts.ack",
                         }

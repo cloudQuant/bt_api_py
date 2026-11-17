@@ -19,7 +19,7 @@ from bt_api_py.gateway_direct_owner import GatewayDirectOwner, GatewayOwnerServi
 from bt_api_py.service_registry import ServiceCallContext, ServiceDispatchAdmission, ServiceResultTooLargeError
 
 ACCOUNT_FACTS_OPERATIONS = frozenset({
-    'account.facts.read_after', 'account.facts.progress', 'account.facts.ack', 'account.facts.status',
+    'account.facts.read_after', 'account.facts.read_after.v2', 'account.facts.progress', 'account.facts.ack', 'account.facts.status',
     'account.facts.snapshot_info', 'account.facts.snapshot_read', 'account.facts.snapshot_confirm',
 })
 
@@ -57,6 +57,7 @@ class GatewayAccountFactsObserver:
                 raise ValueError('INVALID_ACCOUNT_FACTS_STATUS_SOURCE')
         self.status_source = status_source
         self.owner, self.journal, self.ledger = owner, journal, ledger
+        self._facts_origin = (owner, journal, ledger)
         self.account_scope, self.execution_domain_ref, self.principals = account_scope, execution_domain_ref, principals
 
     def handle(self, operation, context, arguments):
@@ -78,6 +79,7 @@ class GatewayAccountFactsObserver:
                     (scope.strategy_ref is not None or scope.run_id is not None))):
             return reject('SCOPE_DENIED')
         fields = {'account.facts.read_after': {'after_sequence', 'expected_epoch', 'limit'},
+                  'account.facts.read_after.v2': {'after_sequence', 'expected_epoch', 'limit'},
                   'account.facts.progress': set(), 'account.facts.status': set(),
                   'account.facts.ack': {'sequence', 'expected_epoch'},
                   'account.facts.snapshot_info': set(),
@@ -85,7 +87,7 @@ class GatewayAccountFactsObserver:
                   'account.facts.snapshot_confirm': {'snapshot_id', 'snapshot_digest'}}[operation]
         if set(arguments) != fields:
             return reject('INVALID_REQUEST')
-        if operation == 'account.facts.read_after':
+        if operation in {'account.facts.read_after', 'account.facts.read_after.v2'}:
             seq, epoch, limit = arguments['after_sequence'], arguments['expected_epoch'], arguments['limit']
             if (not _sequence(seq) or (epoch is not None and not _epoch(epoch)) or (seq > 0 and epoch is None)
                     or type(limit) is not int or not 1 <= limit <= 256):
@@ -202,10 +204,41 @@ class GatewayAccountFactsObserver:
                     if not context.result_fits(result):
                         raise ServiceResultTooLargeError()
                     return result
-                if operation == 'account.facts.read_after':
+                if operation in {'account.facts.read_after', 'account.facts.read_after.v2'}:
+                    version2 = operation == 'account.facts.read_after.v2'
+                    if version2:
+                        original_owner, original_journal, original_ledger = self._facts_origin
+                        def verify_origin():
+                            if (self.owner is not original_owner or self.journal is not original_journal
+                                    or self.ledger is not original_ledger
+                                    or not original_owner.is_bound_to(original_journal)
+                                    or not original_ledger.is_bound_to(original_journal)
+                                    or original_journal.account_scope != self.account_scope
+                                    or original_ledger.account_scope != self.account_scope):
+                                raise DirectCommandJournalError('ACCOUNT_FACT_STREAM_UNAVAILABLE')
+                            journal_id = original_journal.journal_id
+                            if (type(journal_id) is not str or not journal_id or journal_id != journal_id.strip()
+                                    or len(journal_id) > 256):
+                                raise DirectCommandJournalError('ACCOUNT_FACT_STREAM_UNAVAILABLE')
+                            return journal_id
+                        source_id = verify_origin()
+                    def response(page):
+                        result = {'status': 'OK', 'page': page_value(page)}
+                        if version2:
+                            result.update(schema='sdk.gateway.account_facts.page/2', journal_id=source_id)
+                        return result
                     page = self.ledger.read_account_facts(**kwargs, after_sequence=seq, expected_epoch=epoch,
-                        limit=limit, result_fits=lambda p: context.result_fits({'status': 'OK', 'page': page_value(p)}))
-                    return {'status': 'OK', 'page': page_value(page)}
+                        limit=limit, result_fits=lambda p: context.result_fits(response(p)))
+                    if version2:
+                        try:
+                            if verify_origin() != source_id:
+                                return {'status': 'UNKNOWN'}
+                        except Exception:
+                            # The read transaction may already have committed an
+                            # offered cursor; a rejected-before-read reply would
+                            # incorrectly imply no effect.
+                            return {'status': 'UNKNOWN'}
+                    return response(page)
                 if operation == 'account.facts.ack':
                     progress = self.ledger.acknowledge_account_facts(**kwargs, sequence=arguments['sequence'],
                         expected_epoch=arguments['expected_epoch'], result_fits=lambda p: context.result_fits(
@@ -224,7 +257,8 @@ class GatewayAccountFactsObserver:
                     return reject(error.code)
                 raise
         try:
-            return self.owner.submit_service_call(execute).result(timeout_seconds=1.0)
+            target_owner = self._facts_origin[0] if operation == 'account.facts.read_after.v2' else self.owner
+            return target_owner.submit_service_call(execute).result(timeout_seconds=1.0)
         except GatewayOwnerServiceCallError:
             return {'status': 'UNKNOWN'}
         finally:

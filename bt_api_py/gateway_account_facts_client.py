@@ -120,6 +120,50 @@ class GatewayAccountFactResult:
     _read_token: object = field(default=None, repr=False, compare=False)
 
 
+@dataclass(frozen=True, slots=True)
+class GatewayAccountFactV2Result:
+    outcome: str
+    journal_id: str | None = None
+    page: GatewayAccountFactPage | None = None
+    code: str | None = None
+    _read_token: object = field(default=None, repr=False, compare=False)
+
+
+@dataclass(frozen=True, slots=True)
+class GatewayAccountFactIssuedPage:
+    """Detached authenticated observation, not a ledger or trading authorization."""
+    journal_id: str
+    page: GatewayAccountFactPage
+
+
+def _issued_wire(result):
+    page = result.page
+    progress = page.progress
+    raw = {name: getattr(progress, name) for name in (
+        'account_scope', 'consumer_ref', 'epoch', 'offered_sequence',
+        'acknowledged_sequence', 'bootstrap_count')}
+    raw.update(schema_version=1, has_more=page.has_more)
+    fields = ('sequence', 'fact_digest', 'disposition', 'reason', 'strategy_scope',
+              'execution_sequence', 'reservation_id', 'origin', 'parent_ref', 'child_id',
+              'external_receipt_digest', 'phase', 'event_digest')
+    raw['events'] = []
+    for event in page.events:
+        item = {name: getattr(event, name) for name in fields}
+        item['observation'] = event.observation.to_mapping()
+        raw['events'].append(item)
+    return {'status': 'OK', 'schema': 'sdk.gateway.account_facts.page/2',
+            'journal_id': result.journal_id, 'page': raw}
+
+
+def _issued_bytes(result):
+    return json.dumps(_issued_wire(result), sort_keys=True, separators=(',', ':'),
+                      ensure_ascii=True, allow_nan=False).encode('ascii')
+
+
+def _issued_digest(result):
+    return hashlib.sha256(_issued_bytes(result)).hexdigest()
+
+
 def _text(value):
     return type(value) is str and bool(value) and value == value.strip() and len(value) <= 256
 
@@ -178,6 +222,7 @@ class GatewayAccountFactsClient(GatewayAccountObserverClient):
     def __init__(self, runtime, *, route: GatewayAccountObserverRoute,
                  peer: WireIdentity | None = None, fingerprint: str | None = None):
         super().__init__(runtime, route=route, peer=peer, fingerprint=fingerprint)
+        self._issued_v2 = None
         identity, scope = route.identity, route.scope
         self._consumer_ref = 'account-facts:' + hashlib.sha256(json.dumps([
             identity.principal_ref, identity.role.value, identity.actor_ref, scope.execution_domain_ref,
@@ -194,15 +239,26 @@ class GatewayAccountFactsClient(GatewayAccountObserverClient):
         try:
             issued = None
             if self._bound_route is not None:
-                if operation == 'account.facts.read_after':
+                if operation in {'account.facts.read_after', 'account.facts.read_after.v2'}:
                     self._read_binding = None
+                    self._issued_v2 = None
                 elif operation == 'account.facts.ack':
                     issued = self._read_binding
                     if (issued is None or read_token is not issued[0] or issued[1] != issued[2]
                             or arguments['expected_epoch'] != issued[3]
                             or arguments['sequence'] != issued[5] or self._runtime is not issued[6]):
                         return GatewayAccountFactResult('TRANSPORT_NOT_STARTED', code='READ_BINDING_REQUIRED')
+                    if self._issued_v2 is not None:
+                        try:
+                            self._validate_issued(self._issued_v2[0])
+                        except Exception:
+                            self._read_binding = None
+                            self._issued_v2 = None
+                            return GatewayAccountFactResult('TRANSPORT_NOT_STARTED', code='READ_BINDING_REQUIRED')
+                    if issued[5] <= issued[4]:
+                        return GatewayAccountFactResult('TRANSPORT_NOT_STARTED', code='READ_BINDING_REQUIRED')
                     self._read_binding = None
+                    self._issued_v2 = None
             try:
                 registration = self._registration(operation)
             except Exception:
@@ -322,8 +378,12 @@ class GatewayAccountFactsClient(GatewayAccountObserverClient):
                         raise ValueError
                     return GatewayAccountFactResult('OBSERVED', fact_status=GatewayAccountFactStatus(
                         value['status'], value['unattributed'], value['conflict'], value['verified_external']))
-                field = 'page' if operation == 'account.facts.read_after' else 'progress'
-                if set(result) != {'status', field} or result['status'] != 'OK' or type(result[field]) is not dict:
+                version2 = operation == 'account.facts.read_after.v2'
+                field = 'page' if operation in {'account.facts.read_after', 'account.facts.read_after.v2'} else 'progress'
+                expected_fields = {'status', field} | ({'schema', 'journal_id'} if version2 else set())
+                if (set(result) != expected_fields or result['status'] != 'OK' or type(result[field]) is not dict
+                        or (version2 and (result['schema'] != 'sdk.gateway.account_facts.page/2'
+                                          or not _text(result['journal_id'])))):
                     raise ValueError
                 raw = result[field]
                 fields = {'schema_version', 'account_scope', 'consumer_ref', 'epoch',
@@ -359,7 +419,7 @@ class GatewayAccountFactsClient(GatewayAccountObserverClient):
                         or (previous < progress.offered_sequence and not raw['has_more'])):
                     raise ValueError
                 token = None
-                if bound is not None and events:
+                if bound is not None and (events or version2):
                     if type(bound._binding_token) is not _BoundBindingToken:
                         raise ValueError
                     token = _FactReadToken()
@@ -371,8 +431,19 @@ class GatewayAccountFactsClient(GatewayAccountObserverClient):
                     self._read_binding = (token, bound.before, snapshot, raw['epoch'],
                                           arguments['after_sequence'], previous, self._runtime,
                                           bound._binding_token, digest)
-                return GatewayAccountFactResult('OBSERVED', page=GatewayAccountFactPage(progress, tuple(events), raw['has_more']),
-                                                _read_token=token)
+                page = GatewayAccountFactPage(progress, tuple(events), raw['has_more'])
+                if version2:
+                    if token is None:
+                        raise ValueError
+                    issued_result = GatewayAccountFactV2Result('OBSERVED', result['journal_id'], page,
+                                                               _read_token=token)
+                    if _issued_digest(issued_result) != digest:
+                        raise ValueError
+                    identities = (page.progress, page.events,
+                                  tuple((event, event.observation) for event in page.events))
+                    self._issued_v2 = (issued_result, page, token, digest, self._runtime, registration, identities)
+                    return issued_result
+                return GatewayAccountFactResult('OBSERVED', page=page, _read_token=token)
             except Exception:
                 return GatewayAccountFactResult('UNKNOWN', code='INVALID_OR_UNAVAILABLE_REPLY')
         finally:
@@ -384,6 +455,68 @@ class GatewayAccountFactsClient(GatewayAccountObserverClient):
             raise ValueError('INVALID_READ')
         return self._call('account.facts.read_after', {'after_sequence': after_sequence,
             'expected_epoch': expected_epoch, 'limit': limit}, timeout_seconds)
+
+    def read_after_v2(self, *, after_sequence=0, expected_epoch=None, limit=256, timeout_seconds=5.0):
+        """Read journal-bound facts using only the authenticated strict transport."""
+        if self._bound_route is None:
+            raise ValueError('STRICT_ACCOUNT_FACTS_REQUIRED')
+        if (not _sequence(after_sequence) or type(limit) is not int or not 1 <= limit <= 256
+                or (expected_epoch is not None and not _epoch(expected_epoch))
+                or (after_sequence and expected_epoch is None)):
+            raise ValueError('INVALID_READ')
+        result = self._call('account.facts.read_after.v2', {'after_sequence': after_sequence,
+            'expected_epoch': expected_epoch, 'limit': limit}, timeout_seconds)
+        if type(result) is GatewayAccountFactV2Result:
+            return result
+        return GatewayAccountFactV2Result(result.outcome, code=result.code)
+
+    def _validate_issued(self, result):
+        issued = self._issued_v2
+        if (issued is None or result is not issued[0] or type(result) is not GatewayAccountFactV2Result
+                or result.page is not issued[1] or result._read_token is not issued[2]
+                or self._runtime is not issued[4] or result.outcome != 'OBSERVED' or result.code is not None
+                or self._read_binding is None or self._read_binding[0] is not issued[2]
+                or self._read_binding[1] != self._read_binding[2]
+                or self._read_binding[6] is not issued[4] or self._read_binding[8] != issued[3]
+                or type(result.page) is not GatewayAccountFactPage
+                or result.page.progress is not issued[6][0] or result.page.events is not issued[6][1]
+                or type(result.page.events) is not tuple
+                or len(result.page.events) != len(issued[6][2])
+                or any(event is not original or event.observation is not observation
+                       for event, (original, observation) in zip(result.page.events, issued[6][2]))
+                or self._registration('account.facts.read_after.v2') != issued[5]):
+            raise ValueError('ISSUED_PAGE_INVALID')
+        # Once encoded, this immutable snapshot is the only data checked and
+        # returned. DTOs can be force-mutated by another thread despite frozen
+        # dataclasses, and the client lock does not protect those objects.
+        snapshot = _issued_bytes(result)
+        if hashlib.sha256(snapshot).hexdigest() != issued[3]:
+            raise ValueError('ISSUED_PAGE_INVALID')
+        return json.loads(snapshot)
+
+    def validate_copy_issued_page(self, result):
+        """Copy the exact issued response on its creating thread; no commit is implied.
+
+        A later read or any ACK consumes the issuance. ACK independently fences
+        the original socket; this copy does not guarantee a continuing connection.
+        """
+        if os.getpid() != self._pid or threading.current_thread() is not self._thread:
+            raise RuntimeError('ACCOUNT_FACTS_WRONG_OWNER')
+        if not self._lock.acquire(blocking=False):
+            raise RuntimeError('ACCOUNT_FACTS_BUSY')
+        try:
+            wire = self._validate_issued(result)
+            raw = wire['page']
+            progress = GatewayAccountFactProgress(*(raw[k] for k in ('account_scope', 'consumer_ref',
+                'epoch', 'offered_sequence', 'acknowledged_sequence', 'bootstrap_count')))
+            events = tuple(_parse_fact(item, account=progress.account_scope, maximum=progress.offered_sequence,
+                                       bootstrap_count=progress.bootstrap_count) for item in raw['events'])
+            return GatewayAccountFactIssuedPage(wire['journal_id'],
+                GatewayAccountFactPage(progress, events, raw['has_more']))
+        except Exception as error:
+            raise ValueError('ISSUED_PAGE_INVALID') from error
+        finally:
+            self._lock.release()
 
     def snapshot_info(self, *, timeout_seconds=5.0):
         """Read Gateway retention metadata; it is not an exchange snapshot."""

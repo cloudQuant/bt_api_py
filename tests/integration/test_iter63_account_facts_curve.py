@@ -228,7 +228,7 @@ def test_fact_stream_actual_curve_scope_bootstrap_live_and_ack(tmp_path, monkeyp
                                              'account_comparison': comparison},
                                             ready=lambda: True))
             host.start()
-            ready.put(('ready', state['risk_reservation'], state['exec_reservation'], state['self_reservation'], owner, ledger))
+            ready.put(('ready', state['risk_reservation'], state['exec_reservation'], state['self_reservation'], owner, ledger, journal.journal_id, facts))
             while not stop.is_set():
                 host.serve_once(10)
         except BaseException as error:
@@ -257,6 +257,58 @@ def test_fact_stream_actual_curve_scope_bootstrap_live_and_ack(tmp_path, monkeyp
         client = GatewayAccountFactsClient(runtime, route=route)
         strict = GatewayAccountFactsClient(runtime, route=route, peer=SERVICE,
                                            fingerprint=hashlib.sha256(server_public).hexdigest())
+        facts_observer = started[7]
+        for field in ('owner', 'journal', 'ledger'):
+            original = getattr(facts_observer, field)
+            setattr(facts_observer, field, object())
+            try:
+                denied = strict.read_after_v2(limit=4)
+                assert denied.code == 'ACCOUNT_FACT_STREAM_UNAVAILABLE'
+            finally:
+                setattr(facts_observer, field, original)
+        original_handle = GatewayAccountFactsObserver.handle
+        budget_candidates = []
+        def limited_budget(observer, operation, context, arguments):
+            if operation == 'account.facts.read_after.v2':
+                def refuse(result):
+                    budget_candidates.append(result)
+                    return False
+                context = replace(context, result_fits=refuse)
+            return original_handle(observer, operation, context, arguments)
+        with monkeypatch.context() as patch:
+            patch.setattr(GatewayAccountFactsObserver, 'handle', limited_budget)
+            assert strict.read_after_v2(limit=4).outcome != 'OBSERVED'
+        assert budget_candidates and all(
+            set(candidate) == {'status', 'schema', 'journal_id', 'page'}
+            and candidate['journal_id'] == started[6] for candidate in budget_candidates)
+        # Replace the observer's source only after the real owner transaction
+        # has committed its offer. The caller must see UNKNOWN, not denial.
+        original_journal = facts_observer.journal
+        original_read_facts = GatewayDirectExecutionLedger.read_account_facts
+        def replace_after_commit(ledger, **kwargs):
+            page = original_read_facts(ledger, **kwargs)
+            facts_observer.journal = object()
+            return page
+        try:
+            with monkeypatch.context() as patch:
+                patch.setattr(GatewayDirectExecutionLedger, 'read_account_facts', replace_after_commit)
+                uncertain = strict.read_after_v2(limit=4)
+            assert uncertain.outcome == 'UNKNOWN' and uncertain._read_token is None
+        finally:
+            facts_observer.journal = original_journal
+        committed_progress = strict.progress()
+        assert committed_progress.outcome == 'OBSERVED'
+        assert committed_progress.progress.offered_sequence == 4
+        assert committed_progress.progress.acknowledged_sequence == 0
+        v2_page = strict.read_after_v2(limit=4)
+        assert v2_page.outcome == 'OBSERVED' and v2_page.journal_id == started[6]
+        detached = strict.validate_copy_issued_page(v2_page)
+        assert detached.journal_id == started[6] and detached.page == v2_page.page
+        object.__setattr__(v2_page.page.events[0], 'reason', 'MUTATED')
+        with pytest.raises(ValueError, match='ISSUED_PAGE_INVALID'):
+            strict.validate_copy_issued_page(v2_page)
+        assert strict.acknowledge(4, expected_epoch=v2_page.page.progress.epoch,
+                                  read_token=v2_page._read_token).code == 'READ_BINDING_REQUIRED'
         first = strict.read_after(limit=4)
         assert first.outcome == 'OBSERVED' and first._read_token is not None
         wrong_key = GatewayAccountFactsClient(runtime, route=route, peer=SERVICE, fingerprint='0' * 64)
@@ -410,6 +462,9 @@ def test_fact_stream_actual_curve_scope_bootstrap_live_and_ack(tmp_path, monkeyp
         with pytest.raises(ServiceRuntimeError, match='AMBIGUOUS_OR_MISSING_ROUTE'):
             other_runtime.call('store.account', 'account.facts.read_after',
                 {'after_sequence': 0, 'expected_epoch': None, 'limit': 1}, timeout_seconds=2)
+        with pytest.raises(ServiceRuntimeError, match='AMBIGUOUS_OR_MISSING_ROUTE'):
+            other_runtime.call('store.account', 'account.facts.read_after.v2',
+                {'after_sequence': 0, 'expected_epoch': None, 'limit': 1}, timeout_seconds=2)
         # A separate caller transaction commits before the explicit ACK; this
         # is a local fixture and does not establish cross-store atomicity.
         replacement.close(timeout_seconds=10)
@@ -452,8 +507,9 @@ def test_fact_stream_actual_curve_scope_bootstrap_live_and_ack(tmp_path, monkeyp
         assert strict_replacement.acknowledge(7, expected_epoch=page.page.progress.epoch,
             read_token=observed._read_token).code == 'READ_BINDING_REQUIRED'
         assert strict_replacement.progress().progress.acknowledged_sequence == 7
-        reoffered = strict_replacement.read_after(after_sequence=6, expected_epoch=page.page.progress.epoch)
+        reoffered = strict_replacement.read_after_v2(after_sequence=6, expected_epoch=page.page.progress.epoch)
         assert reoffered.outcome == 'OBSERVED' and reoffered._read_token is not None
+        assert strict_replacement.validate_copy_issued_page(reoffered).journal_id == started[6]
         assert strict_replacement.acknowledge(7, expected_epoch=page.page.progress.epoch,
             read_token=reoffered._read_token).outcome == 'OBSERVED'
         final = replace(fact(keys=('final',), binding=('final',), venue='final',

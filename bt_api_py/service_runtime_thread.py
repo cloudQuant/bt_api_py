@@ -477,7 +477,7 @@ def _execute_bound_call(runtime: Any, call: _BoundCall) -> _BoundOwnerResult:
             if facts_stream and (type(token.lineage) is not tuple or len(token.lineage) != 3
                     or any(token.lineage[i] is not lineage[i] for i in range(3))
                     or (call.operation == "account.facts.ack"
-                        and token.observation.operation != "account.facts.read_after")):
+                        and token.observation.operation not in ("account.facts.read_after", "account.facts.read_after.v2"))):
                 raise ValueError("BOUND_ROUTE_UNAVAILABLE")
         elif call.expected_token is not None:
             raise ValueError("BOUND_ROUTE_UNAVAILABLE")

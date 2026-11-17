@@ -204,7 +204,7 @@ _GATEWAY_DELEGATE_ACTOR_OPERATIONS = _GATEWAY_DELEGATE_ACTOR_READ_OPERATIONS | _
 _GATEWAY_ALL_DELEGATE_OPERATIONS = _GATEWAY_DELEGATED_WRITE_OPERATIONS | _GATEWAY_DELEGATE_ACTOR_OPERATIONS
 _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS = frozenset({
     "account.events.read_after", "account.events.progress", "account.events.ack",
-    "account.facts.read_after", "account.facts.progress", "account.facts.ack", "account.facts.status",
+    "account.facts.read_after", "account.facts.read_after.v2", "account.facts.progress", "account.facts.ack", "account.facts.status",
     "account.facts.snapshot_info", "account.facts.snapshot_read", "account.facts.snapshot_confirm",
     "account.cancel_attempts.read_after", "account.cancel_attempts.progress", "account.cancel_attempts.ack",
 })
@@ -7511,7 +7511,7 @@ class ServiceRegistry:
                                       and operation in _RISK_ADMIN_WRITE_OPERATIONS)):
             write_fact_kind = "dispatch"
         elif capability.port == "service.account_read" and (
-            operation in {"account.ack", "account.events.read_after", "account.events.ack", "account.facts.read_after", "account.facts.ack", "account.facts.snapshot_read", "account.facts.snapshot_confirm", "account.cancel_attempts.read_after", "account.cancel_attempts.ack"}
+            operation in {"account.ack", "account.events.read_after", "account.events.ack", "account.facts.read_after", "account.facts.read_after.v2", "account.facts.ack", "account.facts.snapshot_read", "account.facts.snapshot_confirm", "account.cancel_attempts.read_after", "account.cancel_attempts.ack"}
             or (
                 operation == "account.read_after"
                 and arguments.get("track_delivery", False) is True

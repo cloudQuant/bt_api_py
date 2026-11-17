@@ -1537,3 +1537,11 @@ and facts immediately before strict transport entry. Both Registry and ledger
 locks are released before network I/O. The earliest used fact/permit wall expiry
 and a conservative monotonic cap restrict the actual send; expiry or uncertainty
 after sending retains the original attempt and does not authorize a retry.
+
+The explicit `account.facts.read_after.v2` operation returns the original
+Gateway journal identity with the same authenticated fact page. The strict
+client can validate and detach only its exact issued response using one
+canonical snapshot. Mutated responses cannot be copied or acknowledged.
+A source change after the read transaction returns UNKNOWN because its offered
+cursor may already be committed. The detached page is a historical observation;
+a consumer must still bind its actual local commit to that page before ACK.
