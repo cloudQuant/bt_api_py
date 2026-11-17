@@ -157,7 +157,7 @@ PORT_OPERATIONS = MappingProxyType(
              "execution.management.parent.by_request.read.v1"}
         ),
         "service.direct_write": frozenset(
-            {"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch",
+            {"direct.reserve", "direct.risk_first_reserve.v2", "direct.release", "direct.command_status", "direct.dispatch",
              "direct.cancel", "direct.cancel_status",
              "direct.strategy_position", "direct.strategy_close_capacity", "direct.strategy_financial", "direct.instrument_status",
              "direct.delegated_command_status",
@@ -1156,6 +1156,7 @@ class ServiceClientRuntime:
         self._execution_upstream_attempted_keys = set()
         self._live_parent_capabilities_lock = threading.RLock()
         self._live_parent_capabilities: dict[_LiveParentSourceCapability, tuple[Any, ...]] = {}
+        self._recorded_parent_attempts: dict[object, tuple[Any, ...]] = {}
         self._live_parent_revisions: dict[tuple[Any, ...], int] = {}
         self._live_parent_source_identities: dict[tuple[Any, str], tuple[str, str]] = {}
         self._active_live_source_marker = None
@@ -2022,7 +2023,7 @@ class ServiceClientRuntime:
 
     def capture_live_parent_source(self, target: BoundServiceTarget, spec: dict[str, Any], *,
                                    deadline_monotonic: float) -> _LiveParentSourceCapability:
-        """Capture one source on an issuer-verified strict registration."""
+        """Capture a legacy raw source; this establishes no recorded intake history."""
         return self._capture_live_parent_source(target, spec, deadline_monotonic=deadline_monotonic,
                                                 expected_subject=None)
 
@@ -2104,7 +2105,12 @@ class ServiceClientRuntime:
 
     def capture_prepared_parent_source(self, target: BoundServiceTarget, preparation: Any, parent_ref: str, *,
                                        deadline_monotonic: float) -> _LiveParentSourceCapability:
-        """Bind a locally revalidated parent to one strict SOURCE observation.
+        """Retired: host-managed parents require a recorded SOURCE attempt."""
+        raise ServiceRuntimeRequestNotSentError()
+
+    def _capture_recorded_parent_source(self, target, preparation, parent_ref, attempt_permit, *,
+                                        deadline_monotonic):
+        """Bind a durably recorded local attempt to one strict SOURCE observation.
 
         This local capability is not a Gateway registration, send permission,
         source of account truth, or database rollback proof.
@@ -2118,6 +2124,8 @@ class ServiceClientRuntime:
             )
             from bt_api_execution.submission_intake import _wire_scope
             if (type(target) is not BoundServiceTarget or type(preparation) is not LocalGatewayParentPreparation
+                    or type(self._recorded_parent_attempts.get(attempt_permit)) is not tuple
+                    or self._recorded_parent_attempts[attempt_permit][:3] != (preparation, parent_ref, target)
                     or type(parent_ref) is not str or not parent_ref or parent_ref != parent_ref.strip()
                     or not parent_ref.isprintable() or len(parent_ref.encode('utf-8', 'strict')) > 256
                     or type(deadline_monotonic) not in (int, float) or not math.isfinite(deadline_monotonic)
@@ -2148,6 +2156,7 @@ class ServiceClientRuntime:
             copied, canonical = self._live_parent_spec(target_snapshot, spec)
             if canonical != before.gateway_spec_json or not unchanged() or _BOUND_MONOTONIC() >= deadline_monotonic:
                 raise ServiceRuntimeRequestNotSentError()
+            self._check_recorded_parent_attempt(attempt_permit)
             capability = self._capture_live_parent_source(target_snapshot, copied,
                 deadline_monotonic=deadline_monotonic, expected_subject=expected_subject)
             with self._live_parent_capabilities_lock:
@@ -2158,6 +2167,7 @@ class ServiceClientRuntime:
                 raise ServiceCallOutcomeUnknownError('UNKNOWN', 'direct.parent.source')
             try:
                 after = LocalGatewayParentPreparation.read_prepared(preparation, parent_ref)
+                self._check_recorded_parent_attempt(attempt_permit)
                 current_proof = self._live_parent_binding(target_snapshot)
                 if (type(after) is not LocalGatewayPreparedSnapshot or after.canonical_record != before.canonical_record
                         or after.gateway_spec_json != canonical or not unchanged()
@@ -2183,6 +2193,153 @@ class ServiceClientRuntime:
                     raise ServiceRuntimeRequestNotSentError() from None
                 raise ServiceCallOutcomeUnknownError('UNKNOWN', 'direct.parent.source') from None
             raise
+
+    def _verify_recorded_parent_attempt(self, cursor, active, permit):
+        from bt_api_execution.atomic_submission_intake import _receipt_origin_key
+        from bt_api_execution.contracts import canonical_json
+        from bt_api_execution.local_gateway_parent_preparation import _preparation_key, _source_attempt_key
+
+        self._assert_owner_thread()
+        entry = self._recorded_parent_attempts.get(permit)
+        if type(entry) is not tuple or len(entry) != 8:
+            raise ValueError
+        preparation, parent_ref, target, attempt, binding, request_id, request_sha256, instance_id = entry
+        preparation._check(cursor, active)
+        prepared = preparation._expected_record(cursor, parent_ref)
+        preparation_row = cursor.execute('SELECT value FROM execution_meta WHERE key=?',
+            (_preparation_key(preparation._parent_scope, parent_ref),)).fetchone()
+        attempt_row = cursor.execute('SELECT value FROM execution_meta WHERE key=?',
+            (_source_attempt_key(preparation._parent_scope, parent_ref),)).fetchone()
+        origin_row = cursor.execute('SELECT value FROM execution_meta WHERE key=?',
+            (_receipt_origin_key(preparation._parent_scope, parent_ref),)).fetchone()
+        if preparation_row is None or attempt_row is None or origin_row is None:
+            raise ValueError
+        attempt_value, origin = json.loads(attempt), json.loads(origin_row[0])
+        expected_origin = {'version': 1, 'journal_incarnation': preparation._manifest_incarnation,
+            'account_key': preparation._scope.account_key, 'parent_scope': preparation._parent_scope,
+            'parent_ref': parent_ref, 'request_id': request_id, 'request_sha256': request_sha256,
+            'instance_id': instance_id, 'service_identity': binding['identity'],
+            'lease_owner': preparation._lease.owner_id, 'lease_token': preparation._lease.fencing_token}
+        origin_hash = hashlib.sha256(canonical_json(expected_origin).encode('utf-8')).hexdigest()
+        if (self._recorded_parent_attempts.get(permit) is not entry or preparation_row[0] != prepared
+                or attempt_row[0] != attempt or canonical_json(attempt_value) != attempt
+                or type(attempt_value) is not dict or attempt_value.get('target') != binding
+                or attempt_value.get('origin_sha256') != origin_hash
+                or attempt_value.get('preparation_sha256') != hashlib.sha256(prepared.encode('utf-8')).hexdigest()
+                or origin != {'origin': expected_origin, 'sha256': origin_hash}
+                or canonical_json(origin) != origin_row[0]):
+            raise ValueError
+        return entry
+
+    def _check_recorded_parent_attempt(self, permit):
+        from bt_api_execution.atomic_submission_intake import _nonblocking_store_transaction
+
+        entry = self._recorded_parent_attempts.get(permit)
+        if type(entry) is not tuple or len(entry) != 8:
+            raise ValueError
+        preparation = entry[0]
+        with preparation._host.intake_scope(nonblocking=True) as active:
+            with _nonblocking_store_transaction(preparation._store, write=False) as cursor:
+                self._verify_recorded_parent_attempt(cursor, active, permit)
+
+    def record_prepared_parent_source(self, target, preparation, parent_ref, *, request_id,
+                                      request_sha256, instance_id, attempt_id, deadline_monotonic):
+        """Persist a single local SOURCE attempt and its authenticated observation.
+
+        A durable observation is history only; it is not a dispatch grant.
+        Any uncertainty leaves the original attempt non-retryable.
+        """
+        from bt_api_execution.atomic_submission_intake import _nonblocking_store_transaction, _receipt_origin_key
+        from bt_api_execution.contracts import canonical_json
+        from bt_api_execution.local_gateway_parent_preparation import (
+            LocalGatewayParentPreparation, _preparation_key, _source_attempt_key, _source_observation_key,
+        )
+        from bt_api_execution.submission_intake import _identity, _wire_scope
+
+        self._assert_owner_thread()
+        if type(target) is not BoundServiceTarget or type(preparation) is not LocalGatewayParentPreparation:
+            raise ServiceRuntimeRequestNotSentError()
+        binding = {'mount': target.mount, 'service_id': target.service_id, 'instance_id': target.instance_id,
+            'scope_ref': target.scope_ref, 'scope': _wire_scope(target.scope), 'identity': _identity(target.identity),
+            'run_id': target.run_id, 'transport_ref': target.transport_ref,
+            'security_profile_ref': target.security_profile_ref, 'endpoint': target.endpoint,
+            'expected_peer': _identity(target.expected_peer), 'server_key_fingerprint': target.server_key_fingerprint,
+            'registration_id': target.registration_id, 'service_epoch': target.service_epoch}
+        self._live_parent_binding(target)
+        try:
+            attempt = preparation.begin_source(parent_ref, request_id=request_id, request_sha256=request_sha256,
+                                               instance_id=instance_id, attempt_id=attempt_id, target=binding)
+        except Exception:
+            # The SOURCE RPC has not yet been entered, even if the local
+            # attempt transaction itself had an ambiguous outcome.
+            raise ServiceRuntimeRequestNotSentError() from None
+        if type(attempt) is tuple and attempt in (('HISTORICAL',), ('UNKNOWN',)):
+            return {'status': attempt[0]}
+        if type(attempt) is not str:
+            raise ServiceRuntimeRequestNotSentError()
+        capability = None
+        attempt_permit = object()
+        self._recorded_parent_attempts[attempt_permit] = (preparation, parent_ref, target, attempt, binding,
+                                                           request_id, request_sha256, instance_id)
+        try:
+            capability = self._capture_recorded_parent_source(target, preparation, parent_ref, attempt_permit,
+                                                               deadline_monotonic=deadline_monotonic)
+            with self._live_parent_capabilities_lock:
+                saved = self._live_parent_capabilities.get(capability)
+            if (type(saved) is not tuple or len(saved) != 8 or saved[0] is not self
+                    or saved[2] is not preparation or saved[4] != parent_ref or saved[6] != target):
+                raise ValueError
+            entry, prepared = saved[1], saved[5]
+            if type(entry) is not tuple or len(entry) != 10:
+                raise ValueError
+            anchor = entry[7]
+            if type(anchor) is not tuple or len(anchor) != 6:
+                raise ValueError
+            observation = {'version': 1, 'status': 'OBSERVED', 'attempt_id': attempt_id,
+                'attempt_sha256': hashlib.sha256(attempt.encode('utf-8')).hexdigest(),
+                'account_scope': anchor[0], 'strategy_scope': anchor[1], 'execution_domain_ref': anchor[2],
+                'journal_id': anchor[3], 'gateway_generation': anchor[4], 'journal_revision': anchor[5]}
+            encoded = canonical_json(observation)
+            def check():
+                if (not _bound_clock_current() or _BOUND_MONOTONIC() >= deadline_monotonic
+                        or capability._revoked.is_set() or self._live_parent_binding(target) != entry[2]):
+                    raise ValueError
+                with self._live_parent_capabilities_lock:
+                    if self._live_parent_capabilities.get(capability) is not saved:
+                        raise ValueError
+            with preparation._host.intake_scope(nonblocking=True) as active:
+                with _nonblocking_store_transaction(preparation._store, write=True) as cursor:
+                    check()
+                    self._verify_recorded_parent_attempt(cursor, active, attempt_permit)
+                    if (preparation._expected_record(cursor, parent_ref) != prepared
+                            or cursor.execute('SELECT value FROM execution_meta WHERE key=?',
+                                (_preparation_key(preparation._parent_scope, parent_ref),)).fetchone()[0] != prepared
+                            or cursor.execute('SELECT value FROM execution_meta WHERE key=?',
+                                (_source_attempt_key(preparation._parent_scope, parent_ref),)).fetchone()[0] != attempt):
+                        raise ValueError
+                    origin_row = cursor.execute('SELECT value FROM execution_meta WHERE key=?',
+                        (_receipt_origin_key(preparation._parent_scope, parent_ref),)).fetchone()
+                    origin = json.loads(origin_row[0])
+                    attempt_value = json.loads(attempt)
+                    if (type(origin) is not dict or set(origin) != {'origin', 'sha256'}
+                            or origin['sha256'] != attempt_value['origin_sha256']
+                            or hashlib.sha256(canonical_json(origin['origin']).encode('utf-8')).hexdigest()
+                            != origin['sha256']):
+                        raise ValueError
+                    key = _source_observation_key(preparation._parent_scope, parent_ref)
+                    if cursor.execute('SELECT 1 FROM execution_meta WHERE key=?', (key,)).fetchone() is not None:
+                        raise ValueError
+                    cursor.execute('INSERT INTO execution_meta(key,value) VALUES (?,?)', (key, encoded))
+                    self._verify_recorded_parent_attempt(cursor, active, attempt_permit)
+                    check()
+            check()
+            return {'status': 'OBSERVED'}
+        except Exception:
+            raise ServiceCallOutcomeUnknownError('UNKNOWN', 'direct.parent.source') from None
+        finally:
+            self._recorded_parent_attempts.pop(attempt_permit, None)
+            if type(capability) is _LiveParentSourceCapability:
+                self._discard_live_parent_capability(capability)
 
     def _invalidate_live_parent_capabilities(self) -> None:
         if os.getpid() != self._owner_pid:
@@ -3039,7 +3196,7 @@ class ServiceClientRuntime:
             operations = operations.intersection({"calendar.query.v1"})
         elif port == "service.direct_write":
             operations = operations.difference(
-                {"direct.parent.acceptance_order", "direct.events.read_after", "direct.events.progress", "direct.events.ack",
+                {"direct.risk_first_reserve.v2", "direct.parent.acceptance_order", "direct.events.read_after", "direct.events.progress", "direct.events.ack",
                  "direct.cancel", "direct.cancel_status", "direct.control.apply", "direct.control.resume",
                  "direct.strategy_position", "direct.strategy_close_capacity", "direct.strategy_financial", "direct.instrument_status",
                  "direct.delegated_command_status",

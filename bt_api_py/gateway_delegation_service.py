@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import threading
+import math
 from collections.abc import Mapping
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field
@@ -17,6 +18,7 @@ from bt_api_py.gateway_direct_service import _reservation_admission, _Reservatio
 from bt_api_py.service_registry import ServiceCallContext, ServiceDispatchAdmission
 
 OPERATIONS = frozenset({'direct.delegated_reserve','direct.delegated_dispatch'})
+RISK_FIRST_RESERVE_OPERATION = 'direct.risk_first_reserve.v2'
 
 # Journal refusals raised inside the owner's reserve transaction before it commits: the
 # transaction rolled back, so the request is answered as a refusal, exactly as the
@@ -45,6 +47,7 @@ class GatewayDelegationSettings:
     instrument_recheck: Callable = field(repr=False, compare=False)
     parent_recheck: Callable | None = field(default=None, repr=False, compare=False)
     risk_only_submit_strategies: frozenset[str] = frozenset()
+    risk_first_enabled: bool = False
 
     def __post_init__(self):
         if (type(self.grants) is not tuple or not self.grants
@@ -52,7 +55,9 @@ class GatewayDelegationSettings:
                        or g.identity.delegate_ref is not None for g in self.grants)
                 or len({(g.identity.principal_ref, g.account_scope, g.strategy_scope) for g in self.grants}) != len(self.grants)
                 or not callable(self.instrument_recheck)
-                or (self.parent_recheck is not None and not callable(self.parent_recheck))):
+                or (self.parent_recheck is not None and not callable(self.parent_recheck))
+                or type(self.risk_first_enabled) is not bool
+                or (self.risk_first_enabled and not any(g.actor_kind == 'risk' for g in self.grants))):
             raise ValueError('INVALID_GATEWAY_DELEGATION')
         only = self.risk_only_submit_strategies
         if (type(only) is not frozenset
@@ -67,7 +72,7 @@ class GatewayDelegationSettings:
 
 class GatewayDelegationService:
     def __init__(self, settings, *, owner, journal, instance_id, scope_ref, market_gate_required=False,
-                 reservation_fence=None):
+                 reservation_fence=None, risk_first_owner_binding=None):
         # ``reservation_fence`` is the trading fence of the strategies' own reservations
         # (``GatewayDirectServiceBinding``): a delegated reservation goes through it too, so a
         # delegate is never admitted where the represented strategy would not be (G64-09).
@@ -82,10 +87,114 @@ class GatewayDelegationService:
         self._market_gate_required = market_gate_required
         self._market_gate = None
         self._reservation_fence = reservation_fence
+        from bt_api_py._gateway_owner_guard_binding import _GatewayOwnerGuardBinding
+        if ((settings.risk_first_enabled and type(risk_first_owner_binding) is not _GatewayOwnerGuardBinding)
+                or (not settings.risk_first_enabled and risk_first_owner_binding is not None)):
+            raise ValueError('INVALID_GATEWAY_DELEGATION')
+        self._risk_first_owner_binding = risk_first_owner_binding
+        self._risk_first_registry = None
+        self._risk_first_host_check = None
 
-    def configure(self, registry):
+    def configure(self, registry, *, risk_first_host_check=None):
+        if (self.settings.risk_first_enabled != callable(risk_first_host_check)):
+            raise ValueError('INVALID_GATEWAY_DELEGATION')
+        if self.settings.risk_first_enabled:
+            from bt_api_py.service_registry import ServiceRegistry
+            if type(registry) is not ServiceRegistry or self._risk_first_registry is not None:
+                raise ValueError('INVALID_GATEWAY_DELEGATION')
         registry.configure_gateway_delegates(instance_id=self.instance_id, scope_ref=self.scope_ref,
                                              grants=self.settings.grants)
+        if self.settings.risk_first_enabled:
+            self._risk_first_registry = registry
+            self._risk_first_host_check = risk_first_host_check
+
+    def _handle_risk_first(self, context, arguments):
+        """Return RESERVED plus the exact v2 result, or UNKNOWN for any uncertainty.
+
+        A response never certifies an earlier attempt was not sent. Only the
+        journal's current first-insert result can be projected; old rows cannot
+        be used to reconstruct a first-reservation response.
+        """
+        from bt_api_base.gateway_risk_first_reserve_v2 import (
+            GatewayRiskFirstReserveRequestV2, GatewayRiskFirstReserveResultV2,
+        )
+        from bt_api_gateway.direct_command_journal import FirstDelegatedReservation
+        from bt_api_py._gateway_risk_first_scope import _plain, assert_in_active_scope
+
+        if (not self.settings.risk_first_enabled or self._risk_first_registry is None
+                or not callable(self._risk_first_host_check)
+                or type(context) is not ServiceCallContext):
+            return {'status': 'UNKNOWN'}
+        admission = context.dispatch_admission
+        if type(admission) is not ServiceDispatchAdmission:
+            return {'status': 'UNKNOWN'}
+        try:
+            def reserve():
+                with admission.scope() as check:
+                    def recheck(_context=None):
+                        if self._risk_first_host_check() is not True:
+                            raise ValueError('GATEWAY_OWNER_GUARD_BINDING_INVALID')
+                        assert_in_active_scope(
+                            registry=self._risk_first_registry, service_id=self._risk_first_registry.service_id,
+                            instance_id=self.instance_id, context=context, arguments=arguments,
+                            admission=admission, recheck=check, owner=self.owner, journal=self.journal,
+                            owner_binding=self._risk_first_owner_binding,
+                        )
+                        if self._risk_first_host_check() is not True:
+                            raise ValueError('GATEWAY_OWNER_GUARD_BINDING_INVALID')
+                        return True
+
+                    recheck()
+                    values = _plain(arguments)
+                    request = GatewayRiskFirstReserveRequestV2.from_mapping(values['request'])
+                    payload, command = values['payload'], request.command
+                    grant = admission._binding.delegate_grant
+                    permit = authorize_delegated_command(
+                        context, grant, command, 'direct.reserve', payload, registry_recheck=recheck,
+                        current_grant=lambda: grant, instrument_recheck=self.settings.instrument_recheck,
+                        parent_recheck=self.settings.parent_recheck,
+                    )
+                    from bt_api_py.gateway_order_contract import decode_gateway_order_request
+                    decoded = decode_gateway_order_request(payload, self.journal.account_scope)
+                    trading = (None if self._reservation_fence is None else
+                               lambda: _reservation_admission(self._reservation_fence, context, decoded))
+                    first = self._risk_first_owner_binding.reserve_first_risk(
+                        self.owner, self.journal, request, payload, permit=permit, trading_fence=trading,
+                    )
+                    recheck()
+                    if (type(first) is not FirstDelegatedReservation
+                            or first.account_scope != command.account_scope
+                            or first.strategy_scope != command.strategy_scope
+                            or first.request_key != command.request_key
+                            or first.actor_principal != command.actor_principal
+                            or first.run_id != command.run_id
+                            or first.payload_digest != command.payload_digest
+                            or first.delegation_digest != command.digest
+                            or first.journal_id != self.journal.journal_id
+                            or first.owner_generation != self.journal.generation
+                            or type(first.version) is not int or first.version != 1
+                            or type(first.remaining_ttl_seconds) not in (int, float)
+                            or not math.isfinite(first.remaining_ttl_seconds)):
+                        raise ValueError('FIRST_RESERVATION_UNAVAILABLE')
+                    remaining = math.floor(self._risk_first_owner_binding.first_risk_remaining(
+                        self.owner, self.journal, first) * 1000)
+                    result = GatewayRiskFirstReserveResultV2(
+                        request_commitment_digest=request.digest, journal_id=first.journal_id,
+                        owner_generation=first.owner_generation, reservation_generation=first.owner_generation,
+                        account_scope=first.account_scope, strategy_scope=first.strategy_scope,
+                        execution_domain_ref=command.execution_domain_ref, run_id=first.run_id,
+                        request_key=first.request_key, reservation_id=first.reservation_id,
+                        payload_digest=first.payload_digest, remaining_ttl_ms=remaining,
+                    )
+                    if not result.matches_request(request):
+                        raise ValueError('FIRST_RESERVATION_UNAVAILABLE')
+                    recheck()
+                    return {'status': 'RESERVED', 'result': result.to_mapping()}
+            return self.owner.submit_service_call(reserve).result(timeout_seconds=1.0)
+        except Exception:
+            return {'status': 'UNKNOWN'}
+        finally:
+            admission.close()
 
     def install_market_gate(self, gate):
         from bt_api_py.gateway_market_dispatch_gate import GatewayMarketDispatchGate
@@ -100,6 +209,8 @@ class GatewayDelegationService:
         self._market_gate = gate
 
     def handle(self, operation, context, arguments):
+        if operation == RISK_FIRST_RESERVE_OPERATION:
+            return self._handle_risk_first(context, arguments)
         if (operation not in OPERATIONS or type(context) is not ServiceCallContext
                 or not isinstance(arguments, Mapping) or context.identity.role is not WireRole.SERVICE):
             return {'status':'REQUEST_REJECTED','code':'SCOPE_DENIED'}

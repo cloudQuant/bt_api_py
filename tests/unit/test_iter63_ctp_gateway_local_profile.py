@@ -1093,3 +1093,99 @@ def test_simnow_account_observation_bundle_composes_with_the_read_port_bound(tmp
     raw["components"]["gateway"]["settings"]["bind_ports"].remove("service.account_read")
     with pytest.raises(CtpGatewayTradingError, match="INVALID_TRADING_CONFIGURATION"):
         simnow_trading_profile_factory.create_deployment(parse_service_config(raw))
+
+
+def test_risk_first_bundle_option_requires_matching_risk_reserve_grant(tmp_path, monkeypatch):
+    from copy import deepcopy
+    from bt_api_py.ctp_gateway_local_profile import load_simnow_trading_resources
+
+    doc, file, config = _fixture(tmp_path, monkeypatch)
+    doc['settings']['write_enabled'] = True
+    doc['returns'] = _returns()
+    strategy = doc['clients'][0]['identity']['actor_ref']
+    delegate = _risk_delegate(doc, strategy, doc['returns']['instruments'][0])
+    doc['delegation'] = {'delegates': [delegate]}
+
+    def load():
+        file.write_text(json.dumps(doc), encoding='utf-8')
+        return load_simnow_trading_resources(config)
+
+    # Historical bundles and explicit false retain the old, disabled contract.
+    assert load().delegation_settings.risk_first_enabled is False
+    doc['delegation']['risk_first_enabled'] = False
+    assert load().delegation_settings.risk_first_enabled is False
+    for bad in (None, 0, 1, 'true', [], {}):
+        doc['delegation']['risk_first_enabled'] = bad
+        with pytest.raises(CtpLocalProfileError, match='^CTP_LOCAL_RESOURCES_INVALID$'):
+            load()
+    doc['delegation']['risk_first_enabled'] = True
+    with pytest.raises(CtpLocalProfileError, match='^CTP_LOCAL_RESOURCES_INVALID$'):
+        load()  # a switch without an explicit matching Registry operation
+    delegate['resources'][0]['operations'].append('direct.risk_first_reserve.v2')
+    resources = load()
+    assert resources.delegation_settings.risk_first_enabled is True
+    assert 'direct.reserve' in resources.delegation_settings.grants[0].operations
+    assert 'direct.risk_first_reserve.v2' in resources.authority.grants['principal-risk'][0].resources[0].operations
+
+    base = deepcopy(doc['delegation'])
+    for mutate in ('disabled', 'no_logical_reserve', 'wrong_strategy', 'wrong_port', 'wrong_account', 'run_bound'):
+        doc['delegation'] = deepcopy(base)
+        current = doc['delegation']['delegates'][0]
+        resource = current['resources'][0]
+        if mutate == 'disabled':
+            doc['delegation']['risk_first_enabled'] = False
+        elif mutate == 'no_logical_reserve':
+            current['strategies'][strategy]['operations'] = ['direct.dispatch']
+        elif mutate == 'wrong_strategy':
+            resource['scope']['strategy_ref'] = 'another'
+        elif mutate == 'wrong_port':
+            resource['port'] = 'service.account_read'
+        elif mutate == 'wrong_account':
+            resource['scope']['account_ref'] = 'another'
+        else:
+            resource['scope']['run_id'] = 'run'
+        with pytest.raises(CtpLocalProfileError, match='^CTP_LOCAL_RESOURCES_INVALID$'):
+            load()
+
+
+def test_risk_first_bundle_profile_validation_is_inert_without_native_ctp(tmp_path, monkeypatch):
+    import os
+    import subprocess
+
+    doc, file, config = _fixture(tmp_path, monkeypatch)
+    _, config = _composing_config(config, delegation_enabled=True)
+    _composing_doc(doc)
+    strategy = doc['clients'][0]['identity']['actor_ref']
+    instrument = doc['returns']['instruments'][0]
+    doc['clients'][0]['symbols'] = [instrument['native_symbol']]
+    delegate = _risk_delegate(doc, strategy, instrument)
+    delegate['resources'][0]['operations'].append('direct.risk_first_reserve.v2')
+    doc['delegation'] = {'delegates': [delegate], 'risk_first_enabled': True}
+    file.write_text(json.dumps(doc), encoding='utf-8')
+    config_path = tmp_path / 'config-public.json'
+    config_path.write_text(json.dumps(config.to_public_dict()), encoding='utf-8')
+    script = '''
+import builtins, json, sys
+blocked = ('ctpbee_api', 'thosttraderapi', 'thostmduserapi', 'bt_api_ctp.ctp.client')
+assert not any(name.startswith(blocked) for name in sys.modules)
+original = builtins.__import__
+def no_native(name, *args, **kwargs):
+    if name.startswith(blocked):
+        raise AssertionError('native CTP import during validation')
+    return original(name, *args, **kwargs)
+builtins.__import__ = no_native
+from bt_api_py.service_config import parse_service_config
+from bt_api_py.ctp_gateway_local_profile import simnow_trading_profile_factory
+with open(sys.argv[1], encoding='utf-8') as stream:
+    config = parse_service_config(json.load(stream))
+assert simnow_trading_profile_factory.create_deployment(config).state == 'new'
+assert not any(name.startswith(blocked) for name in sys.modules)
+print('VALIDATION_INERT')
+'''
+    result = subprocess.run(
+        ['/Users/yunjinqi/opt/anaconda3/bin/conda', 'run', '--no-capture-output', '-n', 'base',
+         'python', '-c', script, str(config_path)], env=os.environ.copy(), capture_output=True, text=True,
+        timeout=30, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == 'VALIDATION_INERT'

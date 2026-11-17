@@ -81,3 +81,43 @@ class _GatewayOwnerGuardBinding:
                 raise RuntimeError("GATEWAY_OWNER_GUARD_BINDING_INVALID")
             if self.__closing.is_set():
                 raise RuntimeError("GATEWAY_OWNER_GUARD_BINDING_INVALID")
+
+    def reserve_first_risk(self, owner, journal, request, payload, *, permit, trading_fence):
+        """Use the factory-owned guard on its owner thread; return no guard capability."""
+        from contextlib import nullcontext
+
+        self._assert_bound_nonblocking(owner, journal)
+        command = request.command
+        result = journal.reserve_first_delegated(
+            command.strategy_scope, command.request_key, command.actor_principal, payload,
+            guard=self.__guard, reservation_fence=nullcontext, delegation_permit=permit,
+            ttl_seconds=request.requested_ttl_ms / 1000,
+            origin_trading_fence=trading_fence, risk_v2_request=request,
+        )
+        self._assert_bound_nonblocking(owner, journal)
+        return result
+
+    def _assert_bound_nonblocking(self, owner, journal):
+        """Never wait for the owner condition while Registry admission is held."""
+        if not owner._condition.acquire(blocking=False):
+            raise RuntimeError("GATEWAY_OWNER_GUARD_BINDING_INVALID")
+        try:
+            self.assert_bound(owner, journal)
+        finally:
+            owner._condition.release()
+
+    def first_risk_remaining(self, owner, journal, first):
+        """Resample the same guarded journal clock before projecting the result."""
+        from bt_api_gateway.direct_command_journal import (
+            FirstDelegatedReservation, _bounded_remaining_ttl, _first_reservation_clock_scope,
+        )
+
+        if type(first) is not FirstDelegatedReservation:
+            raise RuntimeError("GATEWAY_FIRST_RESERVATION_INVALID")
+        self._assert_bound_nonblocking(owner, journal)
+        with _first_reservation_clock_scope(self.__guard, journal.generation, journal._clock) as clock:
+            clock.sample(journal._clock)
+            self._assert_bound_nonblocking(owner, journal)
+            now = clock.sample(journal._clock)
+            self._assert_bound_nonblocking(owner, journal)
+            return min(first.remaining_ttl_seconds, _bounded_remaining_ttl(first.expires_at, now))

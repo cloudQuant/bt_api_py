@@ -601,6 +601,7 @@ def _validate_config(
                                         and item.strategy_scope == scope.strategy_ref
                                         and item.execution_domain_ref == scope.execution_domain_ref]
                             logical = {'direct.delegated_reserve':'direct.reserve','direct.delegated_dispatch':'direct.dispatch',
+                                       'direct.risk_first_reserve.v2':'direct.reserve',
                                        'direct.delegate_actor_status':'direct.command_status',
                                        'direct.delegate_actor_cancel':'direct.cancel',
                                        'direct.delegate_actor_cancel_status':'direct.cancel_status',
@@ -622,7 +623,10 @@ def _validate_config(
                                                     and item.instance_id == instance and item.scope_ref == config.scope_ref
                                                     for item in acceptance_grants))
                                 if op in logical:
-                                    return len(matching) == 1 and logical[op] in matching[0].operations
+                                    return (len(matching) == 1 and logical[op] in matching[0].operations
+                                            and (op != 'direct.risk_first_reserve.v2'
+                                                 or (delegation_settings.risk_first_enabled
+                                                     and matching[0].actor_kind == 'risk')))
                                 return op in PARENT_OPERATIONS and len(parents) == 1 and op in parents[0].operations
                             if scope.run_id is not None or not all(operation_granted(op) for op in resource.operations):
                                 raise ValueError
@@ -2594,7 +2598,9 @@ def build_ctp_gateway_trading_profile(
                 # A delegated reservation passes the strategies' own trading fence (G64-09).
                 values['delegation_service'] = GatewayDelegationService(effective_delegation,
                     owner=owner, journal=journal, instance_id=instance, scope_ref=config.scope_ref,
-                    market_gate_required=True, reservation_fence=binding._reservation_fence)
+                    market_gate_required=True, reservation_fence=binding._reservation_fence,
+                    risk_first_owner_binding=(holder['owner_guard_binding']
+                                              if effective_delegation.risk_first_enabled else None))
                 if actor_stream_enabled:
                     if holder.get('returns') is None:
                         raise CtpGatewayTradingError('ACTOR_STREAM_UNAVAILABLE')

@@ -1,10 +1,10 @@
-"""Synthetic, owner-local checks for a possible Risk-first reservation.
+"""Owner-local checks for the explicitly composed Risk-first handler.
 
-This private primitive is not installed in a handler. Its argument shape is a
-test candidate, not a wire contract. Success is not a permit, source proof, or
-authority to write. Risk service/epoch and full instrument identity are claims.
-Registry, service, instance and holder are caller-supplied and are checked for
-mutual consistency only; no production Host anchor is installed here.
+These private checks are one part of the handler and do not themselves grant
+write authority or prove source identity. Risk service/epoch and full instrument
+identity remain claims. The handler supplies its separately checked Host anchor
+and transaction rechecks; the independent production journal write gate remains
+closed.
 """
 
 import threading
@@ -39,15 +39,14 @@ def _plain(value):
 
 def assert_in_active_scope(*, registry, service_id, instance_id, context, arguments,
                            admission, recheck, owner, journal, owner_binding):
-    """Assert current consistency on the owner, returning no durable result.
+    """Assert current handler consistency on the owner, returning no durable result.
 
     Caller enters the exact Registry admission scope on the owner thread before
     calling. Never dispatch work or perform provider/network I/O under it. The
     owner condition is acquired without waiting: a competing close or another
     owner operation causes refusal instead of a Registry/owner lock wait cycle.
-    These checks are sequential observations, not atomic authorization. Owner
-    or Registry state may change during or after them. A future transaction
-    requires its own atomic design and same-scope final recheck.
+    These checks are sequential observations, not atomic authorization. The
+    caller must retain the scope and recheck it around the journal transaction.
     """
     try:
         if (type(registry) is not ServiceRegistry or type(service_id) is not str

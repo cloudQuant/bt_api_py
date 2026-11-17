@@ -439,6 +439,7 @@ def _delegation(value, principals, grants, direct, *, account_scope, execution_d
                                                            "operations": ["direct.reserve", ...]}},
                         "resources": [<registry resource, as for a client>]}],
          "risk_only_submit": ["<strategy ref>"],
+         "risk_first_enabled": false,
          "upgrade_parent_authority_from_v12": false}
 
     A delegate may act only for the listed strategies of this bundle's clients and only
@@ -447,6 +448,8 @@ def _delegation(value, principals, grants, direct, *, account_scope, execution_d
     ``direct.dispatch``, ``direct.command_status``, ``direct.cancel``,
     ``direct.cancel_status``, ``direct.release``). ``risk_only_submit`` (optional, off
     unless present) leaves SUBMIT of each listed strategy to its Risk delegate alone.
+    ``risk_first_enabled`` is optional and defaults to false. It installs only the
+    explicitly granted v2 route; the separate journal write gate remains closed.
 
     A delegate of ``"kind": "execution"`` (63.13 base, D63-56) also names, per strategy,
     ``"parent_operations"``: a non-empty subset of ``direct.parent.register``,
@@ -470,9 +473,14 @@ def _delegation(value, principals, grants, direct, *, account_scope, execution_d
     if type(value) is not dict:
         _invalid()
     value = _mapping(value, ("delegates",) + tuple(
-        name for name in ("risk_only_submit", "upgrade_parent_authority_from_v12") if name in value))
+        name for name in ("risk_only_submit", "risk_first_enabled", "upgrade_parent_authority_from_v12")
+        if name in value))
     if type(value["delegates"]) is not list or not value["delegates"]:
         _invalid()
+    risk_first_enabled = value.get("risk_first_enabled", False)
+    if type(risk_first_enabled) is not bool:
+        _invalid()
+    risk_first_granted = False
     trusted = frozenset(instruments)
     strategies = frozenset(grant.strategy_ref for grant in direct.values())
     delegate_grants, parent_grants = [], []
@@ -507,17 +515,31 @@ def _delegation(value, principals, grants, direct, *, account_scope, execution_d
         entries = []
         for item in delegate["resources"]:
             item = _mapping(item, ("instance_id", "port", "scope_ref", "scope", "operations"))
+            resource_scope = _scope(item["scope"])
+            operations = _string_set(item["operations"])
+            if "direct.risk_first_reserve.v2" in operations:
+                if (not risk_first_enabled or kind != "risk" or item["port"] != "service.direct_write"
+                        or resource_scope.account_ref != account_scope
+                        or resource_scope.execution_domain_ref != execution_domain_ref
+                        or resource_scope.run_id is not None
+                        or resource_scope.strategy_ref not in delegate["strategies"]
+                        or "direct.reserve" not in delegate["strategies"][resource_scope.strategy_ref]["operations"]):
+                    _invalid()
+                risk_first_granted = True
             entries.append(ResourceGrant(item["instance_id"], item["port"], item["scope_ref"],
-                                         _scope(item["scope"]), _string_set(item["operations"])))
+                                         resource_scope, operations))
         principals[public] = identity.principal_ref
         grants[identity.principal_ref] = (PrincipalGrant(identity, tuple(entries)),)
     risk_only = _string_set(value["risk_only_submit"]) if "risk_only_submit" in value else frozenset()
     upgrade = value.get("upgrade_parent_authority_from_v12", False)
     if type(upgrade) is not bool or (upgrade and not parent_grants):
         _invalid()
+    if risk_first_enabled and not risk_first_granted:
+        _invalid()
     # The instrument recheck names exactly the operator's declared return instruments.
     return (GatewayDelegationSettings(tuple(delegate_grants), lambda instrument: instrument in trusted,
-                                      risk_only_submit_strategies=risk_only),
+                                      risk_only_submit_strategies=risk_only,
+                                      risk_first_enabled=risk_first_enabled),
             GatewayParentSettings(tuple(parent_grants)) if parent_grants else None, upgrade)
 
 

@@ -1065,9 +1065,14 @@ class ThreadedServiceClientRuntime:
     def capture_prepared_parent_source(self, target: BoundServiceTarget, preparation: Any, parent_ref: str, *,
                                        timeout_seconds: float = 5.0,
                                        deadline_monotonic: float | None = None) -> Any:
-        """Revalidate a local preparation around one owner-thread SOURCE."""
-        return self._parent_capability_call('prepared_source', target, {}, (preparation, parent_ref, target),
-                                            timeout_seconds, deadline_monotonic)
+        """Retired: host-managed parents require a recorded SOURCE attempt."""
+        raise ServiceRuntimeRequestNotSentError()
+
+    def record_prepared_parent_source(self, target, preparation, parent_ref, *, request_id, request_sha256,
+                                      instance_id, attempt_id, timeout_seconds=5.0):
+        """Record one source observation; previous or uncertain attempts are not resent."""
+        args = (preparation, parent_ref, target, request_id, request_sha256, instance_id, attempt_id)
+        return self._parent_capability_call('recorded_source', target, {}, args, timeout_seconds, None)
 
     def register_live_parent(self, capability: Any, target: BoundServiceTarget, spec: dict[str, Any], *,
                              timeout_seconds: float = 5.0, deadline_monotonic: float | None = None) -> Any:
@@ -1076,12 +1081,15 @@ class ThreadedServiceClientRuntime:
     def _parent_capability_call(self, action, target, spec, capability, timeout_seconds, absolute_deadline):
         self._check_reentry()
         try:
-            if action == 'prepared_source':
+            if action not in ('source', 'recorded_source', 'register'):
+                raise ValueError
+            if action == 'recorded_source':
                 from bt_api_execution.local_gateway_parent_preparation import LocalGatewayParentPreparation
-                if (type(capability) is not tuple or len(capability) != 3
+                if (type(capability) is not tuple or len(capability) != 7
                         or type(capability[0]) is not LocalGatewayParentPreparation
                         or type(capability[1]) is not str or not capability[1]
-                        or capability[2] is not target):
+                        or capability[2] is not target
+                        or any(type(v) is not str or not v for v in capability[3:])):
                     raise ValueError
             timeout = _timeout(timeout_seconds)
             if (timeout > threading.TIMEOUT_MAX or type(target) is not BoundServiceTarget
@@ -2015,8 +2023,8 @@ class ThreadedServiceClientRuntime:
                             raise ServiceRuntimeRequestNotSentError() from None
                         if action == 'source':
                             result = runtime.capture_live_parent_source(target, spec, deadline_monotonic=deadline)
-                        elif action == 'prepared_source':
-                            preparation, parent_ref, original_target = capability
+                        elif action == 'recorded_source':
+                            preparation, parent_ref, original_target = capability[:3]
                             def original_target_current():
                                 return (type(original_target) is BoundServiceTarget and replace(
                                     original_target, scope=replace(original_target.scope),
@@ -2028,14 +2036,17 @@ class ThreadedServiceClientRuntime:
                                 initially_current = False
                             if not initially_current:
                                 raise ServiceRuntimeRequestNotSentError()
-                            result = runtime.capture_prepared_parent_source(
-                                target, preparation, parent_ref, deadline_monotonic=deadline)
+                            result = runtime.record_prepared_parent_source(
+                                target, preparation, parent_ref, request_id=capability[3],
+                                request_sha256=capability[4], instance_id=capability[5],
+                                attempt_id=capability[6], deadline_monotonic=deadline)
                             try:
                                 still_current = original_target_current()
                             except Exception:
                                 still_current = False
                             if not still_current:
-                                runtime._discard_live_parent_capability(result)
+                                if type(result) is _LiveParentSourceCapability:
+                                    runtime._discard_live_parent_capability(result)
                                 raise ThreadedRuntimeError('CALL_OUTCOME_UNKNOWN')
                         elif action == 'register':
                             result = runtime.register_live_parent(capability, target, spec, deadline_monotonic=deadline)

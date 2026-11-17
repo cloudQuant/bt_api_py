@@ -1147,6 +1147,25 @@ class ServiceHost:
                 for component in self._components
                 for capability in component.capabilities
             )
+            # The Risk-first capability is declared in the built-in catalog but
+            # belongs to an explicitly composed delegation service, not to the
+            # ordinary delegation configuration. Remove it from the startup plan
+            # unless that exact instance installed the trusted holder.
+            risk_first_instances = {
+                item.instance_id for item in self._gateway_delegations
+                if item.settings.risk_first_enabled
+            }
+            planned_capabilities = tuple(
+                ServiceCapability(
+                    cap.instance_id, cap.port,
+                    cap.operations - {"direct.risk_first_reserve.v2"},
+                    cap.write_operations - {"direct.risk_first_reserve.v2"},
+                    market_wire_version=cap.market_wire_version,
+                ) if (cap.port == "service.direct_write"
+                      and "direct.risk_first_reserve.v2" in cap.operations
+                      and cap.instance_id not in risk_first_instances) else cap
+                for cap in planned_capabilities
+            )
             # Optional read sources are known only after resources resolve.
             # All other planned operations must remain exact.
             if len(component_capabilities) != len(planned_capabilities):
@@ -1396,6 +1415,9 @@ class ServiceHost:
                     migration_deployment_epoch=self._migration_deployment_epoch,
                     migration_start_guard=migration_start_snapshot,
                     enable_risk_admin_cancel_admission=self._risk_admin_cancel_service is not None,
+                    enable_gateway_risk_first_reserve_admission=any(
+                        item.settings.risk_first_enabled for item in self._gateway_delegations
+                    ),
                 )
             except ServiceRegistryStartupCleanupError as exc:
                 self._registry = exc.registry
@@ -1495,7 +1517,13 @@ class ServiceHost:
                             if error.code != 'COVERAGE_INCOMPLETE':
                                 raise
             for delegation in self._gateway_delegations:
-                delegation.configure(registry)
+                if delegation.settings.risk_first_enabled:
+                    delegation.configure(registry, risk_first_host_check=(
+                        lambda service=delegation, expected_registry=registry:
+                            self._gateway_risk_first_owner_current(expected_registry, service)
+                    ))
+                else:
+                    delegation.configure(registry)
             for parent_service in self._gateway_parent_services:
                 parent_service.configure(registry)
             for acceptance in gateway_acceptance_services:
@@ -3864,6 +3892,30 @@ class ServiceHost:
             raise ServiceHostError(codes.get(code, "GATEWAY_OWNER_GUARD_BINDING_INVALID")) from None
         except Exception:
             raise ServiceHostError("GATEWAY_OWNER_GUARD_BINDING_INVALID") from None
+
+    def _gateway_risk_first_owner_current(self, registry, service) -> bool:
+        """Check the exact Host publication on-owner, without waiting under Registry."""
+        owner = service.owner
+        if not owner._condition.acquire(blocking=False):
+            return False
+        try:
+            if not self._gateway_owner_guard_lock.acquire(blocking=False):
+                return False
+            try:
+                row = self._gateway_owner_guard_bindings.get(service.instance_id)
+                return bool(
+                    self._gateway_owner_guard_active and self._registry is registry
+                    and type(row) is tuple and len(row) == 6
+                    and row[0] is registry and row[1] == service.instance_id
+                    and row[2] is owner and row[3] is service.journal
+                    and row[4] is service._risk_first_owner_binding
+                    and any(item is service for item in self._gateway_delegations)
+                    and owner._lifecycle_is_current(row[5])
+                )
+            finally:
+                self._gateway_owner_guard_lock.release()
+        finally:
+            owner._condition.release()
 
     def _check_gateway_owner_lifecycles(self) -> None:
         """Recheck startup observations without holding locks across I/O."""

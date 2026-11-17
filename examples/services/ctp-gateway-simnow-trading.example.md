@@ -128,13 +128,15 @@ A Risk service can reserve, dispatch, read, cancel and release orders on behalf 
                                                      "direct.cancel", "direct.cancel_status", "direct.release"]}},
     "resources": [<service.direct_write grant on the strategy's scope with the direct.delegated_* and direct.delegate_actor_* operations>]
   }],
-  "risk_only_submit": ["<strategy ref>"]
+  "risk_only_submit": ["<strategy ref>"],
+  "risk_first_enabled": false
 }
 ```
 
 - A delegate acts only for the listed strategies of this bundle's clients, and only on instruments listed in `returns.instruments`. `operations` lists what it may do for that strategy; its Registry `resources` must match them. The Gateway refuses with `DELEGATION_DENIED` a request for another strategy or run, an instrument outside the list, or another party's order (the strategy's own or another delegate's). Nothing is written by a refused request.
 - An order placed by a delegate belongs to the strategy it acts for: it appears in that strategy's command status and event stream, with the delegate's principal as the actor. The delegate can register only while that strategy's run is registered.
 - The operator config must set `delegation_enabled: true` with `account_extensions_enabled`, `strategy_ledger_enabled` and `control_enabled` (journal schema 12 or later, for example through `strategy_ledger.account_comparison.upgrade_from_v11`). With `direct.command_status`, `direct.cancel`, `direct.cancel_status` or `direct.release` in a grant, `cancel_enabled` must be `true` as well.
+- `risk_first_enabled` is an optional boolean, defaulting to `false`. Setting it to `true` explicitly installs the Risk-first v2 route; at least one Risk delegate must have `direct.reserve` in its strategy grant and `direct.risk_first_reserve.v2` in its matching `service.direct_write` resource. This enables routing only: the separate journal v2 write gate remains closed, so it does not establish readiness to write or trade.
 - `risk_only_submit` is optional and off unless present (D63-37). For each listed strategy only its Risk delegate may reserve and dispatch; the strategy's own client grant must then not contain `direct.reserve` or `direct.dispatch` (the bundle is refused at startup otherwise), and its own attempt is refused with `SUBMIT_NOT_GRANTED`. Keep at least one write operation in the strategy's grant (a cancel or `direct.release`): a delegate can register only for a strategy run that holds a write registration. This is an ordinary grant: the Gateway never checks whether Risk approved an order.
 - A delegate may also receive market keys: list its principal in `market.principal_allowed_indices` and give it a `service.market_source` grant at account scope (no strategy, no run). A service principal that is not a delegate gets no market keys.
 - The example above shows a Risk delegate. Execution delegates (parent orders and their child orders) and the account observation stream (`account.events.*`) are configured as described in the next section.

@@ -659,7 +659,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                          "direct.strategy_position", "direct.strategy_close_capacity", "direct.strategy_financial", "direct.instrument_status",
                          "direct.delegated_command_status",
                          "direct.delegated_cancel", "direct.delegated_cancel_status",
-                         "direct.delegated_reserve", "direct.delegated_dispatch",
+                         "direct.delegated_reserve", "direct.delegated_dispatch", "direct.risk_first_reserve.v2",
                          "direct.delegate_actor_status", "direct.delegate_actor_cancel", "direct.delegate_actor_cancel_status", "direct.delegate_actor_release", "direct.delegate_actor_release_status",
                          "direct.delegate_actor_status_v2", "direct.delegate_actor_release_status_v2",
                          "direct.delegate_events.read_after", "direct.delegate_events.progress", "direct.delegate_events.ack",
@@ -700,7 +700,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             write_operations_by_port=MappingProxyType(
                 {
                     "service.direct_write": frozenset(
-                        {"direct.reserve", "direct.release", "direct.dispatch", "direct.cancel", "direct.delegated_cancel", "direct.delegated_reserve", "direct.delegated_dispatch",
+                        {"direct.reserve", "direct.release", "direct.dispatch", "direct.cancel", "direct.delegated_cancel", "direct.delegated_reserve", "direct.delegated_dispatch", "direct.risk_first_reserve.v2",
                          "direct.control.apply", "direct.control.resume", "direct.control.drain_target", "direct.control.reconcile",
                          "direct.control.cancel_scope",
                          "direct.parent.register", "direct.parent.cancel", "direct.parent.register_v2", "direct.parent.cancel_v2", "direct.delegate_actor_cancel", "direct.delegate_actor_release"}
@@ -1428,6 +1428,7 @@ def validate_components(specs: Sequence[ComponentSpec]) -> tuple[PreparedCompone
                 operations = operations - {"direct.delegated_cancel", "direct.delegated_cancel_status"}
             if normalized.get("delegation_enabled") is not True:
                 operations = operations - {"direct.delegated_reserve", "direct.delegated_dispatch"}
+                operations = operations - module.RISK_FIRST_RESERVE_OPERATIONS
                 operations = operations - {"direct.delegate_actor_status", "direct.delegate_actor_cancel", "direct.delegate_actor_cancel_status", "direct.delegate_actor_release", "direct.delegate_actor_release_status"}
                 operations = operations - module.DELEGATE_ACTOR_V2_OPERATIONS
             if normalized.get("cancel_enabled") is not True:
@@ -2473,7 +2474,10 @@ def build_component(
                         if (type(trading_delegation_adapter) is not GatewayDelegationService
                                 or trading_delegation_adapter.owner is not adapter._owner
                                 or trading_delegation_adapter.journal is not adapter._journal
-                                or trading_delegation_adapter.instance_id != spec.instance_id):
+                                or trading_delegation_adapter.instance_id != spec.instance_id
+                                or (trading_delegation_adapter.settings.risk_first_enabled
+                                    and (trading_delegation_adapter._risk_first_owner_binding is not values.get('owner_guard_binding')
+                                         or trading_delegation_adapter._reservation_fence is not adapter._reservation_fence))):
                             raise ServiceComponentError("INVALID_DELEGATION_BINDING")
                     elif "delegation_service" in values:
                         raise ServiceComponentError("INVALID_DELEGATION_BINDING")
@@ -3228,6 +3232,8 @@ def build_component(
                 configured = getattr(adapter, "supported_operations", None)
                 if type(configured) is frozenset and trading_delegation_adapter is not None:
                     configured = configured | prepared.module.DELEGATED_WRITE_OPERATIONS
+                    if trading_delegation_adapter.settings.risk_first_enabled:
+                        configured = configured | prepared.module.RISK_FIRST_RESERVE_OPERATIONS
                 if type(configured) is frozenset and trading_parent_adapter is not None:
                     configured = configured | prepared.module.PARENT_OPERATIONS | prepared.module.PARENT_SOURCE_OPERATIONS | prepared.module.PARENT_V2_OPERATIONS | prepared.module.PARENT_FAULT_OPERATIONS
                 if type(configured) is frozenset and trading_parent_acceptance_adapter is not None:
@@ -3246,6 +3252,7 @@ def build_component(
                     | ((prepared.module.DELEGATED_STRATEGY_READ_OPERATIONS - {'direct.delegated_cancel_status'}) if prepared.options.get("account_extensions_enabled") is True else frozenset())
                     | ((prepared.module.DELEGATED_STRATEGY_CANCEL_OPERATIONS | {'direct.delegated_cancel_status'}) if prepared.options.get("account_extensions_enabled") is True and prepared.options.get("cancel_enabled") is True else frozenset())
                     | (prepared.module.DELEGATED_WRITE_OPERATIONS if prepared.options.get("delegation_enabled") is True else frozenset())
+                    | (prepared.module.RISK_FIRST_RESERVE_OPERATIONS if trading_delegation_adapter is not None and trading_delegation_adapter.settings.risk_first_enabled else frozenset())
                     | ((prepared.module.PARENT_OPERATIONS | prepared.module.PARENT_SOURCE_OPERATIONS | prepared.module.PARENT_V2_OPERATIONS | prepared.module.PARENT_FAULT_OPERATIONS) if prepared.options.get("parent_authority_enabled") is True else frozenset())
                     | (prepared.module.PARENT_ACCEPTANCE_OPERATIONS if prepared.options.get("parent_acceptance_order_enabled") is True else frozenset())
                     | (prepared.module.DELEGATE_ACTOR_OPERATIONS if trading_delegate_actor_adapter is not None else frozenset())
@@ -3480,6 +3487,9 @@ def build_component(
                         assert trading_delegate_actor_stream is not None
                         return trading_delegate_actor_stream.handle(_operation, context, arguments)
                     if _operation in prepared.module.DELEGATED_WRITE_OPERATIONS:
+                        assert trading_delegation_adapter is not None
+                        return trading_delegation_adapter.handle(_operation, context, arguments)
+                    if _operation in prepared.module.RISK_FIRST_RESERVE_OPERATIONS:
                         assert trading_delegation_adapter is not None
                         return trading_delegation_adapter.handle(_operation, context, arguments)
                     if _operation in prepared.module.ACCOUNT_STRATEGY_READ_OPERATIONS:

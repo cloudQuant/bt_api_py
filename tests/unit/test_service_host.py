@@ -1007,7 +1007,8 @@ def test_gateway_owner_startup_matches_only_its_exact_optional_event_omissions(
         direct = actual_by_port["service.direct_write"]
         assert direct.operations <= planned_by_port["service.direct_write"]
         assert planned_by_port["service.direct_write"] - direct.operations == frozenset(
-            {"direct.events.read_after", "direct.events.progress", "direct.events.ack"}
+            {"direct.events.read_after", "direct.events.progress", "direct.events.ack",
+             "direct.instrument_status"}
         )
         assert direct.write_operations == planned_writes_by_port["service.direct_write"]
         assert "direct.reserve" in direct.operations

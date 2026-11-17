@@ -244,111 +244,18 @@ def source_calls(env):
     return [item for item in env['seen'] if item[1] == SOURCE]
 
 
-def test_real_curve_prepared_source_is_read_only_and_register_remains_closed(local_curve):
+@pytest.mark.parametrize('case', ['valid', 'other_run', 'missing_preparation', 'empty_parent'])
+def test_retired_prepared_source_never_sends_or_writes(local_curve, case):
     env = local_curve
-    cap = env['threaded'].capture_prepared_parent_source(
-        env['target'], env['preparation'], env['request']['spec']['parent_ref'])
-    assert not cap._revoked.is_set() and cap in env['runtime']._live_parent_capabilities
-    entry = env['runtime']._live_parent_capabilities[cap][1]
-    assert entry[8].operation == SOURCE
-    local_identity = env['preparation'].read_prepared(env['request']['spec']['parent_ref']).identity
-    assert local_identity['principal_ref'] == env['strategy_a'].principal_ref
-    assert local_identity['actor_ref'] == env['strategy_a'].actor_ref == env['rig'].scope.strategy_ref
-    local_record = json.loads(env['preparation'].read_prepared(env['request']['spec']['parent_ref']).canonical_record)
-    assert env['source_results'][0]['result']['strategy_subject'] == {
-        'identity': local_record['intake']['identity'], 'scope': local_record['intake']['wire_scope']}
-    source = env['source_results'][0]['result']['result']
-    with sqlite3.connect(env['db']) as db:
-        revision = db.execute('SELECT revision FROM direct_journal_meta').fetchone()[0]
-    assert entry[7] == (source['account_scope'], source['strategy_scope'], source['execution_domain_ref'],
-                        source['journal_id'], source['gateway_generation'], source['journal_revision'])
-    assert (source['journal_id'], source['gateway_generation'], source['journal_revision']) == (
-        env['journal'].journal_id, env['journal'].generation, revision)
-    assert env['source_results'][0]['ok'] and env['source_results'][0]['result']['status'] == 'OBSERVED'
-    assert len(source_calls(env)) == 1 and parent_counts(env) == (0, 0)
-    spec = json.loads(env['preparation'].read_prepared(env['request']['spec']['parent_ref']).gateway_spec_json)
+    target, preparation = env['target'], env['preparation']
+    if case == 'other_run':
+        target = replace(target, scope=replace(target.scope, run_id='other-run'), run_id='other-run')
+    elif case == 'missing_preparation':
+        preparation = None
+    parent_ref = '' if case == 'empty_parent' else env['request']['spec']['parent_ref']
+    before = env['store']._connection.total_changes
     with pytest.raises(ServiceRuntimeRequestNotSentError):
-        env['threaded'].register_live_parent(cap, env['target'], spec)
-    assert cap._revoked.is_set() and parent_counts(env) == (0, 0)
-    assert not [item for item in env['seen'] if item[1] == REGISTER_V2]
-
-
-@pytest.mark.parametrize('local_curve', ['mismatched-subject'], indirect=True)
-def test_source_observation_rejects_different_original_strategy_subject(local_curve):
-    env = local_curve
-    original = env['preparation'].read_prepared(env['request']['spec']['parent_ref']).identity
-    assert (original['principal_ref'], original['actor_ref']) != (
-        env['strategy_a'].principal_ref, env['strategy_a'].actor_ref)
-    # Gateway reports its current authenticated subject; the Execution caller
-    # must reject it when it differs from the original local intake.
-    with pytest.raises(ServiceCallOutcomeUnknownError):
-        env['threaded'].capture_prepared_parent_source(
-            env['target'], env['preparation'], env['request']['spec']['parent_ref'])
+        env['threaded'].capture_prepared_parent_source(target, preparation, parent_ref)
+    assert not source_calls(env) and parent_counts(env) == (0, 0)
+    assert env['store']._connection.total_changes == before
     assert not env['runtime']._live_parent_capabilities
-    assert env['source_results'][0]['ok'] and env['source_results'][0]['result']['status'] == 'OBSERVED'
-    observed = env['source_results'][0]['result']['strategy_subject']['identity']
-    assert (observed['principal_ref'], observed['actor_ref']) == (
-        env['strategy_a'].principal_ref, env['strategy_a'].actor_ref)
-    assert parent_counts(env) == (0, 0)
-
-
-def test_real_curve_valid_strategy_b_cannot_use_local_strategy_a_preparation(local_curve):
-    env = local_curve
-    registrations = [item for item in env['seen'] if item[1] == 'service.register'
-                     and item[0] == 'curve-strategy-b']
-    assert len(registrations) == 1 and registrations[0][3].actor_ref == env['scope_b'].strategy_ref
-    assert registrations[0][2] == env['scope_b']
-    with env['registry']._lock:
-        row = env['registry']._db.execute('SELECT expires_at FROM sessions WHERE registration_id=?',
-            (env['registration_b']['registration_id'],)).fetchone()
-        assert row is not None and row['expires_at'] > time.time()
-    threaded, target, _ = env['start_runtime'](env['scope_b'])
-    # Independently prove that B's own live Gateway route can observe SOURCE.
-    assert threaded.call_bound(target, SOURCE, {'account_scope': env['scope_b'].account_ref,
-        'strategy_scope': env['scope_b'].strategy_ref,
-        'execution_domain_ref': env['scope_b'].execution_domain_ref})['status'] == 'OBSERVED'
-    before = len(source_calls(env))
-    with pytest.raises(ServiceRuntimeRequestNotSentError):
-        threaded.capture_prepared_parent_source(target, env['preparation'], env['request']['spec']['parent_ref'])
-    assert len(source_calls(env)) == before and parent_counts(env) == (0, 0)
-
-
-@pytest.mark.parametrize('failure', ['strategy-expired', 'grant-revoked'])
-def test_real_curve_lost_strategy_or_service_grant_never_issues_capability(local_curve, failure):
-    env = local_curve
-    registry = env['registry']
-    with registry._lock:
-        if failure == 'strategy-expired':
-            registry._db.execute('UPDATE sessions SET expires_at=0 WHERE registration_id=?',
-                                 (env['registration_a']['registration_id'],))
-        else:
-            key = ('synthetic-instance', 'synthetic-scope', env['service_identity'].principal_ref,
-                   env['rig'].scope.account_ref, env['rig'].scope.strategy_ref)
-            registry._gateway_parent_grants[key] = replace(env['grant_a'], operations=frozenset({REGISTER_V2}))
-    with pytest.raises((ServiceRuntimeError, ThreadedRuntimeError)):
-        env['threaded'].capture_prepared_parent_source(
-            env['target'], env['preparation'], env['request']['spec']['parent_ref'])
-    assert len(source_calls(env)) == 1 and len(env['source_results']) == 1
-    response = env['source_results'][0]
-    assert not response['ok'] or response['result'].get('status') != 'OBSERVED'
-    assert not env['runtime']._live_parent_capabilities and parent_counts(env) == (0, 0)
-
-
-@pytest.mark.parametrize('change', ['lease', 'record'])
-def test_real_curve_local_change_during_source_discards_capability(local_curve, change):
-    env = local_curve
-    def mutate(result):
-        assert result['ok'] and result['result']['status'] == 'OBSERVED'
-        with env['store']._transaction() as cursor:
-            if change == 'lease':
-                cursor.execute('UPDATE execution_writer_leases SET expires_at_ns=1 WHERE owner_id=?',
-                               (env['lease'].owner_id,))
-            else:
-                cursor.execute('UPDATE execution_parent_records SET request_sha256=? WHERE parent_id=?',
-                               ('f' * 64, env['request']['spec']['parent_ref']))
-    env['hook'][0] = mutate
-    with pytest.raises(ServiceCallOutcomeUnknownError):
-        env['threaded'].capture_prepared_parent_source(
-            env['target'], env['preparation'], env['request']['spec']['parent_ref'])
-    assert len(source_calls(env)) == 1 and not env['runtime']._live_parent_capabilities
-    assert parent_counts(env) == (0, 0)
