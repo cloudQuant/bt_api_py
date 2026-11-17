@@ -13,12 +13,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import signal
+import sys
+import threading
 import time
 from dataclasses import dataclass
 
 from .execution_parent_service_host import ParentConfig, ParentServiceHost, parse_config as parse_parent
 from .execution_read_service_host import Config as ReadConfig, ReadServiceHost, _path, parse_config as parse_read
+from .execution_gateway_source_config import (GatewaySourceClient, StdinSourceControl,
+    parse_config as parse_source, validate_config as validate_source)
 from .monitor_service_config import read_bounded
 
 SCHEMA = 'bt_api_execution.combined_service.v1'
@@ -32,9 +37,10 @@ class CombinedServiceError(ValueError):
 class CombinedConfig:
     parent: object
     management: object
+    gateway_source: object = None
 
 
-def _validate_pair(parent, read):
+def _validate_pair(parent, read, gateway_source=None):
     if type(parent) is not ParentConfig or type(read) is not ReadConfig:
         raise ValueError
     parent_endpoint = parent.service.communication['profiles'][parent.service.transport_ref]['endpoints']['rpc_bind']
@@ -52,14 +58,19 @@ def _validate_pair(parent, read):
     if any(key == audit or audit in key.parents or key == registry
            or key == parent.journal_root or parent.journal_root in key.parents for key in keys):
         raise ValueError
-    return CombinedConfig(parent, read)
+    if gateway_source is not None:
+        validate_source(gateway_source, parent, read)
+    return CombinedConfig(parent, read, gateway_source)
 
 
 def parse_config(raw):
     try:
-        if type(raw) is not dict or set(raw) != {'schema', 'parent', 'management'} or raw['schema'] != SCHEMA:
+        if (type(raw) is not dict or not {'schema', 'parent', 'management'} <= set(raw)
+                or set(raw) - {'schema', 'parent', 'management', 'gateway_source'} or raw['schema'] != SCHEMA):
             raise ValueError
-        return _validate_pair(parse_parent(raw['parent']), parse_read(raw['management']))
+        parent, read = parse_parent(raw['parent']), parse_read(raw['management'])
+        source = parse_source(raw['gateway_source'], parent, read) if 'gateway_source' in raw else None
+        return _validate_pair(parent, read, source)
     except Exception:
         raise CombinedServiceError('INVALID_CONFIGURATION') from None
 
@@ -77,9 +88,12 @@ def load_config(path):
         config = parse_config(json.loads(read_bounded(config_path, 1024 * 1024, protected=True).decode('utf-8'),
             object_pairs_hook=unique, parse_constant=lambda _: (_ for _ in ()).throw(ValueError())))
         parent, read = config.parent, config.management
+        source_keys = (() if config.gateway_source is None else
+                       (config.gateway_source.server_public, config.gateway_source.client_public,
+                        config.gateway_source.client_secret))
         if (config_path in (parent.registry_path, parent.server_public, parent.server_secret,
                             *(p for _, p in parent.principal_keys), read.server_public,
-                            read.server_secret, read.client_public)
+                            read.server_secret, read.client_public, *source_keys)
                 or config_path == parent.journal_root or parent.journal_root in config_path.parents
                 or config_path == read.audit_root or read.audit_root in config_path.parents):
             raise ValueError
@@ -94,22 +108,27 @@ class CombinedServiceHost:
         if type(config) is not CombinedConfig:
             raise CombinedServiceError('INVALID_CONFIGURATION')
         try:
-            _validate_pair(config.parent, config.management)
+            _validate_pair(config.parent, config.management, config.gateway_source)
         except Exception:
             raise CombinedServiceError('INVALID_CONFIGURATION') from None
         self.config = config
-        self.parent = self.management = None
+        self.parent = self.management = self.gateway_source = None
+        self._owner_pid = self._owner_thread = None
         self.state = 'new'
 
     def start(self):
         if self.state != 'new':
             raise CombinedServiceError('INVALID_STATE')
+        self._owner_pid, self._owner_thread = os.getpid(), threading.current_thread()
         self.state = 'close_uncertain'
         try:
             self.parent = ParentServiceHost(self.config.parent)
             self.parent.start()
             self.management = ReadServiceHost(self.config.management, borrowed_from=self.parent)
             self.management.start()
+            if self.config.gateway_source is not None:
+                self.gateway_source = GatewaySourceClient(self.config.gateway_source, self.parent)
+                self.gateway_source.start()
             self.state = 'running'
         except BaseException:
             try:
@@ -132,13 +151,26 @@ class CombinedServiceHost:
             management = 'READY'
         except Exception:
             management = 'UNAVAILABLE'
-        return {'parent': parent, 'management': management}
+        result = {'parent': parent, 'management': management}
+        if self.config.gateway_source is not None:
+            result['gateway_source'] = 'UNREADY' if self.gateway_source is None else self.gateway_source.status()
+        return result
+
+    def observe_source(self, parent_ref, *, request_id, request_sha256):
+        """Make one explicit local-only SOURCE observation; never retry it."""
+        if (self.state != 'running' or self.gateway_source is None or os.getpid() != self._owner_pid
+                or threading.current_thread() is not self._owner_thread):
+            return 'UNKNOWN'
+        return self.gateway_source.observe(parent_ref, request_id=request_id, request_sha256=request_sha256)
 
     def close(self):
         if self.state == 'closed':
             return
         self.state = 'close_uncertain'
         try:
+            if self.gateway_source is not None:
+                self.gateway_source.close()
+                self.gateway_source = None
             if self.management is not None:
                 self.management.close()
                 self.management = None
@@ -154,13 +186,28 @@ def main(argv=None):
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest='command', required=True)
     for command in ('validate', 'run'):
-        sub.add_parser(command).add_argument('--config', required=True)
+        child = sub.add_parser(command)
+        child.add_argument('--config', required=True)
+        if command == 'run':
+            child.add_argument('--source-control-stdin', action='store_true')
     args = parser.parse_args(argv)
+    control = None
+    control_requested = args.command == 'run' and args.source_control_stdin
     try:
+        if control_requested:
+            control = StdinSourceControl(sys.stdin.fileno(), sys.stdout.fileno())
         config = load_config(args.config)
         if args.command == 'validate':
             print('EXECUTION_COMBINED_CONFIG_VALID', flush=True)
             return 0
+        if args.source_control_stdin and config.gateway_source is None:
+            raise CombinedServiceError('INVALID_CONFIGURATION')
+        def emit(line):
+            if control is None:
+                print(line, flush=True)
+            else:
+                control.report(line)
+                control.flush()
         host, signals, failed = CombinedServiceHost(config), 0, False
         def stop(_signum, _frame):
             nonlocal signals
@@ -170,10 +217,30 @@ def main(argv=None):
             try:
                 host.start()
                 status = host.poll()
-                print('EXECUTION_COMBINED_PARENT_' + status['parent'], flush=True)
-                print('EXECUTION_COMBINED_MANAGEMENT_' + status['management'], flush=True)
+                emit('EXECUTION_COMBINED_PARENT_' + status['parent'])
+                emit('EXECUTION_COMBINED_MANAGEMENT_' + status['management'])
+                if 'gateway_source' in status:
+                    emit('EXECUTION_COMBINED_GATEWAY_SOURCE_' + status['gateway_source'])
                 while not signals and 'UNAVAILABLE' not in status.values():
                     status = host.poll()
+                    if signals or 'UNAVAILABLE' in status.values():
+                        break
+                    if control is not None:
+                        control.flush()
+                        if not control.accepting:
+                            continue
+                        item, overflow = control.poll()
+                        if overflow:
+                            emit('EXECUTION_SOURCE_QUEUE_FULL')
+                        if item is not False:
+                            value = control.request(item)
+                            if signals:
+                                break
+                            result = ('INVALID_REQUEST' if value is None else host.observe_source(
+                                value['parent_ref'], request_id=value['request_id'], request_sha256=value['request_sha256']))
+                            if result not in ('OBSERVED', 'HISTORICAL', 'UNKNOWN', 'INVALID_REQUEST'):
+                                result = 'UNKNOWN'
+                            emit('EXECUTION_SOURCE_' + result)
                 if 'UNAVAILABLE' in status.values():
                     failed = True
             except Exception:
@@ -186,16 +253,25 @@ def main(argv=None):
                         break
                     except Exception:
                         failed = True
-                        print('EXECUTION_COMBINED_CLEANUP_PENDING', flush=True)
+                        emit('EXECUTION_COMBINED_CLEANUP_PENDING')
                         while signals == before:
                             time.sleep(0.1)
         finally:
             for sig, handler in previous.items():
                 signal.signal(sig, handler)
-        print('EXECUTION_COMBINED_FAILED' if failed else 'EXECUTION_COMBINED_STOPPED', flush=True)
+        emit('EXECUTION_COMBINED_FAILED' if failed else 'EXECUTION_COMBINED_STOPPED')
+        if control is not None:
+            control.flush(); control.close(); control = None
         return int(failed)
     except Exception:
-        print('EXECUTION_COMBINED_FAILED', flush=True)
+        if control is not None:
+            control.report('EXECUTION_COMBINED_FAILED'); control.flush()
+            try:
+                control.close()
+            except Exception:
+                pass
+        elif not control_requested:
+            print('EXECUTION_COMBINED_FAILED', flush=True)
         return 1
 
 
