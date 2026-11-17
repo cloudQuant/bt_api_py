@@ -2739,6 +2739,14 @@ class ServiceHost:
                                                    resources.values.get("read_service"))):
                         raise ServiceHostError("MARKET_RESOURCE_KEYS_INVALID")
                     expected_keys.add("instrument_service")
+            if "service.instrument_product_read" in item.operations_by_port:
+                from bt_api_py.gateway_instrument_product_service import GatewayInstrumentProductService
+
+                service = resources.values.get("instrument_product_service")
+                if (type(service) is not GatewayInstrumentProductService
+                        or not service.matches(resources.values.get("binding"))):
+                    raise ServiceHostError("MARKET_RESOURCE_KEYS_INVALID")
+                expected_keys.add("instrument_product_service")
             from bt_api_gateway.market_hub import GatewayMarketHub
 
             expected_hub_type = GatewayMarketHub

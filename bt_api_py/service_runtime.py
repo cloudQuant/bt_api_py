@@ -145,6 +145,7 @@ def _bound_receipt_time_valid(received_ns: int, started_ns: int, deadline: float
 PORT_OPERATIONS = MappingProxyType(
     {
         "service.calendar_read": frozenset({"calendar.query.v1", "calendar.windows.v1", "calendar.monitor.windows.v1"}),
+        "service.instrument_product_read": frozenset({"instrument.product.begin.v1", "instrument.product.status.v1", "instrument.product.cancel.v1"}),
         "service.execution_delegate": frozenset(
             {"execution.child.release_policy_check"}
         ),
@@ -2284,7 +2285,9 @@ class ServiceClientRuntime:
             if ((binding.operations.intersection({
                     "account.cancel_attempts.read_after", "account.cancel_attempts.ack"})
                  or (binding.mount == "upstream.telemetry" and self.identity.role is WireRole.SERVICE
-                     and "events.append" in binding.operations))
+                     and "events.append" in binding.operations)
+                 or (binding.mount == "upstream.instrument_products" and self.identity.role is WireRole.SERVICE
+                     and binding.operations == PORT_OPERATIONS["service.instrument_product_read"]))
                     and self._has_current_registration_observation(binding, _startup=startup)):
                 old_lineage = self._registration_lineage.get(id(binding))
             upstream_old = None
@@ -2821,6 +2824,8 @@ class ServiceClientRuntime:
         if not isinstance(capabilities, (tuple, list)):
             raise ServiceRuntimeError("INVALID_SERVICE_REPLY")
         requested = self._requested_operations.get(binding["mount"])
+        if binding["mount"] == "upstream.instrument_products" and requested != PORT_OPERATIONS["service.instrument_product_read"]:
+            raise ServiceRuntimeError("CAPABILITY_UNAVAILABLE")
         required_ports = MOUNT_PORTS[binding["mount"]]
         if binding["mount"] == "application.monitor" and requested is not None:
             required_ports = tuple(

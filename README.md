@@ -1360,3 +1360,28 @@ reads do not observe uncommitted parent rows. A failure to start management can
 occur after first-claim commit and follows the same explicit recovery steps
 above. The tested local CURVE paths establish local receipt/read behavior only,
 not Risk approval, Gateway dispatch or provider execution.
+
+
+### Explicit service ProductID observations
+
+The trading Gateway can explicitly mount `upstream.instrument_products` on
+`service.instrument_product_read`, with `instrument.product.begin.v1`,
+`instrument.product.status.v1` and `instrument.product.cancel.v1`. The protected
+`instrument_product_observers` section supplies SERVICE identities, exact
+account-scoped resource grants and a per-principal instrument allowlist. A
+Monitor may share one exact identity and key with the explicit calendar observer
+section; both ports still require separate grants. Default profiles add neither
+this mount nor a query, and configuration parsing does not require CTP imports.
+
+The service reuses the original trading owner, CTP session and bounded query
+lane. The returned `product_id` comes from the same immutable native instrument
+row as the validated rules. Current support remains futures-only and requires
+the full rule fields. It is a current session observation, not a historical
+as-of mapping, complete product membership, account-read grant or write permit.
+
+`GatewayInstrumentProductClient` borrows an already started, thread-owned
+`ServiceClientRuntime`; it does not start or close that runtime. It pins the
+authenticated peer and registration lineage, starts its local expiry bound
+before sending, and retains pending or unknown operations. Explicit `retire()`
+releases only known terminal local entries. Synthetic owner/profile/CURVE tests
+cover these paths; native account and deployment acceptance remain separate.

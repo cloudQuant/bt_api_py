@@ -73,6 +73,8 @@ _EXECUTION_RELEASE_CHECK = 'execution.child.release_policy_check'
 _EXECUTION_RELEASE_OPERATIONS = frozenset({_EXECUTION_RELEASE_CHECK})
 _CALENDAR_READ_OPERATIONS = frozenset({"calendar.query.v1", "calendar.windows.v1"})
 _CALENDAR_MONITOR_OPERATION = "calendar.monitor.windows.v1"
+_PRODUCT_PORT = "service.instrument_product_read"
+_PRODUCT_OPERATIONS = frozenset({"instrument.product.begin.v1", "instrument.product.status.v1", "instrument.product.cancel.v1"})
 
 
 def _execution_release_local_policy_handler(_context, _arguments):
@@ -953,6 +955,10 @@ def validate_capabilities_and_grants(
     if any(type(capability) is not ServiceCapability for capability in capabilities):
         raise TypeError("capabilities must contain ServiceCapability values")
     for capability in capabilities:
+        if ((capability.port == _PRODUCT_PORT and
+                (capability.operations != _PRODUCT_OPERATIONS or capability.write_operations))
+                or (capability.port != _PRODUCT_PORT and capability.operations & _PRODUCT_OPERATIONS)):
+            raise ValueError("invalid instrument product capability")
         if (_CALENDAR_MONITOR_OPERATION in capability.operations
                 and (capability.port != "service.calendar_read" or capability.write_operations)):
             raise ValueError("monitor calendar operation requires its read-only port")
@@ -979,6 +985,14 @@ def validate_capabilities_and_grants(
                 capability = capability_map.get((resource.instance_id, resource.port))
                 if capability is None or not resource.operations.issubset(capability.operations):
                     raise ValueError("resource grant exceeds declared capability")
+                if (resource.port == _PRODUCT_PORT or resource.operations & _PRODUCT_OPERATIONS) and not (
+                    entry.identity.role is WireRole.SERVICE and entry.identity.principal_ref == principal
+                    and entry.identity.delegate_ref is None and resource.port == _PRODUCT_PORT
+                    and resource.operations == _PRODUCT_OPERATIONS and resource.scope.account_ref is not None
+                    and resource.scope == WireScope(resource.scope.execution_domain_ref, account_ref=resource.scope.account_ref)
+                    and not capability.write_operations
+                ):
+                    raise ValueError("instrument product requires exact service account scope")
                 if _CALENDAR_MONITOR_OPERATION in resource.operations and not (
                     entry.identity.role is WireRole.SERVICE
                     and entry.identity.principal_ref == principal
@@ -5494,6 +5508,9 @@ class ServiceRegistry:
                 and (not instrument_operations <= requested_operations
                      or identity.role is not WireRole.STRATEGY_CLIENT)):
             return "SCOPE_DENIED", capability, frozenset()
+        if port == _PRODUCT_PORT and (requested_operations != _PRODUCT_OPERATIONS
+                                     or identity.role is not WireRole.SERVICE):
+            return "SCOPE_DENIED", capability, frozenset()
         resource_candidates = [
             resource
             for principal_grant in self._grants.get(principal, ())
@@ -7322,6 +7339,13 @@ class ServiceRegistry:
                 )
             ):
                 return self._failure("SCOPE_DENIED")
+            if capability.port == _PRODUCT_PORT and operation in _PRODUCT_OPERATIONS and any(
+                required not in granted or not self._current_resource_allows(
+                    principal, identity, instance_id=instance_id, port=row["port"],
+                    scope_ref=row["scope_ref"], scope=scope, operation=required)
+                for required in _PRODUCT_OPERATIONS
+            ):
+                return self._failure("SCOPE_DENIED")
             handler = self._handlers.get((instance_id, operation))
             if handler is None:
                 return self._failure("CAPABILITY_UNAVAILABLE")
@@ -7664,10 +7688,10 @@ class ServiceRegistry:
                             or not _release_action_facts_match(record[0], arguments)
                             or encode_wire_value(arguments) != admission._binding.arguments):
                         return self._failure('HANDLER_FAILED')
-            if capability.port == "service.account_read" and operation in {
+            if (capability.port == "service.account_read" and operation in {
                 "account.instrument_spec.begin", "account.instrument_spec.status",
                 "account.instrument_spec.cancel",
-            }:
+            }) or (capability.port == _PRODUCT_PORT and operation in _PRODUCT_OPERATIONS):
                 # Recheck the live registration and grant after the handler, so
                 # a revoked or expired lease cannot publish a cached result.
                 with self._read_snapshot():
@@ -7690,9 +7714,9 @@ class ServiceRegistry:
                                     principal, identity, instance_id=instance_id,
                                     port=capability.port, scope_ref=current["scope_ref"],
                                     scope=scope, operation=required)
-                                for required in (
+                                for required in (_PRODUCT_OPERATIONS if capability.port == _PRODUCT_PORT else (
                                     "account.instrument_spec.begin", "account.instrument_spec.status",
-                                    "account.instrument_spec.cancel"))):
+                                    "account.instrument_spec.cancel")))):
                         return self._failure("SCOPE_DENIED")
             if not result_fits(result):
                 # The handler may already have committed an external effect.
@@ -7708,6 +7732,9 @@ class ServiceRegistry:
                     ("service.account_read", "account.instrument_spec.begin"),
                     ("service.account_read", "account.instrument_spec.status"),
                     ("service.account_read", "account.instrument_spec.cancel"),
+                    (_PRODUCT_PORT, "instrument.product.begin.v1"),
+                    (_PRODUCT_PORT, "instrument.product.status.v1"),
+                    (_PRODUCT_PORT, "instrument.product.cancel.v1"),
                     ("service.monitor_query", "telemetry.snapshot"),
                     ("service.market_source", "market.read_after_bounded"),
                     ("service.direct_write", "direct.events.read_after"),

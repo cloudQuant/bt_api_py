@@ -771,7 +771,7 @@ def _load_resources(config, *, trading):
         raw = _protected_json(resource_path)
         # A trading bundle may add a "clock" section (trusted SNTP policy).
         optional = ({"clock", "controls", "strategy_ledger", "strategy_financial", "delegation", "execution_subject_scopes", "required_monitor",
-                     "account_observation", "recovery_observation", "recovery_monitor_relay", "instrument_status_read"} if trading else set()) | {"calendars"}
+                     "account_observation", "recovery_observation", "recovery_monitor_relay", "instrument_status_read", "instrument_product_observers"} if trading else set()) | {"calendars"}
         if type(raw) is not dict or not set(keys) <= set(raw) <= set(keys) | optional:
             _invalid()
         if type(raw["schema_version"]) is not int or raw["schema_version"] != 1:
@@ -825,19 +825,64 @@ def _load_resources(config, *, trading):
             direct[identity.principal_ref] = GatewayDirectGrant(identity.actor_ref, _string_set(client["symbols"]))
         calendar_raw = raw.get("calendars")
         monitor_identities = []
+        product_observer_clients = {}
+        product_grants = frozenset()
+        if "instrument_product_observers" in raw:
+            from bt_api_base.market_protocol import MarketInstrumentKey
+            from bt_api_py.gateway_instrument_product_codec import OPERATIONS
+            from bt_api_py.gateway_instrument_product_config import InstrumentProductGrant
+
+            observers = _mapping(raw["instrument_product_observers"], ("clients", "grants"))
+            if (type(observers["clients"]) is not list or not observers["clients"]
+                    or type(observers["grants"]) is not list or not observers["grants"]):
+                _invalid()
+            for client in observers["clients"]:
+                client = _mapping(client, ("identity", "curve_public_key", "resources"))
+                identity = _identity(client["identity"])
+                public = _curve(client["curve_public_key"])
+                if (identity.role is not WireRole.SERVICE or identity.delegate_ref is not None
+                        or identity.principal_ref in grants or public in principals
+                        or type(client["resources"]) is not list or len(client["resources"]) != 1):
+                    _invalid()
+                resources = []
+                for item in client["resources"]:
+                    item = _mapping(item, ("instance_id", "port", "scope_ref", "scope", "operations"))
+                    operations = _string_set(item["operations"])
+                    if item["port"] != "service.instrument_product_read" or operations != OPERATIONS:
+                        _invalid()
+                    resources.append(ResourceGrant(item["instance_id"], item["port"], item["scope_ref"],
+                                                   _scope(item["scope"]), operations))
+                principals[public] = identity.principal_ref
+                grants[identity.principal_ref] = (PrincipalGrant(identity, tuple(resources)),)
+                product_observer_clients[identity.principal_ref] = (public, identity, resources[0])
+                monitor_identities.append(identity)
+            result = []
+            for item in observers["grants"]:
+                item = _mapping(item, ("principal_ref", "actor_ref", "execution_domain_ref", "account_ref", "instruments"))
+                if type(item["instruments"]) is not list or not item["instruments"]:
+                    _invalid()
+                instruments = tuple(MarketInstrumentKey.from_dict(key) for key in item["instruments"])
+                if len(set(instruments)) != len(instruments):
+                    _invalid()
+                result.append(InstrumentProductGrant(item["principal_ref"], item["actor_ref"],
+                    item["execution_domain_ref"], item["account_ref"], frozenset(instruments)))
+            product_grants = frozenset(result)
+            if len(product_grants) != len(result):
+                _invalid()
         if type(calendar_raw) is dict and "monitor_clients" in calendar_raw:
             from bt_api_py.gateway_calendar_service import CALENDAR_MONITOR_WINDOWS_OPERATION
 
             clients = calendar_raw["monitor_clients"]
             if ("monitor_grants" not in calendar_raw or type(clients) is not list or not clients):
                 _invalid()
+            calendar_principals, calendar_keys = set(), set()
             for client in clients:
                 client = _mapping(client, ("identity", "curve_public_key", "resources"))
                 identity = _identity(client["identity"])
                 public = _curve(client["curve_public_key"])
                 if (identity.role is not WireRole.SERVICE or identity.delegate_ref is not None
-                        or identity.principal_ref in grants or public in principals
-                        or type(client["resources"]) is not list or not client["resources"]):
+                        or identity.principal_ref in calendar_principals or public in calendar_keys
+                        or type(client["resources"]) is not list or len(client["resources"]) != 1):
                     _invalid()
                 entries = []
                 for item in client["resources"]:
@@ -848,9 +893,24 @@ def _load_resources(config, *, trading):
                         _invalid()
                     entries.append(ResourceGrant(item["instance_id"], item["port"], item["scope_ref"],
                                                  _scope(item["scope"]), operations))
-                principals[public] = identity.principal_ref
-                grants[identity.principal_ref] = (PrincipalGrant(identity, tuple(entries)),)
-                monitor_identities.append(identity)
+                prior = product_observer_clients.get(identity.principal_ref)
+                if prior is not None:
+                    previous_public, previous_identity, previous_resource = prior
+                    current = entries[0]
+                    if (public != previous_public or identity != previous_identity
+                            or principals.get(public) != identity.principal_ref
+                            or (current.instance_id, current.scope_ref, current.scope) != (
+                                previous_resource.instance_id, previous_resource.scope_ref, previous_resource.scope)):
+                        _invalid()
+                    grants[identity.principal_ref] = (PrincipalGrant(identity, (previous_resource, current)),)
+                else:
+                    if identity.principal_ref in grants or public in principals:
+                        _invalid()
+                    principals[public] = identity.principal_ref
+                    grants[identity.principal_ref] = (PrincipalGrant(identity, tuple(entries)),)
+                    monitor_identities.append(identity)
+                calendar_principals.add(identity.principal_ref)
+                calendar_keys.add(public)
         control_grants, upgrade_controls, drain_upgrade, lease_drain, release_audit = None, False, None, None, None
         if trading and raw.get("controls") is not None:
             control_grants, upgrade_controls, drain_upgrade, lease_drain, release_audit = _controls(
@@ -876,6 +936,9 @@ def _load_resources(config, *, trading):
                    for entry in entries):
                 _invalid()
         authority = TrustedServiceAuthority(**authority_raw, principals=principals, grants=grants)
+        from bt_api_py.gateway_instrument_product_config import validate_product_grants
+        validate_product_grants(product_grants, config=config, authority=authority,
+                                account_key=settings.account_key, account_scope=settings.account_scope)
         from bt_api_py.ctp_gateway_calendar_config import parse_calendar_settings, validate_calendar_settings
         calendar_settings = (parse_calendar_settings(
             raw["calendars"], config_file=resource_path, config=config,
@@ -1006,6 +1069,7 @@ def _load_resources(config, *, trading):
                 account_read_settings=read_settings,
                 account_read_principals=read_principals,
                 calendar_settings=calendar_settings,
+                instrument_product_grants=product_grants,
                 recovery_observation_settings=recovery_observation,
                 recovery_monitor_relay=recovery_monitor_relay,
                 control_release_audit_enabled=release_audit is not None,

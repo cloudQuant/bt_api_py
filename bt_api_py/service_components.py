@@ -652,6 +652,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             public_ports=MappingProxyType(
                 {
                     "service.calendar_read": frozenset({"calendar.query.v1", "calendar.windows.v1", "calendar.monitor.windows.v1"}),
+                    "service.instrument_product_read": frozenset({"instrument.product.begin.v1", "instrument.product.status.v1", "instrument.product.cancel.v1"}),
                     "service.direct_write": frozenset(
                         {"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch",
                          "direct.cancel", "direct.cancel_status",
@@ -1444,6 +1445,8 @@ def validate_components(specs: Sequence[ComponentSpec]) -> tuple[PreparedCompone
                 operations = operations - {"market.read_after_bounded"}
         if spec.component == "gateway" and spec.options.get("role") == "trading_owner" and "service.calendar_read" in spec.bind_ports:
             operations = operations | {"calendar.query.v1", "calendar.windows.v1", "calendar.monitor.windows.v1"}
+        if spec.component == "gateway" and spec.options.get("role") == "trading_owner" and "service.instrument_product_read" in spec.bind_ports:
+            operations = operations | {"instrument.product.begin.v1", "instrument.product.status.v1", "instrument.product.cancel.v1"}
         if spec.component == "gateway" and normalized.get("reconciliation_cut") is True:
             # Only an explicitly enabled worker with a trusted inspector port
             # serves reconciliation evidence (iteration 60, acceptance G2).
@@ -2189,6 +2192,9 @@ def build_component(
             expected_keys = expected_keys | {"read_service"}
             if "instrument_service" in resources.values:
                 expected_keys = expected_keys | {"instrument_service"}
+        if (spec.component == "gateway" and spec.options.get("role") == "trading_owner"
+                and "service.instrument_product_read" in public_ports):
+            expected_keys = expected_keys | {"instrument_product_service"}
         if (
             spec.component == "gateway"
             and spec.options.get("role") == "trading_owner"
@@ -2372,6 +2378,7 @@ def build_component(
         trading_read_adapter: object | None = None
         trading_read_module: object | None = None
         trading_instrument_adapter: object | None = None
+        trading_product_adapter: object | None = None
         trading_calendar_adapter: object | None = None
         trading_account_comparison: object | None = None
         trading_account_strategy_reads: object | None = None
@@ -2422,6 +2429,12 @@ def build_component(
                     adapter = values["binding"]
                     if type(adapter) is not module.GatewayDirectServiceBinding:
                         raise ServiceComponentError("INVALID_DIRECT_BINDING")
+                    if "service.instrument_product_read" in public_ports:
+                        from bt_api_py.gateway_instrument_product_service import GatewayInstrumentProductService
+                        trading_product_adapter = values["instrument_product_service"]
+                        if (type(trading_product_adapter) is not GatewayInstrumentProductService
+                                or not trading_product_adapter.matches(adapter)):
+                            raise ServiceComponentError("INVALID_INSTRUMENT_PRODUCT_BINDING")
                     if "service.calendar_read" in public_ports:
                         from bt_api_py.gateway_calendar_service import GatewayCalendarService
                         trading_calendar_adapter = values["calendar_service"]
@@ -3448,6 +3461,9 @@ def build_component(
             ) -> Mapping[str, Any]:
                 assert _adapter is not None
                 if spec.component == "gateway" and spec.options.get("role") == "trading_owner":
+                    if _operation in {"instrument.product.begin.v1", "instrument.product.status.v1", "instrument.product.cancel.v1"}:
+                        assert trading_product_adapter is not None
+                        return trading_product_adapter.handle(_operation, context=context, arguments=arguments)
                     if _operation in {"calendar.query.v1", "calendar.windows.v1", "calendar.monitor.windows.v1"}:
                         assert trading_calendar_adapter is not None
                         return trading_calendar_adapter.handle(_operation, context=context, arguments=arguments)
@@ -3888,13 +3904,16 @@ def build_component(
                     except Exception:
                         return False
 
-        if trading_instrument_adapter is not None:
+        if trading_instrument_adapter is not None or trading_product_adapter is not None:
             prior_registration_maintain = maintain_registrations
 
             def maintain_gateway_registrations(contexts):
                 if prior_registration_maintain is not None:
                     prior_registration_maintain(contexts)
-                trading_instrument_adapter.maintain_registrations(contexts)
+                if trading_instrument_adapter is not None:
+                    trading_instrument_adapter.maintain_registrations(contexts)
+                if trading_product_adapter is not None:
+                    trading_product_adapter.maintain_registrations(contexts)
 
             maintain_registrations = maintain_gateway_registrations
 

@@ -51,6 +51,12 @@ class _Job:
 class GatewayInstrumentService:
     """A single volatile query service using an exact CTP session and read ACL."""
 
+    _begin_operation = "account.instrument_spec.begin"
+    _status_operation = "account.instrument_spec.status"
+    _cancel_operation = "account.instrument_spec.cancel"
+    _operations = INSTRUMENT_OPERATIONS
+    _registration_port = "service.account_read"
+
     def __init__(self, owner, session, journal, read_service, universe, principals):
         if (type(owner) is not GatewayDirectOwner or type(session) is not CtpGatewaySession
                 or type(read_service) is not GatewayReadService or not owner.is_bound_to(journal)
@@ -95,6 +101,10 @@ class GatewayInstrumentService:
         self._read.handle("account.head", principal_ref=context.principal_ref,
                           identity=context.identity, scope=context.scope, arguments={})
 
+    def _authorize_instrument(self, context, instrument):
+        if instrument not in self._universe:
+            raise ValueError("INSTRUMENT_DENIED")
+
     def _reply(self, context, job, operation_id):
         state, code, snapshot = ("not_found", None, None) if job is None else (job.state, job.code, None)
         if job is not None and state == "ready":
@@ -107,11 +117,11 @@ class GatewayInstrumentService:
                 job.check_requested = True
                 state = "pending"
             else:
-                spec = InstrumentSpec(**dict(obs.rules), freshness=Freshness("live", obs.completed_at_utc, False), raw={})
-                snapshot = {"instrument": job.instrument.to_dict(), "spec": encode_gateway_instrument_spec(spec),
-                            "session_generation": self._generation,
-                            "connection_generation": obs.connection_generation, "trading_day": obs.trading_day,
-                            "remaining_seconds": remaining}
+                try:
+                    snapshot = self._snapshot(job, obs, remaining)
+                except Exception:
+                    self._finish(job, "failed", "SOURCE_UNAVAILABLE")
+                    state, code = job.state, job.code
         response = {"operation_id": operation_id, "status": state, "code": code, "snapshot": snapshot}
         self._check_reply_budget(context, response)
         if snapshot is not None:
@@ -147,6 +157,12 @@ class GatewayInstrumentService:
             job.checked_at = None  # each release consumes one fresh validation cycle
         return response
 
+    def _snapshot(self, job, obs, remaining):
+        spec = InstrumentSpec(**dict(obs.rules), freshness=Freshness("live", obs.completed_at_utc, False), raw={})
+        return {"instrument": job.instrument.to_dict(), "spec": encode_gateway_instrument_spec(spec),
+                "session_generation": self._generation, "connection_generation": obs.connection_generation,
+                "trading_day": obs.trading_day, "remaining_seconds": remaining}
+
     @staticmethod
     def _check_reply_budget(context, response):
         if not callable(context.result_fits):
@@ -175,16 +191,15 @@ class GatewayInstrumentService:
 
     def handle(self, operation, *, context, arguments):
         self._authorize(context)
-        if (operation not in INSTRUMENT_OPERATIONS or not isinstance(arguments, Mapping)
-                or set(arguments) != ({"operation_id", "instrument"} if operation.endswith(".begin") else {"operation_id"})
+        if (operation not in self._operations or not isinstance(arguments, Mapping)
+                or set(arguments) != ({"operation_id", "instrument"} if operation == self._begin_operation else {"operation_id"})
                 or type(arguments.get("operation_id")) is not str or not _ID.fullmatch(arguments["operation_id"])):
             raise ValueError("INVALID_REQUEST")
         operation_id = arguments["operation_id"]
         instrument = None
-        if operation.endswith(".begin"):
+        if operation == self._begin_operation:
             instrument = MarketInstrumentKey.from_dict(arguments["instrument"])
-            if instrument not in self._universe:
-                raise ValueError("INSTRUMENT_DENIED")
+            self._authorize_instrument(context, instrument)
         key = (context.registration_id, operation_id)
         with self._lock:
             if self._closed:
@@ -192,7 +207,7 @@ class GatewayInstrumentService:
             job = self._jobs.get(key)
             if job is not None and not self._same(job.context, context):
                 raise ValueError("SCOPE_DENIED")
-            if operation.endswith(".begin"):
+            if operation == self._begin_operation:
                 if job is not None and job.instrument is not None and job.instrument != instrument:
                     raise ValueError("OPERATION_CONFLICT")
                 if job is None:
@@ -202,7 +217,7 @@ class GatewayInstrumentService:
                     # Check before enqueuing or storing any new job.
                     self._reply(context, job, operation_id)
                     self._jobs[key] = job
-            elif operation.endswith(".cancel"):
+            elif operation == self._cancel_operation:
                 if job is None:
                     if not self._has_capacity(context.registration_id, pending=False):
                         raise ValueError("CAPACITY_EXCEEDED")
@@ -245,8 +260,8 @@ class GatewayInstrumentService:
 
     def maintain_registrations(self, contexts):
         active = {item.context.registration_id: item for item in contexts
-                  if type(item) is ActiveRegistrationContext and item.port == "service.account_read"
-                  and item.operations >= INSTRUMENT_OPERATIONS}
+                  if type(item) is ActiveRegistrationContext and item.port == self._registration_port
+                  and item.operations >= self._operations}
         with self._lock:
             jobs = list(self._jobs.items())
             submitted = 0

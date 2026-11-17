@@ -91,6 +91,7 @@ _APPLICATION_MOUNTS: Final[frozenset[str]] = frozenset(
 )
 _UPSTREAM_MOUNTS: Final[frozenset[str]] = frozenset(
     {
+        "upstream.instrument_products",
         "upstream.calendar",
         "upstream.market",
         "upstream.account",
@@ -117,6 +118,7 @@ _MOUNTS_BY_ROLE: Final[dict[str, frozenset[str]]] = {
 
 _ACCOUNT_MOUNTS: Final[frozenset[str]] = frozenset(
     {
+        "upstream.instrument_products",
         "upstream.calendar",
         "broker.direct_write",
         "broker.execution_parent",
@@ -159,6 +161,7 @@ _PORTFOLIO_MOUNTS: Final[frozenset[str]] = frozenset(
 )
 _OPTIONAL_MOUNTS: Final[frozenset[str]] = frozenset(
     {
+        "upstream.instrument_products",
         "upstream.calendar",
         "store.market",
         "store.account",
@@ -196,6 +199,7 @@ _OWNER_CONTROL_MOUNTS: Final[frozenset[str]] = frozenset(
 _CLIENT_ALIAS_MOUNTS: Final[dict[str, frozenset[str]]] = {
     "gateway": frozenset(
         {
+            "upstream.instrument_products",
             "broker.direct_write",
             "application.direct_write",
             "upstream.direct_write",
@@ -266,7 +270,7 @@ _CLIENT_ALIAS_MOUNTS: Final[dict[str, frozenset[str]]] = {
 
 _COMPONENT_PORTS: Final[dict[str, dict[str | None, frozenset[str]]]] = {
     "gateway": {
-        "trading_owner": frozenset({"service.direct_write", "service.account_read", "service.market_source", "service.calendar_read"}),
+        "trading_owner": frozenset({"service.direct_write", "service.account_read", "service.market_source", "service.calendar_read", "service.instrument_product_read"}),
         "market_hub": frozenset({"service.market_source"}),
         "account_session_worker": frozenset(
             {

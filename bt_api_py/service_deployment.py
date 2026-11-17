@@ -27,6 +27,7 @@ MOUNT_PORTS: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
         "store.account": ("service.account_read",),
         "store.calendar": ("service.calendar_read",),
         "upstream.calendar": ("service.calendar_read",),
+        "upstream.instrument_products": ("service.instrument_product_read",),
         "broker.orders": ("service.order_entry",),
         "broker.direct_write": ("service.direct_write",),
         "broker.execution_parent": ("service.execution_parent",),

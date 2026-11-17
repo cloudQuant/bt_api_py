@@ -410,6 +410,7 @@ def _validate_config(
     acceptance_grants: tuple,
     calendar_settings: object | None,
     instrument_status_read: object | None,
+    instrument_product_grants: frozenset,
 ) -> str:
     if type(config) is not ServiceConfig or type(authority) is not TrustedServiceAuthority:
         raise CtpGatewayTradingError("INVALID_TRADING_CONFIGURATION")
@@ -491,7 +492,8 @@ def _validate_config(
         acceptance_principals = {grant.identity.principal_ref for grant in acceptance_grants}
         calendar_monitor_principals = (set() if calendar_settings is None else
                                        {g.principal_ref for g in calendar_settings.monitor_grants})
-        all_principals = set(grants) | set(control_grants) | set(read_principals) | market_principals | delegate_principals | parent_principals | acceptance_principals | calendar_monitor_principals
+        product_principals = {g.principal_ref for g in instrument_product_grants}
+        all_principals = set(grants) | set(control_grants) | set(read_principals) | market_principals | delegate_principals | parent_principals | acceptance_principals | calendar_monitor_principals | product_principals
         instance = item["instance_id"]
         if (
             set(components) != {"gateway"}
@@ -501,6 +503,7 @@ def _validate_config(
                 | ({"service.account_read"} if read_settings is not None else set())
                 | ({"service.market_source"} if market_settings is not None else set())
                 | ({"service.calendar_read"} if calendar_settings is not None else set())
+                | ({"service.instrument_product_read"} if instrument_product_grants else set())
             )
             or len(item["bind_ports"]) != len(set(item["bind_ports"]))
             or type(cancel_enabled) is not bool
@@ -569,6 +572,7 @@ def _validate_config(
                             "service.account_read",
                             "service.market_source",
                             "service.calendar_read",
+                            "service.instrument_product_read",
                         }
                         or resource.scope_ref != config.scope_ref
                         or scope.execution_domain_ref != authority.scope.execution_domain_ref
@@ -585,7 +589,9 @@ def _validate_config(
                                      and market_settings is not None)
                             and not (resource.port == 'service.calendar_read'
                                      and principal in calendar_monitor_principals
-                                     and resource.operations == frozenset({'calendar.monitor.windows.v1'})))
+                                     and resource.operations == frozenset({'calendar.monitor.windows.v1'}))
+                            and not (resource.port == 'service.instrument_product_read'
+                                     and principal in product_principals))
                     ):
                         raise ValueError
                     if resource.port == "service.direct_write":
@@ -895,6 +901,7 @@ def build_ctp_gateway_trading_profile(
     upgrade_account_fact_recovery_from_v17: bool = False,
     upgrade_account_event_recovery_from_v18: bool = False,
     calendar_settings: object | None = None,
+    instrument_product_grants: frozenset = frozenset(),
     strategy_financial_source_factory: Callable[..., object] | None = None,
     strategy_financial_settings: object | None = None,
     strategy_ledger_external_baseline: object | None = None,
@@ -1143,6 +1150,12 @@ def build_ctp_gateway_trading_profile(
                                    account_scope=settings.account_scope)
     except Exception:
         raise CtpGatewayTradingError("INVALID_CALENDAR_CONFIGURATION") from None
+    from bt_api_py.gateway_instrument_product_config import validate_product_grants
+    try:
+        validate_product_grants(instrument_product_grants, config=config, authority=authority,
+                                account_key=settings.account_key, account_scope=settings.account_scope)
+    except Exception:
+        raise CtpGatewayTradingError("INVALID_INSTRUMENT_PRODUCT_CONFIGURATION") from None
     instance = _validate_config(
         config,
         authority,
@@ -1157,6 +1170,7 @@ def build_ctp_gateway_trading_profile(
         acceptance_grants,
         calendar_settings,
         instrument_status_read,
+        instrument_product_grants,
     )
     if instrument_status_read is not None:
         for principal in instrument_status_read.principal_instruments:
@@ -1390,6 +1404,9 @@ def build_ctp_gateway_trading_profile(
                 instrument_service = holder.get("instrument_service")
                 if instrument_service is not None and instrument_service.cleanup_on_owner() is not True:
                     raise CtpGatewayTradingError("INSTRUMENT_CLEANUP_UNCONFIRMED")
+                product_service = holder.get("instrument_product_service")
+                if product_service is not None and product_service.cleanup_on_owner() is not True:
+                    raise CtpGatewayTradingError("INSTRUMENT_PRODUCT_CLEANUP_UNCONFIRMED")
                 origin_source = holder.get('strategy_origin_source')
                 if origin_source is not None and not origin_closed:
                     origin_source.close()
@@ -2369,6 +2386,10 @@ def build_ctp_gateway_trading_profile(
             if instrument_service is not None:
                 instrument_service.begin_close()
                 instrument_service.maintain_registrations(())
+            product_service = holder.get("instrument_product_service")
+            if product_service is not None:
+                product_service.begin_close()
+                product_service.maintain_registrations(())
             if market_proxy is not None:
                 try:
                     market_proxy.begin_close()
@@ -2786,6 +2807,12 @@ def build_ctp_gateway_trading_profile(
                 )
                 holder["instrument_service"] = instrument_service
                 values["instrument_service"] = instrument_service
+            if instrument_product_grants:
+                from bt_api_py.gateway_instrument_product_service import GatewayInstrumentProductService
+                product_service = GatewayInstrumentProductService(owner, holder["session"], journal,
+                                                                  instrument_product_grants)
+                holder["instrument_product_service"] = product_service
+                values["instrument_product_service"] = product_service
             if calendar_settings is not None:
                 values["calendar_service"] = holder["calendar_service"]
             return ComponentResources.owned(values, ready=ready, close=close_resources)

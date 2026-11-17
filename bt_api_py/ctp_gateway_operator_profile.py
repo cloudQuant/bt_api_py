@@ -118,6 +118,7 @@ class CtpGatewayTrustedResources:
     control_release_audit_enabled: bool = False
     upgrade_control_release_audit: bool = False
     calendar_settings: object | None = field(default=None, repr=False)
+    instrument_product_grants: frozenset = field(default_factory=frozenset, repr=False)
     recovery_observation_settings: object | None = field(default=None, repr=False)
     instrument_status_read: object | None = field(default=None, repr=False)
     recovery_monitor_relay: object | None = field(default=None, repr=False)
@@ -200,6 +201,7 @@ def create_ctp_gateway_profile_factory(
             control_release_audit_enabled=resources.control_release_audit_enabled,
             upgrade_control_release_audit=resources.upgrade_control_release_audit,
             calendar_settings=resources.calendar_settings,
+            instrument_product_grants=resources.instrument_product_grants,
             recovery_observation_settings=resources.recovery_observation_settings,
             recovery_monitor_relay=resources.recovery_monitor_relay,
             instrument_status_read=resources.instrument_status_read,
