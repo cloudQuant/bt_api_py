@@ -540,6 +540,13 @@ def _pretrade_config(raw: object) -> tuple[int, RiskPretradeUpgrade | None]:
 
 
 @dataclass(frozen=True)
+class RiskAccountFactsObservation:
+    poll_interval_seconds: float
+    timeout_seconds: float
+    page_size: int
+
+
+@dataclass(frozen=True)
 class RiskServiceConfig:
     path: Path
     service_id: str
@@ -578,6 +585,7 @@ class RiskServiceConfig:
     strict_admin_cancel: bool = False
     pretrade_schema_version: int = 3
     pretrade_upgrade_from_v3: RiskPretradeUpgrade | None = None
+    account_facts_observation: RiskAccountFactsObservation | None = None
 
     def __repr__(self) -> str:
         return f"RiskServiceConfig(service_id={self.service_id!r})"
@@ -896,12 +904,21 @@ def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceCon
             "deadlines",
             "refresh",
         ),
-        optional=("rules", "pretrade"),
+        optional=("rules", "pretrade", "account_facts_observation"),
     )
     if top["schema"] != RISK_SERVICE_CONFIG_SCHEMA:
         _fail("RISK_SERVICE_CONFIG_SCHEMA_UNSUPPORTED")
     pretrade_version, pretrade_upgrade = ((3, None) if "pretrade" not in top
                                          else _pretrade_config(top["pretrade"]))
+    facts_observation = None
+    if "account_facts_observation" in top:
+        item = _mapping(top["account_facts_observation"],
+                        required=("poll_interval_seconds", "timeout_seconds", "page_size"))
+        interval = _seconds(item["poll_interval_seconds"], maximum=Decimal(3600))
+        timeout = _seconds(item["timeout_seconds"], maximum=Decimal('0.250'))
+        if interval < 1.0 or timeout < 0.001 or pretrade_version != 4 or pretrade_upgrade is not None:
+            _fail("RISK_SERVICE_CONFIG_ACCOUNT_FACTS_INVALID")
+        facts_observation = RiskAccountFactsObservation(interval, timeout, _int(item["page_size"], low=1, high=256))
     service = _mapping(
         top["service"],
         required=(
@@ -1051,6 +1068,7 @@ def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceCon
         strict_admin_cancel=strict_admin_cancel,
         pretrade_schema_version=pretrade_version,
         pretrade_upgrade_from_v3=pretrade_upgrade,
+        account_facts_observation=facts_observation,
     )
 
 
@@ -1072,6 +1090,7 @@ __all__ = [
     "MAX_RESERVATION_TTL_SECONDS",
     "PRINCIPAL_ROLES",
     "RISK_SERVICE_CONFIG_SCHEMA",
+    "RiskAccountFactsObservation",
     "RiskAccountSnapshotConfig",
     "RiskGatewayIdentity",
     "RiskGatewayUpstream",

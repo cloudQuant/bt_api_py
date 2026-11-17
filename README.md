@@ -1545,9 +1545,32 @@ extension. `poll_once()` commits the page and source binding before ACK;
 does not trigger automatic retry. Reconstructing a coordinator checks the stored
 source before any RPC, including service instance and key fingerprint. Source
 changes need a future explicit transition. The calls are synchronous on the
-ledger owner thread, not a nonblocking Host loop. No production Host enables
-this coordinator automatically, and it does not establish account coverage or
-enable the R05 trading gate.
+ledger owner thread. They do not establish account coverage or enable the R05
+trading gate.
+
+The Risk Host can explicitly select this consumer with a top-level setting:
+
+```yaml
+account_facts_observation:
+  poll_interval_seconds: 1
+  timeout_seconds: 0.1
+  page_size: 64
+```
+
+The original ledger must already be v4 with an R05 v2 extension. Startup only
+attaches the existing extension; it neither installs it nor combines observation
+startup with a schema upgrade. The consumer uses a separate strict connection
+on the existing `upstream.account` mount, requesting only
+`account.facts.read_after.v2` and `account.facts.ack`. The original events
+observer keeps its own registration. At most one page is attempted per due
+Host tick. UNKNOWN or a pending ACK pauses this consumer until explicit recovery;
+Host maintenance does not retry it or replace its stored source binding.
+
+Poll intervals are 1–3600 seconds, network timeouts 0.001–0.250 seconds and pages
+1–256 items. These limits do not bound SQLite or operating-system I/O. Unconfirmed
+runtime or ledger cleanup retains the original Host and fence. The local
+`account_facts_observation_status()` reports a finite consumer state, not account
+readiness or authority. With no setting, this consumer remains disabled.
 
 The explicit `account.facts.read_after.v2` operation returns the original
 Gateway journal identity with the same authenticated fact page. The strict

@@ -14,11 +14,20 @@ from dataclasses import dataclass, field, replace
 
 from bt_api_base.gateway_execution_stream_protocol import GatewayExecutionObservation
 from bt_api_base.service_protocol import WireIdentity, WireScope
-from bt_api_py.gateway_account_observer_client import GatewayAccountObserverClient, GatewayAccountObserverRoute
+
+from bt_api_py.gateway_account_facts_identity import account_facts_consumer_ref
+from bt_api_py.gateway_account_observer_client import (
+    GatewayAccountObserverClient,
+    GatewayAccountObserverRoute,
+)
 from bt_api_py.gateway_delegate_service_client import runtime_failure
 from bt_api_py.gateway_execution_stream_client import _detach_wire, _epoch, _sequence
 from bt_api_py.service_runtime import ServiceRuntimeRequestNotSentError
-from bt_api_py.service_runtime_thread import BoundCallObservation, BoundCallResult, _BoundBindingToken
+from bt_api_py.service_runtime_thread import (
+    BoundCallObservation,
+    BoundCallResult,
+    _BoundBindingToken,
+)
 
 
 class _FactReadToken:
@@ -224,9 +233,7 @@ class GatewayAccountFactsClient(GatewayAccountObserverClient):
         super().__init__(runtime, route=route, peer=peer, fingerprint=fingerprint)
         self._issued_v2 = None
         identity, scope = route.identity, route.scope
-        self._consumer_ref = 'account-facts:' + hashlib.sha256(json.dumps([
-            identity.principal_ref, identity.role.value, identity.actor_ref, scope.execution_domain_ref,
-            scope.account_ref, scope.strategy_ref], separators=(',', ':'), ensure_ascii=True).encode('ascii')).hexdigest()
+        self._consumer_ref = account_facts_consumer_ref(principal_ref=identity.principal_ref, identity=identity, scope=scope)
 
     def _call(self, operation, arguments, timeout_seconds, *, read_token=None):
         if os.getpid() != self._pid or threading.current_thread() is not self._thread:

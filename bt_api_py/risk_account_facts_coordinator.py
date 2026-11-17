@@ -119,6 +119,9 @@ class RiskAccountFactsCoordinator:
             binding = txn.r05_source_binding()
             if binding is not None and binding != self._source_binding:
                 raise ValueError('R05_FACTS_SOURCE_CHANGED')
+            if progress is not None and (progress['gateway_account'] != self._route.scope.account_ref
+                                         or progress['consumer_ref'] != self._consumer):
+                raise ValueError('R05_FACTS_SOURCE_CHANGED')
         self._check()
         return progress
 

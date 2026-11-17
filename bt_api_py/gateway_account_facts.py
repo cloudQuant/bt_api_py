@@ -6,8 +6,6 @@ It is not itself proof that the provider observation is complete.
 """
 from __future__ import annotations
 
-import hashlib
-import json
 from collections.abc import Mapping
 
 from bt_api_base.gateway_execution_stream_protocol import project_gateway_execution_observation
@@ -15,8 +13,14 @@ from bt_api_base.service_protocol import WireRole
 from bt_api_gateway.account_fact_consumer_ownership import AccountFactConsumerOwner
 from bt_api_gateway.direct_command_journal import DirectCommandJournalError
 from bt_api_gateway.direct_execution_journal import GatewayDirectExecutionLedger
+
+from bt_api_py.gateway_account_facts_identity import account_facts_consumer_ref
 from bt_api_py.gateway_direct_owner import GatewayDirectOwner, GatewayOwnerServiceCallError
-from bt_api_py.service_registry import ServiceCallContext, ServiceDispatchAdmission, ServiceResultTooLargeError
+from bt_api_py.service_registry import (
+    ServiceCallContext,
+    ServiceDispatchAdmission,
+    ServiceResultTooLargeError,
+)
 
 ACCOUNT_FACTS_OPERATIONS = frozenset({
     'account.facts.read_after', 'account.facts.read_after.v2', 'account.facts.progress', 'account.facts.ack', 'account.facts.status',
@@ -30,14 +34,6 @@ def _epoch(value):
 
 def _sequence(value):
     return type(value) is int and 0 <= value < 2**63
-
-
-def account_facts_consumer_ref(*, principal_ref, identity, scope):
-    """Derive a stable fact cursor only from the authenticated caller."""
-    return 'account-facts:' + hashlib.sha256(json.dumps([
-        principal_ref, identity.role.value, identity.actor_ref, scope.execution_domain_ref,
-        scope.account_ref, scope.strategy_ref,
-    ], separators=(',', ':'), ensure_ascii=True).encode('ascii')).hexdigest()
 
 
 class GatewayAccountFactsObserver:

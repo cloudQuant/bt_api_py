@@ -53,6 +53,7 @@ from bt_api_base.risk_service_protocol import (
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 
 from bt_api_py.risk_service_config import (
+    RiskAccountFactsObservation,
     RiskPretradeUpgrade,
     RiskR04Selection,
     RiskServiceConfig,
@@ -76,6 +77,7 @@ POLICY_LABELS = {
 OBSERVER_OPERATIONS = frozenset(
     {"account.events.read_after", "account.events.progress", "account.events.ack"}
 )
+ACCOUNT_FACTS_OBSERVATION_OPERATIONS = frozenset({'account.facts.read_after.v2', 'account.facts.ack'})
 DELEGATE_OPERATIONS = frozenset(
     {
         "direct.delegated_reserve",
@@ -112,6 +114,7 @@ _CLEANUP_DIAGNOSTIC_REASONS = frozenset({
     "PORT_CLOSE_UNCONFIRMED", "STORAGE_STACK_UNCONFIRMED", "STORAGE_OWNER_UNCONFIRMED",
     "STORAGE_CLOSE_UNCONFIRMED", "CLEANUP_EXCEPTION", "HANDLE_CLOSE_EXCEPTION",
     "HANDLE_CLOSE_UNCONFIRMED", "SLOT_REGISTRATION_UNCONFIRMED",
+    'ACCOUNT_FACTS_STORAGE_UNKNOWN',
 })
 _ENTRY_PROOFS_GUARD = threading.Lock()
 _ENTRY_PROOFS: weakref.WeakKeyDictionary[Any, tuple[Any, Any, Any, Any]] = weakref.WeakKeyDictionary()
@@ -1110,7 +1113,18 @@ class RiskServiceHost:
             raise TypeError("RISK_SERVICE_CONFIG_REQUIRED")
         if type(config.strict_admin_cancel) is not bool:
             raise RiskServiceStartError("RISK_SERVICE_CONFIG_STRICT_ADMIN_CANCEL_INVALID")
-        _pretrade_selection(config)
+        version, upgrade = _pretrade_selection(config)
+        observation = getattr(config, 'account_facts_observation', None)
+        if observation is not None and (type(observation) is not RiskAccountFactsObservation
+                or version != 4 or upgrade is not None
+                or type(observation.poll_interval_seconds) not in (int, float)
+                or not math.isfinite(observation.poll_interval_seconds)
+                or not 1 <= observation.poll_interval_seconds <= 3600
+                or type(observation.timeout_seconds) not in (int, float)
+                or not math.isfinite(observation.timeout_seconds)
+                or not 0.001 <= observation.timeout_seconds <= 0.250
+                or type(observation.page_size) is not int or not 1 <= observation.page_size <= 256):
+            raise RiskServiceStartError('RISK_SERVICE_CONFIG_ACCOUNT_FACTS_INVALID')
         _require_supported_r04(config)
         self.config = config
         self._creator_pid = os.getpid()
@@ -1148,6 +1162,9 @@ class RiskServiceHost:
         self._observer_runtime: Any = None
         self._observer_route: Any = None
         self._observer_retry_at = 0.0
+        self._account_facts_runtime: Any = None
+        self._account_facts_coordinator: Any = None
+        self.account_facts_status = 'DISABLED'
         self._delegate_cleanup_unresolved: list[Any] = []
         self._next: dict[str, float] = {}
         self.stop_event = threading.Event()
@@ -1496,8 +1513,16 @@ class RiskServiceHost:
                     self.ledger = PretradeLedger(journal, fence, schema_version=4)
                 else:
                     self.ledger = PretradeLedger(journal, fence)
+                if getattr(config, 'account_facts_observation', None) is not None:
+                    try:
+                        self.ledger.attach_existing_r05_observations_v2()
+                    except RiskOrderJournalError as error:
+                        if error.code == 'R05_OBSERVATION_COMMIT_UNCERTAIN':
+                            raise
+                        _fail('RISK_SERVICE_ACCOUNT_FACTS_V2_REQUIRED')
             except RiskOrderJournalError as error:
-                if error.code in ("PRETRADE_INIT_COMMIT_UNCERTAIN", "PRETRADE_MIGRATION_COMMIT_UNCERTAIN"):
+                if error.code in ("PRETRADE_INIT_COMMIT_UNCERTAIN", "PRETRADE_MIGRATION_COMMIT_UNCERTAIN",
+                                  'R05_OBSERVATION_COMMIT_UNCERTAIN'):
                     # Preserve the original acquiring stack itself. Moving its
                     # callbacks with pop_all() introduces an unrooted handoff.
                     self._uncertain_storage = (journal, fence)
@@ -1660,7 +1685,7 @@ class RiskServiceHost:
         gateway = self.config.gateway
         return WireIdentity(WireRole.SERVICE, gateway.principal_ref, gateway.service_id)
 
-    def _service_runtime(self, mount: str, scope: WireScope, operations: frozenset[str], *, run_id: str | None = None, extension: Callable[[], Any] | None = None, market: bool = False) -> Any:
+    def _service_runtime(self, mount: str, scope: WireScope, operations: frozenset[str], *, run_id: str | None = None, extension: Callable[[], Any] | None = None, market: bool = False, strict_connection: bool = False) -> Any:
         _require_supported_r04(self.config)
         from bt_api_py.service_runtime import ServiceClientRuntime, ZmqTransportFactory
         from bt_api_py.service_runtime_thread import ThreadedServiceClientRuntime
@@ -1672,7 +1697,8 @@ class RiskServiceHost:
         self._check_cleanup_ready()
         curve = self._curve(delegate)
         self._check_cleanup_ready()
-        factory = ZmqTransportFactory({_GATEWAY_SECURITY: curve})
+        factory = (ZmqTransportFactory({_GATEWAY_SECURITY: curve}, strict_single_connection=True)
+                   if strict_connection else ZmqTransportFactory({_GATEWAY_SECURITY: curve}))
         self._check_cleanup_ready()
         peer = self._peer()
         self._check_cleanup_ready()
@@ -1693,6 +1719,93 @@ class RiskServiceHost:
             cleanup_unknown=self._runtime_cleanup_unknown,
             on_cleanup_sticky=self._runtime_cleanup_sticky,
         )
+
+    def _start_account_facts(self, route: Any) -> None:
+        """Attach one separate strict facts consumer to the original Risk owner."""
+        settings = getattr(self.config, 'account_facts_observation', None)
+        if settings is None:
+            return
+        from bt_api_risk.pretrade.ledger import PretradeLedger
+
+        from bt_api_py.gateway_account_facts_client import GatewayAccountFactsClient
+        from bt_api_py.gateway_account_facts_identity import account_facts_consumer_ref
+        from bt_api_py.risk_account_facts_coordinator import RiskAccountFactsCoordinator
+
+        peer = self._peer()
+        expected = {'service_id': route.service_id, 'instance_id': route.instance_id,
+            'peer_role': peer.role.value, 'peer_principal': peer.principal_ref, 'peer_actor': peer.actor_ref,
+            'peer_delegate': peer.delegate_ref, 'fingerprint': hashlib.sha256(self.config.gateway.server_public_key).hexdigest()}
+        consumer = account_facts_consumer_ref(principal_ref=route.identity.principal_ref,
+                                               identity=route.identity, scope=route.scope)
+        def preflight():
+            with PretradeLedger.transaction(self.ledger) as txn:
+                state = txn.r05_progress()
+                binding = txn.r05_source_binding()
+                if binding is not None and binding != expected:
+                    raise ValueError('R05_FACTS_SOURCE_CHANGED')
+                if state is not None and (state['gateway_account'] != route.scope.account_ref
+                                          or state['consumer_ref'] != consumer):
+                    raise ValueError('R05_FACTS_SOURCE_CHANGED')
+            return state
+
+        try:
+            initial_state = self._call_lifecycle(preflight)
+        except Exception as error:
+            if getattr(self.ledger, '_r05_uncertain', False):
+                self._record_cleanup_uncertain(self.ledger, 'ACCOUNT_FACTS_STORAGE_UNKNOWN')
+            if str(error) == 'R05_FACTS_SOURCE_CHANGED':
+                _fail('RISK_SERVICE_ACCOUNT_FACTS_SOURCE_MISMATCH')
+            _fail('RISK_SERVICE_ACCOUNT_FACTS_UNAVAILABLE')
+
+        runtime = self._call_lifecycle(self._service_runtime, 'upstream.account', route.scope,
+            ACCOUNT_FACTS_OBSERVATION_OPERATIONS, strict_connection=True)
+        self._runtimes.append(runtime)
+        self._account_facts_runtime = runtime
+        self._check_cleanup_ready()
+        try:
+            if self._call_lifecycle(preflight) != initial_state:
+                _fail('RISK_SERVICE_ACCOUNT_FACTS_UNAVAILABLE')
+            snapshot = self._call_lifecycle(runtime.start, timeout_seconds=self.config.call_timeout_seconds)
+            if not self._call_lifecycle(_granted, snapshot, 'upstream.account', ACCOUNT_FACTS_OBSERVATION_OPERATIONS):
+                _fail('RISK_SERVICE_ACCOUNT_FACTS_GRANT_REQUIRED')
+            client = self._call_lifecycle(GatewayAccountFactsClient, runtime, route=route, peer=self._peer(),
+                fingerprint=hashlib.sha256(self.config.gateway.server_public_key).hexdigest())
+            read_registration = self._call_lifecycle(client._registration, 'account.facts.read_after.v2')
+            ack_registration = self._call_lifecycle(client._registration, 'account.facts.ack')
+            if read_registration != ack_registration:
+                _fail('RISK_SERVICE_ACCOUNT_FACTS_GRANT_REQUIRED')
+            coordinator = self._call_lifecycle(RiskAccountFactsCoordinator, client, self.ledger,
+                limit=settings.page_size, timeout_seconds=settings.timeout_seconds)
+            state = self._call_lifecycle(coordinator._progress)
+        except Exception as error:
+            if getattr(self.ledger, '_r05_uncertain', False):
+                self._record_cleanup_uncertain(self.ledger, 'ACCOUNT_FACTS_STORAGE_UNKNOWN')
+            if isinstance(error, RiskServiceStartError):
+                raise
+            if str(error) == 'R05_FACTS_SOURCE_CHANGED':
+                _fail('RISK_SERVICE_ACCOUNT_FACTS_SOURCE_MISMATCH')
+            _fail('RISK_SERVICE_ACCOUNT_FACTS_UNAVAILABLE')
+        self._check_cleanup_ready()
+        self._account_facts_coordinator = coordinator
+        self.account_facts_status = 'RECOVERY_REQUIRED' if state is not None and state['pending'] is not None else 'READY'
+
+    def _poll_account_facts(self) -> None:
+        if self.account_facts_status not in {'READY', 'APPLIED', 'EMPTY'}:
+            return
+        try:
+            result = self._account_facts_coordinator.poll_once()
+            status = result.status if type(result.status) is str else 'UNKNOWN'
+            self.account_facts_status = status if status in {'APPLIED', 'EMPTY', 'RECOVERY_REQUIRED'} else 'UNKNOWN'
+        except Exception:
+            self.account_facts_status = 'UNKNOWN'
+        if getattr(self.ledger, '_r05_uncertain', False):
+            self._record_cleanup_uncertain(self.ledger, 'ACCOUNT_FACTS_STORAGE_UNKNOWN')
+
+    def account_facts_observation_status(self) -> str:
+        """Return only the local bounded consumer state, never source authority."""
+        self._check_owner_identity()
+        status = self.account_facts_status
+        return status if status in {'DISABLED', 'READY', 'APPLIED', 'EMPTY', 'UNKNOWN', 'RECOVERY_REQUIRED'} else 'UNKNOWN'
 
     def _connect_delegate(self, route: Any) -> _DelegateHandle:
         _require_supported_r04(self.config)
@@ -1945,6 +2058,7 @@ class RiskServiceHost:
         self._check_cleanup_ready()
         self._observer_runtime = observer_runtime
         self._observer_route = observer_route
+        self._start_account_facts(observer_route)
         self._runtimes.append(self.control_runtime)
         try:
             snapshot = self._call_lifecycle(self.control_runtime.start, timeout_seconds=timeout)
@@ -2282,6 +2396,8 @@ class RiskServiceHost:
                 "account": now,
                 "financial": now,
             }
+            if self._account_facts_coordinator is not None:
+                self._next['account_facts'] = now
         except BaseException:
             try:
                 self.close()
@@ -2318,6 +2434,10 @@ class RiskServiceHost:
             ("market", self.market is not None, config.market_poll_seconds),
             ("account", self.account is not None, config.account_snapshot_seconds),
             ("financial", self.financial is not None, config.strategy_financial_seconds),
+            ('account_facts', self._account_facts_coordinator is not None
+             and self.account_facts_status in {'READY', 'APPLIED', 'EMPTY'},
+             None if getattr(config, 'account_facts_observation', None) is None
+             else config.account_facts_observation.poll_interval_seconds),
             ("maintain", True, config.maintain_seconds),
         )
         try:
@@ -2357,6 +2477,10 @@ class RiskServiceHost:
             self._call_lifecycle(self.financial.refresh)
             self._check_cleanup_ready()
             self._next["financial"] = deadlines["financial"]
+        if 'account_facts' in deadlines:
+            self._call_lifecycle(self._poll_account_facts)
+            self._check_cleanup_ready()
+            self._next['account_facts'] = deadlines['account_facts']
         if "maintain" in deadlines:
             self._call_lifecycle(self.engine.maintain)
             self._check_cleanup_ready()
@@ -2589,6 +2713,7 @@ def _cleanup_wait_diagnostic(host: RiskServiceHost) -> tuple[tuple[str, ...], tu
         owned = (
             ("HOST", host),
             ("OBSERVER", fields.get("_observer_runtime")),
+            ('ACCOUNT_FACTS', fields.get('_account_facts_runtime')),
             ("CONTROL", fields.get("control_runtime")),
             ("DELEGATE_PORT", fields.get("order_port")),
             ("MARKET", fields.get("market")),
@@ -2597,6 +2722,7 @@ def _cleanup_wait_diagnostic(host: RiskServiceHost) -> tuple[tuple[str, ...], tu
             ("SERVICE", fields.get("service_host")),
             ("STORAGE", fields.get("_stack")),
             ("STORAGE", fields.get("_uncertain_storage")),
+            ('STORAGE', fields.get('ledger')),
         )
         runtimes = fields.get("_runtimes")
         runtimes = runtimes[:64] if type(runtimes) is list else ()
