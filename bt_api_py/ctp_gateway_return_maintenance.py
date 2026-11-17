@@ -21,13 +21,19 @@ _BLOCKING_QUERY_POLL_SECONDS = 0.005
 
 
 class CtpGatewayReturnMaintenance:
-    def __init__(self, session, provider, journal, guard, account_key, settings, *, external_classifier=None):
+    def __init__(self, session, provider, journal, guard, account_key, settings, *, external_classifier=None,
+                 observed_order_source=False):
         self._session, self._provider, self._settings = session, provider, settings
         self._ledger = GatewayDirectExecutionLedger(journal, guard)
         self._account_key = account_key
         if external_classifier is not None and not callable(external_classifier):
             raise ValueError("INVALID_EXTERNAL_CLASSIFIER")
         self._external_classifier = external_classifier
+        if type(observed_order_source) is not bool:
+            raise ValueError("INVALID_OBSERVED_ORDER_SOURCE")
+        self._observed_order_source_enabled = observed_order_source
+        self._observed_order_source = None
+        self._source_start_failed = False
         self._lock = threading.Lock()
         self._pid = os.getpid()
         self._owner_thread = threading.current_thread()
@@ -64,12 +70,15 @@ class CtpGatewayReturnMaintenance:
         # Called after SQLite transaction begins.  Nothing under this lock may
         # acquire SQLite or call native code (journal -> lock is the only order).
         with self._lock:
-            if self._closing.is_set() or not self._open:
+            if (self._closing.is_set() or not self._open
+                    or (self._observed_order_source is not None and self._observed_order_source.blocked)):
                 raise GatewayReservationAdmissionDenied()
             yield
 
     def status(self):
         with self._lock:
+            if self._observed_order_source is not None and self._observed_order_source.blocked:
+                return {"status": "OBSERVED_SOURCE_GAP", "reservation_open": False}
             return {
                 "status": "OWNER_CLOSED" if self._closing.is_set() else self._status,
                 "reservation_open": self._open and not self._closing.is_set(),
@@ -82,6 +91,12 @@ class CtpGatewayReturnMaintenance:
                 return {"status": "UNAVAILABLE", "unattributed": None,
                         "conflict": None, "verified_external": None}
             return dict(self._fact_health)
+
+    def observed_order_source_status(self):
+        """Return candidate owner-local progress; it is never Risk coverage."""
+        if self._observed_order_source is None:
+            return None
+        return self._observed_order_source.status()
 
     def _refresh_fact_status(self):
         try:
@@ -138,6 +153,11 @@ class CtpGatewayReturnMaintenance:
                 or not 0 <= timeout_seconds <= 3600):
             raise ValueError("INVALID_CLOSE_TIMEOUT")
         self.begin_close()
+        if self._observed_order_source is not None and self._observed_order_source._invalidation_pending:
+            try:
+                self._observed_order_source.invalidate()
+            except Exception:
+                return False
         if not self._lock.acquire(timeout=timeout_seconds):
             return False
         try:
@@ -156,30 +176,61 @@ class CtpGatewayReturnMaintenance:
         self._stale_seen = False
         self._next_kind = "orders"
         self._next_query = 0.0
+        if self._observed_order_source is not None:
+            self._observed_order_source.invalidate()
+            self._observed_order_source = None
         generation = self._provider.session_generation()
         if reader is None:
             reader = self._session.create_return_query_reader()
         reader.assert_session_current()
         if self._provider.session_generation() != generation:
             raise CtpGatewayReturnQueryError("SESSION_CHANGED")
+        observed_order_source = None
+        if self._observed_order_source_enabled:
+            from bt_api_py.ctp_gateway_observed_order_source import CtpGatewayObservedOrderSource
+            observed_order_source = CtpGatewayObservedOrderSource(self._session, reader, self._ledger)
+            self._observed_order_source = observed_order_source
+            try:
+                observed_order_source.start()
+            except Exception:
+                if not observed_order_source._begin_attempted:
+                    raise
+                # Preserve custody of the original source even if its begin or
+                # invalidation outcome is uncertain; poll/close can retry.
+                self._source_start_failed = True
+                self._generation, self._reader = generation, reader
+                self._set(False, "OBSERVED_SOURCE_GAP")
+                return
         ingestor = CtpGatewayReturnIngestor(
             reader,
             self._ledger,
             account_key=self._account_key,
             instruments=self._settings.instruments,
             external_classifier=self._external_classifier,
+            **({'observed_order_source': observed_order_source} if observed_order_source is not None else {}),
         )
+        self._observed_order_source = observed_order_source
+        self._source_start_failed = False
         self._generation, self._ingestor, self._reader = generation, ingestor, reader
 
     def refresh_generation(self):
-        if self._provider.session_generation() != self._generation:
-            self._set(False, "SESSION_CHANGED")
-            self._done.clear()
-            self._pair_seen = False
-            reader = self._ingestor.rebind_same_native()
-            self._rebuild(reader)
-        else:
-            self._ingestor.assert_session_current()
+        try:
+            if self._source_start_failed:
+                if self._observed_order_source._invalidation_pending:
+                    self._observed_order_source.invalidate()
+                raise RuntimeError("OBSERVED_SOURCE_UNAVAILABLE")
+            if self._provider.session_generation() != self._generation:
+                self._set(False, "SESSION_CHANGED")
+                self._done.clear()
+                self._pair_seen = False
+                reader = self._ingestor.rebind_same_native()
+                self._rebuild(reader)
+            else:
+                self._ingestor.assert_session_current()
+        except Exception:
+            if self._observed_order_source is not None:
+                self._observed_order_source._invalidate_safely()
+            raise
 
     def poll(self):
         self._set(False, "MAINTENANCE")
@@ -187,12 +238,20 @@ class CtpGatewayReturnMaintenance:
         try:
             self.refresh_generation()
             buffer = self._session.return_buffer
+            if self._observed_order_source is not None and self._observed_order_source.blocked:
+                raise RuntimeError("OBSERVED_SOURCE_GAP")
             status = buffer.status()
+            if status.gap and self._observed_order_source is not None:
+                self._observed_order_source.invalidate()
             batch = buffer.offer(limit=self._settings.callback_batch_limit)
             if batch.records:
                 self._ingestor.ingest_callbacks(
                     batch, assert_current=self._session.assert_return_record_current
                 )
+            if self._observed_order_source is not None and buffer.status().gap:
+                self._observed_order_source.invalidate()
+            if self._observed_order_source is not None and self._observed_order_source.blocked:
+                raise RuntimeError("OBSERVED_SOURCE_GAP")
             buffer.ack(batch)
             self._stale_seen = False
             self._ledger.reconcile_pending(limit=256)
@@ -200,6 +259,8 @@ class CtpGatewayReturnMaintenance:
             self._last_poll_ok = True
             status = buffer.status()
             if status.gap:
+                if self._observed_order_source is not None:
+                    self._observed_order_source.invalidate()
                 self._pair_seen = False
                 self._set(False, "SOURCE_GAP")
             elif status.record_count:
@@ -378,6 +439,8 @@ class CtpGatewayReturnMaintenance:
                 return "OWNER_REQUIRED"
             if self._closing.is_set():
                 return "CLOSING"
+            if self._observed_order_source is not None and self._observed_order_source.blocked:
+                return "OBSERVED_SOURCE_GAP"
             if self._provider.session_generation() != self._generation:
                 return "SESSION_CHANGED"
             self._ingestor.assert_session_current()
@@ -399,7 +462,8 @@ class CtpGatewayReturnMaintenance:
         """Owner-thread live check; neither queries nor dispatch share an atomic venue cut."""
         try:
             with self._lock:
-                if self._closing.is_set():
+                if (self._closing.is_set()
+                        or (self._observed_order_source is not None and self._observed_order_source.blocked)):
                     return False
             if self._provider.session_generation() != self._generation:
                 self._set(False, "SESSION_CHANGED")

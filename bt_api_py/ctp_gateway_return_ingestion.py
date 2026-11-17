@@ -127,6 +127,7 @@ class CtpGatewayReturnIngestor:
         account_key: AccountKey,
         instruments: tuple[MarketInstrumentKey, ...],
         external_classifier=None,
+        observed_order_source=None,
     ) -> None:
         if (
             type(reader) is not CtpGatewayReturnQueryReader
@@ -178,6 +179,12 @@ class CtpGatewayReturnIngestor:
             account_key.account_id,
         )
         self._catalog = MappingProxyType(catalog)
+        if observed_order_source is not None:
+            from bt_api_py.ctp_gateway_observed_order_source import CtpGatewayObservedOrderSource
+            if (type(observed_order_source) is not CtpGatewayObservedOrderSource
+                    or not observed_order_source.matches(reader, ledger)):
+                raise CtpGatewayReturnIngestionError("INVALID_CONFIGURATION")
+        self._observed_order_source = observed_order_source
         self._external_classifier = external_classifier
         self._account_key, self._environment = account_key, environment
         self._unkeyed: dict[tuple[str, str], int] = {}
@@ -330,140 +337,159 @@ class CtpGatewayReturnIngestor:
             # a trading control action or a synthetic external entry.
             return
 
+    def _project_callback(self, record):
+        if record.kind in {"insert_response", "insert_error"}:
+            if type(record.error_code) is not int or record.error_code <= 0:
+                raise CtpGatewayReturnIngestionError("UNSUPPORTED_RETURN")
+            from bt_api_ctp.gateway_place_return_projection import (
+                gateway_place_error_key,
+                project_gateway_place_error,
+            )
+
+            place_key = gateway_place_error_key(
+                record, expected_broker=self._broker_id, expected_investor=self._investor_id
+            )
+            journal = self._ledger.journal
+            command = journal.find_place_by_request_key(place_key)
+            if command is None:
+                raise ValueError
+            prepared = journal.get_prepared_place(command.reservation_id)
+            if prepared is None:
+                raise CtpGatewayReturnIngestionError("UNSUPPORTED_RETURN")
+            # The Gateway's own order; never skipped without a key.
+            instrument = self._instrument(record.row)
+            if instrument is None:
+                raise ValueError
+            projection = project_gateway_place_error(
+                record,
+                prepared,
+                account_scope=self._account_scope,
+                expected_broker=self._broker_id,
+                expected_investor=self._investor_id,
+                instrument=instrument,
+            )
+            if projection.place_key != place_key:
+                raise ValueError
+            binding_keys = project_direct_strong_identity_keys(
+                prepared.identity, day_scoped_ids=True
+            )
+            fact = replace(
+                projection.fact,
+                binding_keys=tuple(sorted(binding_keys)),
+                identity_keys=tuple(sorted(binding_keys)),
+            )
+            return fact, projection
+        if record.kind in {"action_response", "action_error"}:
+            if type(record.error_code) is not int or record.error_code <= 0:
+                raise CtpGatewayReturnIngestionError("UNSUPPORTED_RETURN")
+            from bt_api_ctp.gateway_cancel_return_projection import (
+                gateway_cancel_error_key,
+                project_gateway_cancel_error,
+            )
+            from bt_api_gateway.direct_cancel_journal import GatewayDirectCancelJournal
+
+            cancel_key = gateway_cancel_error_key(
+                record, expected_broker=self._broker_id, expected_investor=self._investor_id
+            )
+            attempt = GatewayDirectCancelJournal(self._ledger.journal).find_by_request_key(
+                cancel_key
+            )
+            if attempt is None or attempt.prepared_cancel is None:
+                raise ValueError
+            if attempt.prepared_cancel.source_binding is None:
+                raise CtpGatewayReturnIngestionError("UNSUPPORTED_RETURN")
+            # The Gateway's own cancel; never skipped without a key.
+            instrument = self._instrument(record.row)
+            if instrument is None:
+                raise ValueError
+            projection = project_gateway_cancel_error(
+                record,
+                attempt.prepared_cancel,
+                account_scope=self._account_scope,
+                expected_broker=self._broker_id,
+                expected_investor=self._investor_id,
+                instrument=instrument,
+            )
+            if projection.cancel_key != cancel_key:
+                raise ValueError
+            binding_keys = project_direct_strong_identity_keys(
+                attempt.prepared_cancel.target_identity, day_scoped_ids=True
+            )
+            fact = replace(
+                projection.fact,
+                binding_keys=tuple(sorted(binding_keys)),
+                identity_keys=tuple(sorted(binding_keys)),
+            )
+            return fact, projection
+        if record.kind not in {"order", "trade"}:
+            raise CtpGatewayReturnIngestionError("UNSUPPORTED_RETURN")
+        day = record.row["TradingDay"]
+        if (
+            type(day) is not str
+            or len(day) != 8
+            or not day.isascii()
+            or not day.isdigit()
+            or datetime.strptime(day, "%Y%m%d").strftime("%Y%m%d") != day
+            or day > record.reception_trading_day
+        ):
+            raise ValueError
+        return (self._project(record.kind, record.row, source_ref=record.source_ref,
+            trading_day=day, connection_generation=record.connection_generation), None)
+
+
     def ingest_callbacks(self, batch, *, assert_current):
         """Project the complete offered prefix before writing; caller owns ACK."""
         self._check_owner()
-        try:
-            records = batch.records
-            facts = []
-            for record in records:
-                try:
-                    assert_current(record)
-                except Exception:
-                    raise CtpGatewayReturnIngestionError("SOURCE_STALE") from None
-                if record.kind in {"insert_response", "insert_error"}:
-                    if type(record.error_code) is not int or record.error_code <= 0:
-                        raise CtpGatewayReturnIngestionError("UNSUPPORTED_RETURN")
-                    from bt_api_ctp.gateway_place_return_projection import (
-                        gateway_place_error_key,
-                        project_gateway_place_error,
-                    )
-
-                    place_key = gateway_place_error_key(
-                        record, expected_broker=self._broker_id, expected_investor=self._investor_id
-                    )
-                    journal = self._ledger.journal
-                    command = journal.find_place_by_request_key(place_key)
-                    if command is None:
-                        raise ValueError
-                    prepared = journal.get_prepared_place(command.reservation_id)
-                    if prepared is None:
-                        raise CtpGatewayReturnIngestionError("UNSUPPORTED_RETURN")
-                    # The Gateway's own order; never skipped without a key.
-                    instrument = self._instrument(record.row)
-                    if instrument is None:
-                        raise ValueError
-                    projection = project_gateway_place_error(
-                        record,
-                        prepared,
-                        account_scope=self._account_scope,
-                        expected_broker=self._broker_id,
-                        expected_investor=self._investor_id,
-                        instrument=instrument,
-                    )
-                    if projection.place_key != place_key:
-                        raise ValueError
-                    binding_keys = project_direct_strong_identity_keys(
-                        prepared.identity, day_scoped_ids=True
-                    )
-                    fact = replace(
-                        projection.fact,
-                        binding_keys=tuple(sorted(binding_keys)),
-                        identity_keys=tuple(sorted(binding_keys)),
-                    )
-                    facts.append((fact, projection))
-                    continue
-                if record.kind in {"action_response", "action_error"}:
-                    if type(record.error_code) is not int or record.error_code <= 0:
-                        raise CtpGatewayReturnIngestionError("UNSUPPORTED_RETURN")
-                    from bt_api_ctp.gateway_cancel_return_projection import (
-                        gateway_cancel_error_key,
-                        project_gateway_cancel_error,
-                    )
-                    from bt_api_gateway.direct_cancel_journal import GatewayDirectCancelJournal
-
-                    cancel_key = gateway_cancel_error_key(
-                        record, expected_broker=self._broker_id, expected_investor=self._investor_id
-                    )
-                    attempt = GatewayDirectCancelJournal(self._ledger.journal).find_by_request_key(
-                        cancel_key
-                    )
-                    if attempt is None or attempt.prepared_cancel is None:
-                        raise ValueError
-                    if attempt.prepared_cancel.source_binding is None:
-                        raise CtpGatewayReturnIngestionError("UNSUPPORTED_RETURN")
-                    # The Gateway's own cancel; never skipped without a key.
-                    instrument = self._instrument(record.row)
-                    if instrument is None:
-                        raise ValueError
-                    projection = project_gateway_cancel_error(
-                        record,
-                        attempt.prepared_cancel,
-                        account_scope=self._account_scope,
-                        expected_broker=self._broker_id,
-                        expected_investor=self._investor_id,
-                        instrument=instrument,
-                    )
-                    if projection.cancel_key != cancel_key:
-                        raise ValueError
-                    binding_keys = project_direct_strong_identity_keys(
-                        attempt.prepared_cancel.target_identity, day_scoped_ids=True
-                    )
-                    fact = replace(
-                        projection.fact,
-                        binding_keys=tuple(sorted(binding_keys)),
-                        identity_keys=tuple(sorted(binding_keys)),
-                    )
-                    facts.append((fact, projection))
-                    continue
-                if record.kind not in {"order", "trade"}:
-                    raise CtpGatewayReturnIngestionError("UNSUPPORTED_RETURN")
-                day = record.row["TradingDay"]
-                if (
-                    type(day) is not str
-                    or len(day) != 8
-                    or not day.isascii()
-                    or not day.isdigit()
-                    or datetime.strptime(day, "%Y%m%d").strftime("%Y%m%d") != day
-                    or day > record.reception_trading_day
-                ):
-                    raise ValueError
-                facts.append(
-                    (
-                        self._project(
-                            record.kind,
-                            record.row,
-                            source_ref=record.source_ref,
-                            trading_day=day,
-                            connection_generation=record.connection_generation,
-                        ),
-                        None,
-                    )
-                )
-        except CtpGatewayReturnIngestionError:
-            raise
-        except Exception:
-            raise CtpGatewayReturnIngestionError("PROJECTION_FAILED") from None
-        completed = 0
-        for record, (fact, error_projection) in zip(records, facts, strict=True):
+        records = batch.records
+        facts = []
+        for record in records:
             try:
                 assert_current(record)
             except Exception:
+                if self._observed_order_source is not None:
+                    self._observed_order_source.note_validation_failure(record)
+                raise CtpGatewayReturnIngestionError("SOURCE_STALE") from None
+            try:
+                source_digest = (None if self._observed_order_source is None else
+                                 self._observed_order_source.record_digest(record))
+            except Exception:
+                raise CtpGatewayReturnIngestionError("PROJECTION_FAILED") from None
+            try:
+                fact, projection = self._project_callback(record)
+                facts.append((fact, projection, source_digest))
+            except Exception as error:
+                if self._observed_order_source is None:
+                    if isinstance(error, CtpGatewayReturnIngestionError):
+                        raise
+                    raise CtpGatewayReturnIngestionError("PROJECTION_FAILED") from None
+                # Record a finite gap for this exact verified source row. The
+                # ticket is not ACKed if the gap write fails.
+                facts.append((None, None, source_digest))
+        completed = 0
+        for record, (fact, error_projection, source_digest) in zip(records, facts, strict=True):
+            try:
+                assert_current(record)
+            except Exception:
+                if self._observed_order_source is not None:
+                    self._observed_order_source.note_validation_failure(record)
                 raise CtpGatewayReturnIngestionError(
                     "SOURCE_STALE", completed_count=completed
                 ) from None
             if fact is None:
-                # No instrument key exists for its contract; counted in _project.
+                if self._observed_order_source is not None:
+                    try:
+                        self._observed_order_source.record(record, source_record_digest=source_digest)
+                        assert_current(record)
+                    except Exception as error:
+                        self._observed_order_source.note_validation_failure(record)
+                        if type(error) is ValueError and error.args == ('OBSERVED_ORDER_RECORD_CHANGED',):
+                            self._observed_order_source._invalidate_safely()
+                        raise CtpGatewayReturnIngestionError(
+                            "INGEST_FAILED", completed_count=completed, in_flight_may_have_committed=True
+                        ) from None
+                    # A durable gap is not a successfully handled ticket.
+                    raise CtpGatewayReturnIngestionError("PROJECTION_FAILED", completed_count=completed)
+                # The legacy path retains its existing skip behavior.
                 completed += 1
                 continue
             ledger_returned = False
@@ -498,8 +524,16 @@ class CtpGatewayReturnIngestor:
                             source_binding=error_projection.source_binding,
                             before_commit=before_commit,
                         )
+                if self._observed_order_source is not None:
+                    assert_current(record)
+                    self._observed_order_source.record(record, source_record_digest=source_digest, fact=fact)
+                    assert_current(record)
+                    if self._observed_order_source.blocked:
+                        raise CtpGatewayReturnIngestionError("SOURCE_STALE")
                 completed += 1
             except _CallbackSourceStaleError:
+                if self._observed_order_source is not None:
+                    self._observed_order_source.note_validation_failure(record)
                 # Raised inside the ledger's pre-commit recheck the transaction
                 # rolled back; raised by the optional external recorder after
                 # the ledger returned, this fact is already committed.
@@ -507,7 +541,11 @@ class CtpGatewayReturnIngestor:
                     "SOURCE_STALE", completed_count=completed,
                     in_flight_may_have_committed=ledger_returned,
                 ) from None
-            except Exception:
+            except Exception as error:
+                if self._observed_order_source is not None:
+                    self._observed_order_source.note_validation_failure(record)
+                    if type(error) is ValueError and error.args == ('OBSERVED_ORDER_RECORD_CHANGED',):
+                        self._observed_order_source._invalidate_safely()
                 raise CtpGatewayReturnIngestionError(
                     "INGEST_FAILED", completed_count=completed, in_flight_may_have_committed=True
                 ) from None
@@ -515,6 +553,8 @@ class CtpGatewayReturnIngestor:
             try:
                 assert_current(record)
             except Exception:
+                if self._observed_order_source is not None:
+                    self._observed_order_source.note_validation_failure(record)
                 raise CtpGatewayReturnIngestionError(
                     "SOURCE_STALE", completed_count=completed
                 ) from None
@@ -549,7 +589,12 @@ class CtpGatewayReturnIngestor:
                 for row in batch.rows
             ]
         except Exception:
+            if self._observed_order_source is not None:
+                self._observed_order_source.invalidate()
             raise CtpGatewayReturnIngestionError("PROJECTION_FAILED") from None
+        if self._observed_order_source is not None and any(fact is None for fact in projected):
+            self._observed_order_source.invalidate()
+            raise CtpGatewayReturnIngestionError("PROJECTION_FAILED")
         facts = [fact for fact in projected if fact is not None]
         self._assert_current(batch)
         completed = 0

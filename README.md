@@ -1453,3 +1453,20 @@ the reservation, authorize dispatch or establish continuously valid authority
 throughout a network call. This bridge is not yet installed in the Risk engine
 or service host. Production source verification and Gateway write gates remain
 closed; existing v3 ledgers have no automatic migration to the v4 attempt schema.
+
+### Optional CTP observed order tracking
+
+`CtpGatewayReturnMaintenance(..., observed_order_source=True)` explicitly records
+validated native callback receipts in the original Gateway journal before
+acknowledgement. Duplicate records retain separate sequence receipts; failed
+projections persist a gap, retain the original ticket and close existing
+reservation admission. A source begin with an uncertain outcome retains its
+original binding and retries invalidation during cleanup. Only a conflict in
+the independently verified original record invalidates that source; conflicting
+fact arguments do not establish source drift.
+
+This option remains absent from the production profile. Its local contiguous
+prefix is not account-wide coverage, and query-cut scheduling is not yet wired.
+The return buffer acknowledgement and concurrent callback arrival are separate
+operations; acknowledging a processed prefix does not prove the absence of a
+later source gap. Risk R05 and trading gates remain closed.

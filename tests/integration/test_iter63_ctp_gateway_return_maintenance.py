@@ -359,7 +359,7 @@ def test_closing_owner_has_no_ledger_continuity(real_owner):
 
 
 @pytest.mark.timeout(30)
-def test_close_is_reserved_under_the_real_reservation_fence_without_blocking(real_owner):
+def test_close_is_reserved_under_the_real_reservation_fence_without_blocking(real_owner, monkeypatch):
     """SimNow 2026-11-10 21:01: the first close reservation froze the Gateway.
 
     The ledger's continuity port asked ``ledger_continuous`` while the same
@@ -375,6 +375,9 @@ def test_close_is_reserved_under_the_real_reservation_fence_without_blocking(rea
 
     from bt_api_py.ctp_gateway_strategy_ledger import CtpGatewayStrategyLedger
 
+    # The cut is an explicit synthetic test premise for this lock regression;
+    # the production source gate remains closed until its proof is available.
+    monkeypatch.setattr(CtpGatewayStrategyLedger, "_source_cut_verified", staticmethod(lambda: True))
     m, session, native, journal, instrument, helper = real_owner
     guard = m._ledger._guard
     journal.enable_controls(guard)
