@@ -510,6 +510,36 @@ def _r04_selection(value: object) -> RiskR04Selection | None:
 
 
 @dataclass(frozen=True)
+class RiskPretradeUpgrade:
+    """Operator-supplied historical file identities for one migration attempt."""
+
+    expected_database_identity: tuple[int, int]
+    expected_lock_identity: tuple[int, int]
+    maintenance_window: bool
+
+
+def _pretrade_config(raw: object) -> tuple[int, RiskPretradeUpgrade | None]:
+    item = _mapping(raw, required=("schema_version",), optional=("upgrade_from_v3",))
+    version = item["schema_version"]
+    if type(version) is not int or version not in (3, 4):
+        _fail("RISK_SERVICE_CONFIG_PRETRADE_INVALID")
+    if "upgrade_from_v3" not in item:
+        return version, None
+    upgrade = _mapping(item["upgrade_from_v3"], required=("expected_database_identity",
+        "expected_lock_identity", "maintenance_window"))
+    def identity(value):
+        if (type(value) is not list or len(value) != 2
+                or any(type(part) is not int or part < 0 for part in value) or value[1] == 0):
+            _fail("RISK_SERVICE_CONFIG_PRETRADE_INVALID")
+        return tuple(value)
+    db = identity(upgrade["expected_database_identity"])
+    lock = identity(upgrade["expected_lock_identity"])
+    if version != 4 or upgrade["maintenance_window"] is not True or db == lock:
+        _fail("RISK_SERVICE_CONFIG_PRETRADE_INVALID")
+    return version, RiskPretradeUpgrade(db, lock, True)
+
+
+@dataclass(frozen=True)
 class RiskServiceConfig:
     path: Path
     service_id: str
@@ -546,6 +576,8 @@ class RiskServiceConfig:
     strategy_financial_max_age_seconds: float | None = None
     r04_selection: RiskR04Selection | None = None
     strict_admin_cancel: bool = False
+    pretrade_schema_version: int = 3
+    pretrade_upgrade_from_v3: RiskPretradeUpgrade | None = None
 
     def __repr__(self) -> str:
         return f"RiskServiceConfig(service_id={self.service_id!r})"
@@ -864,10 +896,12 @@ def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceCon
             "deadlines",
             "refresh",
         ),
-        optional=("rules",),
+        optional=("rules", "pretrade"),
     )
     if top["schema"] != RISK_SERVICE_CONFIG_SCHEMA:
         _fail("RISK_SERVICE_CONFIG_SCHEMA_UNSUPPORTED")
+    pretrade_version, pretrade_upgrade = ((3, None) if "pretrade" not in top
+                                         else _pretrade_config(top["pretrade"]))
     service = _mapping(
         top["service"],
         required=(
@@ -1015,6 +1049,8 @@ def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceCon
         else _nanosecond_seconds(financial_age, maximum=Decimal(86400)),
         r04_selection=r04_selection,
         strict_admin_cancel=strict_admin_cancel,
+        pretrade_schema_version=pretrade_version,
+        pretrade_upgrade_from_v3=pretrade_upgrade,
     )
 
 
@@ -1042,6 +1078,7 @@ __all__ = [
     "RiskInstrumentBinding",
     "RiskMarketConfig",
     "RiskPrincipal",
+    "RiskPretradeUpgrade",
     "RiskR04Selection",
     "RiskServiceConfig",
     "RiskServiceConfigError",

@@ -1470,3 +1470,19 @@ prefix is not account-wide coverage, and query-cut scheduling is not yet wired.
 The return buffer acknowledgement and concurrent callback arrival are separate
 operations; acknowledging a processed prefix does not prove the absence of a
 later source gap. Risk R05 and trading gates remain closed.
+
+The Risk service may explicitly select `pretrade.schema_version: 4`. An existing
+v4 journal requires no upgrade setting. A one-time `upgrade_from_v3` additionally
+requires the previously saved database and lock device/inode pairs and
+`maintenance_window: true`. The Host verifies existing files before entry,
+uses its original inner fence manager for migration, and opens v4 before any
+Gateway client or listener starts. Remove `upgrade_from_v3` from the resume
+configuration after confirmed success; it is never an automatic startup retry.
+The status command refuses configurations that request an upgrade.
+
+An uncertain migration retains the original acquiring stack, manager and fence
+through the existing cleanup wait path. These checks assume a trusted maintenance
+window; the underlying fence constructor can still create files if an external
+actor deletes them after the pre-entry check. This composition does not claim
+to prevent malicious replacement or create permission to release an uncertain
+owner. Default v3 configuration and all source/write gates remain unchanged.

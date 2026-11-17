@@ -33,12 +33,13 @@ import math
 import os
 import signal
 import sqlite3
+import stat
 import sys
 import threading
 import time
 import weakref
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, closing, contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -52,6 +53,7 @@ from bt_api_base.risk_service_protocol import (
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 
 from bt_api_py.risk_service_config import (
+    RiskPretradeUpgrade,
     RiskR04Selection,
     RiskServiceConfig,
     RiskServiceConfigError,
@@ -187,6 +189,57 @@ def _fence_entry_result_code(result: Any) -> str | None:
 
 def _fail(code: str) -> None:
     raise RiskServiceStartError(code)
+
+
+def _pretrade_selection(config: RiskServiceConfig) -> tuple[int, RiskPretradeUpgrade | None]:
+    version = getattr(config, 'pretrade_schema_version', 3)
+    upgrade = getattr(config, 'pretrade_upgrade_from_v3', None)
+    if type(version) is not int or version not in (3, 4):
+        _fail('RISK_SERVICE_CONFIG_PRETRADE_INVALID')
+    if upgrade is not None:
+        def valid(value):
+            return (type(value) is tuple and len(value) == 2
+                    and all(type(part) is int and part >= 0 for part in value) and value[1] > 0)
+        if (type(upgrade) is not RiskPretradeUpgrade or version != 4
+                or upgrade.maintenance_window is not True
+                or not valid(upgrade.expected_database_identity) or not valid(upgrade.expected_lock_identity)
+                or upgrade.expected_database_identity == upgrade.expected_lock_identity):
+            _fail('RISK_SERVICE_CONFIG_PRETRADE_INVALID')
+    return version, upgrade
+
+
+def _pretrade_existing(config: RiskServiceConfig, scope: Any, *, version: int,
+                       expected: tuple[tuple[int, int], tuple[int, int]] | None = None):
+    """Observe pre-existing v3/v4 storage without creating files or granting authority."""
+    from bt_api_risk.pretrade.ledger import PretradeLedger, _source_unverified
+    try:
+        if not hasattr(os, 'geteuid'):
+            raise ValueError
+        path = config.risk_database
+        digest = hashlib.sha256(scope.key.encode('utf-8')).hexdigest()
+        lock_path = path.with_name(path.name + '.' + digest + '.writer.lock')
+        def observe():
+            result = []
+            for value in (path, lock_path):
+                info = os.stat(value, follow_symlinks=False)
+                if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+                        or info.st_uid != os.geteuid()):
+                    raise ValueError
+                result.append((info.st_dev, info.st_ino))
+            return tuple(result)
+        identities = observe()
+        if identities[0] == identities[1] or (expected is not None and identities != expected):
+            raise ValueError
+        # The URI explicitly prevents sqlite from creating a missing database.
+        with closing(sqlite3.connect(path.absolute().as_uri() + '?mode=ro', uri=True)) as connection:
+            PretradeLedger._check_schema(connection, version=version)
+            if _source_unverified(connection) is not True:
+                raise ValueError
+        if observe() != identities:
+            raise ValueError
+        return identities
+    except Exception:
+        raise RiskServiceStartError('RISK_SERVICE_STORAGE_SCHEMA_INVALID') from None
 
 
 def _require_supported_r04(config: RiskServiceConfig) -> None:
@@ -1057,6 +1110,7 @@ class RiskServiceHost:
             raise TypeError("RISK_SERVICE_CONFIG_REQUIRED")
         if type(config.strict_admin_cancel) is not bool:
             raise RiskServiceStartError("RISK_SERVICE_CONFIG_STRICT_ADMIN_CANCEL_INVALID")
+        _pretrade_selection(config)
         _require_supported_r04(config)
         self.config = config
         self._creator_pid = os.getpid()
@@ -1312,9 +1366,18 @@ class RiskServiceHost:
         if self._storage_cleanup_uncertain:
             _fail("RISK_SERVICE_STORAGE_CLEANUP_UNCERTAIN")
         config = self.config
+        pretrade_version, pretrade_upgrade = _pretrade_selection(config)
+        existing_identities = None
+        if pretrade_version == 4:
+            scope = AccountScope(config.provider, config.account_scope, config.environment)
+            expected = None if pretrade_upgrade is None else (
+                pretrade_upgrade.expected_database_identity, pretrade_upgrade.expected_lock_identity)
+            existing_identities = _pretrade_existing(config, scope, version=3 if pretrade_upgrade else 4,
+                                                     expected=expected)
         ensure_private_directory(config.storage_directory)
         self._check_storage_acquisition_ready()
-        scope = AccountScope(config.provider, config.account_scope, config.environment)
+        if pretrade_version == 3:
+            scope = AccountScope(config.provider, config.account_scope, config.environment)
         self._check_storage_acquisition_ready()
         # Hold the same account lock across schema initialization and ownership;
         # ordinary setup failures release it, but an uncertain commit retains it.
@@ -1409,15 +1472,32 @@ class RiskServiceHost:
                     raise _FencedJournalEntryError(code, error.original, error.manager) from None
                 raise
             self._check_storage_acquisition_ready()
+            if pretrade_version == 4:
+                _pretrade_existing(config, scope, version=3 if pretrade_upgrade else 4,
+                                   expected=existing_identities)
             restrict_file(config.risk_database)
             self._check_storage_acquisition_ready()
             self._storage_owner = threading.current_thread()
             self._storage_init_in_flight = True
             _STORAGE_INIT_ROOTS[id(self)] = (self, acquiring, manager, result, journal, fence)
             try:
-                self.ledger = PretradeLedger(journal, fence)
+                if pretrade_upgrade is not None:
+                    from bt_api_risk.pretrade.ledger import migrate_v3_to_v4
+                    if (type(manager) is not _FencedJournalManager or type(manager._binding) is not tuple
+                            or len(manager._binding) != 3 or manager._binding[0] is not manager._inner_manager
+                            or manager._binding[1] is not journal or manager._binding[2] is not fence):
+                        _fail('RISK_SERVICE_STORAGE_INIT_COMMIT_UNCERTAIN')
+                    migrate_v3_to_v4(journal, fence, fence_manager=manager._inner_manager,
+                        expected_database_identity=pretrade_upgrade.expected_database_identity,
+                        expected_lock_identity=pretrade_upgrade.expected_lock_identity,
+                        maintenance_window=pretrade_upgrade.maintenance_window)
+                    _pretrade_existing(config, scope, version=4, expected=existing_identities)
+                if pretrade_version == 4:
+                    self.ledger = PretradeLedger(journal, fence, schema_version=4)
+                else:
+                    self.ledger = PretradeLedger(journal, fence)
             except RiskOrderJournalError as error:
-                if error.code == "PRETRADE_INIT_COMMIT_UNCERTAIN":
+                if error.code in ("PRETRADE_INIT_COMMIT_UNCERTAIN", "PRETRADE_MIGRATION_COMMIT_UNCERTAIN"):
                     # Preserve the original acquiring stack itself. Moving its
                     # callbacks with pop_all() introduces an unrooted handoff.
                     self._uncertain_storage = (journal, fence)
@@ -1428,7 +1508,20 @@ class RiskServiceHost:
                     _fail("RISK_SERVICE_STORAGE_INIT_COMMIT_UNCERTAIN")
                 self._storage_init_in_flight = False
                 _fail("RISK_SERVICE_STORAGE_SCHEMA_INVALID")
+            except RiskServiceStartError:
+                if pretrade_upgrade is not None:
+                    self._storage_init_uncertain = True
+                    self._uncertain_storage = (journal, fence)
+                    self._record_cleanup_uncertain((acquiring, manager, journal, fence), "STORAGE_INIT_UNKNOWN")
+                    _fail("RISK_SERVICE_STORAGE_INIT_COMMIT_UNCERTAIN")
+                self._storage_init_in_flight = False
+                raise
             except Exception:
+                if pretrade_upgrade is not None:
+                    self._storage_init_uncertain = True
+                    self._uncertain_storage = (journal, fence)
+                    self._record_cleanup_uncertain((acquiring, manager, journal, fence), "STORAGE_INIT_UNKNOWN")
+                    _fail("RISK_SERVICE_STORAGE_INIT_COMMIT_UNCERTAIN")
                 # PretradeLedger.__init__ is a proof-producing constructor. It
                 # wraps every unproven COMMIT/ROLLBACK/connection-close outcome
                 # as RiskOrderJournalError("PRETRADE_INIT_COMMIT_UNCERTAIN") and
@@ -2649,6 +2742,8 @@ def _command_status(args: argparse.Namespace) -> int:
         return 2
     try:
         _require_supported_r04(config)
+        if _pretrade_selection(config)[1] is not None:
+            _fail('RISK_SERVICE_MIGRATION_RUN_REQUIRED')
     except RiskServiceStartError as error:
         _print({"code": error.code})
         return 2
