@@ -13,7 +13,7 @@ from bt_api_base.service_protocol import WireIdentity, WireRole
 ACTIONS = frozenset({
     'accept', 'register', 'owner_dispatch', 'child', 'rollover',
     'dispatch_child', 'cancel', 'query', 'reconcile', 'release_proof', 'release_child',
-    'child_observation',
+    'child_observation', 'reserve_parent',
 })
 
 

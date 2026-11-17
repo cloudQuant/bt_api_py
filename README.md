@@ -1505,3 +1505,13 @@ reduced the maximum step from about 5.17s to 0.36s but increased their cumulativ
 time to about 15.10s. Maximum-size workloads and slow storage are not accepted.
 Native submission and SQLite I/O can block. No production profile, remote cut
 manifest or Risk coverage consumer is wired by this local coordinator.
+
+
+The Execution action vocabulary now includes a separately granted
+`reserve_parent` action for explicit local preparation against the original
+account journal. The formal parent service still accepts only its existing
+actions and does not enable this operation. Local preparation persists one
+UNKNOWN attempt before issuing a one-use capability and rechecks journal,
+Registry, lease and parent deadlines on consumption. It has no Risk RPC or
+dispatch path; canonical returned facts are a historical local observation,
+not continuous cross-service authorization.
