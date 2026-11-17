@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ipaddress
 import os
+import re
 import stat
 from dataclasses import dataclass
 from pathlib import Path
@@ -175,6 +176,16 @@ class MonitorProducerBinding:
 
 
 @dataclass(frozen=True)
+class RecoveryAlertRuleConfig:
+    rule_id: str
+    rule_version: int
+    threshold_ns: int
+    max_candidates: int
+    severity: str
+    notify: bool
+
+
+@dataclass(frozen=True)
 class RecoveryDurationConfig:
     consumer_id: str
     binding_ref: str
@@ -182,6 +193,7 @@ class RecoveryDurationConfig:
     scope_ref: str
     config_version: str
     member_key: MarketSubscriptionKey
+    alert_rule: RecoveryAlertRuleConfig | None = None
 
 
 @dataclass(frozen=True)
@@ -319,6 +331,24 @@ def _producer_bindings(value, ingress, domain, account, outbox_scope, allowed_ty
     return tuple(bindings)
 
 
+def _recovery_alert_rule(value):
+    item = _map(value, {
+        "rule_id", "rule_version", "threshold_ns", "max_candidates", "severity", "notify"
+    })
+    rule_id, version, threshold, capacity, severity, notify = (
+        item["rule_id"], item["rule_version"], item["threshold_ns"],
+        item["max_candidates"], item["severity"], item["notify"],
+    )
+    if (type(rule_id) is not str or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", rule_id) is None
+            or type(version) is not int or not 1 <= version <= 2_147_483_647
+            or type(threshold) is not int or not 1 <= threshold <= (1 << 63) - 1
+            or type(capacity) is not int or not 2 <= capacity <= 1_000_000
+            or type(severity) is not str or severity not in {"info", "warning", "critical"}
+            or notify is not False):
+        raise MonitorServiceConfigError()
+    return RecoveryAlertRuleConfig(rule_id, version, threshold, capacity, severity, notify)
+
+
 def _recovery_duration(value, bindings, outbox_scope):
     event_type = "gateway.recovery.journal.v1"
     producers = tuple(
@@ -330,9 +360,12 @@ def _recovery_duration(value, bindings, outbox_scope):
     result = []
     consumers, members = set(), set()
     for raw in value:
-        item = _map(raw, {
+        keys = {
             "consumer_id", "binding_ref", "source_ref", "scope_ref", "config_version", "member_key"
-        })
+        }
+        if type(raw) is dict and "alert_rule" in raw:
+            keys.add("alert_rule")
+        item = _map(raw, keys)
         texts = tuple(_text(item[key]) for key in (
             "consumer_id", "binding_ref", "source_ref", "scope_ref", "config_version"
         ))
@@ -351,7 +384,8 @@ def _recovery_duration(value, bindings, outbox_scope):
         consumers.add(consumer)
         members.add(member_binding)
         result.append(RecoveryDurationConfig(
-            consumer, binding_ref, source_ref, scope_ref, config_version, member
+            consumer, binding_ref, source_ref, scope_ref, config_version, member,
+            _recovery_alert_rule(item["alert_rule"]) if "alert_rule" in item else None,
         ))
     return tuple(result)
 

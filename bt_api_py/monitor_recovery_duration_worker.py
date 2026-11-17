@@ -1,4 +1,4 @@
-"""Owned, local-only recovery consumers; no fact collection or alert delivery."""
+"""Owned, local-only recovery consumers and alert recording; no network delivery."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ class RecoveryDurationWorker:
         self._ready = threading.Event()
         self._lock = threading.Lock()
         self._failed = False
+        self._failure_code = None
         self._views = {}
         self._thread = threading.Thread(target=self._run, name="monitor-recovery-duration", daemon=False)
 
@@ -32,6 +33,11 @@ class RecoveryDurationWorker:
                 RecoveryDurationConsumer,
             )
 
+            delivery = None
+            if any(config.alert_rule is not None for config in self._configs):
+                from bt_api_monitor.alert_delivery import AlertDeliveryService
+
+                delivery = AlertDeliveryService(self._outbox, sinks=())
             consumers = []
             for config in self._configs:
                 if self._stop.is_set():
@@ -46,31 +52,56 @@ class RecoveryDurationWorker:
                     config.consumer_id, matches[0], config.scope_ref, config.config_version,
                     config.member_key,
                 )
-                consumer = RecoveryDurationConsumer(
-                    self._outbox, binding, scope_bindings=self._producer_bindings
-                )
+                rule = None
+                if config.alert_rule is not None:
+                    from bt_api_monitor.recovery_duration_alerts import RecoveryDurationAlertRule
+
+                    configured = config.alert_rule
+                    if configured.notify is not False:
+                        raise ValueError("MONITOR_RECOVERY_ALERT_NOTIFY_INVALID")
+                    rule = RecoveryDurationAlertRule(
+                        configured.rule_id, configured.rule_version, configured.threshold_ns,
+                        configured.max_candidates, configured.severity, configured.notify,
+                    )
+                options = {"scope_bindings": self._producer_bindings}
+                if rule is not None:
+                    options["alert_rule"] = rule
+                consumer = RecoveryDurationConsumer(self._outbox, binding, **options)
+                reconciler = None
+                if rule is not None:
+                    from bt_api_monitor.recovery_duration_alerts import (
+                        RecoveryDurationAlertReconciler,
+                    )
+
+                    reconciler = RecoveryDurationAlertReconciler(consumer, delivery)
                 if self._stop.is_set():
                     return
                 snapshot = consumer.snapshot()
                 pending = snapshot["pending_reason"] is not None
-                consumers.append((config.consumer_id, consumer, pending))
+                consumers.append((config.consumer_id, consumer, pending, reconciler))
                 self._store(config.consumer_id, snapshot, pending)
             self._ready.set()
             while not self._stop.is_set():
-                for index, (consumer_id, consumer, pending) in enumerate(consumers):
+                for index, (consumer_id, consumer, pending, reconciler) in enumerate(consumers):
                     if self._stop.is_set():
                         break
-                    if pending:
-                        continue
-                    consumer.process_next(facts=())
-                    snapshot = consumer.snapshot()
-                    pending = snapshot["pending_reason"] is not None
-                    consumers[index] = (consumer_id, consumer, pending)
-                    self._store(consumer_id, snapshot, pending)
+                    if not pending:
+                        consumer.process_next(facts=())
+                        snapshot = consumer.snapshot()
+                        pending = snapshot["pending_reason"] is not None
+                        consumers[index] = (consumer_id, consumer, pending, reconciler)
+                        self._store(consumer_id, snapshot, pending)
+                    if reconciler is not None:
+                        reconciler.reconcile(limit=1)
                 self._stop.wait(0.05)
-        except BaseException:
+        except BaseException as error:
             with self._lock:
                 self._failed = True
+                self._failure_code = (
+                    "MONITOR_RECOVERY_ALERT_CAPACITY_EXHAUSTED"
+                    if getattr(error, "code", None) == "RECOVERY_ALERT_CAPACITY_EXHAUSTED"
+                    else "MONITOR_RECOVERY_FAILED"
+                )
             self._ready.set()
 
     def _store(self, consumer_id, snapshot, pending):
@@ -92,6 +123,11 @@ class RecoveryDurationWorker:
     def failed(self):
         with self._lock:
             return self._failed
+
+    @property
+    def failure_code(self):
+        with self._lock:
+            return self._failure_code
 
     def snapshot(self, consumer_id):
         with self._lock:

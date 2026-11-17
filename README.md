@@ -1401,7 +1401,13 @@ Host uses its original durable outbox and complete ingress binding list, with
 one independent consumer/checkpoint per configured member. An owned background
 thread performs bounded steps. Missing mapping/calendar facts remain durable
 pending and pause that consumer; this composition currently supplies no remote
-facts and sends no alerts. Cached snapshots are explicitly historical only,
+facts. An optional `alert_rule` declares `rule_id`, `rule_version`,
+`threshold_ns`, `max_candidates`, `severity` and `notify: false`. Its owned
+worker reconciles committed candidates into the original local alert outbox,
+including while that member is pending. No network notification is configured.
+Candidate capacity exhaustion fails the worker closed with a distinct finite
+status; existing candidates and resources remain available for inspection.
+Without a rule, this composition creates no alert tables. Cached snapshots are explicitly historical only,
 with current state UNKNOWN. Unconfirmed worker shutdown retains the original
 worker, listeners and resources for explicit retry.
 

@@ -317,7 +317,7 @@ class MonitorServiceHost:
         if self.state != "ready":
             raise MonitorServiceError("MONITOR_STATE_INVALID")
         if self._recovery_worker is not None and self._recovery_worker.failed:
-            raise MonitorServiceError("MONITOR_RECOVERY_FAILED")
+            raise MonitorServiceError(self._recovery_worker.failure_code or "MONITOR_RECOVERY_FAILED")
         for host in self._hosts:
             host.serve_once(timeout_ms=timeout_ms)
 
