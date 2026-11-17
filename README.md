@@ -1466,7 +1466,7 @@ the independently verified original record invalidates that source; conflicting
 fact arguments do not establish source drift.
 
 This option remains absent from the production profile. Its local contiguous
-prefix is not account-wide coverage, and query-cut scheduling is not yet wired.
+prefix is not account-wide coverage.
 The return buffer acknowledgement and concurrent callback arrival are separate
 operations; acknowledging a processed prefix does not prove the absence of a
 later source gap. Risk R05 and trading gates remain closed.
@@ -1486,3 +1486,22 @@ window; the underlying fence constructor can still create files if an external
 actor deletes them after the pre-entry check. This composition does not claim
 to prevent malicious replacement or create permission to release an uncertain
 owner. Default v3 configuration and all source/write gates remain unchanged.
+
+`CtpGatewayOrderCutCoordinator` explicitly coordinates one original CTP query
+with that same maintenance owner, tracker and journal. It projects the original
+query rows and verifies at most one pinned callback receipt per advance before
+persisting a candidate. Query absence does not delete observed orders. Gaps,
+expired evidence and uncertain post-write validation retain the original pin
+and fail closed. Current candidate reads include subsequently observed account
+history gaps without rewriting the historical cut. Failure invalidation performs
+SQLite I/O only after releasing the native query lock.
+
+Receipt immutability relies on the original guard and immutable-table triggers,
+whose DDL is checked by journal transactions; it does not protect against an
+external actor temporarily replacing and restoring database objects. Each step
+still validates the full native result and window, and the final step compares
+all pinned digests. In synthetic 64-record tests, splitting receipt checks
+reduced the maximum step from about 5.17s to 0.36s but increased their cumulative
+time to about 15.10s. Maximum-size workloads and slow storage are not accepted.
+Native submission and SQLite I/O can block. No production profile, remote cut
+manifest or Risk coverage consumer is wired by this local coordinator.
