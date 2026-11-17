@@ -180,6 +180,9 @@ class GatewayInstrumentProductClient:
             # A new call can observe pending or have an unknown outcome; only
             # a newly confirmed terminal reply permits local retirement.
             self._terminal.discard(operation_id)
+            current, _ = self._current()
+            if current is not b:
+                raise ValueError
             started = time.monotonic()
             response = self._runtime.call(
                 "upstream.instrument_products",
@@ -194,31 +197,37 @@ class GatewayInstrumentProductClient:
                 _expected_peer=self._peer,
                 _expected_fingerprint=self._signature[2][1],
             )
-            self._current()
+            current, _ = self._current()
+            if current is not b:
+                raise ValueError
             value = validate_response(
                 response, expected_operation_id=operation_id, expected_instrument=key
             )
             snap = value["snapshot"]
             if snap is None:
-                if value["status"] in {"failed", "cancelled", "not_found"}:
-                    self._terminal.add(operation_id)
-                return InstrumentProductResult(operation_id, value["status"], value["code"], key)
-            expiry = started + snap["remaining_seconds"]
-            if not math.isfinite(expiry) or time.monotonic() >= expiry:
-                raise InstrumentProductClientError("OBSERVATION_EXPIRED")
-            self._terminal.add(operation_id)
-            return InstrumentProductResult(
-                operation_id,
-                "ready",
-                None,
-                key,
-                snap["product_id"],
-                snap["session_generation"],
-                snap["connection_generation"],
-                snap["trading_day"],
-                snap["completed_at_utc"],
-                expiry,
-            )
+                result = InstrumentProductResult(operation_id, value["status"], value["code"], key)
+            else:
+                expiry = started + snap["remaining_seconds"]
+                if not math.isfinite(expiry) or time.monotonic() >= expiry:
+                    raise InstrumentProductClientError("OBSERVATION_EXPIRED")
+                result = InstrumentProductResult(
+                    operation_id,
+                    "ready",
+                    None,
+                    key,
+                    snap["product_id"],
+                    snap["session_generation"],
+                    snap["connection_generation"],
+                    snap["trading_day"],
+                    snap["completed_at_utc"],
+                    expiry,
+                )
+            current, _ = self._current()
+            if current is not b:
+                raise ValueError
+            if value["status"] in {"ready", "failed", "cancelled", "not_found"}:
+                self._terminal.add(operation_id)
+            return result
         except InstrumentProductClientError:
             raise
         except Exception:

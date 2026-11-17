@@ -12,6 +12,7 @@ import bt_api_py.gateway_instrument_product_client as module
 from bt_api_py.gateway_instrument_product_client import (
     GatewayInstrumentProductClient,
     InstrumentProductClientError,
+    InstrumentProductResult,
 )
 from bt_api_py.gateway_instrument_product_codec import (
     BEGIN,
@@ -133,6 +134,75 @@ def test_authenticated_renewal_and_replacement_or_scope_rejected(monkeypatch):
         client.status(OPID)
     assert runtime.state == "registered"
     client.close()
+
+
+@pytest.mark.parametrize("when", ["before_send", "after_reply", "projection"])
+@pytest.mark.parametrize("status", ["pending", "ready", "failed", "cancelled", "not_found"])
+@pytest.mark.parametrize("operation", ["begin", "status", "cancel"])
+def test_same_call_renewal_refuses_result_and_retains_job(monkeypatch, when, status, operation):
+    client, runtime, _, snapshot, lineage = fake(monkeypatch)
+    assert client.begin(OPID, KEY).status == "pending"
+    original_call = runtime.call
+    original_binding = runtime._bindings[0]
+    original_current = client._current
+    sends = []
+
+    def renew():
+        renewed = replace(original_binding, lease_deadline=275, expires_at=325, renewal_due_at=220)
+        runtime._bindings = [renewed]
+        runtime._registration_lineage[id(renewed)] = (renewed, None, *lineage, object())
+        return renewed
+
+    def reply(*args, **kwargs):
+        sends.append(args[1])
+        response = original_call(*args, **kwargs)
+        response = {
+            "operation_id": OPID,
+            "status": status,
+            "code": "SOURCE_UNAVAILABLE" if status == "failed" else None,
+            "snapshot": snapshot if status == "ready" else None,
+        }
+        if when == "after_reply":
+            renew()
+        return response
+
+    runtime.call = reply
+    if when == "before_send":
+        calls = []
+
+        def current():
+            calls.append(None)
+            if len(calls) == 2:
+                renew()
+            return original_current()
+
+        monkeypatch.setattr(client, "_current", current)
+    elif when == "projection":
+        result_type = module.InstrumentProductResult
+
+        def project(*args, **kwargs):
+            result = result_type(*args, **kwargs)
+            renew()
+            return result
+
+        monkeypatch.setattr(module, "InstrumentProductResult", project)
+
+    with pytest.raises(InstrumentProductClientError, match="PRODUCT_UNAVAILABLE"):
+        if operation == "begin":
+            client.begin(OPID, KEY)
+        else:
+            getattr(client, operation)(OPID)
+    expected_operation = {"begin": module.BEGIN, "status": module.STATUS, "cancel": module.CANCEL}
+    assert sends == ([] if when == "before_send" else [expected_operation[operation]])
+    assert OPID in client._jobs and OPID not in client._terminal
+    monkeypatch.setattr(client, "_current", original_current)
+    runtime.call = original_call
+    with pytest.raises(InstrumentProductClientError, match="OPERATION_NOT_TERMINAL"):
+        client.retire(OPID)
+    # A later call may use the authenticated replacement binding.
+    monkeypatch.setattr(module, "InstrumentProductResult", InstrumentProductResult)
+    assert client.status(OPID).status == "ready"
+    client.retire(OPID)
 
 
 def test_terminal_retirement_bounds_capacity_and_never_drops_pending(monkeypatch):

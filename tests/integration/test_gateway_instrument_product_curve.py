@@ -17,9 +17,13 @@ from bt_api_ctp.ctp.client import CtpNativeStopReceipt, TraderClient
 from bt_api_ctp.feeds.live_ctp_feed import CtpRequestDataFuture
 
 import bt_api_py.ctp_gateway_trading as trading
+import bt_api_py.gateway_instrument_product_client as product_client_module
 from bt_api_py.ctp_gateway_calendar_config import CtpGatewayCalendarSettings
 from bt_api_py.gateway_calendar_service import CalendarMonitorGrant
-from bt_api_py.gateway_instrument_product_client import GatewayInstrumentProductClient
+from bt_api_py.gateway_instrument_product_client import (
+    GatewayInstrumentProductClient,
+    InstrumentProductClientError,
+)
 from bt_api_py.gateway_instrument_product_codec import OPERATIONS
 from bt_api_py.gateway_instrument_product_config import InstrumentProductGrant
 from bt_api_py.service_config import parse_service_config
@@ -274,6 +278,51 @@ def test_product_only_port_uses_original_trading_session(tmp_path, monkeypatch, 
         assert result.status == "ready"
         assert result.product_id == "rb" and result.instrument == KEY
         assert time.monotonic() < result.valid_until_monotonic
+        before_renewal = next(
+            b for b in client.bindings if b.mount == "upstream.instrument_products"
+        )
+        original_call = client.call
+
+        def renew_after_reply(*args, **kwargs):
+            response = original_call(*args, **kwargs)
+            client._maintain(force=True)
+            return response
+
+        client.call = renew_after_reply
+        with pytest.raises(InstrumentProductClientError, match="PRODUCT_UNAVAILABLE"):
+            product.status(opid)
+        renewed = next(b for b in client.bindings if b.mount == "upstream.instrument_products")
+        assert renewed is not before_renewal
+        assert renewed.registration_id == before_renewal.registration_id
+        assert renewed.service_epoch == before_renewal.service_epoch
+        with pytest.raises(InstrumentProductClientError, match="OPERATION_NOT_TERMINAL"):
+            product.retire(opid)
+        client.call = original_call
+        assert product.status(opid).product_id == "rb"
+        before_projection = next(
+            b for b in client.bindings if b.mount == "upstream.instrument_products"
+        )
+        result_type = product_client_module.InstrumentProductResult
+
+        def renew_during_projection(*args, **kwargs):
+            value = result_type(*args, **kwargs)
+            client._maintain(force=True)
+            return value
+
+        with monkeypatch.context() as patches:
+            patches.setattr(product_client_module, "InstrumentProductResult", renew_during_projection)
+            with pytest.raises(InstrumentProductClientError, match="PRODUCT_UNAVAILABLE"):
+                product.status(opid)
+        after_projection = next(
+            b for b in client.bindings if b.mount == "upstream.instrument_products"
+        )
+        assert after_projection is not before_projection
+        assert after_projection.registration_id == before_projection.registration_id
+        assert after_projection.service_epoch == before_projection.service_epoch
+        with pytest.raises(InstrumentProductClientError, match="OPERATION_NOT_TERMINAL"):
+            product.retire(opid)
+        assert product.status(opid).product_id == "rb"
+        product.retire(opid)
         product.close()
         assert client.state == "registered"
         assert len(feeds) == len(natives) == len(native_calls) == 1

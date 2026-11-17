@@ -1383,7 +1383,10 @@ as-of mapping, complete product membership, account-read grant or write permit.
 `ServiceClientRuntime`; it does not start or close that runtime. It pins the
 authenticated peer and registration lineage, starts its local expiry bound
 before sending, and retains pending or unknown operations. Explicit `retire()`
-releases only known terminal local entries. Synthetic owner/profile/CURVE tests
+releases only known terminal local entries. A call requires the same binding
+object before send, after the response and after result projection. Renewal
+between calls is allowed; renewal during a call refuses that result and keeps
+the operation for a later explicit status query. Synthetic owner/profile/CURVE tests
 cover these paths; native account and deployment acceptance remain separate.
 
 
