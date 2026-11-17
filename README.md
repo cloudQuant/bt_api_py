@@ -1436,3 +1436,20 @@ claim. Its account lease advances while old strategy history remains isolated
 and unresolved historical outcomes remain unresolved; the combined host serves
 only its configured strategy scope. Local synthetic scope-resume tests do not
 prove an actual owner has stopped or that an account is ready to trade.
+
+### Risk first-reservation receipt bridge
+
+`RiskGatewayFirstReserveBridge` explicitly composes an existing Risk ledger,
+Registry admission and dedicated strict `ServiceClientRuntime` on the same
+owner thread. It commits one v4 attempt before sending, rechecks the original
+permit and registration after payload projection, and releases the Registry
+scope and SQLite transaction before network I/O. Receipt consumption checks
+the original authenticated socket and registration again; closing, renewing or
+replacing that binding invalidates the captured observation. Uncertain outcomes
+consume the local attempt and never trigger a resend.
+
+The returned one-use result is a historical observation. It does not confirm
+the reservation, authorize dispatch or establish continuously valid authority
+throughout a network call. This bridge is not yet installed in the Risk engine
+or service host. Production source verification and Gateway write gates remain
+closed; existing v3 ledgers have no automatic migration to the v4 attempt schema.

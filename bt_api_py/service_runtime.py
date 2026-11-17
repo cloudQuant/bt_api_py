@@ -410,6 +410,21 @@ class _LiveParentSourceCapability:
         raise TypeError("capability cannot be serialized")
 
 
+class _RiskFirstWireReceipt:
+    """Opaque owner-local lookup key; its type alone conveys no authority."""
+
+    __slots__ = ()
+
+    def __copy__(self):
+        raise TypeError("receipt cannot be copied")
+
+    def __deepcopy__(self, _memo):
+        raise TypeError("receipt cannot be copied")
+
+    def __reduce_ex__(self, _protocol):
+        raise TypeError("receipt cannot be serialized")
+
+
 class ServiceCallOutcomeUnknownError(ServiceRuntimeError):
     """A dispatched handler failed without proving that it had no side effects."""
 
@@ -1160,6 +1175,8 @@ class ServiceClientRuntime:
         self._live_parent_revisions: dict[tuple[Any, ...], int] = {}
         self._live_parent_source_identities: dict[tuple[Any, str], tuple[str, str]] = {}
         self._active_live_source_marker = None
+        self._risk_first_receipts: dict[_RiskFirstWireReceipt, tuple[Any, ...]] = {}
+        self._risk_first_capture_marker = None
         self._bindings: list[RegisteredBinding] = []
         self._registration_lineage: dict[int, tuple[Any, ...]] = {}
         self._registration_failure_generation: dict[tuple[str, str], int] = {}
@@ -1841,6 +1858,7 @@ class ServiceClientRuntime:
         deadline_monotonic: float,
         _require_issued_receipt: bool = False,
         _source_capture_marker: object | None = None,
+        _risk_first_marker: object | None = None,
     ) -> Mapping[str, Any]:
         """Use one authenticated registration without selecting its route twice.
 
@@ -1849,6 +1867,11 @@ class ServiceClientRuntime:
         the ZMQ transport. Existing direct clients do not use this method.
         """
         self._assert_owner_thread()
+        if (type(operation) is str and operation == 'direct.risk_first_reserve.v2'
+                and (_risk_first_marker is None
+                     or _risk_first_marker is not self._risk_first_capture_marker
+                     or _require_issued_receipt is not True)):
+            raise ServiceRuntimeRequestNotSentError()
         try:
             valid_deadline = (type(deadline_monotonic) in (int, float) and math.isfinite(deadline_monotonic))
         except OverflowError:
@@ -1943,10 +1966,149 @@ class ServiceClientRuntime:
             deadline_monotonic=final_deadline,
             _require_issued_receipt=_require_issued_receipt or parent_target,
             _source_capture_marker=_source_capture_marker,
+            _risk_first_capture_marker=_risk_first_marker,
         )
         # The parent path returns only the validated value to its caller. The
         # issued receipt also rechecks registration/socket continuity at reply.
         return result[0] if parent_target else result
+
+    def _risk_first_binding(self, target: BoundServiceTarget):
+        """Inspect the exact strict registration and socket on this owner only."""
+        try:
+            self._assert_owner_thread()
+            if (type(target) is not BoundServiceTarget or target.mount != 'upstream.direct_write'
+                    or target.port != 'service.direct_write' or target.identity.role is not WireRole.SERVICE
+                    or self._state != 'registered' or not self.healthy or self.identity != target.identity
+                    or self.run_id != target.run_id or self._monotonic_clock is not _BOUND_MONOTONIC
+                    or not _bound_clock_current() or type(self._factory) is not ZmqTransportFactory
+                    or self._factory._require_factory_mode() is not True):
+                raise ValueError
+            BoundServiceTarget.__post_init__(target)
+            key = (target.service_id, target.transport_ref, target.registration_id, target.service_epoch)
+            proof = self._strict_registration_transports.get(key)
+            if (type(proof) is not tuple or len(proof) != 3
+                    or self._authenticated_registration_transports.get(key) is not proof
+                    or self._transports.get((target.service_id, target.transport_ref)) is not proof[0]):
+                raise ValueError
+            adapter, client, socket_binding = proof
+            from bt_api_transport_zmq.service_v2 import (
+                RequestNotSentError, ZmqServiceClient, _ServiceSocketBinding, _strict_client_binding,
+            )
+            if (type(adapter) is not _RequestNotSentAdapter or type(client) is not ZmqServiceClient
+                    or adapter._error_type is not RequestNotSentError or adapter._transport is not client
+                    or type(socket_binding) is not _ServiceSocketBinding
+                    or socket_binding.strict_single_connection is not True
+                    or _strict_client_binding(client) is not socket_binding
+                    or not client._socket_binding_current(socket_binding)):
+                raise ValueError
+            profile = self._config['communication']['profiles'][target.transport_ref]
+            keys = self._factory._profiles[target.security_profile_ref]
+            if (type(profile) is not dict or profile.get('backend') != 'zmq'
+                    or profile.get('security_profile_ref') != target.security_profile_ref
+                    or profile.get('endpoints', {}).get('rpc_connect') != target.endpoint
+                    or type(keys) is not ClientCurveKeys
+                    or hashlib.sha256(keys.server_key).hexdigest() != target.server_key_fingerprint
+                    or client._server_key != keys.server_key or client._public_key != keys.public_key
+                    or client._secret_key != keys.secret_key or client._identity != target.expected_peer
+                    or client._endpoint != target.endpoint):
+                raise ValueError
+            matches = [binding for binding in self._bindings if type(binding) is RegisteredBinding
+                       and binding.active is True and binding.required is True
+                       and binding.mount == target.mount and binding.service_id == target.service_id
+                       and binding.instance_id == target.instance_id and binding.scope_ref == target.scope_ref
+                       and binding.scope == target.scope and binding.registration_id == target.registration_id
+                       and binding.service_epoch == target.service_epoch and binding.transport_ref == target.transport_ref
+                       and 'direct.risk_first_reserve.v2' in binding.operations
+                       and binding.lease_deadline > _BOUND_MONOTONIC()]
+            if len(matches) != 1 or self.authenticated_peer_for_binding(matches[0]) != (
+                    target.expected_peer, target.server_key_fingerprint):
+                raise ValueError
+            return proof, matches[0], replace(matches[0], scope=replace(matches[0].scope))
+        except Exception:
+            raise ServiceRuntimeRequestNotSentError() from None
+
+    def _capture_risk_first(self, bridge, attempt, target, request, payload, *, deadline_monotonic):
+        """Exchange one registered attempt for an opaque, strict socket observation."""
+        from bt_api_base.gateway_risk_first_reserve_v2 import (
+            GatewayRiskFirstReserveRequestV2, GatewayRiskFirstReserveResultV2,
+        )
+        from bt_api_py.risk_gateway_first_reserve_client import RiskGatewayFirstReserveBridge
+        from bt_api_py.service_runtime_thread import _copy_wire
+        self._assert_owner_thread()
+        if type(bridge) is not RiskGatewayFirstReserveBridge:
+            raise ServiceRuntimeRequestNotSentError()
+        bridge._take_send(attempt, self, target, request, payload)
+        proof, binding, binding_snapshot = self._risk_first_binding(target)
+        target_snapshot = replace(target, scope=replace(target.scope), identity=replace(target.identity),
+                                  expected_peer=replace(target.expected_peer))
+        request = GatewayRiskFirstReserveRequestV2.from_mapping(request.to_mapping())
+        payload_copy = _copy_wire(payload)
+        from bt_api_py.risk_first_payload_consistency import validate_risk_first_payload_consistency
+        validate_risk_first_payload_consistency(request, payload_copy)
+        arguments = {'request': request.to_mapping(), 'payload': payload_copy}
+        bridge._check_sent(attempt, self, target, bridge._request_snapshot, payload)
+        # Revalidate after projection and before entering the transport.  The
+        # Registry scope and ledger transaction both end before network I/O.
+        bridge._check_attempt(attempt)
+        marker = object()
+        if self._risk_first_capture_marker is not None:
+            raise ServiceRuntimeRequestNotSentError()
+        self._risk_first_capture_marker = marker
+        started = _BOUND_MONOTONIC()
+        try:
+            raw, receipt = self._call_bound(
+                target_snapshot, 'direct.risk_first_reserve.v2',
+                arguments,
+                deadline_monotonic=deadline_monotonic, _require_issued_receipt=True,
+                _risk_first_marker=marker,
+            )
+        finally:
+            self._risk_first_capture_marker = None
+        try:
+            raw = _copy_wire(raw)
+            if (type(raw) is not dict or set(raw) != {'status', 'result'}
+                    or type(raw['status']) is not str or raw['status'] != 'RESERVED'
+                    or type(raw['result']) is not dict):
+                raise ValueError
+            result = GatewayRiskFirstReserveResultV2.from_mapping_for_request(raw['result'], request)
+            bridge._check_sent(attempt, self, target, bridge._request_snapshot, payload)
+            current, live_binding, live_snapshot = self._risk_first_binding(target_snapshot)
+            if (any(current[index] is not proof[index] for index in range(3))
+                    or live_binding is not binding or live_snapshot != binding_snapshot
+                    or _BOUND_MONOTONIC() >= deadline_monotonic):
+                raise ValueError
+            ticket = _RiskFirstWireReceipt()
+            self._risk_first_receipts[ticket] = (bridge, attempt, target_snapshot, request, result,
+                                                 proof, binding, binding_snapshot, started,
+                                                 float(deadline_monotonic))
+            return ticket
+        except Exception:
+            raise ServiceCallOutcomeUnknownError(receipt.request_message_id, 'direct.risk_first_reserve.v2') from None
+
+    def _consume_risk_first(self, bridge, attempt, ticket, marker):
+        """Consume a receipt once after same-owner strict continuity checks."""
+        from bt_api_base.gateway_risk_first_reserve_v2 import GatewayRiskFirstReserveResultV2
+        self._assert_owner_thread()
+        entry = self._risk_first_receipts.pop(ticket, None) if type(ticket) is _RiskFirstWireReceipt else None
+        try:
+            if type(entry) is not tuple or len(entry) != 10 or entry[0] is not bridge or entry[1] is not attempt:
+                raise ValueError
+            bridge._check_consume_marker(marker)
+            _, _, target, request, result, proof, binding, binding_snapshot, started, deadline = entry
+            current, live_binding, live_snapshot = self._risk_first_binding(target)
+            now = _BOUND_MONOTONIC()
+            if (any(current[index] is not proof[index] for index in range(3))
+                    or live_binding is not binding or live_snapshot != binding_snapshot
+                    or not started <= now < deadline):
+                raise ValueError
+            remaining = result.remaining_ttl_ms - math.ceil((now - started) * 1000)
+            if remaining < 1:
+                raise ValueError
+            mapped = result.to_mapping()
+            mapped['remaining_ttl_ms'] = remaining
+            return GatewayRiskFirstReserveResultV2.from_mapping_for_request(mapped, request)
+        except Exception:
+            raise ServiceCallOutcomeUnknownError('UNKNOWN', 'direct.risk_first_reserve.v2') from None
 
     def _live_parent_binding(self, target: BoundServiceTarget) -> tuple[Any, Any, Any]:
         """Recheck the exact issuer-verified registration on its owner thread."""
@@ -2345,6 +2507,9 @@ class ServiceClientRuntime:
         if os.getpid() != self._owner_pid:
             return
         with self._live_parent_capabilities_lock:
+            receipts = getattr(self, '_risk_first_receipts', None)
+            if type(receipts) is dict:
+                receipts.clear()
             for capability in self._live_parent_capabilities:
                 capability._revoked.set()
             self._live_parent_capabilities.clear()
@@ -3772,6 +3937,11 @@ class ServiceClientRuntime:
         transport_ref = args[1] if len(args) > 1 else kwargs.get('transport_ref')
         operation = args[3] if len(args) > 3 else kwargs.get('operation')
         marker = kwargs.pop('_source_capture_marker', None)
+        risk_first_marker = kwargs.pop('_risk_first_capture_marker', None)
+        if (operation == 'direct.risk_first_reserve.v2'
+                and (risk_first_marker is None or risk_first_marker is not self._risk_first_capture_marker
+                     or kwargs.get('_require_issued_receipt') is not True)):
+            raise ServiceRuntimeRequestNotSentError()
         if (operation != 'direct.parent.source' or kwargs.get('_require_issued_receipt') is not True
                 or marker is None or marker is not getattr(self, '_active_live_source_marker', None)):
             self._invalidate_live_parent_capabilities()
