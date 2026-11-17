@@ -750,6 +750,26 @@ _SURFACED_CTP_SESSION_CODES = (
 )
 
 
+def _ctp_connect_failure_detail(session: object) -> str:
+    """Project only locally observed categories from the exact CTP owner."""
+    from bt_api_ctp.account_provider import CtpReadOnlyAccountSessionProvider
+    from bt_api_ctp.gateway_session import CtpGatewaySession
+
+    try:
+        if (type(session) is not CtpGatewaySession or session._state != "failed"
+                or type(session._reader) is not CtpReadOnlyAccountSessionProvider):
+            return "UNKNOWN"
+        detail = session._gateway_connect_failure_detail
+        if type(detail) is str and detail in {
+            "FEED_FACTORY_FAILED", "FEED_PREFLIGHT_FAILED", "NATIVE_START_FAILED",
+            "NATIVE_WAIT_FAILED", "READINESS_FALSE", "SCOPE_UNTRUSTED", "SESSION_BINDING_CHANGED",
+        }:
+            return detail
+    except Exception:
+        pass
+    return "UNKNOWN"
+
+
 def _market_gate_latency(settings, market_settings) -> float:
     """Market gate quote age limit; above 2 s only on SimNow (user decision 2026-11-10)."""
     latency = (2.0 if market_settings is None
@@ -1748,6 +1768,13 @@ def build_ctp_gateway_trading_profile(
                         # The timestamp proves an actual exception was observed;
                         # a still-blocked native connect is not a connect failure.
                         holder['session_failure'] = (code, time.monotonic())
+                        if code == "CTP_SESSION_CONNECT_FAILED":
+                            try:
+                                _LOG.warning("CTP_SESSION_CONNECT_FAILED detail=%s",
+                                             _ctp_connect_failure_detail(session))
+                            except BaseException:
+                                # Diagnostics must not alter owner cleanup.
+                                pass
                     raise
                 holder["session"] = session
                 if recovery_observation_settings is not None:

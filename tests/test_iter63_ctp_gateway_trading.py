@@ -479,6 +479,7 @@ def test_reservation_commit_timeout_revokes_binding_and_retains_guard_until_clea
             self.gate._closing = threading.Event()
             self.gate._open = True
             self.gate._status = "HEALTHY"
+            self.gate._observed_order_source = None
 
         def begin_close(self):
             self.gate.begin_close()
