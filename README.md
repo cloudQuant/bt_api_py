@@ -1538,6 +1538,17 @@ locks are released before network I/O. The earliest used fact/permit wall expiry
 and a conservative monotonic cap restrict the actual send; expiry or uncertainty
 after sending retains the original attempt and does not authorize a retry.
 
+`RiskAccountFactsCoordinator` explicitly composes a strict authenticated Gateway
+facts client with the original v4 Risk ledger and an explicitly enabled R05 v2
+extension. `poll_once()` commits the page and source binding before ACK;
+`recover_pending_once()` rereads exactly the original pending range. UNKNOWN
+does not trigger automatic retry. Reconstructing a coordinator checks the stored
+source before any RPC, including service instance and key fingerprint. Source
+changes need a future explicit transition. The calls are synchronous on the
+ledger owner thread, not a nonblocking Host loop. No production Host enables
+this coordinator automatically, and it does not establish account coverage or
+enable the R05 trading gate.
+
 The explicit `account.facts.read_after.v2` operation returns the original
 Gateway journal identity with the same authenticated fact page. The strict
 client can validate and detach only its exact issued response using one
