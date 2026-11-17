@@ -1042,6 +1042,8 @@ class ServiceHost:
                         omitted |= direct_module.ACCOUNT_OBSERVER_OPERATIONS
                     if 'account_facts' not in pending_resources.values:
                         omitted |= direct_module.ACCOUNT_FACTS_OPERATIONS
+                    if 'order_cut_source' not in pending_resources.values:
+                        omitted |= direct_module.ACCOUNT_ORDER_CUT_OPERATIONS
                     if 'account_cancel_attempts' not in pending_resources.values:
                         omitted |= direct_module.ACCOUNT_CANCEL_ATTEMPT_OPERATIONS
                     trading_account_optional_omissions[item.spec.instance_id] = omitted

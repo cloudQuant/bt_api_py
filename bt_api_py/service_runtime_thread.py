@@ -245,6 +245,7 @@ class _BoundBindingToken:
     runtime_values: tuple
     observation: BoundCallObservation
     lineage: object = None
+    order_cut_evidence: object = None
 
 
 def _copy_bound_observation(observation: BoundCallObservation) -> BoundCallObservation:
@@ -259,7 +260,7 @@ def _copy_bound_observation(observation: BoundCallObservation) -> BoundCallObser
 class _BoundCall(_Call):
     def __init__(self, mount: str, operation: str, arguments: Any, kwargs: dict[str, Any], route: BoundCallRoute,
                  expected_binding: BoundCallObservation | None = None, expected_token: object = None,
-                 expected_server_key_fingerprint: str | None = None):
+                 expected_server_key_fingerprint: str | None = None, validate_order_cut_only: bool = False):
         super().__init__(mount, operation, arguments, kwargs)
         self.route = route
         if expected_binding is not None:
@@ -273,6 +274,8 @@ class _BoundCall(_Call):
             raise ValueError("INVALID_EXPECTED_FINGERPRINT")
         self.expected_server_key_fingerprint = expected_server_key_fingerprint
         self.original_expected_server_key_fingerprint = expected_server_key_fingerprint
+        self.validate_order_cut_only = validate_order_cut_only
+        self.original_validate_order_cut_only = validate_order_cut_only
         self.raw_started = False
         self.original_target = (mount, operation, kwargs["account_ref"], kwargs["portfolio_ref"],
                                 kwargs["scope_ref"], kwargs["max_reply_message_bytes"], BoundCallRoute(**vars(route)))
@@ -332,6 +335,8 @@ def _check_bound_call(call: _BoundCall) -> None:
             or type(call.route) is not BoundCallRoute
             or call.expected_binding != call.original_expected_binding
             or call.expected_token is not call.original_expected_token
+            or call.validate_order_cut_only is not call.original_validate_order_cut_only
+            or type(call.validate_order_cut_only) is not bool
             or call.expected_server_key_fingerprint != call.original_expected_server_key_fingerprint):
         raise ValueError("BOUND_ROUTE_UNAVAILABLE")
     target = (call.mount, call.operation, call.kwargs["account_ref"], call.kwargs["portfolio_ref"],
@@ -481,6 +486,17 @@ def _execute_bound_call(runtime: Any, call: _BoundCall) -> _BoundOwnerResult:
                 raise ValueError("BOUND_ROUTE_UNAVAILABLE")
         elif call.expected_token is not None:
             raise ValueError("BOUND_ROUTE_UNAVAILABLE")
+        if call.validate_order_cut_only:
+            if (call.operation not in {'account.order_cut.current.v1', 'account.order_cut.query_page.v1',
+                                       'account.order_cut.receipt_page.v1'}
+                    or not facts_stream or call.expected_binding is None
+                    or call.expected_token.observation.operation != call.operation
+                    or type(call.expected_token.order_cut_evidence) is not tuple
+                    or len(call.expected_token.order_cut_evidence) != 2
+                    or call.expected_token.order_cut_evidence[0] != call.original_arguments):
+                raise ValueError('BOUND_ROUTE_UNAVAILABLE')
+            return _BoundOwnerResult({'valid': True}, binding, before, binding_values, runtime_values,
+                                     transport, lineage)
         mount, operation = call.mount, call.operation
         arguments, kwargs = _copy_wire(call.arguments), dict(call.kwargs)
         _check_bound_call(call)
@@ -526,9 +542,13 @@ def _finish_bound_call(runtime: Any, call: _BoundCall, result: _BoundOwnerResult
                 raise ValueError
     except Exception:
         raise ThreadedRuntimeError("BOUND_OUTCOME_UNKNOWN") from None
+    evidence = None
+    if call.operation in {'account.order_cut.current.v1', 'account.order_cut.query_page.v1',
+                          'account.order_cut.receipt_page.v1'} and not call.validate_order_cut_only:
+        evidence = (call.original_arguments, _bound_wire_signature(copied_result))
     token = _BoundBindingToken(_BOUND_BINDING_ISSUER, runtime, result.binding, result.transport,
                                result.binding_values, result.runtime_values,
-                               _copy_bound_observation(result.before), result.lineage)
+                               _copy_bound_observation(result.before), result.lineage, evidence)
     return BoundCallResult(copied_result, result.before, after, token)
 class _TargetBoundCall:
     def __init__(self, target: BoundServiceTarget | BoundAccountServiceTarget | BoundExecutionParentTarget | BoundExecutionManagementReadTarget, operation: str, arguments: Any, deadline: float):
@@ -923,12 +943,15 @@ class ThreadedServiceClientRuntime:
         _expected_binding: BoundCallObservation | None = None,
         _expected_token: object = None,
         _expected_server_key_fingerprint: str | None = None,
+        _validate_order_cut_only: bool = False,
     ) -> Any:
         self._check_reentry()
         if operation in (_ACCOUNT_BOUND_OPERATION, _MANAGEMENT_BOUND_OPERATION, _MANAGEMENT_PLAN_BOUND_OPERATION, _MANAGEMENT_BY_REQUEST_BOUND_OPERATION):
             raise ServiceRuntimeRequestNotSentError()
         deadline = _deadline(timeout_seconds)
         if not isinstance(arguments, Mapping):
+            raise ThreadedRuntimeError("INVALID_ARGUMENTS")
+        if type(_validate_order_cut_only) is not bool or (_validate_order_cut_only and _bound_route is None):
             raise ThreadedRuntimeError("INVALID_ARGUMENTS")
         if _bound_route is not None:
             if type(_bound_route) is not BoundCallRoute:
@@ -955,7 +978,7 @@ class ThreadedServiceClientRuntime:
             )
             call = (_Call(*call_arguments) if _bound_route is None
                     else _BoundCall(*call_arguments, _bound_route, _expected_binding, _expected_token,
-                                    _expected_server_key_fingerprint))
+                                    _expected_server_key_fingerprint, _validate_order_cut_only))
         except Exception:
             if _bound_route is None:
                 raise
@@ -1011,7 +1034,7 @@ class ThreadedServiceClientRuntime:
                    expected_binding: BoundCallObservation | None = None,
                    _expected_token: object = None,
                    expected_server_key_fingerprint: str | None = None,
-                   deadline_monotonic: float | None = None) -> Any:
+                   deadline_monotonic: float | None = None, _validate_order_cut_only: bool = False) -> Any:
         """Dispatch either the legacy route-bound or target-bound owner call."""
         if (route is not None or expected_binding is not None or _expected_token is not None
                 or type(mount) is str):
@@ -1021,11 +1044,12 @@ class ThreadedServiceClientRuntime:
                                portfolio_ref=route.scope.portfolio_ref, scope_ref=route.scope_ref,
                                timeout_seconds=timeout_seconds, _bound_route=route,
                                _expected_server_key_fingerprint=expected_server_key_fingerprint,
-                               _expected_binding=expected_binding, _expected_token=_expected_token)
+                               _expected_binding=expected_binding, _expected_token=_expected_token,
+                               _validate_order_cut_only=_validate_order_cut_only)
             if type(result) is not BoundCallResult:
                 raise ThreadedRuntimeError("BOUND_OUTCOME_UNKNOWN")
             return result
-        if expected_server_key_fingerprint is not None:
+        if expected_server_key_fingerprint is not None or _validate_order_cut_only:
             raise ThreadedRuntimeError("INVALID_ARGUMENTS")
         return self._call_bound_target(
             mount, operation, arguments, timeout_seconds=timeout_seconds,

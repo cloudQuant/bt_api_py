@@ -56,6 +56,7 @@ from bt_api_py.gateway_direct_service import (
     ACCOUNT_OBSERVER_OPERATIONS,
     ACCOUNT_CANCEL_ATTEMPT_OPERATIONS,
     ACCOUNT_FACTS_OPERATIONS,
+    ACCOUNT_ORDER_CUT_OPERATIONS,
     STRATEGY_FINANCIAL_OPERATIONS,
     PARENT_OPERATIONS,
     DELEGATED_STRATEGY_READ_OPERATIONS,
@@ -86,7 +87,7 @@ _OPERATIONS = (
     frozenset({"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch"})
     | EVENT_OPERATIONS
 )
-_READ_OPERATIONS = ACCOUNT_READ_OPERATIONS | INSTRUMENT_OPERATIONS | ACCOUNT_COMPARISON_OPERATIONS | ACCOUNT_STRATEGY_READ_OPERATIONS | ACCOUNT_OBSERVER_OPERATIONS | ACCOUNT_FACTS_OPERATIONS | ACCOUNT_CANCEL_ATTEMPT_OPERATIONS
+_READ_OPERATIONS = ACCOUNT_READ_OPERATIONS | INSTRUMENT_OPERATIONS | ACCOUNT_COMPARISON_OPERATIONS | ACCOUNT_STRATEGY_READ_OPERATIONS | ACCOUNT_OBSERVER_OPERATIONS | ACCOUNT_FACTS_OPERATIONS | ACCOUNT_CANCEL_ATTEMPT_OPERATIONS | ACCOUNT_ORDER_CUT_OPERATIONS
 _MARKET_OPERATIONS = MARKET_OPERATIONS - {"market.history"}
 
 
@@ -411,6 +412,7 @@ def _validate_config(
     calendar_settings: object | None,
     instrument_status_read: object | None,
     instrument_product_grants: frozenset,
+    order_cut_observation: object | None,
 ) -> str:
     if type(config) is not ServiceConfig or type(authority) is not TrustedServiceAuthority:
         raise CtpGatewayTradingError("INVALID_TRADING_CONFIGURATION")
@@ -584,7 +586,7 @@ def _validate_config(
                         or scope.leg_id is not None
                         or (entry.identity.role is WireRole.SERVICE and resource.port != "service.direct_write"
                             and not (resource.port == "service.account_read" and extensions_enabled
-                                     and resource.operations <= (ACCOUNT_OBSERVER_OPERATIONS | ACCOUNT_FACTS_OPERATIONS | ACCOUNT_CANCEL_ATTEMPT_OPERATIONS))
+                                     and resource.operations <= (ACCOUNT_OBSERVER_OPERATIONS | ACCOUNT_FACTS_OPERATIONS | ACCOUNT_CANCEL_ATTEMPT_OPERATIONS | ACCOUNT_ORDER_CUT_OPERATIONS))
                             and not (resource.port == 'service.market_source' and principal in delegate_principals
                                      and market_settings is not None)
                             and not (resource.port == 'service.calendar_read'
@@ -663,6 +665,10 @@ def _validate_config(
                         or not resource.operations <= _READ_OPERATIONS
                         or (bool(resource.operations & ACCOUNT_OBSERVER_OPERATIONS) and not extensions_enabled)
                         or (bool(resource.operations & ACCOUNT_FACTS_OPERATIONS) and not facts_financial_enabled)
+                        or (bool(resource.operations & ACCOUNT_ORDER_CUT_OPERATIONS)
+                            and (order_cut_observation is None
+                                 or principal not in order_cut_observation.principals
+                                 or entry.identity.role is not WireRole.SERVICE))
                         or (bool(resource.operations & ACCOUNT_CANCEL_ATTEMPT_OPERATIONS) and (not cancel_attempt_stream_enabled or entry.identity.role not in {WireRole.SERVICE, WireRole.APPLICATION_CLIENT}))
                         or (bool(resource.operations & ACCOUNT_COMPARISON_OPERATIONS)
                             and (not extensions_enabled or entry.identity.role is not WireRole.APPLICATION_CLIENT))
@@ -895,6 +901,7 @@ def build_ctp_gateway_trading_profile(
     return_settings: CtpGatewayReturnSettings | None = None,
     account_read_settings: CtpGatewayAccountReadSettings | None = None,
     account_read_principals: frozenset[str] = frozenset(),
+    order_cut_observation=None,
     market_settings: CtpGatewayMarketSettings | None = None,
     recovery_observation_settings=None,
     recovery_monitor_relay=None,
@@ -1134,6 +1141,22 @@ def build_ctp_gateway_trading_profile(
                 raise ValueError
         except Exception:
             raise CtpGatewayTradingError("INVALID_ACCOUNT_READ_SETTINGS") from None
+    if order_cut_observation is not None:
+        from bt_api_py.ctp_gateway_order_cut_source import CtpGatewayOrderCutSettings
+
+        if (type(order_cut_observation) is not CtpGatewayOrderCutSettings
+                or return_settings is None or account_read_settings is None
+                or not order_cut_observation.principals <= account_read_principals
+                or not config.components['gateway']['settings']['options'].get('account_facts_financial_enabled', False)
+                or any(principal not in authority.grants or not any(
+                    entry.identity.role is WireRole.SERVICE and entry.identity.delegate_ref is None
+                    and any(resource.port == 'service.account_read'
+                            and ACCOUNT_ORDER_CUT_OPERATIONS <= resource.operations
+                            and resource.scope == WireScope(authority.scope.execution_domain_ref,
+                                                            account_ref=settings.account_scope)
+                            for resource in entry.resources)
+                    for entry in authority.grants[principal]) for principal in order_cut_observation.principals)):
+            raise CtpGatewayTradingError('INVALID_ORDER_CUT_SETTINGS')
     if market_settings is not None:
         if type(market_settings) is not CtpGatewayMarketSettings:
             raise CtpGatewayTradingError("INVALID_MARKET_SETTINGS")
@@ -1195,6 +1218,7 @@ def build_ctp_gateway_trading_profile(
         calendar_settings,
         instrument_status_read,
         instrument_product_grants,
+        order_cut_observation,
     )
     if instrument_status_read is not None:
         for principal in instrument_status_read.principal_instruments:
@@ -1415,6 +1439,14 @@ def build_ctp_gateway_trading_profile(
                 closing.set()
                 holder.pop("owner_guard_binding", None)
                 deadline = time.monotonic() + settings.close_timeout_seconds
+                cut_source = holder.get('order_cut_source')
+                if cut_source is not None:
+                    try:
+                        cut_closed = cut_source.close() is True
+                    except Exception:
+                        cut_closed = False
+                    if not cut_closed:
+                        raise CtpGatewayTradingError('ORDER_CUT_CLOSE_UNCONFIRMED') from None
                 returns = holder.get("returns")
                 if returns is not None:
                     returns.begin_close()
@@ -1539,6 +1571,8 @@ def build_ctp_gateway_trading_profile(
                     journal_options["risk_v2_binding_enabled"] = True
                 if cancel_attempt_stream_enabled and not upgrade_cancel_attempt_stream:
                     journal_options['cancel_attempt_stream_enabled'] = True
+                if order_cut_observation is not None:
+                    journal_options['observed_order_source_enabled'] = True
                 target_version = 19 if account_event_recovery_enabled else 18 if account_fact_recovery_enabled else 17 if control_cancel_enabled else 16 if strategy_origin_enabled else 15 if actor_stream_enabled else 14 if facts_financial_enabled else 13 if parent_enabled else 12 if extensions_enabled else 11 if ledger_enabled else 10 if control_enabled else 9
                 candidates = [target_version]
                 if target_version == 19 and upgrade_account_event_recovery_from_v18:
@@ -1852,9 +1886,17 @@ def build_ctp_gateway_trading_profile(
                     state["returns"] = CtpGatewayReturnMaintenance(
                         session, provider, journal, guard, settings.account_key, return_settings,
                         **({"external_classifier": trusted_external_classifier}
-                           if trusted_external_classifier is not None else {})
+                           if trusted_external_classifier is not None else {}),
+                        **({'observed_order_source': True} if order_cut_observation is not None else {})
                     )
                     holder["returns"] = state["returns"]
+                    if order_cut_observation is not None:
+                        from bt_api_py.ctp_gateway_order_cut_source import CtpGatewayOrderCutSource
+                        state['order_cut_source'] = CtpGatewayOrderCutSource(
+                            session, state['returns'], journal, guard, order_cut_observation,
+                            execution_domain_ref=authority.scope.execution_domain_ref)
+                        holder['order_cut_source'] = state['order_cut_source']
+                        state['returns'].bind_before_rebuild(state['order_cut_source'].pause_for_reconnect)
                     lease_source = getattr(lease_drain_settings, "recovery_source", None)
                     if callable(getattr(lease_source, "bind", None)):
                         lease_source.bind(session=session, provider=provider, returns=state["returns"],
@@ -2060,6 +2102,14 @@ def build_ctp_gateway_trading_profile(
                     # Neither the owner, its guard, nor its exact session is
                     # released; old account and write evidence is revoked.
                     returns = state.get("returns")
+                    cut_source = state.get('order_cut_source')
+                    if cut_source is not None:
+                        try:
+                            cut_closed = cut_source.pause_for_reconnect() is True
+                        except Exception:
+                            cut_closed = False
+                        if not cut_closed:
+                            raise CtpGatewayTradingError('ORDER_CUT_CLOSE_UNCONFIRMED') from None
                     if returns is not None:
                         returns.pause_for_reconnect()
                     financial_source = holder.get('strategy_financial_source')
@@ -2163,6 +2213,7 @@ def build_ctp_gateway_trading_profile(
                     # expires; without one, retry at most once per second.
                     returns = state.get("returns")
                     strategy_ledger = state.get("strategy_ledger")
+                    cut_source = state.get('order_cut_source')
 
                     def account_read_outstanding():
                         return model_read[0] is not None or (
@@ -2198,11 +2249,12 @@ def build_ctp_gateway_trading_profile(
                         state["account_read_active"] = False
 
                     query_outstanding = returns is not None and returns.query_pending()
+                    cut_outstanding = cut_source is not None and cut_source.pending()
                     now = time.monotonic()
                     settlement_held = False
                     if now >= settlement_due[0] or (
                             now >= settlement_due[1] and not controller.ready):
-                        if query_outstanding or account_read_outstanding():
+                        if query_outstanding or cut_outstanding or account_read_outstanding():
                             settlement_held, settlement_lane_since[0] = True, None
                         elif session.query_lane_ready() or (
                                 settlement_lane_since[0] is not None
@@ -2220,27 +2272,45 @@ def build_ctp_gateway_trading_profile(
                     query_ended = False
                     if returns is not None:
                         returns.poll()
+                        if cut_source is not None:
+                            cut_source.rebind_after_reconnect()
                         query_ended = query_outstanding
                         query_outstanding = returns.advance_query()
                         query_ended = query_ended and not query_outstanding
+                    cut_ended = False
+                    if cut_outstanding:
+                        cut_source.advance()
+                        cut_ended = not cut_source.pending()
+                        cut_outstanding = cut_source.pending()
                     if model_read[0] is not None:
                         poll_model_read()
                     # The ledger's baseline and comparison reads are account
                     # reads too: it polls its own read on every tick and starts
                     # one only when nothing else is outstanding.
+                    now = time.monotonic()
+                    cut_due = (cut_source is not None and not cut_outstanding
+                               and cut_source.due(now))
                     if strategy_ledger is not None and (strategy_ledger.read_pending or (
                             not settlement_held and not query_outstanding
-                            and model_read[0] is None)):
+                            and not cut_outstanding and model_read[0] is None
+                            and not (cut_due and next_choice == 'cut'))):
                         strategy_ledger.maintain()
                     now = time.monotonic()
-                    idle = (not settlement_held and not query_outstanding
+                    idle = (not settlement_held and not query_outstanding and not cut_outstanding
                             and not account_read_outstanding())
                     read_due = read_model is not None and idle and now >= next_read
                     return_due = (returns is not None and idle and not query_ended
                                   and returns.due(now))
-                    choose_read = next_choice == "read" if read_due and return_due else read_due
-                    if choose_read:
-                        next_choice = "returns"
+                    cut_due = cut_due and idle and not cut_ended
+                    choices = ('returns', 'read', 'cut')
+                    due = {'returns': return_due, 'read': read_due, 'cut': cut_due}
+                    start = choices.index(next_choice)
+                    selected = next((choices[(start + offset) % len(choices)]
+                                     for offset in range(len(choices))
+                                     if due[choices[(start + offset) % len(choices)]]), None)
+                    if selected is not None:
+                        next_choice = choices[(choices.index(selected) + 1) % len(choices)]
+                    if selected == 'read':
                         state["account_read_active"] = True
                         token = read_model.begin_refresh()
                         try:
@@ -2259,9 +2329,10 @@ def build_ctp_gateway_trading_profile(
                             # Sends the first query at once when the lane allows.
                             poll_model_read()
                         state["account_read_active"] = False
-                    elif return_due:
-                        next_choice = "read"
+                    elif selected == 'returns':
                         returns.start_query()
+                    elif selected == 'cut':
+                        cut_source.begin()
                     instrument_block = holder.get("instrument_block")
                     if instrument_block is not None:
                         instrument_block.maintain()
@@ -2848,6 +2919,8 @@ def build_ctp_gateway_trading_profile(
                 values["instrument_product_service"] = product_service
             if calendar_settings is not None:
                 values["calendar_service"] = holder["calendar_service"]
+            if order_cut_observation is not None:
+                values['order_cut_source'] = holder['order_cut_source']
             return ComponentResources.owned(values, ready=ready, close=close_resources)
         except BaseException as error:
             partial = ComponentResources.owned(

@@ -207,7 +207,9 @@ _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS = frozenset({
     "account.facts.read_after", "account.facts.read_after.v2", "account.facts.progress", "account.facts.ack", "account.facts.status",
     "account.facts.snapshot_info", "account.facts.snapshot_read", "account.facts.snapshot_confirm",
     "account.cancel_attempts.read_after", "account.cancel_attempts.progress", "account.cancel_attempts.ack",
+    "account.order_cut.current.v1", "account.order_cut.query_page.v1", "account.order_cut.receipt_page.v1",
 })
+_GATEWAY_ORDER_CUT_OPERATIONS = frozenset({"account.order_cut.current.v1", "account.order_cut.query_page.v1", "account.order_cut.receipt_page.v1"})
 _GATEWAY_PARENT_OPERATIONS = frozenset({'direct.parent.register', 'direct.parent.query', 'direct.parent.cancel', 'direct.parent.operation', 'direct.parent.source', 'direct.parent.register_v2', 'direct.parent.operation_v2', 'direct.parent.cancel_v2', 'direct.parent.fault', 'direct.parent.recover'})
 _GATEWAY_PARENT_READ_OPERATIONS = frozenset({'direct.parent.query', 'direct.parent.operation', 'direct.parent.source', 'direct.parent.operation_v2'})
 _GATEWAY_ACCEPTANCE_OPERATION = 'direct.parent.acceptance_order'
@@ -2320,7 +2322,7 @@ class ServiceDispatchAdmission:
                         # not seal for an already invalid request, and do not
                         # rely on authority or time from before that wait.
                         validate_current()
-                        if self._binding.operation not in ({"account.events.progress", "account.facts.progress", "account.facts.status", "account.facts.snapshot_info", "account.cancel_attempts.progress", _EXECUTION_PARENT_QUERY, _GATEWAY_ACCEPTANCE_OPERATION} | _GATEWAY_CONTROL_PURE_READ_OPERATIONS | _GATEWAY_PARENT_READ_OPERATIONS | (_GATEWAY_DELEGATE_ACTOR_READ_OPERATIONS - {'direct.delegate_events.read_after', 'direct.delegate_events.ack'}) | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS):
+                        if self._binding.operation not in ({"account.events.progress", "account.facts.progress", "account.facts.status", "account.facts.snapshot_info", "account.cancel_attempts.progress", _EXECUTION_PARENT_QUERY, _GATEWAY_ACCEPTANCE_OPERATION} | _GATEWAY_ORDER_CUT_OPERATIONS | _GATEWAY_CONTROL_PURE_READ_OPERATIONS | _GATEWAY_PARENT_READ_OPERATIONS | (_GATEWAY_DELEGATE_ACTOR_READ_OPERATIONS - {'direct.delegate_events.read_after', 'direct.delegate_events.ack'}) | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS):
                             try:
                                 fact_kind = ("cursor" if self._binding.operation in (_GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_DELEGATE_STREAM_OPERATIONS)
                                              else "dispatch")
@@ -5204,7 +5206,8 @@ class ServiceRegistry:
             'SELECT * FROM sessions WHERE instance_id=? AND port=? AND principal=? AND service_epoch=? AND expires_at>?',
             (instance_id, 'service.account_read', principal, self._epoch, self._now())).fetchall()
         matches = []
-        family = ('account.facts.' if operation.startswith('account.facts.') else
+        family = ('account.order_cut.' if operation.startswith('account.order_cut.') else
+                  'account.facts.' if operation.startswith('account.facts.') else
                   'account.cancel_attempts.' if operation.startswith('account.cancel_attempts.') else 'account.events.')
         for row in rows:
             current_identity = self._stored_identity(row['identity_json'])
@@ -5507,6 +5510,11 @@ class ServiceRegistry:
         if (port == "service.account_read" and requested_operations & instrument_operations
                 and (not instrument_operations <= requested_operations
                      or identity.role is not WireRole.STRATEGY_CLIENT)):
+            return "SCOPE_DENIED", capability, frozenset()
+        if (requested_operations & _GATEWAY_ORDER_CUT_OPERATIONS and
+                (port != 'service.account_read' or identity.role is not WireRole.SERVICE
+                 or identity.delegate_ref is not None or scope.account_ref is None
+                 or scope != WireScope(scope.execution_domain_ref, account_ref=scope.account_ref))):
             return "SCOPE_DENIED", capability, frozenset()
         if port == _PRODUCT_PORT and (requested_operations != _PRODUCT_OPERATIONS
                                      or identity.role is not WireRole.SERVICE):
@@ -7034,7 +7042,7 @@ class ServiceRegistry:
             return 'SCOPE_DENIED'
         expected_role = (WireRole.APPLICATION_CLIENT if operation in (_GATEWAY_CONTROL_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS) else
                          WireRole.SERVICE if operation in _GATEWAY_ALL_DELEGATE_OPERATIONS else WireRole.STRATEGY_CLIENT)
-        allowed_roles = ({WireRole.SERVICE} if operation == _GATEWAY_ACCEPTANCE_OPERATION else
+        allowed_roles = ({WireRole.SERVICE} if operation == _GATEWAY_ACCEPTANCE_OPERATION or operation in _GATEWAY_ORDER_CUT_OPERATIONS else
                          {WireRole.STRATEGY_CLIENT, WireRole.SERVICE, WireRole.APPLICATION_CLIENT} if observer else
                          {WireRole.STRATEGY_CLIENT, WireRole.SERVICE} if operation in _GATEWAY_PARENT_OPERATIONS else {expected_role})
         if identity.role not in allowed_roles or identity.delegate_ref is not None or not self._identity_is_trusted(principal, identity):

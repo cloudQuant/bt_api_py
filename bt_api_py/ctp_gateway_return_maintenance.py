@@ -33,6 +33,7 @@ class CtpGatewayReturnMaintenance:
             raise ValueError("INVALID_OBSERVED_ORDER_SOURCE")
         self._observed_order_source_enabled = observed_order_source
         self._observed_order_source = None
+        self._before_rebuild = None
         self._source_start_failed = False
         self._lock = threading.Lock()
         self._pid = os.getpid()
@@ -167,6 +168,9 @@ class CtpGatewayReturnMaintenance:
             self._lock.release()
 
     def _rebuild(self, reader=None):
+        if self._observed_order_source is not None and self._before_rebuild is not None:
+            if self._before_rebuild() is not True:
+                raise RuntimeError('ORDER_CUT_CLOSE_UNCONFIRMED')
         # An outstanding query of the previous session is never ingested.
         self._drop_query()
         self._set(False, "SESSION_CHANGED")
@@ -212,6 +216,13 @@ class CtpGatewayReturnMaintenance:
         self._observed_order_source = observed_order_source
         self._source_start_failed = False
         self._generation, self._ingestor, self._reader = generation, ingestor, reader
+
+    def bind_before_rebuild(self, callback):
+        self._check_pid()
+        if (threading.current_thread() is not self._owner_thread or not callable(callback)
+                or self._before_rebuild is not None or not self._observed_order_source_enabled):
+            raise RuntimeError('ORDER_CUT_REBUILD_BINDING_INVALID')
+        self._before_rebuild = callback
 
     def refresh_generation(self):
         try:

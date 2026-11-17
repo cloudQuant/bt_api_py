@@ -585,7 +585,8 @@ _OPERATOR_READ_OPERATIONS = frozenset({"account.snapshot.typed", "account.strate
                                        "account.strategy_book"})
 
 
-def _account_observation(value, principals, grants, *, instruments, account_operators=frozenset()):
+def _account_observation(value, principals, grants, *, instruments, account_operators=frozenset(),
+                         order_cut_principals=frozenset()):
     """Optional section for account observers and the account read port (63.13 base, D63-56)::
 
         {"read_journal_path": "/absolute/path/account-read.sqlite",
@@ -629,6 +630,7 @@ def _account_observation(value, principals, grants, *, instruments, account_oper
 
     from bt_api_py.ctp_gateway_trading import CtpGatewayAccountReadSettings
     from bt_api_py.gateway_account_observer import ACCOUNT_OBSERVER_OPERATIONS
+    from bt_api_py.gateway_direct_service import ACCOUNT_ORDER_CUT_OPERATIONS
 
     required = ("read_journal_path", "observation_identity_path", "expected_observation_issuer_id",
                 "state_scope", "required_coverage", "observers")
@@ -664,7 +666,11 @@ def _account_observation(value, principals, grants, *, instruments, account_oper
         for item in observer["resources"]:
             item = _mapping(item, ("instance_id", "port", "scope_ref", "scope", "operations"))
             scope, operations = _scope(item["scope"]), _string_set(item["operations"])
-            if (item["port"] != "service.account_read" or not operations <= ACCOUNT_OBSERVER_OPERATIONS
+            permitted = ACCOUNT_OBSERVER_OPERATIONS | (ACCOUNT_ORDER_CUT_OPERATIONS
+                        if identity.principal_ref in order_cut_principals else frozenset())
+            if (item["port"] != "service.account_read" or not operations <= permitted
+                    or (operations & ACCOUNT_ORDER_CUT_OPERATIONS
+                        and not ACCOUNT_ORDER_CUT_OPERATIONS <= operations)
                     or scope.strategy_ref is not None):
                 _invalid()  # an observer reads the whole account; it never trades or controls
             entries.append(ResourceGrant(item["instance_id"], item["port"], item["scope_ref"], scope, operations))
@@ -793,7 +799,7 @@ def _load_resources(config, *, trading):
         raw = _protected_json(resource_path)
         # A trading bundle may add a "clock" section (trusted SNTP policy).
         optional = ({"clock", "controls", "strategy_ledger", "strategy_financial", "delegation", "execution_subject_scopes", "required_monitor",
-                     "account_observation", "recovery_observation", "recovery_monitor_relay", "instrument_status_read", "instrument_product_observers"} if trading else set()) | {"calendars"}
+                     "account_observation", "recovery_observation", "recovery_monitor_relay", "instrument_status_read", "instrument_product_observers", "order_cut_observation"} if trading else set()) | {"calendars"}
         if type(raw) is not dict or not set(keys) <= set(raw) <= set(keys) | optional:
             _invalid()
         if type(raw["schema_version"]) is not int or raw["schema_version"] != 1:
@@ -944,6 +950,16 @@ def _load_resources(config, *, trading):
                 account_scope=settings.account_scope,
                 execution_domain_ref=authority_raw["scope"].execution_domain_ref,
                 instruments=_return_settings(raw["returns"]).instruments)
+        order_cut_observation = None
+        if trading and 'order_cut_observation' in raw:
+            from bt_api_py.ctp_gateway_order_cut_source import CtpGatewayOrderCutSettings
+            value = _mapping(raw['order_cut_observation'],
+                             ('query_timeout_seconds', 'refresh_interval_seconds', 'principals'))
+            if type(value['principals']) is not list or len(set(value['principals'])) != len(value['principals']):
+                _invalid()
+            order_cut_observation = CtpGatewayOrderCutSettings(
+                value['query_timeout_seconds'], value['refresh_interval_seconds'],
+                _string_set(value['principals']))
         # After every other section: a delegate's own read resource also makes it a reader.
         read_settings, read_principals = None, frozenset()
         if trading and raw.get("account_observation") is not None:
@@ -951,7 +967,9 @@ def _load_resources(config, *, trading):
                 raw["account_observation"], principals, grants,
                 instruments=_return_settings(raw["returns"]).instruments,
                 account_operators=frozenset(principal for principal, grant in (control_grants or {}).items()
-                                            if grant.account_scope_allowed))
+                                            if grant.account_scope_allowed),
+                order_cut_principals=(frozenset() if order_cut_observation is None
+                                      else order_cut_observation.principals))
         for monitor_identity in monitor_identities:
             if any(entry.identity.actor_ref == monitor_identity.actor_ref
                    for principal, entries in grants.items() if principal != monitor_identity.principal_ref
@@ -1090,6 +1108,7 @@ def _load_resources(config, *, trading):
                 parent_authority_factory=None if parent_settings is None else _parent_authority_factory(),
                 account_read_settings=read_settings,
                 account_read_principals=read_principals,
+                order_cut_observation=order_cut_observation,
                 calendar_settings=calendar_settings,
                 instrument_product_grants=product_grants,
                 recovery_observation_settings=recovery_observation,

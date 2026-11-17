@@ -1,9 +1,8 @@
 """Explicit owner-local coordination of one CTP order query and receipt cut.
 
 A candidate is a local observation only. It does not prove pre-begin history,
-venue atomicity, source continuity, or authorization. No production profile
-selects this coordinator. The caller schedules both this object and the same
-return maintenance on the same owner thread.
+venue atomicity, source continuity, or authorization. The explicitly selected
+profile schedules this object and the same return maintenance on one owner thread.
 """
 
 from __future__ import annotations
@@ -364,6 +363,16 @@ class CtpGatewayOrderCutCoordinator:
             return False
 
     def candidate(self) -> ObservedOrderQueryCut | None:
+        return self._evaluate_candidate(allow_expired=False)
+
+    def live_candidate(self) -> ObservedOrderQueryCut | None:
+        """Check a candidate while allowing normal expiry to be retired later."""
+        candidate = self._evaluate_candidate(allow_expired=True)
+        if candidate is None or self.expired():
+            return None
+        return candidate
+
+    def _evaluate_candidate(self, *, allow_expired):
         self._check_owner()
         if self._state != "CANDIDATE":
             return None
@@ -374,13 +383,13 @@ class CtpGatewayOrderCutCoordinator:
                 type(now) is not float
                 or not math.isfinite(now)
                 or self._deadline is None
-                or now >= self._deadline
+                or (not allow_expired and now >= self._deadline)
                 or type(source.completed_monotonic) not in (int, float)
                 or not math.isfinite(source.completed_monotonic)
                 or now < source.completed_monotonic
                 or type(source.trusted_expires_monotonic) not in (int, float)
                 or not math.isfinite(source.trusted_expires_monotonic)
-                or now > source.trusted_expires_monotonic
+                or (not allow_expired and now > source.trusted_expires_monotonic)
                 or not self._same_components(allow_maintenance_query=True)
             ):
                 raise ValueError
@@ -417,8 +426,8 @@ class CtpGatewayOrderCutCoordinator:
                 type(now) is not float
                 or not math.isfinite(now)
                 or now < source.completed_monotonic
-                or now >= self._deadline
-                or now > source.trusted_expires_monotonic
+                or (not allow_expired and now >= self._deadline)
+                or (not allow_expired and now > source.trusted_expires_monotonic)
                 or not self._same_components(allow_maintenance_query=True)
             ):
                 raise ValueError
@@ -433,6 +442,39 @@ class CtpGatewayOrderCutCoordinator:
         except Exception:
             self._fail("SOURCE_OR_QUERY_FAILED")
             return None
+
+    def retire_expired(self) -> bool:
+        """Retire a fully revalidated, closed-pin candidate after its TTL."""
+        self._check_owner()
+        if self._state != "CANDIDATE":
+            return False
+        try:
+            now = time.monotonic()
+            expiry = self._result.query_source.trusted_expires_monotonic
+            if (type(now) is not float or not math.isfinite(now)
+                    or self._deadline is None or type(expiry) not in (int, float)
+                    or not math.isfinite(expiry)):
+                raise ValueError
+            if now < self._deadline and now <= expiry:
+                return False
+            if self._evaluate_candidate(allow_expired=True) is None:
+                return False
+            return self.close()
+        except Exception:
+            self._fail("SOURCE_OR_QUERY_FAILED")
+            return False
+
+    def expired(self) -> bool:
+        self._check_owner()
+        if self._state != "CANDIDATE":
+            return False
+        now = time.monotonic()
+        expiry = self._result.query_source.trusted_expires_monotonic
+        if (type(now) is not float or not math.isfinite(now) or self._deadline is None
+                or type(expiry) not in (int, float) or not math.isfinite(expiry)):
+            self._fail("SOURCE_OR_QUERY_FAILED")
+            return False
+        return now >= self._deadline or now > expiry
 
     def close(self) -> bool:
         """Fail closed on cancellation; retain original custody on uncertainty."""
