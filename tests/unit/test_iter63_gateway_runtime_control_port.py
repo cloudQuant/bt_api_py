@@ -308,3 +308,77 @@ def test_runtime_operation_subset_is_the_frozen_one():
         {'direct.control.apply', 'direct.control.status', 'direct.control.resume'}) == CONTROL_RUNTIME_OPERATIONS
     assert CONTROL_RUNTIME_OPERATIONS <= _GATEWAY_CONTROL_OPERATIONS
     assert frozenset({'STOP_NEW', 'FREEZE', 'DRAIN'}) == CONTROL_MODES
+
+
+# -- proof refresh (D66-08 continuation) -----------------------------------------------------
+
+def test_operator_refreshes_an_expired_runtime_proof_then_control_works(port):
+    # Before renewal the expired Runtime proof refuses every control call.
+    assert port.call('runtime-expired', 'direct.control.apply',
+                     {'cause_id': 'renewed-stop', 'mode': 'STOP_NEW'})['result'] == {
+        'status': 'REQUEST_REJECTED', 'code': 'RUNTIME_PROOF_EXPIRED'}
+
+    # The delegated operator renews the wall-clock window past the host clock.
+    refreshed = port.binding.refresh_runtime_proof(
+        'runtime-expired', 250.0, operator_ref='operator-a')
+    assert refreshed == {'status': 'OBSERVED', 'principal_ref': 'runtime-expired',
+                         'delegation_id': 'delegation-runtime-expired', 'expires_at': 250.0}
+
+    # The same Runtime can now pause, read status and resume.
+    applied = port.call('runtime-expired', 'direct.control.apply',
+                        {'cause_id': 'renewed-stop', 'mode': 'STOP_NEW'})['result']
+    assert applied == {'status': 'OBSERVED', 'cause_id': 'renewed-stop', 'version': 1,
+                       'active': True}, applied
+    released = port.call('runtime-expired', 'direct.control.resume', {
+        'cause_id': 'renewed-stop', 'expected_version': 1, 'operation_id': 'release-renewed'})
+    assert released['result'] == {'status': 'OBSERVED', 'cause_id': 'renewed-stop',
+                                  'version': 2, 'active': False}, released
+
+
+def test_refresh_runtime_proof_refuses_a_wrong_operator_or_unknown_principal(port):
+    # A different operator cannot renew this delegation.
+    assert port.binding.refresh_runtime_proof(
+        'runtime-expired', 250.0, operator_ref='operator-b') == {
+            'status': 'REQUEST_REJECTED', 'code': 'SCOPE_DENIED'}
+    # An unknown principal or a non-runtime grant is refused.
+    assert port.binding.refresh_runtime_proof(
+        'nobody', 250.0, operator_ref='operator-a') == {
+            'status': 'REQUEST_REJECTED', 'code': 'SCOPE_DENIED'}
+    assert port.binding.refresh_runtime_proof(
+        'ops-acct', 250.0, operator_ref='operator-a') == {
+            'status': 'REQUEST_REJECTED', 'code': 'SCOPE_DENIED'}
+    # Still expired: no renewal happened.
+    assert port.call('runtime-expired', 'direct.control.apply',
+                     {'cause_id': 'still-expired', 'mode': 'STOP_NEW'})['result'] == {
+        'status': 'REQUEST_REJECTED', 'code': 'RUNTIME_PROOF_EXPIRED'}
+
+
+def test_refresh_runtime_proof_refuses_a_non_future_expiry(port):
+    for bad in (99.0, 100.0, float('inf'), float('nan'), 'later', True, None):
+        assert port.binding.refresh_runtime_proof(
+            'runtime-expired', bad, operator_ref='operator-a') == {
+                'status': 'REQUEST_REJECTED', 'code': 'INVALID_REQUEST'}
+    # Still expired.
+    assert port.call('runtime-expired', 'direct.control.apply',
+                     {'cause_id': 'x', 'mode': 'STOP_NEW'})['result'] == {
+        'status': 'REQUEST_REJECTED', 'code': 'RUNTIME_PROOF_EXPIRED'}
+
+
+def test_refresh_runtime_proof_refuses_a_revoked_proof(port):
+    assert port.binding.refresh_runtime_proof(
+        'runtime-revoked', 250.0, operator_ref='operator-a') == {
+            'status': 'REQUEST_REJECTED', 'code': 'RUNTIME_PROOF_UNAVAILABLE'}
+
+
+def test_refresh_runtime_proof_preserves_delegation_and_scope(port):
+    refreshed = port.binding.refresh_runtime_proof(
+        'runtime-a', 250.0, operator_ref='operator-a')
+    assert refreshed['status'] == 'OBSERVED'
+    installed = port.binding._control_grants_dict['runtime-a']
+    assert installed.runtime_proof.delegation_id == 'delegation-runtime-a'
+    assert installed.runtime_proof.operator_ref == 'operator-a'
+    assert installed.runtime_proof.expires_at == 250.0
+    # Scope/operations are unchanged: still strategy-scoped, runtime-only.
+    assert installed.kind == 'runtime'
+    assert installed.strategies == frozenset({'strategy-a'})
+    assert installed.operations == CONTROL_RUNTIME_OPERATIONS

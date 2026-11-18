@@ -10,7 +10,7 @@ import math
 import threading
 import time
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from types import MappingProxyType
 
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
@@ -191,6 +191,32 @@ class RuntimeGatewayControlBridge:
         # binding both sides of the one RPC. Exceptions mean UNKNOWN to Runtime.
         return runtime.call_bound('application.direct_write', operation, dict(arguments), route=bound,
                                   timeout_seconds=self._timeout).result
+
+    def refresh_proof(self, strategy_ref, expires_at):
+        """Renew one strategy's delegation proof on the operator's explicit act.
+
+        D66-08 continuation: the proof's ``expires_at`` is absolute and finite;
+        once it passes the bridge refuses to start and every call is refused.
+        The only lawful renewal is this operator-triggered replacement, which
+        preserves the delegation id and operator and only advances the wall-clock
+        window.  An unknown strategy, a non-finite or non-future expiry, or a
+        revoked proof is refused and the entry is left unchanged.  The proof is
+        swapped under the lifecycle lock so an in-flight call never races it.
+        """
+        with self._lifecycle_lock:
+            if self._state != 'running' or strategy_ref not in self._entries:
+                raise ValueError('RUNTIME_GATEWAY_CALL_DENIED')
+            route, proof, runtime, bound = self._entries[strategy_ref]
+            if (type(expires_at) not in (int, float) or isinstance(expires_at, bool)
+                    or not math.isfinite(expires_at)):
+                raise ValueError('RUNTIME_GATEWAY_CALL_DENIED')
+            if proof.revoked or float(expires_at) <= time.time():
+                raise ValueError('RUNTIME_GATEWAY_PROOF_UNAVAILABLE')
+            new_proof = replace(proof, expires_at=float(expires_at))
+            entries = dict(self._entries)
+            entries[strategy_ref] = (route, new_proof, runtime, bound)
+            self._entries = MappingProxyType(entries)
+        return new_proof.expires_at
 
     def client_for_strategy(self, config, strategy_ref):
         """Build Runtime's existing client with the supplied proof, never a request proof."""

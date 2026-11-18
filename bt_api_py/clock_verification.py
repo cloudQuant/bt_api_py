@@ -394,13 +394,23 @@ def qualify_market_tick_event(
     *,
     max_latency_seconds: float = 2.0,
     source_granularity_ms: float = 1000.0,
+    allow_stale_event_time: bool = False,
 ) -> MarketTickEvent:
     """Return ``event`` re-bound with SDK clock qualification, or unchanged.
 
     The tick is qualified only with valid NTP evidence and a consistent venue
     clock check; otherwise the original (UNKNOWN) event is returned untouched.
+
+    ``allow_stale_event_time`` (default off) relaxes only the event-age
+    dimension: an event time older than ``max_latency_seconds`` still keeps
+    ``freshness_status=STALE`` (never reported as FRESH) but becomes execution
+    eligible when continuity holds, and the contract ref is marked so audits
+    can distinguish the relaxed policy.  A negative latency (event time ahead
+    of receive) stays UNAVAILABLE and never eligible.
     """
 
+    if type(allow_stale_event_time) is not bool:
+        raise ValueError("INVALID_ALLOW_STALE_EVENT_TIME")
     if type(event) is not MarketTickEvent:
         return event
     if evidence is None or not evidence.is_valid() or venue_check is None or not venue_check.consistent:
@@ -431,7 +441,19 @@ def qualify_market_tick_event(
     contract_ref = data.quality_contract_ref or (
         f"{QUALIFICATION_POLICY_REF}:max_latency={max_latency_seconds:g}s"
     )
-    eligible = status is MarketFreshnessStatus.FRESH and data.continuity_status == "continuous"
+    if allow_stale_event_time:
+        contract_ref = f"{contract_ref}:allow_stale=1"
+    if status is MarketFreshnessStatus.FRESH:
+        eligible = data.continuity_status == "continuous"
+    elif status is MarketFreshnessStatus.STALE:
+        # Opt-in relaxation only: a stale event time stays STALE and carries
+        # the explicit allow_stale contract mark above; continuity still gates.
+        eligible = (
+            allow_stale_event_time and data.continuity_status == "continuous"
+        )
+    else:
+        # UNAVAILABLE (event time ahead of receive) is never relaxed.
+        eligible = False
     qualified = replace(
         data,
         quality_contract_ref=contract_ref,
@@ -572,19 +594,21 @@ class GatewayTradeClockQualifier:
     """
 
     def __init__(self, client, verifier: GatewayClockVerifier, *, max_latency_seconds=2.0,
-                 max_clock_error_ms=500.0, timeout_seconds=1.0):
+                 max_clock_error_ms=500.0, timeout_seconds=1.0, allow_stale_event_time=False):
         from bt_api_py.gateway_strategy_market import GatewayMarketSubscriptionClient
 
         if (type(client) is not GatewayMarketSubscriptionClient
                 or type(verifier) is not GatewayClockVerifier
                 or any(type(v) not in (int, float) or not math.isfinite(v) or v <= 0
                        for v in (max_latency_seconds, max_clock_error_ms, timeout_seconds))
-                or timeout_seconds > 30):
+                or timeout_seconds > 30
+                or type(allow_stale_event_time) is not bool):
             raise ValueError("INVALID_GATEWAY_CLOCK_QUALIFIER")
         self._client, self._verifier = client, verifier
         self._latency = float(max_latency_seconds)
         self._max_error_ns = int(max_clock_error_ms * 1_000_000)
         self._timeout = float(timeout_seconds)
+        self._allow_stale_event_time = allow_stale_event_time
         self._pid = os.getpid()
 
     def qualify(self, event, receipt) -> GatewayTradeClockQualification:
@@ -695,7 +719,14 @@ class GatewayTradeClockQualifier:
                 source_delay_ns = obs[source_wall_field] + calibration["offset_ns"] - int(tick_stamp.timestamp() * 1e9)
             except (OverflowError, OSError, ValueError):
                 return unavailable("SOURCE_CLOCK_INVALID")
-            if not (-1_000_000_000 - calibration["error_bound_ns"] <= source_delay_ns
+            if self._allow_stale_event_time:
+                # Explicit opt-in: the positive bound is the event age as seen
+                # by the gateway (receive wall - event time), so a replayed
+                # 7x24 tick is admitted; the event must still not be ahead of
+                # the gateway's receive clock.
+                if source_delay_ns < -1_000_000_000 - calibration["error_bound_ns"]:
+                    return unavailable("VENUE_CLOCK_UNAVAILABLE")
+            elif not (-1_000_000_000 - calibration["error_bound_ns"] <= source_delay_ns
                     <= 2_000_000_000 + calibration["error_bound_ns"]):
                 return unavailable("VENUE_CLOCK_UNAVAILABLE")
         # Recheck local evidence after the RPC: a clock jump or refreshed sample
@@ -712,11 +743,14 @@ class GatewayTradeClockQualifier:
         except (OverflowError, OSError, ValueError):
             return unavailable("EVENT_TIME_UNAVAILABLE")
         source_error_ms = 1000.0 + calibration["error_bound_ns"] / 1e6
-        if (age_seconds < -(source_error_ms + local.error_bound_ns / 1e6) / 1000.0
-                or age_seconds > self._latency):
+        if age_seconds < -(source_error_ms + local.error_bound_ns / 1e6) / 1000.0:
             return unavailable("EVENT_TIME_STALE")
-        freshness_remaining = int((self._latency - age_seconds) * 1_000_000_000)
-        expiry = min(expiry, now_mono + freshness_remaining)
+        if age_seconds > self._latency and not self._allow_stale_event_time:
+            return unavailable("EVENT_TIME_STALE")
+        if not self._allow_stale_event_time or age_seconds <= self._latency:
+            # Only a fresh event time tightens the clock-TTL expiry; an
+            # explicitly allowed stale event time keeps the full clock TTL.
+            expiry = min(expiry, now_mono + int((self._latency - age_seconds) * 1_000_000_000))
         if (expiry <= time.monotonic_ns()
                 or not self._client._issued_clock_matches(event, receipt, observed)):
             return unavailable("CLOCK_BINDING_UNAVAILABLE")

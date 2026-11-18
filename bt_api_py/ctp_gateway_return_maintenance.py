@@ -20,6 +20,22 @@ _CODE = re.compile(r"[A-Z][A-Z0-9_]{0,63}")
 _BLOCKING_QUERY_POLL_SECONDS = 0.005
 
 
+class CtpGatewayReturnMaintenanceError(RuntimeError):
+    """Finite owner-local return-maintenance failure with no value payload.
+
+    A source gap or unavailable observed source is a bounded, named state, not
+    a crashed owner loop. Callers classify by ``code`` exactly as the other
+    Gateway errors do; the raw ``RuntimeError`` is never raised so the poll
+    handler can record the gap instead of falling back to ``CALLBACK_FAILED``.
+    """
+
+    _CODES = frozenset({"OBSERVED_SOURCE_GAP", "OBSERVED_SOURCE_UNAVAILABLE"})
+
+    def __init__(self, code: str):
+        self.code = code if type(code) is str and code in self._CODES else "CALLBACK_FAILED"
+        super().__init__(self.code)
+
+
 class CtpGatewayReturnMaintenance:
     def __init__(self, session, provider, journal, guard, account_key, settings, *, external_classifier=None,
                  observed_order_source=False):
@@ -57,7 +73,34 @@ class CtpGatewayReturnMaintenance:
         # Both full-day queries completed for the current native session and
         # no gap, stale source or session change has been seen since.
         self._pair_seen = False
+        self._recovery_fence_generation = None
         self._rebuild()
+
+    def _clear_instrument_status_recovery_fence(self):
+        with self._lock:
+            self._recovery_fence_generation = None
+        clear = getattr(self._provider, "clear_instrument_status_return_recovery", None)
+        if callable(clear):
+            try:
+                clear()
+            except Exception:
+                _LOG.debug("instrument status return recovery clear failed")
+
+    def _set_instrument_status_recovery_fence(self, generation):
+        with self._lock:
+            self._recovery_fence_generation = (
+                None if self._closing.is_set() else generation
+            )
+
+    def instrument_status_recovery_fence(self):
+        """Thread-safe same-generation return recovery fence for D67-16."""
+        with self._lock:
+            if self._closing.is_set() or self._recovery_fence_generation is None:
+                return False
+            generation = self._recovery_fence_generation
+        if self._observed_order_source is not None and self._observed_order_source.blocked:
+            return False
+        return (generation, "ctp_gateway_return_maintenance")
 
     def _set(self, opened, status):
         with self._lock:
@@ -137,6 +180,7 @@ class CtpGatewayReturnMaintenance:
             raise RuntimeError("OWNER_REQUIRED")
         self._drop_query()
         self._set(False, "SESSION_CHANGED")
+        self._clear_instrument_status_recovery_fence()
         self._clear_fact_status()
         self._done.clear()
         self._pair_seen = False
@@ -154,6 +198,7 @@ class CtpGatewayReturnMaintenance:
                 or not 0 <= timeout_seconds <= 3600):
             raise ValueError("INVALID_CLOSE_TIMEOUT")
         self.begin_close()
+        self._clear_instrument_status_recovery_fence()
         if self._observed_order_source is not None and self._observed_order_source._invalidation_pending:
             try:
                 self._observed_order_source.invalidate()
@@ -174,6 +219,7 @@ class CtpGatewayReturnMaintenance:
         # An outstanding query of the previous session is never ingested.
         self._drop_query()
         self._set(False, "SESSION_CHANGED")
+        self._clear_instrument_status_recovery_fence()
         self._clear_fact_status()
         self._done.clear()
         self._pair_seen = False
@@ -229,9 +275,10 @@ class CtpGatewayReturnMaintenance:
             if self._source_start_failed:
                 if self._observed_order_source._invalidation_pending:
                     self._observed_order_source.invalidate()
-                raise RuntimeError("OBSERVED_SOURCE_UNAVAILABLE")
+                raise CtpGatewayReturnMaintenanceError("OBSERVED_SOURCE_UNAVAILABLE")
             if self._provider.session_generation() != self._generation:
                 self._set(False, "SESSION_CHANGED")
+                self._clear_instrument_status_recovery_fence()
                 self._done.clear()
                 self._pair_seen = False
                 reader = self._ingestor.rebind_same_native()
@@ -250,7 +297,7 @@ class CtpGatewayReturnMaintenance:
             self.refresh_generation()
             buffer = self._session.return_buffer
             if self._observed_order_source is not None and self._observed_order_source.blocked:
-                raise RuntimeError("OBSERVED_SOURCE_GAP")
+                raise CtpGatewayReturnMaintenanceError("OBSERVED_SOURCE_GAP")
             status = buffer.status()
             if status.gap and self._observed_order_source is not None:
                 self._observed_order_source.invalidate()
@@ -262,7 +309,7 @@ class CtpGatewayReturnMaintenance:
             if self._observed_order_source is not None and buffer.status().gap:
                 self._observed_order_source.invalidate()
             if self._observed_order_source is not None and self._observed_order_source.blocked:
-                raise RuntimeError("OBSERVED_SOURCE_GAP")
+                raise CtpGatewayReturnMaintenanceError("OBSERVED_SOURCE_GAP")
             buffer.ack(batch)
             self._stale_seen = False
             self._ledger.reconcile_pending(limit=256)
@@ -273,19 +320,28 @@ class CtpGatewayReturnMaintenance:
                 if self._observed_order_source is not None:
                     self._observed_order_source.invalidate()
                 self._pair_seen = False
+                self._clear_instrument_status_recovery_fence()
                 self._set(False, "SOURCE_GAP")
             elif status.record_count:
+                self._clear_instrument_status_recovery_fence()
                 self._set(False, "CALLBACK_PENDING")
             elif len(self._done) != 2:
+                self._clear_instrument_status_recovery_fence()
                 self._set(False, "QUERY_INCOMPLETE")
             else:
+                if self.ledger_continuous():
+                    self._set_instrument_status_recovery_fence(self._generation)
+                else:
+                    self._clear_instrument_status_recovery_fence()
                 self._set(True, "HEALTHY")
         except Exception as error:
             self._last_poll_ok = False
             self._clear_fact_status()
+            self._clear_instrument_status_recovery_fence()
             self._log_query_failure("callbacks", error)
             code = getattr(error, "code", "CALLBACK_FAILED")
-            if code not in {"UNSUPPORTED_RETURN", "SOURCE_STALE"}:
+            if code not in {"UNSUPPORTED_RETURN", "SOURCE_STALE", "OBSERVED_SOURCE_GAP",
+                            "OBSERVED_SOURCE_UNAVAILABLE"}:
                 code = "CALLBACK_FAILED"
             if code == "SOURCE_STALE" and not self._stale_seen:
                 self._done.clear()

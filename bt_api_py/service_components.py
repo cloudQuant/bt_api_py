@@ -1047,7 +1047,8 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             write_operations_by_port=MappingProxyType(
                 {
                     "service.risk_order": frozenset(
-                        {"risk.order.reserve", "risk.order.dispatch", "risk.order.release"}
+                        {"risk.order.reserve", "risk.order.dispatch", "risk.order.release",
+                         "risk.parent.reserve", "risk.parent.release"}
                     ),
                     "service.risk_admin": frozenset(
                         {"risk.policy.publish", "risk.latch.release", "risk.cancel.request"}
@@ -1418,7 +1419,8 @@ def validate_components(specs: Sequence[ComponentSpec]) -> tuple[PreparedCompone
                 operations = operations - {"direct.strategy_position", "direct.strategy_close_capacity"}
             if normalized.get("account_facts_financial_enabled") is not True:
                 operations = operations - ({"direct.strategy_financial"} | module.ACCOUNT_FACTS_OPERATIONS)
-            if normalized.get("account_fact_recovery_enabled") is not True:
+            if (normalized.get("account_fact_recovery_enabled") is not True
+                    and normalized.get("account_facts_financial_enabled") is not True):
                 operations = operations - module.ACCOUNT_FACTS_OPERATIONS
             if normalized.get("account_extensions_enabled") is not True:
                 operations = operations - {"account.strategy_financial", "account.strategy_book"}
@@ -2569,7 +2571,9 @@ def build_component(
                                     max_latency_seconds=getattr(
                                         adapter, '_market_gate_max_latency_seconds', 2.0),
                                     simnow_latency_relaxed=getattr(
-                                        adapter, '_market_gate_simnow_relaxed', False))
+                                        adapter, '_market_gate_simnow_relaxed', False),
+                                    allow_stale_quote=getattr(
+                                        adapter, '_market_gate_allow_stale_quote', False))
                                 values['hub'].install_market_dispatch_gate(gate)
                                 if (values.get('claim_coordinator') is not None
                                         and type(values.get('claim_wired')) is set):
@@ -3227,7 +3231,8 @@ def build_component(
                     and port == "service.account_read" and trading_account_observer is None):
                 operations = operations - prepared.module.ACCOUNT_OBSERVER_OPERATIONS
             if (spec.component == "gateway" and spec.options.get("role") == "trading_owner"
-                    and port == "service.account_read" and trading_account_facts is None):
+                    and port == "service.account_read" and trading_account_facts is None
+                    and prepared.options.get("account_facts_financial_enabled") is not True):
                 operations = operations - prepared.module.ACCOUNT_FACTS_OPERATIONS
             if (spec.component == "gateway" and spec.options.get("role") == "trading_owner"
                     and port == "service.account_read" and trading_order_cut is None):

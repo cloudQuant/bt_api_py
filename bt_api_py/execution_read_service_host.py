@@ -13,6 +13,7 @@ import os
 import signal
 import sqlite3
 import stat
+import sys
 import time
 import uuid
 from dataclasses import dataclass
@@ -180,8 +181,13 @@ def _check_existing(config):
             or data.get('account') != account_hash or data.get('database') != database.name):
         raise ReadServiceError('INVALID_STORAGE')
     info = database.stat(follow_symlinks=False)
+    root_info = root.stat(follow_symlinks=False)
+    same_file = (
+        (info.st_dev, info.st_ino) == (data.get('device'), data.get('inode'))
+        or (sys.platform == 'darwin' and info.st_ino == data.get('inode') and info.st_dev == root_info.st_dev)
+    )
     if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077
-            or info.st_nlink != 1 or (info.st_dev, info.st_ino) != (data.get('device'), data.get('inode'))):
+            or info.st_nlink != 1 or not same_file):
         raise ReadServiceError('INVALID_STORAGE')
     with sqlite3.connect(database.as_uri() + '?mode=ro', uri=True) as db:
         row = db.execute("SELECT value FROM execution_meta WHERE key='schema_version'").fetchone()

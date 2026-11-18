@@ -116,6 +116,7 @@ class CtpGatewayTrustedResources:
     upgrade_account_event_recovery_from_v18: bool = False
     strategy_ledger_external_baseline: object | None = field(default=None, repr=False)
     strategy_ledger_comparison_refresh_seconds: float | None = None
+    strategy_ledger_source_cut_mode: str = "none"
     control_release_audit_enabled: bool = False
     upgrade_control_release_audit: bool = False
     calendar_settings: object | None = field(default=None, repr=False)
@@ -200,6 +201,7 @@ def create_ctp_gateway_profile_factory(
             strategy_ledger_external_baseline=resources.strategy_ledger_external_baseline,
             strategy_ledger_comparison_refresh_seconds=(
                 resources.strategy_ledger_comparison_refresh_seconds),
+            strategy_ledger_source_cut_mode=resources.strategy_ledger_source_cut_mode,
             control_release_audit_enabled=resources.control_release_audit_enabled,
             upgrade_control_release_audit=resources.upgrade_control_release_audit,
             calendar_settings=resources.calendar_settings,

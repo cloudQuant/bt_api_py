@@ -544,6 +544,10 @@ class RiskAccountFactsObservation:
     poll_interval_seconds: float
     timeout_seconds: float
     page_size: int
+    order_cut_enabled: bool = False
+    order_cut_max_age_seconds: float | None = None
+    order_cut_timeout_seconds: float | None = None
+    order_cut_page_size: int = 256
 
 
 @dataclass(frozen=True)
@@ -586,6 +590,7 @@ class RiskServiceConfig:
     pretrade_schema_version: int = 3
     pretrade_upgrade_from_v3: RiskPretradeUpgrade | None = None
     account_facts_observation: RiskAccountFactsObservation | None = None
+    parent_contract_enabled: bool = False
 
     def __repr__(self) -> str:
         return f"RiskServiceConfig(service_id={self.service_id!r})"
@@ -904,21 +909,63 @@ def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceCon
             "deadlines",
             "refresh",
         ),
-        optional=("rules", "pretrade", "account_facts_observation"),
+        optional=("rules", "pretrade", "account_facts_observation", "parent_contract_enabled"),
     )
     if top["schema"] != RISK_SERVICE_CONFIG_SCHEMA:
         _fail("RISK_SERVICE_CONFIG_SCHEMA_UNSUPPORTED")
     pretrade_version, pretrade_upgrade = ((3, None) if "pretrade" not in top
                                          else _pretrade_config(top["pretrade"]))
+    parent_contract_enabled = top.get("parent_contract_enabled", False)
+    if type(parent_contract_enabled) is not bool:
+        _fail("RISK_SERVICE_CONFIG_PARENT_CONTRACT_INVALID")
     facts_observation = None
     if "account_facts_observation" in top:
-        item = _mapping(top["account_facts_observation"],
-                        required=("poll_interval_seconds", "timeout_seconds", "page_size"))
+        item = _mapping(
+            top["account_facts_observation"],
+            required=("poll_interval_seconds", "timeout_seconds", "page_size"),
+            optional=(
+                "order_cut_enabled",
+                "order_cut_max_age_seconds",
+                "order_cut_timeout_seconds",
+                "order_cut_page_size",
+            ),
+        )
         interval = _seconds(item["poll_interval_seconds"], maximum=Decimal(3600))
         timeout = _seconds(item["timeout_seconds"], maximum=Decimal('0.250'))
         if interval < 1.0 or timeout < 0.001 or pretrade_version != 4 or pretrade_upgrade is not None:
             _fail("RISK_SERVICE_CONFIG_ACCOUNT_FACTS_INVALID")
-        facts_observation = RiskAccountFactsObservation(interval, timeout, _int(item["page_size"], low=1, high=256))
+        page_size = _int(item["page_size"], low=1, high=256)
+        cut_enabled = item.get("order_cut_enabled", False)
+        if type(cut_enabled) is not bool:
+            _fail("RISK_SERVICE_CONFIG_ACCOUNT_FACTS_INVALID")
+        cut_max_age = None
+        cut_timeout = None
+        cut_page_size = 256
+        if not cut_enabled:
+            if any(
+                key in item
+                for key in ("order_cut_max_age_seconds", "order_cut_timeout_seconds", "order_cut_page_size")
+            ):
+                _fail("RISK_SERVICE_CONFIG_ACCOUNT_FACTS_INVALID")
+        else:
+            if "order_cut_max_age_seconds" not in item:
+                _fail("RISK_SERVICE_CONFIG_ACCOUNT_FACTS_INVALID")
+            cut_max_age = _nanosecond_seconds(item["order_cut_max_age_seconds"], maximum=Decimal(86400))
+            if "order_cut_timeout_seconds" in item:
+                cut_timeout = _seconds(item["order_cut_timeout_seconds"], maximum=Decimal(5))
+                if cut_timeout < 0.001:
+                    _fail("RISK_SERVICE_CONFIG_ACCOUNT_FACTS_INVALID")
+            if "order_cut_page_size" in item:
+                cut_page_size = _int(item["order_cut_page_size"], low=1, high=256)
+        facts_observation = RiskAccountFactsObservation(
+            interval,
+            timeout,
+            page_size,
+            order_cut_enabled=cut_enabled,
+            order_cut_max_age_seconds=cut_max_age,
+            order_cut_timeout_seconds=cut_timeout,
+            order_cut_page_size=cut_page_size,
+        )
     service = _mapping(
         top["service"],
         required=(
@@ -1069,6 +1116,7 @@ def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceCon
         pretrade_schema_version=pretrade_version,
         pretrade_upgrade_from_v3=pretrade_upgrade,
         account_facts_observation=facts_observation,
+        parent_contract_enabled=parent_contract_enabled,
     )
 
 

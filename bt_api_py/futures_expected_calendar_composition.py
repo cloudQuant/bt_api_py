@@ -20,6 +20,7 @@ from bt_api_base.futures_expected_calendar_protocol import (
     FuturesExpectedCalendarProviderRegistryPort,
     FuturesExpectedCalendarRequest,
     FuturesExpectedCalendarSnapshot,
+    FuturesExpectedCalendarStatus,
     SelectedFuturesExpectedCalendarRoute,
 )
 
@@ -202,17 +203,24 @@ class _RouteBoundExpectedCalendarPort:
             raise FuturesExpectedCalendarCompositionError(
                 "FUTURES_EXPECTED_CALENDAR_RESULT_INVALID"
             ) from None
+        is_stale_config = (
+            type(snapshot) is FuturesExpectedCalendarSnapshot
+            and snapshot.request is request
+            and snapshot.status is FuturesExpectedCalendarStatus.UNAVAILABLE
+            and snapshot.blockers == ("FUTURES_EXPECTED_CALENDAR_CONFIGURATION_CHANGED",)
+        )
         if (
             type(snapshot) is not FuturesExpectedCalendarSnapshot
             or snapshot.request is not request
-            or self._delegate.validate(snapshot) is not True
+            or (not is_stale_config and self._delegate.validate(snapshot) is not True)
         ):
             raise FuturesExpectedCalendarCompositionError(
                 "FUTURES_EXPECTED_CALENDAR_RESULT_INVALID"
             )
         self._require_current_route()
-        with self._lock:
-            self._issued[id(snapshot)] = snapshot
+        if not is_stale_config:
+            with self._lock:
+                self._issued[id(snapshot)] = snapshot
         return snapshot
 
     def expected_trading_days(self, venue: str, year: int):
@@ -268,6 +276,13 @@ class FuturesExpectedCalendarProviderRouter:
         route_resolver: FuturesExpectedCalendarRouteResolver,
         *,
         registry: FuturesExpectedCalendarProviderRegistry | None = None,
+        factory_resolver: (
+            Callable[
+                [str, Callable[[], FuturesExpectedCalendarProviderFactory]],
+                FuturesExpectedCalendarProviderFactory,
+            ]
+            | None
+        ) = None,
     ) -> None:
         if not callable(route_resolver):
             raise FuturesExpectedCalendarCompositionError(
@@ -278,8 +293,13 @@ class FuturesExpectedCalendarProviderRouter:
             raise FuturesExpectedCalendarCompositionError(
                 "FUTURES_EXPECTED_CALENDAR_PROVIDER_REGISTRY_INVALID"
             )
+        if factory_resolver is not None and not callable(factory_resolver):
+            raise FuturesExpectedCalendarCompositionError(
+                "FUTURES_EXPECTED_CALENDAR_PROVIDER_FACTORY_INVALID"
+            )
         self._route_resolver = route_resolver
         self._registry = selected
+        self._factory_resolver = factory_resolver
         self._lock = RLock()
         self._ports: dict[
             str,
@@ -301,7 +321,16 @@ class FuturesExpectedCalendarProviderRouter:
             if cached is not None and _same_route(cached[0], route):
                 return cached[1]
             try:
-                factory = self._load_factory(exchange_name)
+                if self._factory_resolver is not None:
+                    factory = self._factory_resolver(
+                        exchange_name, lambda: self._load_factory(exchange_name)
+                    )
+                else:
+                    factory = self._load_factory(exchange_name)
+                if not callable(factory):
+                    raise FuturesExpectedCalendarCompositionError(
+                        "FUTURES_EXPECTED_CALENDAR_PROVIDER_FACTORY_INVALID"
+                    )
                 delegate = factory(route)
                 if not isinstance(delegate, FuturesExpectedCalendarPort):
                     raise FuturesExpectedCalendarCompositionError(

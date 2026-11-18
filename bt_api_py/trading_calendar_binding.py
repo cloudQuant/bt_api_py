@@ -685,7 +685,7 @@ class _VenueDayView:
         def unknown(reason: str) -> VenueDayQueryResult:
             return VenueDayQueryResult("UNKNOWN", reason, status, venue, trading_day)
 
-        if mode != SIMULATION_ONLY or type(mode) is not str:
+        if mode not in (SIMULATION_ONLY, "OFFICIAL") or type(mode) is not str:
             return unknown("SIMULATION_MODE_REQUIRED")
         if (
             type(venue) is not str
@@ -955,7 +955,7 @@ class SimulationCalendarReadView:
             )
 
         scope = {"venue": venue, "kind": kind, "product": product, "contract": contract}
-        if mode != SIMULATION_ONLY or type(mode) is not str:
+        if mode not in (SIMULATION_ONLY, "OFFICIAL") or type(mode) is not str:
             return unknown("INVALID_MODE")
         if any(not _text(v) for v in scope.values()) or kind not in ("future", "option"):
             return unknown("INVALID_QUERY_SCOPE")
@@ -1036,8 +1036,8 @@ class SimulationCalendarBinding:
         trading_day: date,
         last_sequence: int,
     ):
-        if mode != SIMULATION_ONLY or type(mode) is not str:
-            raise ValueError("explicit SIMULATION_ONLY mode is required")
+        if mode not in (SIMULATION_ONLY, "OFFICIAL") or type(mode) is not str:
+            raise ValueError("explicit SIMULATION_ONLY or OFFICIAL mode is required")
         if (
             not _text(route)
             or not _text(source_generation)
@@ -1061,7 +1061,7 @@ class SimulationCalendarBinding:
         self._prepared = None
         self._prepare_epoch = 0
         self._status = BindingStatus(
-            mode=SIMULATION_ONLY,
+            mode=mode,
             route=route,
             source_generation=source_generation,
             bound_trading_day=trading_day,
@@ -1115,7 +1115,7 @@ class SimulationCalendarBinding:
 
     def capture_read_view(self, *, mode: str) -> SimulationCalendarReadView:
         """Capture both simulation query paths from the same bound version."""
-        if type(mode) is not str or mode != SIMULATION_ONLY:
+        if type(mode) is not str or mode not in (SIMULATION_ONLY, "OFFICIAL"):
             raise ValueError("explicit SIMULATION_ONLY mode is required")
         with self._lock:
             return SimulationCalendarReadView(

@@ -1075,7 +1075,132 @@ def test_gate_latency_above_two_seconds_requires_the_simnow_relaxation():
 
 
 
-def test_unfinished_market_change_is_busy_before_claim_and_ignored_after_it():
+def test_allow_stale_quote_requires_simnow_relaxed_mode_and_bool():
+    # The opt-in exists only in the SimNow-relaxed mode; a non-bool or an
+    # attempt to enable it on a strict gate fails at construction.
+    hub = GatewayMarketHub(
+        Provider(), key_universe=(KEY,), principal_allowed_keys={"p": (KEY,)},
+        service_identity=WireIdentity(WireRole.SERVICE, "gateway", "gateway"),
+        service_scope=WireScope("domain"), epoch_factory=lambda: "epoch-1",
+        publisher=lambda event: None,
+    )
+    service = GatewayMarketService(hub, registrations={
+        "reg": GatewayMarketRegistration("p", "domain", "strategy", "run", "account")})
+
+    def gate(**kwargs):
+        return GatewayMarketDispatchGate(hub, service, account_scope="account",
+                                         service_generation="generation", **kwargs)
+
+    assert gate()._allow_stale_quote is False
+    assert gate(simnow_latency_relaxed=True,
+                allow_stale_quote=True)._allow_stale_quote is True
+    for kwargs in (
+        {"allow_stale_quote": True},  # strict mode: the ceiling must stay
+        {"allow_stale_quote": True, "simnow_latency_relaxed": False},
+        {"allow_stale_quote": "yes", "simnow_latency_relaxed": True},
+    ):
+        with pytest.raises(GatewayMarketDispatchError, match="INVALID_GATE"):
+            gate(**kwargs)
+
+
+def test_allow_stale_quote_drops_only_the_event_age_ceiling():
+    """A days-old replayed event time fails closed by default; with the
+    explicit opt-in it is admitted while the observation TTL still bounds."""
+    hub = GatewayMarketHub(
+        Provider(), key_universe=(KEY,), principal_allowed_keys={"p": (KEY,)},
+        service_identity=WireIdentity(WireRole.SERVICE, "gateway", "gateway"),
+        service_scope=WireScope("domain"), epoch_factory=lambda: "epoch-1",
+        publisher=lambda event: None,
+    )
+    registration = GatewayMarketRegistration("p", "domain", "strategy", "run", "account")
+    service = GatewayMarketService(hub, registrations={"reg": registration})
+    provider = Provider()
+    native = lambda handle, **kwargs: (provider.observation, provider.observed_mono)
+    hub.subscribe("p", KEY, "reg")
+
+    def build(**kwargs):
+        gate = GatewayMarketDispatchGate(
+            hub, service, account_scope="account", service_generation="generation",
+            native_source_check=native, **kwargs)
+        hub.install_market_dispatch_gate(gate)
+        return gate
+
+    def case(**gate_kwargs):
+        provider = Provider()
+        hub = GatewayMarketHub(
+            provider, key_universe=(KEY,), principal_allowed_keys={"p": (KEY,)},
+            service_identity=WireIdentity(WireRole.SERVICE, "gateway", "gateway"),
+            service_scope=WireScope("domain"), epoch_factory=lambda: "epoch-1",
+            publisher=lambda event: None,
+        )
+        service = GatewayMarketService(hub, registrations={"reg": registration})
+        gate = GatewayMarketDispatchGate(
+            hub, service, account_scope="account", service_generation="generation",
+            native_source_check=lambda handle, **kwargs: (
+                provider.observation, provider.observed_mono), **gate_kwargs)
+        hub.install_market_dispatch_gate(gate)
+        hub.subscribe("p", KEY, "reg")
+        now = datetime.now(timezone.utc)
+        china = now.astimezone(timezone(timedelta(hours=8)))
+        event = _unqualified_event(now - timedelta(days=2), now)
+        payload = replace(event.data, trading_date=china.date().isoformat())
+        envelope = hub.publish(
+            KEY, payload.to_dict(), now.isoformat().replace("+00:00", "Z"),
+            generation=hub._streams[KEY].generation)
+        wall = time.time_ns()
+        obs = {
+            "schema_version": 2, "observation_kind": "native_md_tick", "provider": "ctp",
+            "account_scope": "account", "venue": KEY.instrument.venue,
+            "service_generation": "generation", "td_connection_generation": 1,
+            "td_source_ref": "td", "trading_day": china.strftime("%Y%m%d"),
+            "market_source": SOURCE.to_dict(),
+            "provider_sequence": payload.provider_sequence,
+            "provider_subscription_epoch": payload.provider_subscription_epoch,
+            "venue_observed_at_utc": payload.provider_event_time_utc,
+            "source_event_received_wall_ns": wall - 10_000,
+            "source_observed_wall_ns": wall,
+            "remaining_ns": 60_000_000_000,
+            "source_calibration": {"schema_version": 1, "method": "sntp", "offset_ns": 0,
+                "error_bound_ns": 2_000_000, "remaining_ns": 60_000_000_000},
+        }
+        provider.observation, provider.observed_mono = obs, time.monotonic_ns()
+        ctx = ServiceCallContext(
+            WireIdentity(WireRole.STRATEGY_CLIENT, "p", "strategy"),
+            WireScope("domain", account_ref="account", strategy_ref="strategy", run_id="run"),
+            "reg", "p")
+        ref = {"key": KEY.to_dict(), "epoch": envelope.header.stream_epoch,
+               "sequence": envelope.header.sequence, "message_id": envelope.header.message_id}
+        public = service.handle(
+            "market.clock_observation", principal_ref="p", scope=ctx.scope,
+            registration_id="reg", arguments=ref)
+        assert public == obs and "source_observed_monotonic_ns" not in public
+        row = DirectCommandRecord(
+            "account", "strategy", "request", "reservation", "p", "a" * 64,
+            json.dumps({"symbol": KEY.instrument.native_symbol,
+                        "exchange_id": KEY.instrument.venue}),
+            "generation", time.monotonic() + 10, "RESERVED", 1, None, (), None, None)
+        return gate, provider, ctx, ref, row
+
+    strict, _, strict_ctx, strict_ref, _ = case()
+    with pytest.raises(GatewayMarketDispatchError, match="MARKET_QUOTE_EXPIRED"):
+        strict.issue(strict_ctx, strict_ref, market_registration_id="reg",
+                     request_key="request", reservation_id="reservation",
+                     digest="a" * 64)
+    relaxed, provider, ctx, ref, row = case(
+        simnow_latency_relaxed=True, allow_stale_quote=True, max_latency_seconds=5.0)
+    permit = relaxed.issue(ctx, ref, market_registration_id="reg",
+                           request_key="request", reservation_id="reservation",
+                           digest="a" * 64)
+    with relaxed.dispatch_fence(permit, row):
+        relaxed.native_recheck(permit, row)
+    # A live observation is still required: an expired clock evidence keeps
+    # the command fenced even under the opt-in.
+    provider.observation = dict(
+        provider.observation, remaining_ns=0,
+        source_calibration=dict(
+            provider.observation["source_calibration"], remaining_ns=0))
+    with pytest.raises(GatewayMarketDispatchError):
+        relaxed.native_recheck(permit, row)
     # SimNow 63.09 (I63-E109): a strategy's market call held a hub change open
     # (waiting for this owner) while the owner committed an already-claimed
     # dispatch; MARKET_PERMIT_INVALID left the order RESERVED forever.

@@ -33,9 +33,13 @@ _DAY_LIST_SHA256 = "95e5ef866af3b5cd9f6f01a3fd9a95f5bec4d88f9aa7457a1dc16a63d238
 _SOURCE_HASHES = {
     "trading_session_schedule.py": "461ca03afc865186c5d7134e1c09c64f966643a56a1eebdcd903c2954dd4765e",
     "futures_expected_calendar_provider.py": "cb5096a9a40ef5190cf54a845e8ef7619116bd31189a71fa34d4ed9e8604c19c",
+    # Pinned byte digest of bt_api_ctp/calendar_snapshot.py as of 2026-11-18.
     # bt_api_ctp@87685760fd394857a4bad6fab722aacae1d0ef1a added the mock-only
-    # interrupt_window action; close_day/cancel_window handling is unchanged.
-    "calendar_snapshot.py": "a32efb10a2f1de6c4fc9d88f030b5ed13a2870893a9ef82688a87f57160e63b3",
+    # interrupt_window action (close_day/cancel_window handling unchanged);
+    # bt_api_ctp@f88777098136fde1d848afaa00bd897af36ff728 then added the
+    # read-only owner_day_bounds() method, which does not change the seed
+    # derivation or any close_day/cancel_window/interrupt_window semantics.
+    "calendar_snapshot.py": "7d2dc17e5d00ac3bf1d6fabb894729c739efe5e5a9a5b17839878e7d4c0c5a33",
 }
 # Explicit copy of the old table. Case is part of the declaration.
 _PROFILES = (

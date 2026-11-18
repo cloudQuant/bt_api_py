@@ -9,15 +9,17 @@ import threading
 class RecoveryDurationWorker:
     """Process bounded steps on one owner thread and retain unknown cleanup."""
 
-    def __init__(self, outbox, configs, producer_bindings):
+    def __init__(self, outbox, configs, producer_bindings, *, fact_coordinator_factory=None):
         self._outbox = outbox
         self._configs = configs
         self._producer_bindings = producer_bindings
+        self._fact_coordinator_factory = fact_coordinator_factory
         self._stop = threading.Event()
         self._ready = threading.Event()
         self._lock = threading.Lock()
         self._failed = False
         self._failure_code = None
+        self._close_failed = False
         self._views = {}
         self._thread = threading.Thread(target=self._run, name="monitor-recovery-duration", daemon=False)
 
@@ -27,6 +29,8 @@ class RecoveryDurationWorker:
             raise RuntimeError("MONITOR_RECOVERY_START_FAILED")
 
     def _run(self):
+        coordinator_handle = None
+        coordinator = None
         try:
             from bt_api_monitor.recovery_duration import (
                 RecoveryDurationBinding,
@@ -80,17 +84,53 @@ class RecoveryDurationWorker:
                 pending = snapshot["pending_reason"] is not None
                 consumers.append((config.consumer_id, consumer, pending, reconciler))
                 self._store(config.consumer_id, snapshot, pending)
+            if self._fact_coordinator_factory is not None:
+                coordinator_handle = self._fact_coordinator_factory(self._configs)
+                coordinator = getattr(coordinator_handle, "coordinator", coordinator_handle)
             self._ready.set()
+            permanent_refusals = {}
             while not self._stop.is_set():
+                if coordinator_handle is not None:
+                    maintain = getattr(coordinator_handle, "maintain", None)
+                    if callable(maintain):
+                        maintain()
                 for index, (consumer_id, consumer, pending, reconciler) in enumerate(consumers):
                     if self._stop.is_set():
                         break
+                    resolution = None
                     if not pending:
                         consumer.process_next(facts=())
                         snapshot = consumer.snapshot()
                         pending = snapshot["pending_reason"] is not None
                         consumers[index] = (consumer_id, consumer, pending, reconciler)
                         self._store(consumer_id, snapshot, pending)
+                    if (
+                        pending
+                        and coordinator is not None
+                        and snapshot["pending_reason"]
+                        in {
+                            "PENDING_MAPPING_OR_CALENDAR",
+                            "PENDING_FACT_VERSION_MISMATCH",
+                            "PENDING_CALENDAR_COVERAGE",
+                        }
+                    ):
+                        active_binding = coordinator.binding_for(consumer_id)
+                        cache_key = (
+                            consumer_id,
+                            snapshot["checkpoint"],
+                            snapshot["pending_reason"],
+                            None if active_binding is None else active_binding.binding_digest,
+                        )
+                        if cache_key in permanent_refusals:
+                            resolution = permanent_refusals[cache_key]
+                        else:
+                            resolution = coordinator.resolve_pending_once(consumer_id, consumer)
+                            if resolution.status == "REFUSED" and resolution.permanent_refusal:
+                                permanent_refusals[cache_key] = resolution
+                            snapshot = consumer.snapshot()
+                            pending = snapshot["pending_reason"] is not None
+                            consumers[index] = (consumer_id, consumer, pending, reconciler)
+                            self._store(consumer_id, snapshot, pending, resolution=resolution)
                     if reconciler is not None:
                         reconciler.reconcile(limit=1)
                 self._stop.wait(0.05)
@@ -103,21 +143,42 @@ class RecoveryDurationWorker:
                     else "MONITOR_RECOVERY_FAILED"
                 )
             self._ready.set()
+        finally:
+            if coordinator_handle is not None:
+                close = getattr(coordinator_handle, "close", None)
+                if callable(close):
+                    try:
+                        closed = close()
+                        if closed is False:
+                            with self._lock:
+                                self._close_failed = True
+                    except BaseException:
+                        with self._lock:
+                            self._close_failed = True
 
-    def _store(self, consumer_id, snapshot, pending):
+    def _store(self, consumer_id, snapshot, pending, *, resolution=None):
         reason = snapshot["pending_reason"]
         status = "PROCESSING"
         if pending:
             status = "PENDING_FACTS" if reason in {
                 "PENDING_MAPPING_OR_CALENDAR", "PENDING_CALENDAR_COVERAGE"
             } else "UNKNOWN"
-        with self._lock:
-            self._views[consumer_id] = {
-                "status": status,
-                "current_state": "UNKNOWN",
-                "historical_snapshot": snapshot,
-                "historical_only": True,
+        view = {
+            "status": status,
+            "current_state": "UNKNOWN",
+            "historical_snapshot": snapshot,
+            "historical_only": True,
+        }
+        if resolution is not None:
+            view["fact_resolution"] = {
+                "status": resolution.status,
+                "reason": resolution.reason,
+                "request_id": resolution.request_id,
+                "mapping_version": resolution.mapping_version,
+                "calendar_version": resolution.calendar_version,
             }
+        with self._lock:
+            self._views[consumer_id] = view
 
     @property
     def failed(self):
@@ -144,4 +205,6 @@ class RecoveryDurationWorker:
 
     @property
     def stopped(self):
-        return self._thread.ident is None or not self._thread.is_alive()
+        with self._lock:
+            close_failed = self._close_failed
+        return (self._thread.ident is None or not self._thread.is_alive()) and not close_failed

@@ -49,6 +49,7 @@ __all__ = (
     "CALENDAR_UNKNOWN",
     "InstrumentStatusComposition",
     "InstrumentStatusObservationPort",
+    "InstrumentStatusRecoveryProof",
     "InstrumentStatusScope",
     "OBSERVATION_STATES",
     "PHASE_AUCTION",
@@ -58,6 +59,11 @@ __all__ = (
     "PHASE_PAUSED",
     "PHASE_UNKNOWN",
     "REASON_CODES",
+    "REASON_OBSERVATION_LISTENER_UNHEALTHY",
+    "REASON_OBSERVATION_PRIOR_PAUSE_RECOVERED",
+    "REASON_OBSERVATION_PRIOR_PAUSE_UNRECOVERED",
+    "REASON_OBSERVATION_RECOVERY_INCOMPLETE",
+    "REASON_OBSERVATION_RECOVERY_UNPROVEN",
     "SESSION_PHASES",
     "SOURCES",
     "STATE_CLOSED",
@@ -143,6 +149,11 @@ REASON_OBSERVATION_DUPLICATE = "OBSERVATION_DUPLICATE"
 REASON_OBSERVATION_SEQUENCE_CONFLICT = "OBSERVATION_SEQUENCE_CONFLICT"
 REASON_OBSERVATION_IDENTITY_CONFLICT = "OBSERVATION_IDENTITY_CONFLICT"
 REASON_OBSERVATION_ADMISSION_REFUSED = "OBSERVATION_ADMISSION_REFUSED"
+REASON_OBSERVATION_PRIOR_PAUSE_UNRECOVERED = "OBSERVATION_PRIOR_PAUSE_UNRECOVERED"
+REASON_OBSERVATION_PRIOR_PAUSE_RECOVERED = "OBSERVATION_PRIOR_PAUSE_RECOVERED"
+REASON_OBSERVATION_RECOVERY_INCOMPLETE = "OBSERVATION_RECOVERY_INCOMPLETE"
+REASON_OBSERVATION_LISTENER_UNHEALTHY = "OBSERVATION_LISTENER_UNHEALTHY"
+REASON_OBSERVATION_RECOVERY_UNPROVEN = "OBSERVATION_RECOVERY_UNPROVEN"
 
 REASON_OBSERVATION_CONTINUOUS = "OBSERVATION_CONTINUOUS"
 REASON_OBSERVATION_AUCTION = "OBSERVATION_AUCTION"
@@ -187,6 +198,11 @@ REASON_CODES = frozenset(
         REASON_OBSERVATION_SEQUENCE_CONFLICT,
         REASON_OBSERVATION_IDENTITY_CONFLICT,
         REASON_OBSERVATION_ADMISSION_REFUSED,
+        REASON_OBSERVATION_PRIOR_PAUSE_UNRECOVERED,
+        REASON_OBSERVATION_PRIOR_PAUSE_RECOVERED,
+        REASON_OBSERVATION_RECOVERY_INCOMPLETE,
+        REASON_OBSERVATION_LISTENER_UNHEALTHY,
+        REASON_OBSERVATION_RECOVERY_UNPROVEN,
         REASON_OBSERVATION_CONTINUOUS,
         REASON_OBSERVATION_AUCTION,
         REASON_OBSERVATION_PAUSED,
@@ -219,6 +235,7 @@ _PROVIDER_CONTINUOUS = "continuous"
 _PROVIDER_AUCTION = frozenset({"auction_ordering", "auction_balance", "auction_match"})
 _PROVIDER_PAUSED = frozenset({"before_trading", "no_trading", "transaction_processing"})
 _PROVIDER_CLOSED = "closed"
+_PROVIDER_NON_TRADABLE = _PROVIDER_PAUSED | _PROVIDER_AUCTION | {_PROVIDER_CLOSED}
 _PROVIDER_UNKNOWN = "unknown"
 _PROVIDER_VIEW_STATES = frozenset({"current", "stale", "unknown"})
 
@@ -289,12 +306,73 @@ class InstrumentStatusScope:
             raise ValueError("scope session_generation must be a bounded identifier")
 
 
+@dataclass(frozen=True)
+class InstrumentStatusRecoveryProof:
+    """Neutral same-generation D67-16 recovery and listener-health proof.
+
+    Combines prior-pause invalidation status, same-generation return/session
+    recovery completion, and same-generation listener binding/health tokens
+    (``trader_id``, ``listener_id``, ``spi_id``, ``recovery_fence``).
+    """
+
+    venue: str
+    instrument: str
+    trading_day: date
+    session_generation: str
+    prior_pause_observed: bool
+    prior_pause_invalidated: bool
+    return_recovery_completed: bool
+    listener_healthy: bool
+    prior_pause_generation: str | None = None
+    prior_pause_trading_day: str | None = None
+    prior_pause_status: str | None = None
+    trader_id: str | None = None
+    listener_id: str | None = None
+    spi_id: str | None = None
+    recovery_fence: str | None = None
+    reason_code: str | None = None
+
+    def __post_init__(self) -> None:
+        if not _identifier(self.venue) or not _identifier(self.instrument):
+            raise ValueError("recovery proof identity must be bounded ASCII identifiers")
+        if type(self.trading_day) is not date:
+            raise ValueError("recovery proof trading_day must be a date")
+        if not _identifier(self.session_generation):
+            raise ValueError("recovery proof session_generation must be a bounded identifier")
+        for flag_name in (
+            "prior_pause_observed",
+            "prior_pause_invalidated",
+            "return_recovery_completed",
+            "listener_healthy",
+        ):
+            if type(getattr(self, flag_name)) is not bool:
+                raise ValueError(f"recovery proof {flag_name} must be bool")
+        for opt_name in (
+            "prior_pause_generation",
+            "prior_pause_status",
+            "trader_id",
+            "listener_id",
+            "spi_id",
+            "recovery_fence",
+            "reason_code",
+        ):
+            val = getattr(self, opt_name)
+            if val is not None and not _identifier(val):
+                raise ValueError(f"recovery proof {opt_name} must be a bounded identifier or None")
+        if self.prior_pause_trading_day is not None and not _trading_day_text(
+            self.prior_pause_trading_day
+        ):
+            raise ValueError("recovery proof prior_pause_trading_day must be YYYYMMDD or None")
+
+
 class InstrumentStatusObservationPort:
     """Read-only adapter from a provider view reader to the Store port contract.
 
     ``view_reader(venue, instrument)`` returns the provider's current
     ``InstrumentStatusView`` for that identity, or ``None`` for an explicit
-    absence.  It must be a pure read: no connection, no order, no clock-derived
+    absence.  Optional ``recovery_reader(venue, instrument)`` returns the
+    provider's same-generation ``InstrumentStatusRecoveryState`` (D67-16).
+    It must be a pure read: no connection, no order, no clock-derived
     ordering.  A missing, raising or foreign-type answer becomes an explicit
     absence (``None``) and is never replaced by a guessed status; the compose
     step then reports the absence and can never make the answer ``TRADABLE``
@@ -304,10 +382,13 @@ class InstrumentStatusObservationPort:
     path, credential or account value and adds no authority of its own.
     """
 
-    def __init__(self, view_reader: object) -> None:
+    def __init__(self, view_reader: object, *, recovery_reader: object = None) -> None:
         if not callable(view_reader):
             raise ValueError("instrument status view reader must be callable")
+        if recovery_reader is not None and not callable(recovery_reader):
+            raise ValueError("instrument status recovery reader must be callable")
         self._view_reader = view_reader
+        self._recovery_reader = recovery_reader
 
     def observation(self, scope: object) -> object:
         """Return the provider view for the exact scope, or ``None``."""
@@ -324,6 +405,45 @@ class InstrumentStatusObservationPort:
 
             get_logger("api").warning("ctp_instrument_status_port_read_unavailable")
             return None
+
+    def recovery_proof(self, scope: object) -> InstrumentStatusRecoveryProof | None:
+        """Return the neutral D67-16 recovery proof for ``scope``, or ``None``."""
+
+        if type(scope) is not InstrumentStatusScope or self._recovery_reader is None:
+            return None
+        try:
+            raw = self._recovery_reader(scope.venue, scope.instrument)
+        except Exception:
+            from bt_api_base.logging_factory import get_logger
+
+            get_logger("api").warning("ctp_instrument_status_port_recovery_unavailable")
+            return InstrumentStatusRecoveryProof(
+                venue=scope.venue,
+                instrument=scope.instrument,
+                trading_day=scope.trading_day,
+                session_generation=scope.session_generation,
+                prior_pause_observed=False,
+                prior_pause_invalidated=False,
+                return_recovery_completed=False,
+                listener_healthy=False,
+                reason_code="ctp_instrument_status_source_unavailable",
+            )
+        if raw is None:
+            return None
+        proof = _recovery_proof_from_provider_state(raw, scope)
+        if proof is None:
+            return InstrumentStatusRecoveryProof(
+                venue=scope.venue,
+                instrument=scope.instrument,
+                trading_day=scope.trading_day,
+                session_generation=scope.session_generation,
+                prior_pause_observed=False,
+                prior_pause_invalidated=False,
+                return_recovery_completed=False,
+                listener_healthy=False,
+                reason_code="ctp_instrument_status_observation_invalid",
+            )
+        return proof
 
 
 @dataclass(frozen=True)
@@ -412,6 +532,8 @@ class InstrumentStatusComposition:
     calendar_stale: bool
     source: str
     authorizes_trading: bool = AUTHORIZES_TRADING
+    prior_pause_invalidated: bool = False
+    recovery_verified: bool = False
 
     def __post_init__(self) -> None:
         if self.state not in STATES:
@@ -432,6 +554,10 @@ class InstrumentStatusComposition:
             raise ValueError("conflict must be a finite conflict code")
         if self.authorizes_trading is not False:
             raise ValueError("a composition never authorizes trading")
+        if type(self.prior_pause_invalidated) is not bool:
+            raise ValueError("prior_pause_invalidated must be bool")
+        if type(self.recovery_verified) is not bool:
+            raise ValueError("recovery_verified must be bool")
 
 
 @dataclass(frozen=True)
@@ -444,6 +570,15 @@ class _ObservationFacts:
     category: str | None
     provider_reason: str | None
     day: str | None = None
+
+
+@dataclass(frozen=True)
+class _PriorPauseFacts:
+    status: str
+    generation: str
+    trading_day: str
+    invalidated: bool
+    reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -467,6 +602,19 @@ def _provider_types() -> tuple[type, type, type] | None:
     except ImportError:
         return None
     return InstrumentStatusApplyResult, InstrumentStatusObservation, InstrumentStatusView
+
+
+def _provider_recovery_types() -> tuple[type, type] | None:
+    """Load D67-16 prior-pause and recovery-state types lazily."""
+
+    try:
+        from bt_api_ctp.instrument_status_observation import (
+            InstrumentStatusPriorPause,
+            InstrumentStatusRecoveryState,
+        )
+    except ImportError:
+        return None
+    return InstrumentStatusPriorPause, InstrumentStatusRecoveryState
 
 
 def _unknown_calendar(reason: str) -> CalendarDayAnswer:
@@ -921,6 +1069,227 @@ def _observation_facts(
     )
 
 
+def _extract_prior_pause(
+    observation: object,
+    scope: InstrumentStatusScope,
+) -> tuple[_PriorPauseFacts | None, str | None]:
+    types = _provider_types()
+    recovery_types = _provider_recovery_types()
+    if types is None or recovery_types is None:
+        return None, None
+    view_type = types[2]
+    prior_type = recovery_types[0]
+    if type(observation) is not view_type:
+        return None, None
+    prior = getattr(observation, "prior_pause", None)
+    if prior is None:
+        return None, None
+    if type(prior) is not prior_type:
+        return None, REASON_OBSERVATION_RECOVERY_UNPROVEN
+    if prior.venue != scope.venue or prior.native_symbol != scope.instrument:
+        return None, REASON_OBSERVATION_SCOPE_MISMATCH
+    if (
+        type(prior.status_category) is not str
+        or prior.status_category not in _PROVIDER_NON_TRADABLE
+        or not _identifier(prior.session_generation)
+        or not _trading_day_text(prior.trading_day)
+        or type(prior.invalidated) is not bool
+    ):
+        return None, REASON_OBSERVATION_RECOVERY_UNPROVEN
+    return (
+        _PriorPauseFacts(
+            status=prior.status_category,
+            generation=prior.session_generation,
+            trading_day=prior.trading_day,
+            invalidated=prior.invalidated,
+            reason=prior.invalidation_reason if type(prior.invalidation_reason) is str else None,
+        ),
+        None,
+    )
+
+
+def _recovery_proof_from_provider_state(
+    raw: object,
+    scope: InstrumentStatusScope,
+) -> InstrumentStatusRecoveryProof | None:
+    recovery_types = _provider_recovery_types()
+    if recovery_types is None:
+        return None
+    state_type = recovery_types[1]
+    if type(raw) is not state_type:
+        return None
+    if raw.venue != scope.venue or raw.native_symbol != scope.instrument:
+        return None
+    if (
+        type(raw.prior_pause_observed) is not bool
+        or type(raw.prior_pause_invalidated) is not bool
+        or type(raw.return_recovery_completed) is not bool
+        or type(raw.listener_healthy) is not bool
+    ):
+        return None
+    if raw.session_generation is None or raw.trading_day is None:
+        if raw.listener_healthy is True or raw.return_recovery_completed is True:
+            return None
+        if (
+            raw.trader_id is not None
+            or raw.listener_id is not None
+            or raw.spi_id is not None
+            or raw.recovery_fence is not None
+        ):
+            return None
+        gen = scope.session_generation
+        parsed_day = scope.trading_day
+    else:
+        if not _identifier(raw.session_generation) or not _trading_day_text(raw.trading_day):
+            return None
+        try:
+            parsed_day = date(
+                int(raw.trading_day[0:4]),
+                int(raw.trading_day[4:6]),
+                int(raw.trading_day[6:8]),
+            )
+        except ValueError:
+            return None
+        gen = raw.session_generation
+    try:
+        return InstrumentStatusRecoveryProof(
+            venue=raw.venue,
+            instrument=raw.native_symbol,
+            trading_day=parsed_day,
+            session_generation=gen,
+            prior_pause_observed=raw.prior_pause_observed,
+            prior_pause_invalidated=raw.prior_pause_invalidated,
+            return_recovery_completed=raw.return_recovery_completed,
+            listener_healthy=raw.listener_healthy,
+            prior_pause_generation=raw.prior_pause_generation,
+            prior_pause_trading_day=raw.prior_pause_trading_day,
+            prior_pause_status=raw.prior_pause_status,
+            trader_id=raw.trader_id,
+            listener_id=raw.listener_id,
+            spi_id=raw.spi_id,
+            recovery_fence=raw.recovery_fence,
+            reason_code=raw.reason_code,
+        )
+    except ValueError:
+        return None
+
+
+def _proofs_agree(
+    first: InstrumentStatusRecoveryProof,
+    second: InstrumentStatusRecoveryProof,
+) -> bool:
+    return (
+        first.venue == second.venue
+        and first.instrument == second.instrument
+        and first.trading_day == second.trading_day
+        and first.session_generation == second.session_generation
+        and first.prior_pause_observed == second.prior_pause_observed
+        and first.prior_pause_invalidated == second.prior_pause_invalidated
+        and first.prior_pause_generation == second.prior_pause_generation
+        and first.prior_pause_trading_day == second.prior_pause_trading_day
+        and first.prior_pause_status == second.prior_pause_status
+        and first.return_recovery_completed == second.return_recovery_completed
+        and first.listener_healthy == second.listener_healthy
+        and first.trader_id == second.trader_id
+        and first.listener_id == second.listener_id
+        and first.spi_id == second.spi_id
+        and first.recovery_fence == second.recovery_fence
+    )
+
+
+def _extract_recovery_proof(
+    recovery_proof: object,
+    observation: object,
+    prior_facts: _PriorPauseFacts | None,
+    scope: InstrumentStatusScope,
+) -> tuple[InstrumentStatusRecoveryProof | None, str | None]:
+    explicit: InstrumentStatusRecoveryProof | None = None
+    if recovery_proof is not None:
+        if type(recovery_proof) is not InstrumentStatusRecoveryProof:
+            return None, REASON_OBSERVATION_RECOVERY_UNPROVEN
+        if recovery_proof.venue != scope.venue or recovery_proof.instrument != scope.instrument:
+            return None, REASON_OBSERVATION_RECOVERY_UNPROVEN
+        explicit = recovery_proof
+
+    attached: InstrumentStatusRecoveryProof | None = None
+    types = _provider_types()
+    if types is not None and type(observation) is types[2]:
+        raw_state = getattr(observation, "recovery_state", None)
+        if raw_state is not None:
+            attached = _recovery_proof_from_provider_state(raw_state, scope)
+            if attached is None:
+                return None, REASON_OBSERVATION_RECOVERY_UNPROVEN
+
+    if explicit is not None and attached is not None:
+        if not explicit.listener_healthy or not attached.listener_healthy:
+            return None, REASON_OBSERVATION_LISTENER_UNHEALTHY
+        if not _proofs_agree(explicit, attached):
+            return None, REASON_OBSERVATION_RECOVERY_UNPROVEN
+
+    proof = explicit if explicit is not None else attached
+    if proof is not None and prior_facts is not None:
+        if proof.prior_pause_observed is not True:
+            return None, REASON_OBSERVATION_RECOVERY_UNPROVEN
+        if (
+            proof.prior_pause_generation != prior_facts.generation
+            or proof.prior_pause_trading_day != prior_facts.trading_day
+            or proof.prior_pause_status != prior_facts.status
+            or (not prior_facts.invalidated and proof.prior_pause_invalidated)
+        ):
+            return None, REASON_OBSERVATION_RECOVERY_UNPROVEN
+    return proof, None
+
+
+def _valid_listener_bindings(
+    proof: InstrumentStatusRecoveryProof,
+    scope: InstrumentStatusScope,
+) -> bool:
+    return (
+        proof.listener_healthy is True
+        and proof.venue == scope.venue
+        and proof.instrument == scope.instrument
+        and proof.session_generation == scope.session_generation
+        and proof.trading_day == scope.trading_day
+        and _identifier(proof.trader_id)
+        and _identifier(proof.listener_id)
+        and _identifier(proof.spi_id)
+    )
+
+
+def _valid_recovery_bindings(
+    proof: InstrumentStatusRecoveryProof,
+    scope: InstrumentStatusScope,
+) -> bool:
+    return (
+        proof.return_recovery_completed is True
+        and proof.venue == scope.venue
+        and proof.instrument == scope.instrument
+        and proof.session_generation == scope.session_generation
+        and proof.trading_day == scope.trading_day
+        and _identifier(proof.trader_id)
+        and _identifier(proof.recovery_fence)
+    )
+
+
+def _prior_pause_transitioned(
+    prior_facts: _PriorPauseFacts | None,
+    proof: InstrumentStatusRecoveryProof,
+    scope: InstrumentStatusScope,
+) -> bool:
+    if proof.prior_pause_invalidated is not True:
+        return False
+    if prior_facts is not None and prior_facts.invalidated is not True:
+        return False
+    prior_gen = prior_facts.generation if prior_facts is not None else proof.prior_pause_generation
+    prior_day = prior_facts.trading_day if prior_facts is not None else proof.prior_pause_trading_day
+    if not _identifier(prior_gen) or not _trading_day_text(prior_day):
+        return False
+    return (
+        prior_gen != scope.session_generation
+        or prior_day != scope.trading_day.strftime("%Y%m%d")
+    )
+
+
 def _result(
     *,
     state: str,
@@ -932,6 +1301,8 @@ def _result(
     conflict: str | None = None,
     calendar_stale: bool = False,
     source: str = "NONE",
+    prior_pause_invalidated: bool = False,
+    recovery_verified: bool = False,
 ) -> InstrumentStatusComposition:
     return InstrumentStatusComposition(
         state=state,
@@ -954,6 +1325,8 @@ def _result(
         conflict=conflict,
         calendar_stale=calendar_stale,
         source=source,
+        prior_pause_invalidated=prior_pause_invalidated,
+        recovery_verified=recovery_verified,
     )
 
 
@@ -979,6 +1352,8 @@ def _blank(reason: str) -> InstrumentStatusComposition:
         conflict=None,
         calendar_stale=False,
         source="NONE",
+        prior_pause_invalidated=False,
+        recovery_verified=False,
     )
 
 
@@ -999,23 +1374,51 @@ def _compose(
     observation: object,
     calendar: object,
     apply_result: object,
+    recovery_proof: object = None,
 ) -> InstrumentStatusComposition:
     if type(scope) is not InstrumentStatusScope:
         return _blank(REASON_INVALID_SCOPE)
     calendar_facts = _calendar_facts(calendar, scope)
     observation_facts = _observation_facts(observation, apply_result, scope)
-
-    if observation_facts.state not in ("CURRENT", "ABSENT"):
+    prior_facts, prior_error = _extract_prior_pause(observation, scope)
+    if prior_error is not None:
         return _result(
             state=STATE_UNKNOWN,
-            reason=observation_facts.reason or REASON_OBSERVATION_UNPROVEN,
+            reason=prior_error,
+            phase=PHASE_UNKNOWN,
+            scope=scope,
+            observation=observation_facts,
+            calendar=calendar_facts,
+        )
+    proof, proof_error = _extract_recovery_proof(
+        recovery_proof, observation, prior_facts, scope
+    )
+    if proof_error is not None:
+        return _result(
+            state=STATE_UNKNOWN,
+            reason=proof_error,
             phase=PHASE_UNKNOWN,
             scope=scope,
             observation=observation_facts,
             calendar=calendar_facts,
         )
 
+    has_prior_pause = prior_facts is not None or (
+        proof is not None and proof.prior_pause_observed
+    )
+    prior_pause_invalidated = False
+    recovery_verified = False
+
     if observation_facts.state == "CURRENT":
+        if proof is not None and not _valid_listener_bindings(proof, scope):
+            return _result(
+                state=STATE_UNKNOWN,
+                reason=REASON_OBSERVATION_LISTENER_UNHEALTHY,
+                phase=PHASE_UNKNOWN,
+                scope=scope,
+                observation=observation_facts,
+                calendar=calendar_facts,
+            )
         if not calendar_facts.usable:
             return _result(
                 state=STATE_UNKNOWN,
@@ -1054,9 +1457,153 @@ def _compose(
             conflict=conflict,
             calendar_stale=calendar_stale,
             source="OBSERVATION",
+            prior_pause_invalidated=has_prior_pause and category == _PROVIDER_CONTINUOUS,
+            recovery_verified=(
+                proof is not None
+                and _valid_listener_bindings(proof, scope)
+                and _valid_recovery_bindings(proof, scope)
+            ),
         )
 
-    # Explicit absence or a never-observed view: no effective observation.
+    if observation_facts.state in ("INVALID", "REFUSED", "UNKNOWN"):
+        if (
+            has_prior_pause
+            and proof is not None
+            and not _valid_listener_bindings(proof, scope)
+            and observation_facts.provider_state == "stale"
+            and observation_facts.provider_reason == "ctp_instrument_status_source_unavailable"
+        ):
+            return _result(
+                state=STATE_UNKNOWN,
+                reason=REASON_OBSERVATION_LISTENER_UNHEALTHY,
+                phase=PHASE_UNKNOWN,
+                scope=scope,
+                observation=observation_facts,
+                calendar=calendar_facts,
+            )
+        return _result(
+            state=STATE_UNKNOWN,
+            reason=observation_facts.reason or REASON_OBSERVATION_UNPROVEN,
+            phase=PHASE_UNKNOWN,
+            scope=scope,
+            observation=observation_facts,
+            calendar=calendar_facts,
+        )
+
+    if observation_facts.state == "STALE":
+        stale_can_recover = (
+            has_prior_pause
+            and proof is not None
+            and observation_facts.generation == scope.session_generation
+            and observation_facts.day == scope.trading_day.strftime("%Y%m%d")
+            and observation_facts.reason
+            in {
+                REASON_OBSERVATION_STALE_GENERATION,
+                REASON_OBSERVATION_STALE_TRADING_DAY,
+                REASON_OBSERVATION_SOURCE_UNAVAILABLE,
+            }
+        )
+        if not stale_can_recover:
+            if proof is not None and not _valid_listener_bindings(proof, scope):
+                return _result(
+                    state=STATE_UNKNOWN,
+                    reason=REASON_OBSERVATION_LISTENER_UNHEALTHY,
+                    phase=PHASE_UNKNOWN,
+                    scope=scope,
+                    observation=observation_facts,
+                    calendar=calendar_facts,
+                )
+            return _result(
+                state=STATE_UNKNOWN,
+                reason=observation_facts.reason or REASON_OBSERVATION_UNPROVEN,
+                phase=PHASE_UNKNOWN,
+                scope=scope,
+                observation=observation_facts,
+                calendar=calendar_facts,
+            )
+        if not _valid_listener_bindings(proof, scope):
+            return _result(
+                state=STATE_UNKNOWN,
+                reason=REASON_OBSERVATION_LISTENER_UNHEALTHY,
+                phase=PHASE_UNKNOWN,
+                scope=scope,
+                observation=observation_facts,
+                calendar=calendar_facts,
+            )
+        if not _prior_pause_transitioned(prior_facts, proof, scope):
+            return _result(
+                state=STATE_UNKNOWN,
+                reason=REASON_OBSERVATION_PRIOR_PAUSE_UNRECOVERED,
+                phase=PHASE_UNKNOWN,
+                scope=scope,
+                observation=observation_facts,
+                calendar=calendar_facts,
+            )
+        if not _valid_recovery_bindings(proof, scope):
+            return _result(
+                state=STATE_UNKNOWN,
+                reason=REASON_OBSERVATION_RECOVERY_INCOMPLETE,
+                phase=PHASE_UNKNOWN,
+                scope=scope,
+                observation=observation_facts,
+                calendar=calendar_facts,
+            )
+
+    # Explicit absence, never-observed view, or invalidated cross-reconnect pause.
+    if proof is not None and not _valid_listener_bindings(proof, scope):
+        if has_prior_pause:
+            return _result(
+                state=STATE_PAUSED,
+                reason=REASON_OBSERVATION_LISTENER_UNHEALTHY,
+                phase=PHASE_PAUSED,
+                scope=scope,
+                observation=observation_facts,
+                calendar=calendar_facts,
+            )
+        return _result(
+            state=STATE_UNKNOWN,
+            reason=REASON_OBSERVATION_LISTENER_UNHEALTHY,
+            phase=PHASE_UNKNOWN,
+            scope=scope,
+            observation=observation_facts,
+            calendar=calendar_facts,
+        )
+
+    if has_prior_pause:
+        if proof is None:
+            return _result(
+                state=STATE_PAUSED,
+                reason=REASON_OBSERVATION_PRIOR_PAUSE_UNRECOVERED,
+                phase=PHASE_PAUSED,
+                scope=scope,
+                observation=observation_facts,
+                calendar=calendar_facts,
+            )
+        if not _prior_pause_transitioned(prior_facts, proof, scope):
+            return _result(
+                state=STATE_PAUSED,
+                reason=REASON_OBSERVATION_PRIOR_PAUSE_UNRECOVERED,
+                phase=PHASE_PAUSED,
+                scope=scope,
+                observation=observation_facts,
+                calendar=calendar_facts,
+            )
+        if not _valid_recovery_bindings(proof, scope):
+            return _result(
+                state=STATE_PAUSED,
+                reason=REASON_OBSERVATION_RECOVERY_INCOMPLETE,
+                phase=PHASE_PAUSED,
+                scope=scope,
+                observation=observation_facts,
+                calendar=calendar_facts,
+            )
+        prior_pause_invalidated = True
+        recovery_verified = True
+    elif proof is not None and _valid_listener_bindings(proof, scope) and _valid_recovery_bindings(
+        proof, scope
+    ):
+        recovery_verified = True
+
     if not calendar_facts.usable:
         return _result(
             state=STATE_UNKNOWN,
@@ -1065,6 +1612,8 @@ def _compose(
             scope=scope,
             observation=observation_facts,
             calendar=calendar_facts,
+            prior_pause_invalidated=prior_pause_invalidated,
+            recovery_verified=recovery_verified,
         )
     if calendar_facts.phase == PHASE_CONTINUOUS:
         state, reason = STATE_TRADABLE, REASON_CALENDAR_CONTINUOUS_NO_OBSERVATION
@@ -1080,6 +1629,8 @@ def _compose(
             scope=scope,
             observation=observation_facts,
             calendar=calendar_facts,
+            prior_pause_invalidated=prior_pause_invalidated,
+            recovery_verified=recovery_verified,
         )
     else:
         return _result(
@@ -1089,6 +1640,8 @@ def _compose(
             scope=scope,
             observation=observation_facts,
             calendar=calendar_facts,
+            prior_pause_invalidated=prior_pause_invalidated,
+            recovery_verified=recovery_verified,
         )
     return _result(
         state=state,
@@ -1098,6 +1651,8 @@ def _compose(
         observation=observation_facts,
         calendar=calendar_facts,
         source="CALENDAR",
+        prior_pause_invalidated=prior_pause_invalidated,
+        recovery_verified=recovery_verified,
     )
 
 
@@ -1107,6 +1662,7 @@ def compose_instrument_status(
     observation: object = None,
     calendar: object = None,
     apply_result: object = None,
+    recovery_proof: object = None,
 ) -> InstrumentStatusComposition:
     """Compose one read-only per-instrument status; never an order gate.
 
@@ -1115,13 +1671,15 @@ def compose_instrument_status(
     the optional provider admission result that produced the view; a refusal
     (out-of-order, duplicate, sequence/identity conflict, stale scope,
     unavailable source) yields ``UNKNOWN`` and never reuses the prior status.
+    ``recovery_proof`` is the optional D67-16 same-generation prior-pause /
+    return-recovery / listener-health proof.
     ``calendar`` is a :class:`CalendarDayAnswer`; ``None`` is a missing answer.
     Every failure is returned as a finite, value-free result; this function
     does not raise for malformed inputs.
     """
 
     try:
-        return _compose(scope, observation, calendar, apply_result)
+        return _compose(scope, observation, calendar, apply_result, recovery_proof)
     except Exception:
         # Never leak input values, paths or provider exception text.
         return _blank(REASON_COMPOSITION_ERROR)

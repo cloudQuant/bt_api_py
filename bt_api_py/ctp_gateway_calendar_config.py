@@ -49,6 +49,7 @@ class CtpGatewayCalendarSettings:
     trading_day: date | None
     day_switch: CtpCalendarDaySwitchSettings | None = None
     monitor_grants: frozenset[CalendarMonitorGrant] = frozenset()
+    mode: str = "SIMULATION_ONLY"
 
 
 def parse_calendar_settings(raw, *, config_file, config, authority, account_scope):
@@ -56,7 +57,7 @@ def parse_calendar_settings(raw, *, config_file, config, authority, account_scop
     optional = {"day_switch", "monitor_grants", "monitor_clients"}
     if (type(raw) is not dict or not required <= set(raw) <= required | optional
             or ("monitor_grants" in raw) != ("monitor_clients" in raw)
-            or raw["mode"] != "SIMULATION_ONLY"):
+            or raw["mode"] not in ("SIMULATION_ONLY", "OFFICIAL")):
         raise ValueError("INVALID_CALENDAR_CONFIGURATION")
     candidate = parse_gateway_calendar_config({"calendars": {"root": raw["root"]}}, config_file=config_file)
     if candidate.status != "CONFIGURED":
@@ -90,7 +91,8 @@ def parse_calendar_settings(raw, *, config_file, config, authority, account_scop
             raise ValueError("INVALID_CALENDAR_CONFIGURATION")
         switch = CtpCalendarDaySwitchSettings(**switch)
     settings = CtpGatewayCalendarSettings(candidate.root_path, raw["route"], frozenset(grants),
-                                          frozenset(policies), day, switch, frozenset(monitors))
+                                          frozenset(policies), day, switch, frozenset(monitors),
+                                          mode=raw["mode"])
     validate_calendar_settings(settings, config=config, authority=authority, account_scope=account_scope)
     return settings
 
@@ -102,7 +104,9 @@ def validate_calendar_settings(settings, *, config, authority, account_scope):
         raise ValueError("INVALID_CALENDAR_CONFIGURATION")
     if settings is None:
         return
-    if (type(settings) is not CtpGatewayCalendarSettings or settings.route != "CTP___FUTURE"
+    if (type(settings) is not CtpGatewayCalendarSettings
+            or settings.mode not in ("SIMULATION_ONLY", "OFFICIAL")
+            or settings.route != "CTP___FUTURE"
             or (settings.root is not None and (not isinstance(settings.root, Path) or not settings.root.is_absolute()))
             or (settings.trading_day is not None and (type(settings.trading_day) is not date or settings.root is None))
             or (settings.day_switch is not None and (type(settings.day_switch) is not CtpCalendarDaySwitchSettings
@@ -181,9 +185,9 @@ def create_calendar_service(settings):
     if settings.trading_day is not None:
         from bt_api_ctp.calendar_snapshot import CalendarSnapshot
         binding = SimulationCalendarBinding(
-            mode="SIMULATION_ONLY", store=ReceiptCheckedCalendarStore(TradingCalendarStore(settings.root)),
+            mode=settings.mode, store=ReceiptCheckedCalendarStore(TradingCalendarStore(settings.root)),
             snapshot_factory=CalendarSnapshot, gate=_RejectSwitch(), route=settings.route,
-            source_generation="operator-simulation-" + uuid4().hex,
+            source_generation=("operator-official-" if settings.mode == "OFFICIAL" else "operator-simulation-") + uuid4().hex,
             trading_day=settings.trading_day, last_sequence=0,
         )
         service.rebind(binding)

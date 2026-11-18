@@ -13,6 +13,7 @@ import json
 import os
 import sqlite3
 import stat
+import sys
 import threading
 import time
 from dataclasses import dataclass
@@ -223,6 +224,8 @@ class GatewayRecoveryMonitorRelay:
                     (self._manifest,),
                 )
                 self._db.execute("COMMIT")
+            elif sys.platform == "darwin":
+                self._maybe_adopt_darwin_reboot_device()
             self._validate_checkpoint()
             self._verify_source()
         except GatewayRecoveryRelayError:
@@ -231,6 +234,41 @@ class GatewayRecoveryMonitorRelay:
         except Exception:
             self._dispose_on_init_failure()
             raise GatewayRecoveryRelayError("INITIALIZATION_FAILED") from None
+
+    def _maybe_adopt_darwin_reboot_device(self):
+        """Allow macOS APFS ephemeral st_dev shift across reboots when inode/manifest match."""
+        expected = json.loads(self._manifest)
+        try:
+            rows = self._db.execute("SELECT manifest FROM state").fetchall()
+        except Exception:
+            return
+        if len(rows) != 1 or type(rows[0][0]) is not str:
+            return
+        stored_text = rows[0][0]
+        try:
+            stored = json.loads(stored_text)
+            parent_dev = os.stat(os.path.dirname(self._source_path), follow_symlinks=False).st_dev
+        except Exception:
+            return
+        if (
+            type(stored) is not dict
+            or set(stored) != set(expected)
+            or type(stored.get("source_device")) is not int
+            or stored["source_device"] < 0
+            or stored["source_device"] == expected["source_device"]
+            or self._source_identity[0] != parent_dev
+            or any(stored[k] != expected[k] for k in expected if k != "source_device")
+        ):
+            return
+        try:
+            if _canonical(stored).decode("ascii") != stored_text:
+                return
+        except Exception:
+            return
+        self._manifest = stored_text
+        self._original_manifest = stored_text
+        self._namespace = _hash(stored_text.encode("ascii"))
+        self._original_namespace = self._namespace
 
     def _dispose_on_init_failure(self):
         if self._db is not None:

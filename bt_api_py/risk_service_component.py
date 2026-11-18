@@ -594,14 +594,14 @@ class RiskOrderService:
                 if (caller.role != "execution" or parent.strategy_ref not in caller.strategy_refs
                     or parent.account_scope != self._account or parent.route != self._route):
                     return _rejected("risk_unauthorized")
-                result = self._unsupported_parent(parent.parent_ref)
+                result = engine.parent_reserve(caller, parent)
             else:
                 if set(arguments) != {"parent_ref"} or not _ref(arguments["parent_ref"]):
                     return _rejected("risk_request_invalid")
                 if operation == "risk.parent.release":
                     if caller.role != "execution":
                         return _rejected("risk_unauthorized")
-                    result = self._unsupported_parent(arguments["parent_ref"])
+                    result = engine.parent_release(caller, arguments["parent_ref"])
                 else:
                     result = engine.parent_status(caller, arguments["parent_ref"])
         except RiskRequestError as error:

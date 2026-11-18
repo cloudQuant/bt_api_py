@@ -39,7 +39,7 @@ def decode_calendar_query(arguments):
     """Return the plain scope echo and query parameters; reject every extra field."""
     if not isinstance(arguments, Mapping) or set(arguments) != _SCOPE:
         raise ValueError("INVALID_CALENDAR_REQUEST")
-    if (arguments["mode"] != "SIMULATION_ONLY" or type(arguments["mode"]) is not str
+    if (arguments["mode"] not in ("SIMULATION_ONLY", "OFFICIAL") or type(arguments["mode"]) is not str
             or any(not _id(arguments[name]) for name in ("route", "venue", "kind", "product", "contract"))
             or arguments["kind"] not in {"future", "option"}):
         raise ValueError("INVALID_CALENDAR_REQUEST")
@@ -136,7 +136,7 @@ def decode_calendar_windows_query(arguments):
     """Return exact scope echo and parsed UTC half-open endpoints."""
     if not isinstance(arguments, Mapping) or set(arguments) != _WINDOWS_SCOPE:
         raise ValueError("INVALID_CALENDAR_REQUEST")
-    if (arguments["mode"] != "SIMULATION_ONLY" or type(arguments["mode"]) is not str
+    if (arguments["mode"] not in ("SIMULATION_ONLY", "OFFICIAL") or type(arguments["mode"]) is not str
             or any(not _id(arguments[name]) for name in ("route", "venue", "kind", "product", "contract"))
             or arguments["kind"] not in {"future", "option"}):
         raise ValueError("INVALID_CALENDAR_REQUEST")

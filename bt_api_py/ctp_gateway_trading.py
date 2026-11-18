@@ -14,6 +14,7 @@ import os
 import re
 import threading
 import time
+import traceback
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -302,11 +303,16 @@ class CtpGatewayMarketSettings:
     # Market gate quote age limit. Above 2 s only for a SimNow account
     # (user decision 2026-11-10); the profile refuses it elsewhere.
     dispatch_max_latency_seconds: float = 2.0
+    # Opt-in (default off, SimNow accounts only): the market gate drops only
+    # the event-age ceiling of its quote checks (e.g. a 7x24 replay feed with
+    # a days-old event time); clock bindings and TTLs still gate.
+    allow_stale_quote: bool = False
 
     def __post_init__(self) -> None:
         try:
             if (
                 not _duration(self.dispatch_max_latency_seconds, minimum=0.05, maximum=5)
+                or type(self.allow_stale_quote) is not bool
                 or type(self.key_universe) is not frozenset
                 or not 1 <= len(self.key_universe) <= 1024
                 or any(type(key) is not MarketSubscriptionKey for key in self.key_universe)
@@ -787,6 +793,26 @@ def _market_gate_latency(settings, market_settings) -> float:
     return latency
 
 
+def _market_gate_allow_stale_quote(settings, market_settings) -> bool:
+    """The market gate's allow_stale_quote opt-in; SimNow write paths only.
+
+    The flag exists only when the operator explicitly declared it in the
+    resource bundle's market section, the account is a SimNow account and the
+    bundle enables writes; anything else refuses startup rather than widening
+    the gate implicitly (the gate itself enforces the same rule again).
+    """
+    declared = bool(getattr(market_settings, "allow_stale_quote", False))
+    if not declared:
+        return False
+    if getattr(settings, "write_enabled", False) is not True:
+        raise CtpGatewayTradingError("MARKET_GATE_STALE_QUOTE_REQUIRES_WRITE")
+    account_key = getattr(settings, "account_key", None)
+    if (getattr(account_key, "venue", None) != "simnow"
+            or getattr(account_key, "environment", None) != "simnow"):
+        raise CtpGatewayTradingError("MARKET_GATE_STALE_QUOTE_REQUIRES_SIMNOW")
+    return True
+
+
 def _isolated_storage(settings, registry_path, account_read_settings, recovery_settings=None,
                       relay_settings=None) -> None:
     """Refuse startup unless Gateway storage is OS-isolated to this user (I63 decision)."""
@@ -909,6 +935,7 @@ def build_ctp_gateway_trading_profile(
     control_grants: Mapping[str, GatewayControlGrant] | None = None,
     upgrade_controls_from_v9: bool = False,
     upgrade_strategy_ledger_from_v10: bool = False,
+    strategy_ledger_source_cut_mode: str = "none",
     upgrade_account_extensions_from_v11: bool = False,
     clock_verifier_factory: Callable[[], object] | None = None,
     clock_allowed_servers: frozenset[str] | None = None,
@@ -948,6 +975,8 @@ def build_ctp_gateway_trading_profile(
     permits the explicit one-way journal upgrade that adds it (any schema from 10 on;
     the schema version and the features of later schemas are left as they are).
     """
+    if strategy_ledger_source_cut_mode not in ("none", "returns_bracket_v1"):
+        raise CtpGatewayTradingError("INVALID_STRATEGY_LEDGER_SOURCE_CUT_MODE")
     if (type(upgrade_controls_from_v9) is not bool or type(upgrade_strategy_ledger_from_v10) is not bool
             or type(upgrade_account_extensions_from_v11) is not bool
             or type(upgrade_parent_authority_from_v12) is not bool
@@ -1178,6 +1207,7 @@ def build_ctp_gateway_trading_profile(
             market_settings.call_timeout_seconds,
             market_settings.owner_queue_size,
             market_settings.dispatch_max_latency_seconds,
+            market_settings.allow_stale_quote,
         )
         if any(
             key.source_ref != settings.market_source_ref
@@ -1268,6 +1298,7 @@ def build_ctp_gateway_trading_profile(
     ):
         raise CtpGatewayTradingError("INVALID_RISK_V2_BINDING_CONFIGURATION")
     gate_latency = _market_gate_latency(settings, market_settings)
+    gate_allow_stale_quote = _market_gate_allow_stale_quote(settings, market_settings)
     if upgrade_account_event_recovery_from_v18 and not account_event_recovery_enabled:
         raise CtpGatewayTradingError('INVALID_ACCOUNT_EVENT_RECOVERY_CONFIGURATION')
     if upgrade_account_fact_recovery_from_v17 and not account_fact_recovery_enabled:
@@ -1571,8 +1602,6 @@ def build_ctp_gateway_trading_profile(
                     journal_options["risk_v2_binding_enabled"] = True
                 if cancel_attempt_stream_enabled and not upgrade_cancel_attempt_stream:
                     journal_options['cancel_attempt_stream_enabled'] = True
-                if order_cut_observation is not None:
-                    journal_options['observed_order_source_enabled'] = True
                 target_version = 19 if account_event_recovery_enabled else 18 if account_fact_recovery_enabled else 17 if control_cancel_enabled else 16 if strategy_origin_enabled else 15 if actor_stream_enabled else 14 if facts_financial_enabled else 13 if parent_enabled else 12 if extensions_enabled else 11 if ledger_enabled else 10 if control_enabled else 9
                 candidates = [target_version]
                 if target_version == 19 and upgrade_account_event_recovery_from_v18:
@@ -1605,6 +1634,8 @@ def build_ctp_gateway_trading_profile(
                 last_schema_error = None
                 for version in candidates:
                     try:
+                        if order_cut_observation is not None:
+                            journal_options['observed_order_source_enabled'] = version >= 14
                         schema_options = {
                             "controls_enabled": version >= 10, "strategy_ledger_enabled": version >= 11,
                             "account_extensions_enabled": version >= 12,
@@ -1770,6 +1801,8 @@ def build_ctp_gateway_trading_profile(
                         **observation_options,
                     )
                 except Exception as error:
+                    _LOG.warning("CTP gateway session construction failed: type=%s code=%s",
+                                 type(error).__name__, getattr(error, "code", None))
                     if ((type(error) is CtpGatewaySessionError and error.code == "INVALID_CONFIGURATION")
                             or (type(error) is CtpAccountSessionProviderError
                                 and error.code in {"INVALID_PROVIDER_CONFIGURATION", "INVALID_ACCOUNT_KEY"})):
@@ -1787,6 +1820,8 @@ def build_ctp_gateway_trading_profile(
                 try:
                     session.connect(generation=generation, timeout=settings.connect_timeout_seconds)
                 except Exception as error:
+                    _LOG.warning("CTP gateway session connect failed: type=%s code=%s",
+                                 type(error).__name__, getattr(error, "code", None))
                     code = None
                     if type(error) is TimeoutError:
                         code = "CTP_SESSION_CONNECT_TIMEOUT"
@@ -1890,6 +1925,11 @@ def build_ctp_gateway_trading_profile(
                         **({'observed_order_source': True} if order_cut_observation is not None else {})
                     )
                     holder["returns"] = state["returns"]
+                    bind_recovery_fence = getattr(
+                        provider, "bind_instrument_status_recovery_fence", None
+                    )
+                    if callable(bind_recovery_fence):
+                        bind_recovery_fence(state["returns"].instrument_status_recovery_fence)
                     if order_cut_observation is not None:
                         from bt_api_py.ctp_gateway_order_cut_source import CtpGatewayOrderCutSource
                         state['order_cut_source'] = CtpGatewayOrderCutSource(
@@ -1918,7 +1958,8 @@ def build_ctp_gateway_trading_profile(
                             account_scope=settings.account_scope, route=ROUTE,
                             service_generation=generation, split_close_required=split_close_required,
                             external_baseline=strategy_ledger_external_baseline,
-                            comparison_refresh_seconds=strategy_ledger_comparison_refresh_seconds)
+                            comparison_refresh_seconds=strategy_ledger_comparison_refresh_seconds,
+                            source_cut_mode=strategy_ledger_source_cut_mode)
                         state["strategy_ledger"].install()
                         holder["strategy_ledger"] = state["strategy_ledger"]
 
@@ -2423,7 +2464,10 @@ def build_ctp_gateway_trading_profile(
                     else settings.maintenance_interval_seconds,
                     cancel_dispatcher=cancel_dispatcher,
                 )
-            except BaseException:
+            except BaseException as error:
+                _LOG.warning("Gateway owner startup failed: type=%s code=%s",
+                             type(error).__name__, getattr(error, "code", None))
+                traceback.print_exc()
                 raise GatewayOwnerStartupCleanupError(cleanup) from None
 
         owner = GatewayDirectOwner(
@@ -2458,11 +2502,21 @@ def build_ctp_gateway_trading_profile(
 
         market_hub = market_proxy = None
         hub_closed = proxy_closed = False
+        monitor_only_retry = False
 
         def close_resources():
-            nonlocal hub_closed, proxy_closed
+            nonlocal hub_closed, proxy_closed, monitor_only_retry
             owner._fence_dispatch_shutdown()
             closing.set()
+            if monitor_only_retry:
+                # A previous pass closed every resource except an unconfirmed
+                # Required Monitor cleanup. Retry only that bounded cleanup and
+                # report the same explicit verdict; nothing else is dropped.
+                monitor = holder.get("required_monitor")
+                if monitor is not None and not monitor.close(settings.close_timeout_seconds):
+                    raise CtpGatewayTradingError("MONITOR_CLOSE_UNCONFIRMED")
+                return
+            monitor_uncertain = False
             calendar_switch = holder.get("calendar_day_switch")
             if calendar_switch is not None and not calendar_switch.close():
                 raise CtpGatewayTradingError("CALENDAR_DAY_SWITCH_CLOSE_UNCONFIRMED")
@@ -2482,7 +2536,11 @@ def build_ctp_gateway_trading_profile(
                 calendar_service.close()
             monitor = holder.get("required_monitor")
             if monitor is not None and not monitor.close(settings.close_timeout_seconds):
-                raise CtpGatewayTradingError("MONITOR_CLOSE_UNCONFIRMED")
+                # An unreachable Monitor must not block the remaining close
+                # ordering. The retained registration keeps the cleanup
+                # verdict uncertain; it is reported explicitly below, never
+                # silently swallowed.
+                monitor_uncertain = True
             begin_error = None
             instrument_service = holder.get("instrument_service")
             if instrument_service is not None:
@@ -2522,6 +2580,11 @@ def build_ctp_gateway_trading_profile(
                 or (market_proxy is not None and not proxy_closed)
             ):
                 raise CtpGatewayTradingError("TRADING_OWNER_CLOSE_UNCONFIRMED")
+            if monitor_uncertain:
+                # Bounded final verdict: every other resource is closed and
+                # only the retained Monitor cleanup stays unconfirmed.
+                monitor_only_retry = True
+                raise CtpGatewayTradingError("MONITOR_CLOSE_UNCONFIRMED")
 
         try:
             if calendar_settings is not None:
@@ -2656,6 +2719,7 @@ def build_ctp_gateway_trading_profile(
                 strategy_origin_source=holder.get('strategy_origin_source'),
                 market_gate_max_latency_seconds=gate_latency,
                 market_gate_simnow_relaxed=gate_latency > 2.0,
+                market_gate_allow_stale_quote=gate_allow_stale_quote,
                 risk_only_submit_strategies=(frozenset() if delegation_settings is None
                                              else delegation_settings.risk_only_submit_strategies),
                 instrument_status_service=(None if instrument_status_read is None else
@@ -2940,6 +3004,11 @@ def build_ctp_gateway_trading_profile(
                 or error.code == 'RECOVERY_MONITOR_RELAY_START_FAILED'
             ):
                 surfaced = error.code
+            _LOG.warning(
+                "Gateway resource construction failed: type=%s code=%s",
+                type(error).__name__, getattr(error, "code", None),
+            )
+            traceback.print_exc()
             raise ServiceResourceConstructionError(partial, monitor_incompatible=(
                 type(error) is CtpGatewayTradingError and error.code == "MONITOR_INCOMPATIBLE"
             ), code=surfaced) from None

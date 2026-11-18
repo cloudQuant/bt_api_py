@@ -34,6 +34,11 @@ _SAFE_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _PROFILE_ROLES = frozenset({"account_session_worker", "market_hub", "trading_owner"})
 _OPERATION_STATES = frozenset({"idle", "running", "succeeded", "failed", "outcome_uncertain"})
 _ERROR_CODE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
+# A deployment close that stays unconfirmed across this many stop commands
+# gets a bounded final verdict: the owner thread ends with an explicit
+# uncertain close error code instead of retrying without limit, so repeated
+# SIGTERM/SIGINT cannot leave the operator process hanging forever.
+_STOP_CLOSE_FAILURE_LIMIT = 3
 _READINESS_FAILURES = frozenset({
     "component_maintenance", "component_delay", "gateway_lease", "host_delay", "paper_monitor",
     "concurrent_fault", "intake_fence", "intake_fence_exception", "upstream_unhealthy",
@@ -317,6 +322,7 @@ class GatewayOperatorApplication:
         self._thread: threading.Thread | None = None
         self._deployment: GatewayOperatorDeployment | None = None
         self._pending_command: _OwnerCommand | None = None
+        self._stop_close_failures = 0
         self._control_only = False
         self._host_close_confirmed = False
         self._terminal_state_after_cleanup: str | None = None
@@ -686,6 +692,24 @@ class GatewayOperatorApplication:
             deployment.close()
         except BaseException as exc:
             error_code = _typed_error_code(exc, "APPLICATION_CLOSE_UNCERTAIN")
+            with self._lock:
+                self._stop_close_failures += 1
+                exhausted = self._stop_close_failures >= _STOP_CLOSE_FAILURE_LIMIT
+                cleanup_pending = self._cleanup_pending_in_snapshot(self._status)
+            if exhausted and not cleanup_pending:
+                # Bounded final verdict: the deployment close stayed
+                # unconfirmed across repeated stop commands. The deployment
+                # and its retained resources stay available for offline
+                # reconciliation, but the owner thread ends here with an
+                # explicit uncertain close instead of retrying forever.
+                self._set_state("failed", error_code=error_code)
+                self._finish_operation("stop", "outcome_uncertain", error_code)
+                command.result = self.status
+                command.done.set()
+                with self._lock:
+                    if self._pending_command is command:
+                        self._pending_command = None
+                return True
             self._control_only = True
             self._refresh_deployment_status(
                 state="uncertain",
@@ -694,6 +718,8 @@ class GatewayOperatorApplication:
             )
             command.error_code = error_code
         else:
+            with self._lock:
+                self._stop_close_failures = 0
             self._host_close_confirmed = True
             self._terminal_state_after_cleanup = "closed"
             self._refresh_deployment_status(state="closed", operation=("stop", "succeeded", None))

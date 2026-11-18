@@ -129,6 +129,13 @@ class TradingCalendarStatusReader:
         with self._lock:
             return token is self._configuration_token
 
+    def route_root_and_token(self, route: str) -> tuple[str | None, object]:
+        """Atomically observe the configured root for an exact route and current token."""
+        valid = type(route) is str and _ROUTE.fullmatch(route) is not None
+        with self._lock:
+            root = self._roots.get(route) if valid else None
+            return root, self._configuration_token
+
     def status(self, route: str) -> TradingCalendarStatus:
         if type(route) is not str or not _ROUTE.fullmatch(route):
             return TradingCalendarStatus("UNKNOWN", "INVALID_ROUTE")

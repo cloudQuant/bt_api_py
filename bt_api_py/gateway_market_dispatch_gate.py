@@ -108,10 +108,17 @@ class GatewayMarketDispatchGate:
         native_source_check=None,
         claim_coordinator=None,
         simnow_latency_relaxed=False,
+        allow_stale_quote=False,
     ):
         # User decision 2026-11-10: SimNow ticks lag 1-3.5 s, so a SimNow-only
         # Gateway may admit quotes up to 5 s old; every other venue keeps 2 s.
         latency_cap = SIMNOW_MAX_LATENCY_SECONDS if simnow_latency_relaxed is True else MAX_LATENCY_SECONDS
+        # allow_stale_quote (default off) drops only the event-age ceiling of
+        # the quote-freshness checks (e.g. a SimNow 7x24 replay feed whose
+        # event time stopped days ago). It requires the SimNow-relaxed mode;
+        # wall-step consistency, clock observation bindings, remaining TTLs,
+        # negative elapsed and every other check stay in force.
+        allow_stale_quote_allowed = simnow_latency_relaxed is True
         if claim_coordinator is not None:
             from bt_api_py.gateway_dispatch_claim import GatewayDispatchClaimCoordinator
 
@@ -132,8 +139,10 @@ class GatewayMarketDispatchGate:
                 for v in (max_latency_seconds, max_clock_error_ms)
             )
             or type(simnow_latency_relaxed) is not bool
+            or type(allow_stale_quote) is not bool
             or max_latency_seconds > latency_cap
             or max_clock_error_ms > 500.0
+            or (allow_stale_quote is True and not allow_stale_quote_allowed)
         ):
             raise GatewayMarketDispatchError("INVALID_GATE")
         hub._check_owner()
@@ -146,6 +155,7 @@ class GatewayMarketDispatchGate:
         self._claim_coordinator = claim_coordinator
         self._original_claim_coordinator = claim_coordinator
         self._latency_ns = int(max_latency_seconds * 1_000_000_000)
+        self._allow_stale_quote = allow_stale_quote
         self._max_error_ns = int(max_clock_error_ms * 1_000_000)
         self._limit = max_entries
         self._pid, self._host_thread = os.getpid(), threading.get_ident()
@@ -600,11 +610,21 @@ class GatewayMarketDispatchGate:
                 or worst_age < -(1_000_000_000 + calibration["error_bound_ns"])
             ):
                 raise GatewayMarketDispatchError("MARKET_CLOCK_INVALID")
-            remaining = min(
-                self._latency_ns - worst_age,
-                obs["remaining_ns"] - elapsed,
-                calibration["remaining_ns"] - elapsed,
-            )
+            if self._allow_stale_quote:
+                # Explicit opt-in (SimNow-only): the event age no longer caps
+                # the quote. The observation and calibration TTLs below still
+                # bound staleness of the *clock* evidence, and every wall-step
+                # and binding check above still applies.
+                remaining = min(
+                    obs["remaining_ns"] - elapsed,
+                    calibration["remaining_ns"] - elapsed,
+                )
+            else:
+                remaining = min(
+                    self._latency_ns - worst_age,
+                    obs["remaining_ns"] - elapsed,
+                    calibration["remaining_ns"] - elapsed,
+                )
             if remaining <= 0:
                 # Timing diagnostics only (milliseconds; no account data).
                 _LOG.debug(
@@ -836,7 +856,13 @@ class GatewayMarketDispatchGate:
                 + calibration["offset_ns"]
                 - _utc_ns(obs["venue_observed_at_utc"])
             )
-            if (
+            if self._allow_stale_quote:
+                # Explicit opt-in (SimNow-only): the event age no longer gates
+                # the native source; the negative-age bound and the observation
+                # / calibration TTL checks above still apply.
+                if age < -(1_000_000_000 + calibration["error_bound_ns"]):
+                    raise ValueError
+            elif (
                 age < -(1_000_000_000 + calibration["error_bound_ns"])
                 or age + calibration["error_bound_ns"] + horizon_ns >= self._latency_ns
             ):

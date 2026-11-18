@@ -33,7 +33,7 @@ class GatewayCalendarClientSettings:
     range_read: bool = False
 
     def __post_init__(self):
-        if (self.mode != "SIMULATION_ONLY" or type(self.range_read) is not bool
+        if (self.mode not in ("SIMULATION_ONLY", "OFFICIAL") or type(self.range_read) is not bool
                 or type(self.scopes) is not tuple or not 1 <= len(self.scopes) <= 256):
             raise ValueError("INVALID_CALENDAR_SETTINGS")
         normalized = []
@@ -189,14 +189,14 @@ class GatewayStrategyCalendarClient:
         self._pid, self._lock, self._pending = os.getpid(), threading.Lock(), None
 
     def query(self, *, route, venue, kind, product, contract, trading_day, timeout_seconds=5.0):
-        args = dict(mode="SIMULATION_ONLY", route=route, venue=venue, kind=kind,
+        args = dict(mode=self.mode, route=route, venue=venue, kind=kind,
                     product=product, contract=contract, trading_day=trading_day)
         return self._read("query", args, timeout_seconds)
 
     def windows(self, *, route, venue, kind, product, contract, start_utc, end_utc, timeout_seconds=5.0):
         if not self._settings.range_read:
             raise OwnerOperationError("CALENDAR_RANGE_UNAVAILABLE")
-        args = dict(mode="SIMULATION_ONLY", route=route, venue=venue, kind=kind,
+        args = dict(mode=self.mode, route=route, venue=venue, kind=kind,
                     product=product, contract=contract, start_utc=start_utc, end_utc=end_utc)
         return self._read("windows", args, timeout_seconds)
 

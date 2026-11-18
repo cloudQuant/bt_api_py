@@ -56,6 +56,11 @@ _STARTUP_PROVISIONAL_RANK = {
 _AUTH_FAILURE_CODES = frozenset(
     {"DENIED", "AUTHENTICATION_FAILED", "SCOPE_DENIED", "UNAUTHORIZED_RELAY"}
 )
+# Cumulative bound for the shutdown-phase cleanup retries. A Monitor that
+# stays unreachable cannot hold the close forever: after this budget the
+# worker exits while retaining the runtime, so the cleanup verdict stays
+# explicitly uncertain instead of blocking the owner thread without limit.
+_SHUTDOWN_CLEANUP_BUDGET_SECONDS = 60.0
 # The frozen operation set is exactly one passive operation; the worker calls
 # that name and nothing else.
 if len(MONITOR_HEARTBEAT_OPERATIONS) != 1:
@@ -78,6 +83,14 @@ _UNKNOWN_CODES = frozenset(
         "MONITOR_PROOF_EXPIRED",
         "MONITOR_RUNTIME_UNTRUSTED",
         "UNSUPPORTED_OPERATION",
+        # Owner-queue contention is a local, retryable condition: it says the
+        # native owner was busy, not that the Monitor is unreachable. Keeping
+        # these out of the UNREACHABLE catch-all avoids a false reachability
+        # verdict while the Gateway is doing a long venue query.
+        "SERVICE_CALL_TIMEOUT_QUEUED",
+        "SERVICE_CALL_TIMEOUT_RUNNING",
+        "SERVICE_CALL_QUEUE_FULL",
+        "SERVICE_CALL_NOT_READY",
     }
 )
 
@@ -215,6 +228,12 @@ class RequiredMonitor:
         self._startup_category = None
         self._owner = self._control = None
         self._initial_cause = "monitor:" + uuid.uuid4().hex
+        # Worker-local knowledge that the STOP_NEW outage cause is already
+        # applied on the journal. It avoids re-submitting an owner-queued
+        # persist call on every failed heartbeat while the Monitor is away:
+        # each such call blocks the worker for the heartbeat timeout when the
+        # native owner is busy, which slows the restart recovery loop.
+        self._outage_persisted = False
         self._cleanup_uncertain = False
         self._cleanup_retry = threading.Event()
         self._diagnostic_lock = threading.Lock()
@@ -300,7 +319,13 @@ class RequiredMonitor:
         return not self._thread.is_alive() and not self._cleanup_uncertain
 
     def _owner_call(self, callback):
-        return self._owner.submit_service_call(callback).result(timeout_seconds=1.0)
+        # The native owner may be completing one bounded venue query when the
+        # heartbeat ACK arrives. Wait up to the heartbeat timeout (never less
+        # than the historical 1 s) instead of declaring the Monitor unreachable
+        # on a one-second queue wait.
+        return self._owner.submit_service_call(callback).result(
+            timeout_seconds=max(1.0, float(self.settings.timeout_seconds))
+        )
 
     def _persist_outage(self):
         control, origin = self._control, self.origin
@@ -310,6 +335,7 @@ class RequiredMonitor:
             if not control.active_system_causes(origin):
                 control.apply("monitor:" + uuid.uuid4().hex, "STOP_NEW", scope_kind="account", origin=origin)
         self._owner_call(apply)
+        self._outage_persisted = True
 
     def _restore(self, proof):
         control, origin = self._control, self.origin
@@ -333,6 +359,9 @@ class RequiredMonitor:
                 causes = control.active_system_causes(origin)
             if not causes:
                 self.gate.activate(proof)
+                # The journal no longer holds this worker's outage cause (or it
+                # was never applied); a later heartbeat gap must persist again.
+                self._outage_persisted = False
         self._owner_call(restore)
 
     def _binding(self, runtime):
@@ -393,13 +422,21 @@ class RequiredMonitor:
         pending_outage = False
         retiring = False
         terminating = False
+        shutdown_deadline = None
+        # The native owner rebinding to another generation (or entering its
+        # final cleanup) is permanent for this single-use worker: its journal
+        # generation no longer exists, so no heartbeat retry can ever succeed.
+        # The worker retires its Monitor session once and stops instead of
+        # retrying every interval (which produced a per-second
+        # MONITOR_OWNER_CHANGED failure storm during owner close/rebind).
+        owner_detached = False
         failure_category = "NONE"
         try:
             while True:
                 terminating = terminating or self._stop.is_set()
                 if terminating or retiring:
                     if runtime is None:
-                        if terminating:
+                        if terminating or owner_detached:
                             break
                         retiring = False
                         continue
@@ -428,14 +465,28 @@ class RequiredMonitor:
                     if complete:
                         runtime = None
                         retiring = False
-                        if terminating:
+                        if terminating or owner_detached:
                             break
                         self._set_diagnostic("STARTING", failure_category, "COMPLETE")
                         continue
                     # On shutdown do one bounded attempt per explicit close;
                     # the same owner thread and resources survive for retry.
+                    # The cumulative budget bounds the whole shutdown phase:
+                    # an unreachable Monitor cannot block the close forever.
+                    # After the budget the worker exits and the retained
+                    # runtime keeps the cleanup verdict explicitly uncertain
+                    # (see the finally block); nothing is reported as cleaned.
                     if terminating:
-                        self._cleanup_retry.wait()
+                        if shutdown_deadline is None:
+                            shutdown_deadline = (
+                                time.monotonic() + _SHUTDOWN_CLEANUP_BUDGET_SECONDS
+                            )
+                        remaining = shutdown_deadline - time.monotonic()
+                        if remaining <= 0:
+                            break
+                        self._cleanup_retry.wait(
+                            timeout=min(self.settings.timeout_seconds, remaining)
+                        )
                     else:
                         self._stop.wait(self.settings.interval_seconds)
                     continue
@@ -485,13 +536,24 @@ class RequiredMonitor:
                     failure_category = "NONE"
                     self._set_diagnostic("MONITORING", "NONE", "NONE")
                 except Exception as error:
+                    _LOG.warning(
+                        "Required Monitor heartbeat failed: code=%s type=%s",
+                        getattr(error, "code", None), type(error).__name__,
+                    )
                     self.gate.revoke()
                     pending_outage = True
-                    try:
-                        self._persist_outage()
-                        pending_outage = False
-                    except Exception:
-                        pass
+                    # An already-persisted outage cause must not be re-submitted
+                    # through the congested owner queue on every failed
+                    # heartbeat: each attempt blocks this worker for the
+                    # heartbeat timeout and delays the recovery loop while the
+                    # Monitor is restarting. The revoked in-memory gate keeps
+                    # the journal fail-closed in the meantime.
+                    if not self._outage_persisted:
+                        try:
+                            self._persist_outage()
+                            pending_outage = False
+                        except Exception:
+                            pass
                     if self._confirmed_incompatible(runtime, error):
                         self._record_startup(MONITOR_STARTUP_INCOMPATIBLE)
                         failure_category = "INCOMPATIBLE"
@@ -499,7 +561,12 @@ class RequiredMonitor:
                         continue
                     failure_category = _startup_category_for(error)
                     self._record_startup(failure_category)
-                    if runtime is not None and (
+                    if getattr(error, "code", None) == "MONITOR_OWNER_CHANGED":
+                        # Permanent for this worker (see owner_detached): stop
+                        # heartbeating and retire the Monitor session once.
+                        owner_detached = True
+                        retiring = True
+                    elif runtime is not None and (
                         runtime.state != "registered" or getattr(error, "code", None) in {
                             "STALE_EPOCH", "NOT_REGISTERED", "LEASE_EXPIRED",
                             "REQUIRED_LEASE_EXPIRED", "SESSION_NOT_REGISTERED",

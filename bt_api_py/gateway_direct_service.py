@@ -25,7 +25,7 @@ import threading
 import time
 from collections.abc import Callable, Mapping
 from contextlib import contextmanager, nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import Any, ContextManager
 
@@ -586,6 +586,7 @@ class GatewayDirectServiceBinding:
         strategy_origin_source: object | None = None,
         market_gate_max_latency_seconds: float = 2.0,
         market_gate_simnow_relaxed: bool = False,
+        market_gate_allow_stale_quote: bool = False,
         risk_only_submit_strategies: frozenset[str] = frozenset(),
         instrument_status_service=None,
     ):
@@ -614,8 +615,14 @@ class GatewayDirectServiceBinding:
                 or not math.isfinite(market_gate_max_latency_seconds)
                 or not 0 < market_gate_max_latency_seconds <= (5.0 if market_gate_simnow_relaxed else 2.0)):
             raise ValueError('INVALID_MARKET_GATE_POLICY')
+        # The stale-quote opt-in needs the SimNow-relaxed mode; the gate
+        # constructor re-checks the same pair, so a mismatched binding fails
+        # at composition instead of widening the gate silently.
+        if market_gate_allow_stale_quote is True and market_gate_simnow_relaxed is not True:
+            raise ValueError('INVALID_MARKET_GATE_POLICY')
         self._market_gate_max_latency_seconds = float(market_gate_max_latency_seconds)
         self._market_gate_simnow_relaxed = market_gate_simnow_relaxed
+        self._market_gate_allow_stale_quote = market_gate_allow_stale_quote
         if (type(reservation_owner_serialized) is not bool
                 or (reservation_owner_serialized and (owner is None or reservation_fence is None))):
             raise ValueError("INVALID_RESERVATION_OWNER_POLICY")
@@ -671,7 +678,13 @@ class GatewayDirectServiceBinding:
         # trusted host. The journal clock is monotonic and cannot compare it.
         self._control_clock = control_clock or time.time
         self._control = control
-        self._control_grants = MappingProxyType(control_grants or {})
+        # The installed control grants are read on the owner thread while a
+        # proof refresh (D66-08 continuation) may replace one runtime grant's
+        # proof object.  Both paths go through this lock so the object-identity
+        # recheck in ``_handle_control`` never races a replacement.
+        self._control_grants_lock = threading.Lock()
+        self._control_grants_dict: dict[str, GatewayControlGrant] = dict(control_grants or {})
+        self._control_grants = MappingProxyType(self._control_grants_dict)
         self._journal = journal
         self._cancel_journal = GatewayDirectCancelJournal(journal) if cancel_enabled else None
         self._grants = MappingProxyType(copied)
@@ -714,6 +727,75 @@ class GatewayDirectServiceBinding:
                 or getattr(gate._native_source_check, '__func__', None) is not GatewayOwnerMarketProvider.recheck_market_tick_on_native_owner):
             raise ValueError('INVALID_MARKET_GATE_BINDING')
         self._market_gate = gate
+
+    def refresh_runtime_proof(
+        self, principal_ref: str, expires_at: object, *, operator_ref: str
+    ) -> dict[str, Any]:
+        """Refresh a Runtime grant's control proof on an operator's explicit act.
+
+        D66-08 continuation: a Runtime proof carries an absolute, finite
+        ``expires_at``.  Once it passes, ``pause``/``resume``/``DRAIN`` are
+        refused ``RUNTIME_PROOF_EXPIRED`` (fail-closed).  The only lawful
+        renewal is this explicit, operator-authorized replacement of the
+        installed grant's proof; nothing renews automatically and an expired
+        proof still refuses until a fresh, valid expiry is installed.
+
+        Guards (all fail closed, before any durable effect):
+        * ``principal_ref`` must name an installed ``runtime`` grant whose
+          current proof is not revoked and whose trusted operator matches
+          ``operator_ref`` exactly;
+        * ``expires_at`` must be a finite number strictly in the future on the
+          trusted host clock (``self._control_clock``), never the past, never a
+          non-finite value; a proof cannot be made permanent;
+        * the delegation id and operator are preserved from the installed
+          proof, so a refresh can only extend the wall-clock window, never
+          widen scope or re-target the delegation.
+
+        The replacement is the same object-identity mechanism used for
+        revocation: the handler re-checks ``self._control_grants.get(principal)
+        is not grant``, so an in-flight call under the old grant fails closed
+        once it is swapped out.
+        """
+        if not _ref(principal_ref):
+            return _reject("INVALID_REQUEST")
+        with self._control_grants_lock:
+            grant = self._control_grants_dict.get(principal_ref)
+            if grant is None or grant.kind != "runtime":
+                return _reject("SCOPE_DENIED")
+            proof = grant.runtime_proof
+            if (type(proof) is not GatewayRuntimeControlProof or proof.revoked):
+                return _reject("RUNTIME_PROOF_UNAVAILABLE")
+            if proof.operator_ref != operator_ref:
+                return _reject("SCOPE_DENIED")
+            if (
+                type(expires_at) not in (int, float)
+                or isinstance(expires_at, bool)
+                or not math.isfinite(expires_at)
+            ):
+                return _reject("INVALID_REQUEST")
+            try:
+                now = self._control_clock()
+            except Exception:  # noqa: BLE001 - an unreadable clock proves nothing
+                return _reject("RUNTIME_PROOF_UNAVAILABLE")
+            if (
+                type(now) not in (int, float)
+                or isinstance(now, bool)
+                or not math.isfinite(now)
+            ):
+                return _reject("RUNTIME_PROOF_UNAVAILABLE")
+            if float(expires_at) <= now:
+                return _reject("INVALID_REQUEST")
+            new_proof = replace(proof, expires_at=float(expires_at))
+            new_grant = replace(grant, runtime_proof=new_proof)
+            self._control_grants_dict[principal_ref] = new_grant
+            self._control_grants = MappingProxyType(self._control_grants_dict)
+        _LOG.warning(
+            "Runtime control proof refresh: principal %s delegation %s operator %s "
+            "expires_at %.3f",
+            principal_ref, proof.delegation_id, operator_ref, float(expires_at),
+        )
+        return {"status": "OBSERVED", "principal_ref": principal_ref,
+                "delegation_id": proof.delegation_id, "expires_at": float(expires_at)}
 
     def handle(
         self, operation: str, *, context: ServiceCallContext, arguments: Mapping[str, Any]

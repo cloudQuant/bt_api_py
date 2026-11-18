@@ -803,6 +803,8 @@ class GatewayDirectOwner:
                 self._cancel_dispatcher = resources.cancel_dispatcher
                 self._startup.set()
         except BaseException as exc:
+            _LOG.warning("Gateway owner factory failed: type=%s code=%s",
+                         type(exc).__name__, getattr(exc, "code", None))
             with self._lifecycle_change(failed=True):
                 with self._condition:
                     self._failure = "factory_failed"

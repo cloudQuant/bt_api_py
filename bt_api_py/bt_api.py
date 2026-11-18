@@ -953,10 +953,14 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
 
         self._write_admission = WriteAdmission(write_admission)
         self._direct_write_coordinator: Any | None = None
-        self._trading_session_schedules: dict[str, Any] = {}
+        self._trading_session_schedules: dict[str, tuple[object, Any]] = {}
         # Optional SDK clock qualification of direct market ticks (D62-21/27).
         self._market_clock_verifier: Any | None = None
         self._market_clock_max_latency_seconds = 2.0
+        # Opt-in (default off): stale event times stay STALE but may back
+        # orders when the rest of the clock evidence is sound; see
+        # qualify_market_tick_event.
+        self._market_clock_allow_stale_event_time = False
         # D62-38 decision 5: optional per-instrument latency budgets (seconds),
         # keyed by instrument id; the venue-level budget applies otherwise.
         self._market_clock_latency_by_instrument: dict[str, float] = {}
@@ -971,6 +975,12 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             self._market_clock_max_latency_seconds = float(
                 options.pop("max_latency_seconds", 2.0)
             )
+            allow_stale = options.pop("allow_stale_event_time", False)
+            if type(allow_stale) is not bool:
+                raise ValueError(
+                    "market_clock_verification: allow_stale_event_time must be a bool"
+                )
+            self._market_clock_allow_stale_event_time = allow_stale
             refresh_interval = float(options.pop("refresh_interval_seconds", 300.0))
             by_instrument = options.pop("max_latency_seconds_by_instrument", None) or {}
             if not isinstance(by_instrument, Mapping):
@@ -994,7 +1004,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                     "market_clock_verification: unknown option(s) "
                     + ", ".join(map(str, unknown))
                     + "; allowed: max_latency_seconds, max_latency_seconds_by_instrument, "
-                    + "refresh_interval_seconds, "
+                    + "refresh_interval_seconds, allow_stale_event_time, "
                     + ", ".join(sorted(_MARKET_CLOCK_VERIFIER_OPTIONS))
                 )
             self._market_clock_verifier = ClockVerifier(**options)
@@ -1015,6 +1025,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         self._typed_order_routes_resolved: set[str] = set()
         self._market_session_router: Any | None = None
         self._futures_expected_calendar_router: Any | None = None
+        self._futures_expected_calendar_router_token: object | None = None
         self._market_stream_owner: Any | None = None
         # Managed CTP feeds receive this opaque, process-local capability before
         # they are exposed through ``exchange_feeds``.  The backend resolves it
@@ -4385,15 +4396,66 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
     def trading_session_schedule(self, exchange_name: str) -> Any:
         """Provider-owned trading-session schedule for one route (D62-36)."""
         with self._sdk_capability_lock:
-            schedule = self._trading_session_schedules.get(exchange_name)
-            if schedule is None:
-                from .provider_entrypoints import load_route_entrypoint
+            from .trading_calendar_legacy_ports import (
+                FileBackedTradingSessionSchedule,
+                is_legacy_ctp_trading_session_factory,
+                is_legacy_ctp_trading_session_schedule,
+            )
+            from .trading_calendar_runtime_status import TradingCalendarStatusReader
 
-                factory = load_route_entrypoint(
-                    "bt_api.trading_session_providers", exchange_name
+            reader = self._trading_calendar_status_reader
+            if type(reader) is not TradingCalendarStatusReader:
+                return FileBackedTradingSessionSchedule(
+                    route=exchange_name,
+                    root=None,
+                    reader=None,
+                    token=object(),
+                    unconfigured_reason="calendar_status_reader_unavailable",
                 )
+            root, token = reader.route_root_and_token(exchange_name)
+            cached = self._trading_session_schedules.get(exchange_name)
+            if (
+                isinstance(cached, tuple)
+                and len(cached) == 2
+                and cached[0] is token
+                and reader.configuration_is_current(token)
+            ):
+                return cached[1]
+            if root is not None:
+                schedule: Any = FileBackedTradingSessionSchedule(
+                    route=exchange_name,
+                    root=root,
+                    reader=reader,
+                    token=token,
+                )
+                self._trading_session_schedules[exchange_name] = (token, schedule)
+                return schedule
+
+            from .provider_entrypoints import load_route_entrypoint
+
+            factory = load_route_entrypoint(
+                "bt_api.trading_session_providers", exchange_name
+            )
+            if is_legacy_ctp_trading_session_factory(factory):
+                schedule = FileBackedTradingSessionSchedule(
+                    route=exchange_name,
+                    root=None,
+                    reader=reader,
+                    token=token,
+                    unconfigured_reason="calendar_root_unconfigured",
+                )
+            else:
                 schedule = factory(self.exchange_feeds.get(exchange_name))
-                self._trading_session_schedules[exchange_name] = schedule
+                if is_legacy_ctp_trading_session_schedule(schedule):
+                    schedule = FileBackedTradingSessionSchedule(
+                        route=exchange_name,
+                        root=None,
+                        reader=reader,
+                        token=token,
+                        unconfigured_reason="calendar_root_unconfigured",
+                    )
+            if reader.configuration_is_current(token):
+                self._trading_session_schedules[exchange_name] = (token, schedule)
             return schedule
 
     def configure_trading_calendar_status(self, *, route_roots: Mapping[str, str]) -> None:
@@ -4402,7 +4464,11 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         This does not bind a calendar to any running strategy or authorize trading.
         Each call atomically replaces the instance's route map; an empty map disables it.
         """
-        self._trading_calendar_status_reader.configure(route_roots)
+        with self._sdk_capability_lock:
+            self._trading_calendar_status_reader.configure(route_roots)
+            self._trading_session_schedules.clear()
+            self._futures_expected_calendar_router = None
+            self._futures_expected_calendar_router_token = None
 
     def trading_calendar_status(self, exchange_name: str) -> Any:
         """Observe local CURRENT for an explicitly configured route, without binding it."""
@@ -4534,6 +4600,9 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             evidence,
             check,
             max_latency_seconds=max_latency,
+            allow_stale_event_time=getattr(
+                self, "_market_clock_allow_stale_event_time", False
+            ),
         )
 
     def market_stream(self) -> MarketStreamPort:
@@ -4871,16 +4940,39 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
     def _futures_expected_calendar_capability_router(self) -> Any:
         """Return this API's router over exact expected-calendar providers."""
         with self._sdk_capability_lock:
-            router = self._futures_expected_calendar_router
-            if router is None:
-                from .futures_expected_calendar_composition import (
-                    FuturesExpectedCalendarProviderRouter,
+            from .futures_expected_calendar_composition import (
+                FuturesExpectedCalendarCompositionError,
+                FuturesExpectedCalendarProviderRouter,
+            )
+            from .trading_calendar_legacy_ports import (
+                make_futures_expected_calendar_factory_resolver,
+            )
+            from .trading_calendar_runtime_status import TradingCalendarStatusReader
+
+            reader = self._trading_calendar_status_reader
+            if type(reader) is not TradingCalendarStatusReader:
+                raise FuturesExpectedCalendarCompositionError(
+                    "FUTURES_EXPECTED_CALENDAR_PROVIDER_UNAVAILABLE"
                 )
+            _, current_token = reader.route_root_and_token("")
+            router = self._futures_expected_calendar_router
+            if (
+                router is None
+                or self._futures_expected_calendar_router_token is not current_token
+                or not reader.configuration_is_current(current_token)
+            ):
+                def resolve_route(exchange_name: str) -> Any | None:
+                    return self._resolve_futures_expected_calendar_route(exchange_name)
 
                 router = FuturesExpectedCalendarProviderRouter(
-                    self._resolve_futures_expected_calendar_route
+                    resolve_route,
+                    factory_resolver=make_futures_expected_calendar_factory_resolver(
+                        reader,
+                        current_token,
+                    ),
                 )
                 self._futures_expected_calendar_router = router
+                self._futures_expected_calendar_router_token = current_token
             return router
 
     def _execution_rules_snapshot_capability_router(self) -> Any:

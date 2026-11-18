@@ -78,6 +78,7 @@ OBSERVER_OPERATIONS = frozenset(
     {"account.events.read_after", "account.events.progress", "account.events.ack"}
 )
 ACCOUNT_FACTS_OBSERVATION_OPERATIONS = frozenset({'account.facts.read_after.v2', 'account.facts.ack'})
+from bt_api_py.gateway_order_cut_codec import OPERATIONS as ACCOUNT_ORDER_CUT_OPERATIONS
 DELEGATE_OPERATIONS = frozenset(
     {
         "direct.delegated_reserve",
@@ -1115,7 +1116,38 @@ class RiskServiceHost:
             raise RiskServiceStartError("RISK_SERVICE_CONFIG_STRICT_ADMIN_CANCEL_INVALID")
         version, upgrade = _pretrade_selection(config)
         observation = getattr(config, 'account_facts_observation', None)
-        if observation is not None and (type(observation) is not RiskAccountFactsObservation
+        if observation is not None:
+            cut_enabled = getattr(observation, 'order_cut_enabled', False)
+            cut_max_age = getattr(observation, 'order_cut_max_age_seconds', None)
+            cut_timeout = getattr(observation, 'order_cut_timeout_seconds', None)
+            cut_page_size = getattr(observation, 'order_cut_page_size', 256)
+            cut_invalid = (
+                type(cut_enabled) is not bool
+                or (
+                    not cut_enabled
+                    and (cut_max_age is not None or cut_timeout is not None or cut_page_size != 256)
+                )
+                or (
+                    cut_enabled
+                    and (
+                        type(cut_max_age) not in (int, float)
+                        or not math.isfinite(cut_max_age)
+                        or not 0 < cut_max_age <= 86400
+                        or (
+                            cut_timeout is not None
+                            and (
+                                type(cut_timeout) not in (int, float)
+                                or not math.isfinite(cut_timeout)
+                                or not 0.001 <= cut_timeout <= 5.0
+                            )
+                        )
+                        or type(cut_page_size) is not int
+                        or not 1 <= cut_page_size <= 256
+                    )
+                )
+            )
+            if (
+                type(observation) is not RiskAccountFactsObservation
                 or version != 4 or upgrade is not None
                 or type(observation.poll_interval_seconds) not in (int, float)
                 or not math.isfinite(observation.poll_interval_seconds)
@@ -1123,8 +1155,10 @@ class RiskServiceHost:
                 or type(observation.timeout_seconds) not in (int, float)
                 or not math.isfinite(observation.timeout_seconds)
                 or not 0.001 <= observation.timeout_seconds <= 0.250
-                or type(observation.page_size) is not int or not 1 <= observation.page_size <= 256):
-            raise RiskServiceStartError('RISK_SERVICE_CONFIG_ACCOUNT_FACTS_INVALID')
+                or type(observation.page_size) is not int or not 1 <= observation.page_size <= 256
+                or cut_invalid
+            ):
+                raise RiskServiceStartError('RISK_SERVICE_CONFIG_ACCOUNT_FACTS_INVALID')
         _require_supported_r04(config)
         self.config = config
         self._creator_pid = os.getpid()
@@ -1165,6 +1199,7 @@ class RiskServiceHost:
         self._account_facts_runtime: Any = None
         self._account_facts_coordinator: Any = None
         self.account_facts_status = 'DISABLED'
+        self.order_cut_status = 'DISABLED'
         self._delegate_cleanup_unresolved: list[Any] = []
         self._next: dict[str, float] = {}
         self.stop_event = threading.Event()
@@ -1757,8 +1792,11 @@ class RiskServiceHost:
                 _fail('RISK_SERVICE_ACCOUNT_FACTS_SOURCE_MISMATCH')
             _fail('RISK_SERVICE_ACCOUNT_FACTS_UNAVAILABLE')
 
+        cut_enabled = bool(getattr(settings, 'order_cut_enabled', False))
+        operations = (ACCOUNT_FACTS_OBSERVATION_OPERATIONS | ACCOUNT_ORDER_CUT_OPERATIONS
+                      if cut_enabled else ACCOUNT_FACTS_OBSERVATION_OPERATIONS)
         runtime = self._call_lifecycle(self._service_runtime, 'upstream.account', route.scope,
-            ACCOUNT_FACTS_OBSERVATION_OPERATIONS, strict_connection=True)
+            operations, strict_connection=True)
         self._runtimes.append(runtime)
         self._account_facts_runtime = runtime
         self._check_cleanup_ready()
@@ -1768,14 +1806,43 @@ class RiskServiceHost:
             snapshot = self._call_lifecycle(runtime.start, timeout_seconds=self.config.call_timeout_seconds)
             if not self._call_lifecycle(_granted, snapshot, 'upstream.account', ACCOUNT_FACTS_OBSERVATION_OPERATIONS):
                 _fail('RISK_SERVICE_ACCOUNT_FACTS_GRANT_REQUIRED')
+            if cut_enabled and not self._call_lifecycle(_granted, snapshot, 'upstream.account', ACCOUNT_ORDER_CUT_OPERATIONS):
+                _fail('RISK_SERVICE_ORDER_CUT_GRANT_REQUIRED')
+            fingerprint = hashlib.sha256(self.config.gateway.server_public_key).hexdigest()
             client = self._call_lifecycle(GatewayAccountFactsClient, runtime, route=route, peer=self._peer(),
-                fingerprint=hashlib.sha256(self.config.gateway.server_public_key).hexdigest())
+                fingerprint=fingerprint)
             read_registration = self._call_lifecycle(client._registration, 'account.facts.read_after.v2')
             ack_registration = self._call_lifecycle(client._registration, 'account.facts.ack')
             if read_registration != ack_registration:
                 _fail('RISK_SERVICE_ACCOUNT_FACTS_GRANT_REQUIRED')
-            coordinator = self._call_lifecycle(RiskAccountFactsCoordinator, client, self.ledger,
-                limit=settings.page_size, timeout_seconds=settings.timeout_seconds)
+            if cut_enabled:
+                from bt_api_py.gateway_order_cut_client import GatewayOrderCutClient
+                from bt_api_py.service_runtime_thread import BoundCallRoute
+
+                cut_route = BoundCallRoute(
+                    route.identity,
+                    route.scope,
+                    route.scope_ref,
+                    route.service_id,
+                    route.instance_id,
+                    peer,
+                )
+                cut_client = self._call_lifecycle(GatewayOrderCutClient, runtime, route=cut_route, fingerprint=fingerprint)
+                coordinator = self._call_lifecycle(
+                    RiskAccountFactsCoordinator,
+                    client,
+                    self.ledger,
+                    limit=settings.page_size,
+                    timeout_seconds=settings.timeout_seconds,
+                    order_cut_client=cut_client,
+                    cut_max_age_seconds=settings.order_cut_max_age_seconds,
+                    cut_limit=settings.order_cut_page_size,
+                    cut_timeout_seconds=settings.order_cut_timeout_seconds or settings.timeout_seconds,
+                    now_ns=self._now_ns,
+                )
+            else:
+                coordinator = self._call_lifecycle(RiskAccountFactsCoordinator, client, self.ledger,
+                    limit=settings.page_size, timeout_seconds=settings.timeout_seconds)
             state = self._call_lifecycle(coordinator._progress)
         except Exception as error:
             if getattr(self.ledger, '_r05_uncertain', False):
@@ -1788,16 +1855,68 @@ class RiskServiceHost:
         self._check_cleanup_ready()
         self._account_facts_coordinator = coordinator
         self.account_facts_status = 'RECOVERY_REQUIRED' if state is not None and state['pending'] is not None else 'READY'
+        if cut_enabled:
+            self.order_cut_status = 'RECOVERY_REQUIRED' if self.account_facts_status == 'RECOVERY_REQUIRED' else 'READY'
 
     def _poll_account_facts(self) -> None:
         if self.account_facts_status not in {'READY', 'APPLIED', 'EMPTY'}:
             return
+        settings = getattr(self.config, 'account_facts_observation', None)
+        cut_enabled = bool(settings is not None and getattr(settings, 'order_cut_enabled', False))
         try:
             result = self._account_facts_coordinator.poll_once()
             status = result.status if type(result.status) is str else 'UNKNOWN'
             self.account_facts_status = status if status in {'APPLIED', 'EMPTY', 'RECOVERY_REQUIRED'} else 'UNKNOWN'
+            if cut_enabled:
+                steps = 1
+                while (
+                    self.account_facts_status == 'APPLIED'
+                    and getattr(self._account_facts_coordinator, '_last_has_more', False)
+                    and steps < 64
+                ):
+                    result = self._account_facts_coordinator.poll_once()
+                    status = result.status if type(result.status) is str else 'UNKNOWN'
+                    self.account_facts_status = (
+                        status if status in {'APPLIED', 'EMPTY', 'RECOVERY_REQUIRED'} else 'UNKNOWN'
+                    )
+                    steps += 1
+                if self.account_facts_status in {'APPLIED', 'EMPTY'}:
+                    cut_result = self._account_facts_coordinator.poll_order_cut_once()
+                    cut_status = cut_result.status if type(cut_result.status) is str else 'UNKNOWN'
+                    allowed_cut = {
+                        'CUT_APPLIED', 'CUT_GAP', 'CUT_UNAVAILABLE',
+                        'RECOVERY_REQUIRED', 'NO_FACTS_STATE', 'DISABLED',
+                    }
+                    self.order_cut_status = cut_status if cut_status in allowed_cut else 'UNKNOWN'
+                    if self.order_cut_status == 'RECOVERY_REQUIRED':
+                        self.account_facts_status = 'RECOVERY_REQUIRED'
+                    elif (
+                        self.order_cut_status == 'CUT_APPLIED'
+                        and cut_result.fact_watermark is not None
+                        and cut_result.fact_watermark > cut_result.cursor
+                    ):
+                        catchup = 0
+                        while catchup < 64 and self.account_facts_status in {'APPLIED', 'EMPTY'}:
+                            next_res = self._account_facts_coordinator.poll_once()
+                            next_status = next_res.status if type(next_res.status) is str else 'UNKNOWN'
+                            self.account_facts_status = (
+                                next_status if next_status in {'APPLIED', 'EMPTY', 'RECOVERY_REQUIRED'} else 'UNKNOWN'
+                            )
+                            catchup += 1
+                            if (
+                                self.account_facts_status != 'APPLIED'
+                                or next_res.cursor >= cut_result.fact_watermark
+                                or not getattr(self._account_facts_coordinator, '_last_has_more', False)
+                            ):
+                                break
+                elif self.account_facts_status == 'RECOVERY_REQUIRED':
+                    self.order_cut_status = 'RECOVERY_REQUIRED'
+                else:
+                    self.order_cut_status = 'UNKNOWN'
         except Exception:
             self.account_facts_status = 'UNKNOWN'
+            if cut_enabled:
+                self.order_cut_status = 'UNKNOWN'
         if getattr(self.ledger, '_r05_uncertain', False):
             self._record_cleanup_uncertain(self.ledger, 'ACCOUNT_FACTS_STORAGE_UNKNOWN')
 
@@ -1806,6 +1925,15 @@ class RiskServiceHost:
         self._check_owner_identity()
         status = self.account_facts_status
         return status if status in {'DISABLED', 'READY', 'APPLIED', 'EMPTY', 'UNKNOWN', 'RECOVERY_REQUIRED'} else 'UNKNOWN'
+
+    def order_cut_observation_status(self) -> str:
+        """Return only the local bounded order-cut consumer state, never source authority."""
+        self._check_owner_identity()
+        status = self.order_cut_status
+        return status if status in {
+            'DISABLED', 'READY', 'CUT_APPLIED', 'CUT_GAP',
+            'CUT_UNAVAILABLE', 'RECOVERY_REQUIRED', 'NO_FACTS_STATE', 'UNKNOWN',
+        } else 'UNKNOWN'
 
     def _connect_delegate(self, route: Any) -> _DelegateHandle:
         _require_supported_r04(self.config)
@@ -1938,6 +2066,7 @@ class RiskServiceHost:
                 actor_principal=gateway.delegate.principal_ref,
                 dispatch_recheck_seconds=config.dispatch_recheck_seconds,
                 dispatch_recheck_limit=config.dispatch_recheck_limit,
+                parent_contract_enabled=getattr(config, "parent_contract_enabled", False),
             )
         except Exception:
             _fail("RISK_SERVICE_ENGINE_INVALID")
@@ -2904,6 +3033,7 @@ def _command_status(args: argparse.Namespace) -> int:
             actor_principal=config.gateway.delegate.principal_ref,
             dispatch_recheck_seconds=config.dispatch_recheck_seconds,
             dispatch_recheck_limit=config.dispatch_recheck_limit,
+            parent_contract_enabled=getattr(config, "parent_contract_enabled", False),
         )
         from bt_api_py.risk_service_component import json_safe
 

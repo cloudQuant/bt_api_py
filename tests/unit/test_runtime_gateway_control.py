@@ -327,3 +327,36 @@ def test_real_threaded_runtime_requires_ack_even_after_epoch_inactive(setup, tmp
         assert bridge.state == 'closed'
     assert operations.count('service.unregister') == 1
     assert bridge._entries['strategy'][2] is owner and len(made) == 1
+
+
+def test_refresh_proof_renews_the_bridge_window_and_rejects_bad_values(setup, monkeypatch):
+    route, args = setup
+    class Runtime:
+        def __init__(self, factory, *, require_unregister_ack):
+            assert require_unregister_ack is True
+        def start(self, **kwargs):
+            return SimpleNamespace(healthy=True)
+        def close(self, **kwargs):
+            return _closed()
+    monkeypatch.setattr('bt_api_py.runtime_gateway_control.ThreadedServiceClientRuntime', Runtime)
+    bridge = RuntimeGatewayControlBridge({'strategy': route}, **args).start()
+    original = args['proofs']['strategy'].proof
+    try:
+        # A non-finite or non-future expiry is refused and leaves the proof intact.
+        for bad in (float('nan'), float('inf'), 0.0, 'later', True):
+            with pytest.raises(ValueError):
+                bridge.refresh_proof('strategy', bad)
+        assert bridge._entries['strategy'][1].expires_at == original.expires_at
+        # An unknown strategy is refused.
+        with pytest.raises(ValueError):
+            bridge.refresh_proof('other', time.time() + 500)
+        # A valid future expiry renews the window, preserving delegation/operator.
+        renewed = bridge.refresh_proof('strategy', time.time() + 500)
+        proof = bridge._entries['strategy'][1]
+        assert renewed == proof.expires_at
+        assert proof.expires_at == pytest.approx(time.time() + 500, abs=2)
+        assert proof.delegation_id == original.delegation_id
+        assert proof.operator_ref == original.operator_ref
+        assert proof.revoked is False
+    finally:
+        bridge.close()

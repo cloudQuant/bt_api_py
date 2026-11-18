@@ -274,6 +274,100 @@ def test_an_unknown_clock_option_is_a_clear_configuration_error():
     assert "max_latency_seconds" in message and "validity_seconds" in message
 
 
+def _qualified_inputs():
+    verifier = _verifier(offset_ms=280.0)
+    now = datetime.now(timezone.utc)
+    now_ns = time.time_ns()
+    local = datetime.fromtimestamp(now_ns / 1e9, timezone(timedelta(hours=8)))
+    return verifier.evidence(), verifier.check_venue_time(local.strftime("%H:%M:%S"), now_ns), now
+
+
+def test_allow_stale_event_time_is_off_by_default_and_rejects_non_bool():
+    """The opt-in keeps the strict verdict unless it is explicitly enabled."""
+    evidence, check, now = _qualified_inputs()
+    strict = qualify_market_tick_event(
+        _unqualified_event(now - timedelta(seconds=5), now), evidence, check
+    )
+    assert strict.clock.freshness_status is MarketFreshnessStatus.STALE
+    assert strict.data.execution_eligible is False
+    assert ":allow_stale=1" not in strict.data.quality_contract_ref
+    with pytest.raises(ValueError, match="INVALID_ALLOW_STALE_EVENT_TIME"):
+        qualify_market_tick_event(
+            _unqualified_event(now - timedelta(seconds=5), now),
+            evidence,
+            check,
+            allow_stale_event_time="yes",
+        )
+
+
+def test_allow_stale_event_time_admits_stale_but_keeps_the_stale_report():
+    """A stale event time stays STALE and auditable, but becomes eligible."""
+    evidence, check, now = _qualified_inputs()
+    relaxed = qualify_market_tick_event(
+        _unqualified_event(now - timedelta(seconds=5), now),
+        evidence,
+        check,
+        allow_stale_event_time=True,
+    )
+    assert relaxed.clock.freshness_status is MarketFreshnessStatus.STALE
+    assert relaxed.data.freshness_reason_codes == ("EVENT_TIME_STALE",)
+    assert relaxed.data.execution_eligible is True
+    assert relaxed.data.quality_contract_ref == "rules-1:allow_stale=1"
+
+    from dataclasses import replace as _replace
+
+    base = _unqualified_event(now - timedelta(seconds=5), now)
+    gap = bind_market_tick_event(
+        _replace(base.data, continuity_status="gap"), base.source, base.cursor
+    )
+    assert (
+        qualify_market_tick_event(
+            gap, evidence, check, allow_stale_event_time=True
+        ).data.execution_eligible
+        is False
+    )
+
+
+def test_allow_stale_event_time_never_relaxes_event_time_ahead_of_receive():
+    """The negative-latency UNAVAILABLE branch is not part of the opt-in."""
+    evidence, check, now = _qualified_inputs()
+    ahead = qualify_market_tick_event(
+        _unqualified_event(now + timedelta(seconds=30), now),
+        evidence,
+        check,
+        allow_stale_event_time=True,
+    )
+    assert ahead.clock.freshness_status is MarketFreshnessStatus.UNAVAILABLE
+    assert ahead.data.freshness_reason_codes == ("EVENT_TIME_AHEAD_OF_RECEIVE",)
+    assert ahead.data.execution_eligible is False
+
+
+def test_bt_api_clock_option_requires_a_bool_and_defaults_off():
+    from bt_api_py.bt_api import BtApi
+
+    with pytest.raises(ValueError, match="allow_stale_event_time"):
+        BtApi(
+            {},
+            market_clock_verification={
+                "servers": ("fake",),
+                "query": _FlakyQuery([True]),
+                "allow_stale_event_time": 1,
+            },
+        )
+    api = BtApi(
+        {},
+        market_clock_verification={
+            "servers": ("fake",),
+            "query": _FlakyQuery([True]),
+            "allow_stale_event_time": True,
+        },
+    )
+    try:
+        assert api._market_clock_allow_stale_event_time is True
+    finally:
+        api.close()
+
+
 def test_the_documented_clock_options_are_accepted():
     from bt_api_py.bt_api import BtApi
 

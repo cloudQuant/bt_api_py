@@ -228,11 +228,27 @@ def _strategy_ledger_upgrade(value):
         return False
     if type(value) is dict:
         value = {name: item for name, item in value.items()
-                 if name not in ("external_baseline", "account_comparison")}
+                 if name not in ("external_baseline", "account_comparison", "source_cut_mode")}
     value = _mapping(value, ("upgrade_from_v10",))
     if type(value["upgrade_from_v10"]) is not bool:
         _invalid()
     return value["upgrade_from_v10"]
+
+
+def _strategy_ledger_source_cut_mode(value):
+    """Optional conservative source-cut mode for the strategy ledger.
+
+    ``"none"`` (default) keeps the historical fail-closed gate.  The explicit
+    ``"returns_bracket_v1"`` selects the conservative common cut built from a
+    continuous return stream plus the account read's before/after sequence
+    bracket; legacy baseline rows without the marker stay untrusted.
+    """
+    if type(value) is not dict:
+        return "none"
+    mode = value.get("source_cut_mode", "none")
+    if mode not in ("none", "returns_bracket_v1"):
+        _invalid()
+    return mode
 
 
 def _strategy_ledger_account_comparison(value):
@@ -586,7 +602,7 @@ _OPERATOR_READ_OPERATIONS = frozenset({"account.snapshot.typed", "account.strate
 
 
 def _account_observation(value, principals, grants, *, instruments, account_operators=frozenset(),
-                         order_cut_principals=frozenset()):
+                         order_cut_principals=frozenset(), additional_readers=frozenset()):
     """Optional section for account observers and the account read port (63.13 base, D63-56)::
 
         {"read_journal_path": "/absolute/path/account-read.sqlite",
@@ -630,7 +646,10 @@ def _account_observation(value, principals, grants, *, instruments, account_oper
 
     from bt_api_py.ctp_gateway_trading import CtpGatewayAccountReadSettings
     from bt_api_py.gateway_account_observer import ACCOUNT_OBSERVER_OPERATIONS
-    from bt_api_py.gateway_direct_service import ACCOUNT_ORDER_CUT_OPERATIONS
+    from bt_api_py.gateway_direct_service import (
+        ACCOUNT_FACTS_OPERATIONS,
+        ACCOUNT_ORDER_CUT_OPERATIONS,
+    )
 
     required = ("read_journal_path", "observation_identity_path", "expected_observation_issuer_id",
                 "state_scope", "required_coverage", "observers")
@@ -666,8 +685,9 @@ def _account_observation(value, principals, grants, *, instruments, account_oper
         for item in observer["resources"]:
             item = _mapping(item, ("instance_id", "port", "scope_ref", "scope", "operations"))
             scope, operations = _scope(item["scope"]), _string_set(item["operations"])
-            permitted = ACCOUNT_OBSERVER_OPERATIONS | (ACCOUNT_ORDER_CUT_OPERATIONS
-                        if identity.principal_ref in order_cut_principals else frozenset())
+            permitted = (ACCOUNT_OBSERVER_OPERATIONS | ACCOUNT_FACTS_OPERATIONS
+                         | (ACCOUNT_ORDER_CUT_OPERATIONS
+                            if identity.principal_ref in order_cut_principals else frozenset()))
             if (item["port"] != "service.account_read" or not operations <= permitted
                     or (operations & ACCOUNT_ORDER_CUT_OPERATIONS
                         and not ACCOUNT_ORDER_CUT_OPERATIONS <= operations)
@@ -698,6 +718,10 @@ def _account_observation(value, principals, grants, *, instruments, account_oper
     readers = frozenset(principal for principal, declared in grants.items()
                         if any(resource.port == "service.account_read"
                                for entry in declared for resource in entry.resources))
+    extra = frozenset(additional_readers)
+    if any(type(principal) is not str or principal not in grants for principal in extra):
+        _invalid()
+    readers = readers | extra
     if not readers:
         _invalid()
     return settings, readers
@@ -963,13 +987,24 @@ def _load_resources(config, *, trading):
         # After every other section: a delegate's own read resource also makes it a reader.
         read_settings, read_principals = None, frozenset()
         if trading and raw.get("account_observation") is not None:
+            delegation_readers = frozenset(
+                delegate.get("identity", {}).get("principal_ref")
+                for delegate in (raw.get("delegation") or {}).get("delegates", [])
+                if any(
+                    resource.get("port") == "service.account_read"
+                    and any(str(operation).startswith(("account.facts.", "account.order_cut."))
+                            for operation in resource.get("operations", []))
+                    for resource in delegate.get("resources", [])
+                )
+            )
             read_settings, read_principals = _account_observation(
                 raw["account_observation"], principals, grants,
                 instruments=_return_settings(raw["returns"]).instruments,
                 account_operators=frozenset(principal for principal, grant in (control_grants or {}).items()
                                             if grant.account_scope_allowed),
                 order_cut_principals=(frozenset() if order_cut_observation is None
-                                      else order_cut_observation.principals))
+                                      else order_cut_observation.principals),
+                additional_readers=delegation_readers)
         for monitor_identity in monitor_identities:
             if any(entry.identity.actor_ref == monitor_identity.actor_ref
                    for principal, entries in grants.items() if principal != monitor_identity.principal_ref
@@ -998,6 +1033,8 @@ def _load_resources(config, *, trading):
             market_keys = ("subscriptions", "principal_allowed_indices")
             if type(raw["market"]) is dict and "dispatch_max_latency_seconds" in raw["market"]:
                 market_keys += ("dispatch_max_latency_seconds",)
+            if type(raw["market"]) is dict and "allow_stale_quote" in raw["market"]:
+                market_keys += ("allow_stale_quote",)
             value = _mapping(raw["market"], market_keys)
             if type(value["subscriptions"]) is not list or type(value["principal_allowed_indices"]) is not dict:
                 _invalid()
@@ -1013,8 +1050,12 @@ def _load_resources(config, *, trading):
             latency = value.get("dispatch_max_latency_seconds", 2.0)
             if type(latency) not in (int, float):
                 _invalid()
+            allow_stale_quote = value.get("allow_stale_quote", False)
+            if type(allow_stale_quote) is not bool:
+                _invalid()
             market = CtpGatewayMarketSettings(frozenset(keys), allowed,
-                                              dispatch_max_latency_seconds=float(latency))
+                                              dispatch_max_latency_seconds=float(latency),
+                                              allow_stale_quote=allow_stale_quote)
         options = dict(credentials, ctp_env_profile="config_front_pair", ctp_environment="simnow",
                        trusted_flow_root=str(settings.trusted_flow_root), flow_account_scope=settings.account_scope)
         def request_feed_factory():
@@ -1077,6 +1118,7 @@ def _load_resources(config, *, trading):
                     upgrade_actor_stream_from_v14=drain_upgrade,
                     upgrade_strategy_origin_from_v15=drain_upgrade,
                     upgrade_control_cancel_from_v16=drain_upgrade,
+                    upgrade_account_fact_recovery_from_v17=drain_upgrade,
                     strategy_origin_source_factory=_strategy_origin_source_factory(
                         return_settings.instruments))
             if upgrade_parents:
@@ -1098,6 +1140,8 @@ def _load_resources(config, *, trading):
                     raw.get("strategy_ledger")),
                 upgrade_account_extensions_from_v11=upgrade_extensions,
                 strategy_ledger_comparison_refresh_seconds=comparison_refresh,
+                strategy_ledger_source_cut_mode=_strategy_ledger_source_cut_mode(
+                    raw.get("strategy_ledger")),
                 lease_drain_settings=lease_drain,
                 strategy_financial_settings=_strategy_financial(
                     raw.get("strategy_financial"),

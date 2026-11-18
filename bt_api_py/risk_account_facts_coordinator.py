@@ -14,6 +14,8 @@ import math
 import os
 import re
 import threading
+import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import wraps
 
@@ -28,7 +30,16 @@ from bt_api_py.gateway_account_facts_client import (
     GatewayAccountFactV2Result,
 )
 from bt_api_py.gateway_account_observer_client import GatewayAccountObserverClient
+from bt_api_py.gateway_order_cut_client import GatewayOrderCutClient
 from bt_api_py.service_runtime_thread import BoundCallRoute, ThreadedServiceClientRuntime
+
+
+def _unfreeze(value):
+    if isinstance(value, Mapping):
+        return {key: _unfreeze(item) for key, item in value.items()}
+    if type(value) is tuple:
+        return [_unfreeze(item) for item in value]
+    return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,7 +69,9 @@ def _exclusive(operation):
 class RiskAccountFactsCoordinator:
     """Fenced owner of one explicit read, local apply and ACK observation."""
 
-    def __init__(self, client, ledger, *, limit=256, timeout_seconds=5.0):
+    def __init__(self, client, ledger, *, limit=256, timeout_seconds=5.0,
+                 order_cut_client=None, cut_max_age_seconds=60.0,
+                 cut_limit=256, cut_timeout_seconds=None, now_ns=time.time_ns):
         if (type(client) is not GatewayAccountFactsClient or type(client._runtime) is not ThreadedServiceClientRuntime
                 or type(client._bound_route) is not BoundCallRoute
                 or client._bound_route.peer.role is not WireRole.SERVICE
@@ -75,7 +88,28 @@ class RiskAccountFactsCoordinator:
                 or type(timeout_seconds) not in (int, float) or not math.isfinite(timeout_seconds)
                 or not 0 < timeout_seconds <= threading.TIMEOUT_MAX):
             raise ValueError('R05_FACTS_COORDINATOR_INVALID')
+        cut_timeout = timeout_seconds if cut_timeout_seconds is None else cut_timeout_seconds
+        if order_cut_client is not None:
+            if (type(order_cut_client) is not GatewayOrderCutClient
+                    or order_cut_client._closed
+                    or order_cut_client._original_runtime is not client._runtime
+                    or order_cut_client._bound_route != client._bound_route
+                    or order_cut_client._expected_fingerprint != client._expected_fingerprint
+                    or type(cut_max_age_seconds) not in (int, float)
+                    or not math.isfinite(cut_max_age_seconds) or cut_max_age_seconds <= 0
+                    or int(cut_max_age_seconds * 1_000_000_000) < 1
+                    or type(cut_limit) is not int or not 1 <= cut_limit <= 256
+                    or type(cut_timeout) not in (int, float) or not math.isfinite(cut_timeout)
+                    or not 0 < cut_timeout <= threading.TIMEOUT_MAX
+                    or not callable(now_ns)):
+                raise ValueError('R05_FACTS_COORDINATOR_INVALID')
         self._client, self._ledger = client, ledger
+        self._cut_client = order_cut_client
+        self._cut_bound_value = None if order_cut_client is None else copy.deepcopy(order_cut_client._bound_route)
+        self._cut_max_age_ns = int(cut_max_age_seconds * 1_000_000_000) if order_cut_client is not None else 0
+        self._cut_limit = cut_limit
+        self._cut_timeout = float(cut_timeout)
+        self._now_ns = now_ns
         self._runtime, self._journal, self._fence = client._runtime, ledger._journal, ledger._fence
         self._route, self._bound_route = client._route, client._bound_route
         self._route_value, self._bound_value = copy.deepcopy(self._route), copy.deepcopy(self._bound_route)
@@ -91,6 +125,7 @@ class RiskAccountFactsCoordinator:
         self._mode = 'READY'
         self._busy = False
         self._poisoned = False
+        self._last_has_more = False
         self._check()
 
     def _check(self):
@@ -106,6 +141,15 @@ class RiskAccountFactsCoordinator:
                 or ledger._fence != self._fence_value or ledger._schema_version != 4
                 or ledger._r05_enabled is not True or ledger._r05_version != 2):
             raise ValueError('R05_FACTS_BINDING_CHANGED')
+        if self._cut_client is not None:
+            cc = self._cut_client
+            if (cc._closed or cc._runtime is not self._runtime or cc._original_runtime is not self._runtime
+                    or cc._bound_route != self._cut_bound_value
+                    or cc._expected_fingerprint != self._fingerprint
+                    or getattr(cc.read, '__func__', None) is not GatewayOrderCutClient.read
+                    or getattr(cc.validate_copy_issued, '__func__', None) is not GatewayOrderCutClient.validate_copy_issued
+                    or getattr(cc._registration, '__func__', None) is not GatewayAccountObserverClient._registration):
+                raise ValueError('R05_FACTS_BINDING_CHANGED')
         PretradeLedger._check(ledger)
 
     def _check_owner(self):
@@ -256,6 +300,7 @@ class RiskAccountFactsCoordinator:
             if page['acknowledged_sequence'] != after:
                 raise ValueError('R05_FACTS_ACK_DRIFT')
             staged = self._apply(result, encoded, before)
+            self._last_has_more = bool(page['has_more'])
             if not page['events']:
                 return RiskAccountFactsOutcome('EMPTY', staged['cursor'])
         except Exception:
@@ -268,6 +313,135 @@ class RiskAccountFactsCoordinator:
             return RiskAccountFactsOutcome('UNKNOWN', staged['cursor'], 'ACK_OR_COMMIT_UNAVAILABLE')
         self._mode = 'READY'
         return RiskAccountFactsOutcome('APPLIED', final['cursor'])
+
+    @_exclusive
+    def poll_order_cut_once(self):
+        """Fetch an authenticated order cut (current + query pages + receipt pages) and commit atomically."""
+        self._check_owner()
+        if self._cut_client is None:
+            return RiskAccountFactsOutcome('DISABLED')
+        try:
+            self._check()
+        except Exception:
+            self._mode = 'UNKNOWN'
+            return RiskAccountFactsOutcome('UNKNOWN', code='OWNER_UNCERTAIN')
+        try:
+            before = self._progress()
+        except Exception:
+            self._mode = 'UNKNOWN'
+            return RiskAccountFactsOutcome('UNKNOWN', code='LOCAL_UNAVAILABLE')
+        if before is None:
+            return RiskAccountFactsOutcome('NO_FACTS_STATE')
+        if before['pending'] is not None:
+            self._mode = 'RECOVER'
+            return RiskAccountFactsOutcome('RECOVERY_REQUIRED', before['cursor'])
+        if self._mode != 'READY':
+            return RiskAccountFactsOutcome('UNKNOWN', code='OWNER_UNCERTAIN')
+        try:
+            issued_current = self._cut_client.current(timeout_seconds=self._cut_timeout)
+            if issued_current.outcome != 'OBSERVED':
+                return RiskAccountFactsOutcome('CUT_UNAVAILABLE', before['cursor'], issued_current.code)
+            current_copy = self._cut_client.validate_copy_issued(issued_current, timeout_seconds=self._cut_timeout)
+            if current_copy.outcome != 'OBSERVED':
+                return RiskAccountFactsOutcome('UNKNOWN', before['cursor'], current_copy.code)
+            current_page = _unfreeze(current_copy.page)
+            header = current_page['header']
+            if header['journal_id'] != before['gateway_journal_id'] or header['fact_epoch'] != before['epoch']:
+                self._mode = 'UNKNOWN'
+                return RiskAccountFactsOutcome('UNKNOWN', before['cursor'], 'CUT_SOURCE_MISMATCH')
+            cut_ref = current_page['cut_ref']
+            q_manifest = current_page['query_manifest_digest']
+            query_pages = []
+            after_ordinal = 0
+            while True:
+                res = self._cut_client.query_page(
+                    cut_ref=cut_ref,
+                    after_ordinal=after_ordinal,
+                    limit=self._cut_limit,
+                    expected_manifest_digest=q_manifest,
+                    timeout_seconds=self._cut_timeout,
+                )
+                if res.outcome != 'OBSERVED':
+                    return RiskAccountFactsOutcome('CUT_UNAVAILABLE', before['cursor'], res.code)
+                copied = self._cut_client.validate_copy_issued(res, timeout_seconds=self._cut_timeout)
+                if copied.outcome != 'OBSERVED':
+                    return RiskAccountFactsOutcome('UNKNOWN', before['cursor'], copied.code)
+                page = _unfreeze(copied.page)
+                if page['cut_ref'] != cut_ref or page['header'] != header or page['query_manifest_digest'] != q_manifest:
+                    return RiskAccountFactsOutcome('CUT_UNAVAILABLE', before['cursor'], 'SOURCE_CHANGED')
+                query_pages.append(page)
+                after_ordinal = page['next_ordinal']
+                if not page['has_more']:
+                    break
+                if len(query_pages) > 10000:
+                    raise ValueError('R05_ORDER_CUT_TOO_MANY_PAGES')
+            receipt_pages = []
+            after_seq = header['begin_sequence']
+            receipt_manifest = None
+            while True:
+                res = self._cut_client.receipt_page(
+                    cut_ref=cut_ref,
+                    after_source_sequence=after_seq,
+                    limit=self._cut_limit,
+                    expected_manifest_digest=receipt_manifest,
+                    timeout_seconds=self._cut_timeout,
+                )
+                if res.outcome != 'OBSERVED':
+                    return RiskAccountFactsOutcome('CUT_UNAVAILABLE', before['cursor'], res.code)
+                copied = self._cut_client.validate_copy_issued(res, timeout_seconds=self._cut_timeout)
+                if copied.outcome != 'OBSERVED':
+                    return RiskAccountFactsOutcome('UNKNOWN', before['cursor'], copied.code)
+                page = _unfreeze(copied.page)
+                if page['cut_ref'] != cut_ref or page['header'] != header or page['query_manifest_digest'] != q_manifest:
+                    return RiskAccountFactsOutcome('CUT_UNAVAILABLE', before['cursor'], 'SOURCE_CHANGED')
+                if receipt_manifest is None:
+                    receipt_manifest = page['manifest_digest']
+                elif page['manifest_digest'] != receipt_manifest:
+                    return RiskAccountFactsOutcome('CUT_UNAVAILABLE', before['cursor'], 'SOURCE_CHANGED')
+                receipt_pages.append(page)
+                after_seq = page['next_source_sequence']
+                if not page['has_more']:
+                    break
+                if len(receipt_pages) > 10000:
+                    raise ValueError('R05_ORDER_CUT_TOO_MANY_PAGES')
+            if self._cut_client._current_cut is None or self._cut_client._current_cut[0] != cut_ref:
+                return RiskAccountFactsOutcome('CUT_UNAVAILABLE', before['cursor'], 'SOURCE_CHANGED')
+            observed_at_ns = self._now_ns()
+            if type(observed_at_ns) is not int or observed_at_ns <= 0:
+                raise ValueError('R05_ORDER_CUT_CLOCK_INVALID')
+            with PretradeLedger.transaction(self._ledger) as txn:
+                if txn.r05_progress() != before:
+                    raise ValueError('R05_FACTS_PROGRESS_CHANGED')
+                binding = txn.r05_source_binding()
+                if binding != self._source_binding:
+                    raise ValueError('R05_FACTS_SOURCE_CHANGED')
+                txn.apply_r05_order_cut_current(
+                    source_binding=dict(self._source_binding),
+                    gateway_account=self._route.scope.account_ref,
+                    observed_at_ns=observed_at_ns,
+                    max_age_ns=self._cut_max_age_ns,
+                    page=current_page,
+                )
+                for qpage in query_pages:
+                    txn.apply_r05_order_cut_query_page(
+                        source_binding=dict(self._source_binding),
+                        gateway_account=self._route.scope.account_ref,
+                        page=qpage,
+                    )
+                for rpage in receipt_pages:
+                    txn.apply_r05_order_cut_receipt_page(
+                        source_binding=dict(self._source_binding),
+                        gateway_account=self._route.scope.account_ref,
+                        page=rpage,
+                    )
+            self._check()
+        except Exception:
+            self._latch_after_failure()
+            return RiskAccountFactsOutcome('UNKNOWN', before['cursor'], 'ORDER_CUT_APPLY_UNAVAILABLE')
+        self._mode = 'READY'
+        if header['source_history_has_gap']:
+            return RiskAccountFactsOutcome('CUT_GAP', before['cursor'], 'SOURCE_HISTORY_HAS_GAP')
+        return RiskAccountFactsOutcome('CUT_APPLIED', before['cursor'])
 
     @_exclusive
     def recover_pending_once(self):

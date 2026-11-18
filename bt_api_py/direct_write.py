@@ -453,9 +453,13 @@ class DirectWriteCoordinator:
         view_reader = getattr(provider, "instrument_status_view", None)
         if not callable(view_reader):
             return None
+        recovery_reader = getattr(provider, "instrument_status_recovery_state", None)
         from bt_api_py.instrument_status_composition import InstrumentStatusObservationPort
 
-        return InstrumentStatusObservationPort(view_reader)
+        return InstrumentStatusObservationPort(
+            view_reader,
+            recovery_reader=recovery_reader if callable(recovery_reader) else None,
+        )
 
     def close(self) -> None:
         """Close every created provider that owns resources (e.g. a monitor thread).

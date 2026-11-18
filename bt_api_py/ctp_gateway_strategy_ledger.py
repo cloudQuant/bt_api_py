@@ -145,6 +145,7 @@ class CtpGatewayStrategyLedger:
         retry_seconds: float = 30.0,
         comparison_refresh_seconds: float | None = None,
         comparison_max_age_seconds: float = 120.0,
+        source_cut_mode: str = "none",
     ) -> None:
         if (type(instruments) is not tuple or not instruments
                 or any(type(item) is not MarketInstrumentKey for item in instruments)
@@ -154,7 +155,8 @@ class CtpGatewayStrategyLedger:
                                      comparison_max_age_seconds))
                 or (comparison_refresh_seconds is not None and (
                     type(comparison_refresh_seconds) not in (int, float)
-                    or not 1 <= comparison_refresh_seconds <= comparison_max_age_seconds))):
+                    or not 1 <= comparison_refresh_seconds <= comparison_max_age_seconds))
+                or source_cut_mode not in ("none", "returns_bracket_v1")):
             raise CtpGatewayStrategyLedgerError("INVALID_STRATEGY_LEDGER_SETTINGS")
         self._journal, self._guard = journal, guard
         self._session, self._provider, self._returns = session, provider, returns
@@ -195,6 +197,11 @@ class CtpGatewayStrategyLedger:
         # One object for every port that takes it: the journal compares ports by identity.
         self._external_verifier = self.verify_external_current
         self._ready = False
+        # A baseline written (or a marked baseline verified) under the
+        # conservative returns-bracket cut.  ``_source_cut_verified`` only
+        # allows a read to start; this flag proves the cut for serving.
+        self._cut_verified = False
+        self._source_cut_mode = source_cut_mode
         self._state = "PENDING"
         self._next_attempt = 0.0
         self._pending_evidence: StrategyBaselineEvidence | None = None
@@ -215,10 +222,21 @@ class CtpGatewayStrategyLedger:
     # ------------------------------------------------------------------
     # ports
     # ------------------------------------------------------------------
-    @staticmethod
-    def _source_cut_verified() -> bool:
-        """No installed CTP source proves a common snapshot/return cut."""
-        return False
+    def _source_cut_verified(self) -> bool:
+        """Conservative common cut: the return maintenance is continuous.
+
+        The per-read before/after buffer-sequence and gap check in
+        ``_baseline_from_read`` still proves that no callback crossed the
+        account read.  This method only decides whether the ledger may start
+        that read; it never proves a snapshot on its own, and ``ready`` still
+        requires a completed, bracket-stable baseline.
+        """
+        if self._source_cut_mode != "returns_bracket_v1":
+            return False
+        try:
+            return self._returns.ledger_continuous() is True
+        except Exception:
+            return False
 
     def resolve_binding(self, payload: object) -> StrategyInstrumentBinding:
         if type(payload) is not dict:
@@ -250,7 +268,8 @@ class CtpGatewayStrategyLedger:
             return False
 
     def verify_current_continuity(self, db, account, binding, trading_day, baseline) -> bool:
-        if not self._source_cut_verified():
+        if (not self._source_cut_verified()
+                or (self._source_cut_mode == "returns_bracket_v1" and not self._cut_verified)):
             return False
         try:
             if (threading.current_thread() is not self._owner_thread
@@ -295,20 +314,24 @@ class CtpGatewayStrategyLedger:
     # ------------------------------------------------------------------
     @property
     def ready(self) -> bool:
-        """Ports installed and a baseline present; a cached flag, no I/O."""
-        return self._source_cut_verified() and self._ready
+        """Ports installed and a cut-proven baseline present; a cached flag, no I/O."""
+        return (self._source_cut_verified() and self._ready
+                and (self._cut_verified if self._source_cut_mode == "returns_bracket_v1" else True))
 
     @property
     def state(self) -> str:
-        if (not self._source_cut_verified()
-                and not self._state.startswith(("REFUSED:", "FAILED:"))):
+        unproven = (not self._cut_verified
+                    if self._source_cut_mode == "returns_bracket_v1"
+                    else not self._source_cut_verified())
+        if unproven and not self._state.startswith(("REFUSED:", "FAILED:")):
             return "SOURCE_CUT_UNPROVEN"
         return self._state
 
     @contextmanager
     def reservation_fence(self, context, order):
         """Refuse every new reservation until the ledger can account for it."""
-        if not self._source_cut_verified() or not self._ready:
+        if (not self._source_cut_verified() or not self._ready
+                or (self._source_cut_mode == "returns_bracket_v1" and not self._cut_verified)):
             raise DirectCommandJournalError("STRATEGY_LEDGER_UNAVAILABLE")
         with self._returns.reservation_fence(context, order):
             yield
@@ -647,12 +670,18 @@ class CtpGatewayStrategyLedger:
         current = self._journal.read_strategy_ledger_state(guard=self._guard)
         declared = self._external_baseline
         if current["baseline"] is not None:
+            stored = StrategyBaselineEvidence.from_mapping(current["baseline"])
             if declared is not None:
-                stored = StrategyBaselineEvidence.from_mapping(current["baseline"])
                 if (stored.operation_id != declared.operation_id or stored.operator_ref != declared.operator_ref
                         or _ordered(stored.external_positions) != declared.positions):
                     # Same id with other content, or another declaration: never rebuilt.
                     return "EXTERNAL_BASELINE_CONFLICT"
+            if self._source_cut_mode == "returns_bracket_v1":
+                # A legacy row (written while the source cut was unproven) is
+                # never trusted; only a baseline carrying the marker is.
+                if not stored.cut_ref.endswith(":returns-bracket-v1"):
+                    return "SOURCE_CUT_UNPROVEN"
+                self._cut_verified = True
             return "PRESENT"
         if declared is not None and current["history_present"] is True:
             return "EXTERNAL_BASELINE_NEEDS_EMPTY_JOURNAL"
@@ -713,7 +742,9 @@ class CtpGatewayStrategyLedger:
             route=self._route, owner_generation=self._journal.generation, session_generation=generation,
             source_ref=_SOURCE_REF, position_snapshot_ref=observation.observation_id + ":positions",
             open_orders_snapshot_ref=observation.observation_id + ":open-orders",
-            cut_ref=f"ctp-return-buffer:{generation}:{before.last_sequence}",
+            cut_ref=(f"ctp-return-buffer:{generation}:{before.last_sequence}:returns-bracket-v1"
+                     if self._source_cut_mode == "returns_bracket_v1"
+                     else f"ctp-return-buffer:{generation}:{before.last_sequence}"),
             coverage_refs=("open_orders", "positions"), observed_at_ns=observed_at,
             valid_until_ns=observed_at + self._snapshot_validity_ns,
             positions_complete=True, open_orders_complete=True,
@@ -727,15 +758,18 @@ class CtpGatewayStrategyLedger:
             self._journal.initialize_external_strategy_ledger(
                 evidence, guard=self._guard, baseline_fence=self._fence,
                 verify_authorized_snapshot=self._verify_current)
+            self._cut_verified = True
             return "EXTERNAL_INITIALIZED"
         if history:
             self._journal.initialize_replayed_strategy_ledger(
                 evidence, guard=self._guard, baseline_fence=self._fence,
                 verify_current_snapshot=self._verify_current)
+            self._cut_verified = True
             return "REPLAY_INITIALIZED"
         self._journal.initialize_empty_strategy_ledger(
             evidence, guard=self._guard, baseline_fence=self._fence,
             verify_current_empty=self._verify_current)
+        self._cut_verified = True
         return "EMPTY_INITIALIZED"
 
     def _positions(self, rows) -> tuple[ExternalBaselinePosition, ...] | None:

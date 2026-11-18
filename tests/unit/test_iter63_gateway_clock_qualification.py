@@ -17,13 +17,14 @@ from bt_api_py.service_market import MarketReceiveReceipt
 from tests.test_iter62_clock_verification import SOURCE, _unqualified_event
 
 
-def make_case(monkeypatch):
+def make_case(monkeypatch, *, event_age=None):
     monkeypatch.setattr('bt_api_py.clock_verification._sntp_query', lambda host, timeout: (0, 2_000_000))
     local = GatewayClockVerifier(ClockVerifier(servers=('synthetic',)))
     assert local.refresh() is not None
     now = datetime.now(timezone.utc)
     china = now.astimezone(timezone(timedelta(hours=8)))
-    original = _unqualified_event(now - timedelta(milliseconds=20), now)
+    original = _unqualified_event(
+        now - (timedelta(milliseconds=20) if event_age is None else event_age), now)
     event = bind_market_tick_event(replace(original.data, trading_date=china.date().isoformat()), SOURCE, original.cursor)
     identity = WireIdentity(WireRole.SERVICE, 'principal', 'actor')
     header = WireHeader(protocol_version=WIRE_PROTOCOL_VERSION, kind=WireMessageKind.EVENT, message_id='event', correlation_id=None,
@@ -146,6 +147,35 @@ def test_wall_jump_and_missing_local_calibration_fail_closed(monkeypatch):
 def test_untrusted_query_callback_cannot_be_accepted_as_sntp():
     with pytest.raises(ValueError, match='INVALID_GATEWAY_CLOCK_VERIFIER'):
         GatewayClockVerifier(ClockVerifier(servers=('fake',), query=lambda *_: (0, 0)))
+
+
+def test_stale_event_time_is_rejected_by_default_and_admitted_on_opt_in(monkeypatch):
+    """SimNow 7x24 replay: a days-old event time fails closed unless the
+    explicit allow_stale_event_time opt-in is set; the negative-age bound and
+    clock TTL still gate in both modes."""
+    stale = timedelta(days=2)
+    qualifier, event, receipt, observation, _ = make_case(monkeypatch, event_age=stale)
+    as_tick_observation(event, observation)
+    # The replayed tick reached the gateway when the receive clock was already
+    # two days past the event time: the v2 venue bound itself is event age.
+    assert qualifier.qualify(event, receipt).reason == 'VENUE_CLOCK_UNAVAILABLE'
+    relaxed = GatewayTradeClockQualifier(
+        qualifier._client, qualifier._verifier, allow_stale_event_time=True)
+    assert relaxed.qualify(event, receipt).ok
+    # A same-shaped tick whose event time is *ahead* of the receive clock
+    # stays closed in both modes (the negative-age bound, reached after the
+    # second fixture's fresh local sample).
+    ahead_qualifier, ahead_event, ahead_receipt, ahead_observation, _ = make_case(
+        monkeypatch, event_age=timedelta(days=-2))
+    as_tick_observation(ahead_event, ahead_observation)
+    ahead = GatewayTradeClockQualifier(
+        ahead_qualifier._client, ahead_qualifier._verifier,
+        allow_stale_event_time=True)
+    assert (ahead.qualify(ahead_event, ahead_receipt).reason
+            == 'VENUE_CLOCK_UNAVAILABLE')
+    with pytest.raises(ValueError, match='INVALID_GATEWAY_CLOCK_QUALIFIER'):
+        GatewayTradeClockQualifier(
+            qualifier._client, qualifier._verifier, allow_stale_event_time='yes')
 
 
 def test_empty_poll_keeps_latest_issued_frame_but_failed_poll_clears_it(monkeypatch):

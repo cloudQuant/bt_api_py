@@ -263,3 +263,20 @@ def test_existing_sent_order_status_and_cancel_remain_available(env):
                                                native_cancel, lambda _: True)
     assert dispatcher.dispatch("s", "cancel-1", "p", expected_version=row.version).status == "SENT"
     assert calls == ["rb2701"]
+
+
+def test_returns_bracket_mode_establishes_the_empty_baseline(env):
+    env.journal.enable_strategy_ledger(env.guard)
+    ledger = build(env, source_cut_mode="returns_bracket_v1")
+    ledger.maintain()
+    assert ledger.ready and ledger.state == "EMPTY_INITIALIZED"
+    stored = baseline(env)
+    assert stored["cut_ref"].endswith(":returns-bracket-v1")
+
+
+def test_returns_bracket_mode_does_not_trust_legacy_rows(env):
+    env.journal.enable_strategy_ledger(env.guard)
+    _legacy_baseline(env)
+    ledger = build(env, source_cut_mode="returns_bracket_v1")
+    ledger.maintain()
+    assert (ledger.ready, ledger.state) == (False, "SOURCE_CUT_UNPROVEN")

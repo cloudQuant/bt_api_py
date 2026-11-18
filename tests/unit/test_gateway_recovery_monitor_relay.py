@@ -590,3 +590,33 @@ def test_receiver_stored_shape_over_limit_fails_before_pending(tmp_path):
     assert r.status().cursor == 1 and r.status().pending_count == 1 and len(remote.calls) == 1
     r.close()
     runtime.close()
+
+
+def test_darwin_reboot_shifted_device_adopts_stored_manifest(tmp_path, monkeypatch):
+    import json
+    import sys
+
+    monkeypatch.setattr(sys, "platform", "darwin")
+    source_path = tmp_path / "source.sqlite"
+    source = journal(source_path)
+    populate(source)
+    sink, runtime, _, _, remote = setup_sink()
+    r = relay(tmp_path, source, sink)
+    assert r.pump(max_records=2).cursor == 2
+    old_manifest = json.loads(r._manifest)
+    old_ns = r._namespace
+    shifted = dict(old_manifest)
+    shifted["source_device"] = old_manifest["source_device"] + 1
+    shifted_text = json.dumps(shifted, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+    r._transaction("UPDATE state SET manifest=?", (shifted_text,))
+    r.close()
+    runtime.close()
+
+    sink2, runtime2, _, _, remote2 = setup_sink()
+    remote2.events.update(remote.events)
+    r2 = relay(tmp_path, source, sink2)
+    assert r2._namespace != old_ns
+    assert json.loads(r2._manifest)["source_device"] == shifted["source_device"]
+    assert r2.pump(max_records=10).cursor == 4
+    r2.close()
+    runtime2.close()

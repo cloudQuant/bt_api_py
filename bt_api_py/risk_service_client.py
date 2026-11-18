@@ -43,6 +43,7 @@ from bt_api_base.risk_service_protocol import (
     RISK_REFUSAL_CODES,
     RISK_SERVICE_SCHEMA,
     RiskOrderResult,
+    RiskParentView,
 )
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 
@@ -184,6 +185,20 @@ class RiskCallResult:
     code: str | None = None
     # For a refused route: the finite reason and the evidence still missing.
     detail: RiskRouteRecovery | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RiskParentCallResult:
+    """A parent envelope answer; separate from the order-port answer shape."""
+    outcome: str
+    parent_ref: str | None = None
+    parent_outcome: str | None = None
+    state: str | None = None
+    code: str | None = None
+    total_quantity: str | None = None
+    allocated_quantity: str | None = None
+    unallocated_quantity: str | None = None
+    policy_version: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1256,6 +1271,65 @@ class RiskServiceClient:
         if not _ref(request_key) or not _timeout(timeout_seconds):
             return _not_sent("INVALID_REQUEST")
         return self._answer("risk.order.status", {"request_key": request_key}, timeout_seconds)
+
+    def parent_reserve(self, parent: RiskParentView, *,
+                       timeout_seconds: float = 5.0) -> RiskParentCallResult:
+        """risk.parent.reserve for an authorized Execution delegate."""
+        if type(parent) is not RiskParentView or not _timeout(timeout_seconds):
+            return RiskParentCallResult("NOT_SENT", code="INVALID_REQUEST")
+        return self._parent_answer("risk.parent.reserve", {"parent": parent.to_mapping()},
+                                    timeout_seconds)
+
+    def parent_release(self, parent_ref: str, *,
+                       timeout_seconds: float = 5.0) -> RiskParentCallResult:
+        if not _ref(parent_ref) or not _timeout(timeout_seconds):
+            return RiskParentCallResult("NOT_SENT", code="INVALID_REQUEST")
+        return self._parent_answer("risk.parent.release", {"parent_ref": parent_ref},
+                                    timeout_seconds)
+
+    def parent_status(self, parent_ref: str, *,
+                      timeout_seconds: float = 5.0) -> RiskParentCallResult:
+        if not _ref(parent_ref) or not _timeout(timeout_seconds):
+            return RiskParentCallResult("NOT_SENT", code="INVALID_REQUEST")
+        return self._parent_answer("risk.parent.status", {"parent_ref": parent_ref},
+                                    timeout_seconds)
+
+    def _parent_answer(self, operation, arguments, timeout_seconds):
+        raw, failure = self._call(operation, arguments, timeout_seconds)
+        if failure is not None:
+            return RiskParentCallResult(failure.outcome, code=failure.code)
+        try:
+            if (
+                type(raw) is not dict
+                or set(raw) != {
+                    "schema", "schema_version", "parent_ref", "outcome", "state", "code",
+                    "total_quantity", "allocated_quantity", "unallocated_quantity",
+                    "policy_version",
+                }
+                or raw["schema"] != RISK_SERVICE_SCHEMA
+                or type(raw["schema_version"]) is not int or raw["schema_version"] != 1
+                or not _ref(raw["parent_ref"])
+                or raw["outcome"] not in {"RESERVED", "RELEASED", "DENIED", "UNKNOWN", "NOT_FOUND"}
+                or (raw["state"] is not None and raw["state"] not in {"ACTIVE", "FROZEN", "RELEASED", "DENIED"})
+                or (raw["code"] is not None and raw["code"] not in RISK_REFUSAL_CODES)
+                or any(value is not None and not _text(value) for value in (
+                    raw["total_quantity"], raw["allocated_quantity"],
+                    raw["unallocated_quantity"], raw["policy_version"]))
+            ):
+                raise ValueError
+            return RiskParentCallResult(
+                "ANSWERED",
+                parent_ref=raw["parent_ref"],
+                parent_outcome=raw["outcome"],
+                state=raw["state"],
+                code=raw["code"],
+                total_quantity=raw["total_quantity"],
+                allocated_quantity=raw["allocated_quantity"],
+                unallocated_quantity=raw["unallocated_quantity"],
+                policy_version=raw["policy_version"],
+            )
+        except Exception:
+            return RiskParentCallResult("UNKNOWN", code="INVALID_REPLY")
 
     def service_status(self, *, timeout_seconds: float = 5.0) -> RiskStatusResult:
         """Read ``risk.status``; the reply shape is this client's strict expectation.

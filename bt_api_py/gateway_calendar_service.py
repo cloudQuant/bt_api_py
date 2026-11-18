@@ -174,7 +174,7 @@ class GatewayCalendarService:
                 binding, owner_revision = self._binding, self._revision
             if self._registry._closed or self._registry.service_epoch != self._epoch or binding is None:
                 return self._finish(context, response)
-            view = binding.capture_read_view(mode="SIMULATION_ONLY")
+            view = binding.capture_read_view(mode=binding.status().mode)
             status = view.status()
             with binding._lock:
                 binding_revision = binding._revision
@@ -201,7 +201,7 @@ class GatewayCalendarService:
                 response.update(status="OUT_OF_SCOPE", reason="DAY_OUT_OF_RANGE")
             else:
                 result = view.query(**query)
-                day = view.query_venue_day(mode="SIMULATION_ONLY", venue=scope["venue"], trading_day=query["trading_day"])
+                day = view.query_venue_day(mode=binding.status().mode, venue=scope["venue"], trading_day=query["trading_day"])
                 if result.binding is not status or day.binding is not status:
                     raise ValueError("INVALID_RESULT")
                 response["status"] = result.result.status
@@ -301,7 +301,7 @@ class GatewayCalendarService:
                 binding, revision = self._binding, self._revision
             if self._registry._closed or self._registry.service_epoch != self._epoch or binding is None:
                 return finish()
-            view = binding.capture_read_view(mode="SIMULATION_ONLY")
+            view = binding.capture_read_view(mode=binding.status().mode)
             status = view.status()
             with binding._lock:
                 binding_revision = binding._revision

@@ -228,8 +228,11 @@ def _authority(config, listener, scope, keys, operation):
 class MonitorServiceHost:
     """Own both listeners on one thread, including failure and shutdown cleanup."""
 
-    def __init__(self, config: MonitorServiceConfig) -> None:
+    def __init__(
+        self, config: MonitorServiceConfig, *, recovery_fact_coordinator_factory=None
+    ) -> None:
         self.config = config
+        self._recovery_fact_coordinator_factory = recovery_fact_coordinator_factory
         self._hosts: list[ServiceHost] = []
         self._closed_hosts: set[ServiceHost] = set()
         self._resources: list[object] = []
@@ -299,7 +302,10 @@ class MonitorServiceHost:
                 from bt_api_py.monitor_recovery_duration_worker import RecoveryDurationWorker
 
                 self._recovery_worker = RecoveryDurationWorker(
-                    outbox, self.config.recovery_duration, producer_bindings
+                    outbox,
+                    self.config.recovery_duration,
+                    producer_bindings,
+                    fact_coordinator_factory=self._recovery_fact_coordinator_factory,
                 )
                 self._recovery_worker.start()
             self.state = "ready"

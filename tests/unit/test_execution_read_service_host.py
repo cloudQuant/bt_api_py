@@ -153,3 +153,30 @@ def test_partial_start_uncertain_retains_owner_until_retry(tmp_path, monkeypatch
     assert host.state == 'close_uncertain' and host.listener is not None and host.journal is not None
     host.close()
     assert host.state == 'closed' and host.listener is None and host.journal is None
+
+
+def test_darwin_reboot_shifted_device_opens_readonly_journal(tmp_path, monkeypatch):
+    import hashlib
+    import sys
+    from bt_api_execution.account_journal_host import AccountJournalHost
+    from bt_api_execution.contracts import ExecutionScope
+    from bt_api_py.execution_read_service_host import _check_existing
+
+    monkeypatch.setattr(sys, 'platform', 'darwin')
+    raw = example()
+    root = tmp_path.resolve() / 'journal'
+    root.mkdir(mode=0o700)
+    audit = tmp_path.resolve() / 'audit'
+    audit.mkdir(mode=0o700)
+    raw['storage'].update(journal_root=str(root), audit_root=str(audit))
+    cfg = parse_config(raw)
+    with AccountJournalHost(root=str(root), scope=cfg.local_scope, storage_id=raw['storage']['storage_id']):
+        pass
+    account_hash = hashlib.sha256(cfg.local_scope.account_key.encode()).hexdigest()
+    owner_path = root / f'.execution-intake-{account_hash}.owner'
+    manifest = json.loads(owner_path.read_text())
+    manifest['device'] = manifest['device'] + 1
+    owner_path.chmod(0o600)
+    owner_path.write_text(json.dumps(manifest))
+    owner_path.chmod(0o400)
+    _check_existing(cfg)

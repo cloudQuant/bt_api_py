@@ -822,7 +822,8 @@ def test_builtin_is_registered_and_requires_the_typed_service():
     parsed = parse_service_config(service_config_document(config))
     (prepared,) = validate_components(component_specs(parsed.components))
     assert prepared.write_operations_by_port["service.risk_order"] == {
-        "risk.order.reserve", "risk.order.dispatch", "risk.order.release"}
+        "risk.order.reserve", "risk.order.dispatch", "risk.order.release",
+        "risk.parent.reserve", "risk.parent.release"}
     assert prepared.write_operations_by_port["service.risk_admin"] == {
         "risk.policy.publish", "risk.latch.release", "risk.cancel.request"}
     with pytest.raises(ServiceComponentError) as raised:
