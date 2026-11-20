@@ -9990,9 +9990,27 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         bar_list = data.get_data()
         published = False
         try:
-            for bar in bar_list:
-                data_queue.put(bar)
-                published = True
+            if isinstance(data_queue, EventIngressQueue):
+                iterator = iter(bar_list)
+                no_bar = object()
+                first_bar = next(iterator, no_bar)
+                if first_bar is not no_bar:
+                    # Keep this facade's multi-put producer visible to the exact
+                    # queue retirement fence until the batch's final put returns.
+                    with data_queue._producer_reservation():
+                        data_queue.put(first_bar)
+                        published = True
+                        while True:
+                            try:
+                                bar = next(iterator)
+                            except StopIteration:
+                                break
+                            data_queue.put(bar)
+                            published = True
+            else:
+                for bar in bar_list:
+                    data_queue.put(bar)
+                    published = True
         finally:
             if published and not (
                 isinstance(data_queue, EventIngressQueue) and data_queue.event_waker_bound
