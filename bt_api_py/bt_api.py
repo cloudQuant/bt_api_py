@@ -272,6 +272,9 @@ def _account_risk_snapshot_error(code):
 
 
 DATANAME_SEPARATOR = "___"
+_MAX_EVENT_BATCH_EVENTS = 1024
+_DEFAULT_EVENT_BATCH_SCAN_ITEMS = 256
+_MAX_EVENT_BATCH_SCAN_ITEMS = 1024
 _NORMALIZED_WRITE_OPERATIONS = frozenset({"make_order", "cancel_order", "set_position_mode"})
 _SIMNOW_BOUND_PROFILES = frozenset({"config_front_pair", "set1_group1", "set1_group2"})
 _SIMNOW_RESTRICTED_PROFILES = _SIMNOW_BOUND_PROFILES | frozenset(
@@ -308,6 +311,22 @@ _U1A_RUNTIME_DISTRIBUTIONS = (
     "cryptography",
     "bt_api_ctp",
 )
+
+
+def _normalize_market_snapshot_kinds(coalesce_market_snapshots: Any) -> frozenset[str]:
+    """Validate the shared explicit snapshot-coalescing selection."""
+    if isinstance(coalesce_market_snapshots, str):
+        raise ValueError("coalesce_market_snapshots must be an iterable of event kinds")
+    try:
+        snapshot_kinds = frozenset(str(kind).strip().lower() for kind in coalesce_market_snapshots)
+    except TypeError as exc:
+        raise ValueError("coalesce_market_snapshots must be an iterable of event kinds") from exc
+    unsupported = snapshot_kinds - {"orderbook", "tick"}
+    if unsupported or "" in snapshot_kinds:
+        raise ValueError(
+            "coalesce_market_snapshots supports only complete orderbook and tick snapshots"
+        )
+    return snapshot_kinds
 
 
 class _CtpExecutionArmAuthorization:
@@ -3275,8 +3294,11 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         if not managed_ctp:
             if normalized:
                 self._append_normalized_event_pending(exchange_name, item)
+                self._notify_event_wakers()
             else:
                 source.put(item)
+                if not (isinstance(source, EventIngressQueue) and source.event_waker_bound):
+                    self._notify_event_wakers()
             return
         producer = self._ctp_private_stream_queue(exchange_name, source)
         if normalized:
@@ -3286,6 +3308,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             )
         else:
             producer.put(item)
+        self._notify_event_wakers()
 
     def _append_normalized_event_pending(self, exchange_name: str, item: Any) -> None:
         """Append a normalized producer item under any active batch handoff lock."""
@@ -5405,12 +5428,49 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         token: object,
         *,
         max_raw_items: int | None = 100,
+        max_events: int = 100,
+        max_scan_items: int = _DEFAULT_EVENT_BATCH_SCAN_ITEMS,
+        coalesce_market_snapshots: tuple[str, ...] = (),
     ) -> EventBatch | None:
-        """Return the current unacknowledged batch, or ``None`` when empty.
+        """Return the outstanding batch or one new bounded batch.
+
+        ``None`` means no event was produced and no backlog was visible when
+        the final queue snapshot was taken, or that a caller explicitly set a
+        zero budget. If a budget is exhausted while pending work is visible,
+        the method raises a finite ``EventBatchHandoffError`` code so a caller
+        can schedule a bounded continuation instead of mistaking backlog for
+        an empty drain. A producer may enqueue after the snapshot; its event
+        waker remains the notification for that later input.
 
         A normalization error retains its input at the head of the pending
         lane. A valid prefix is leased first, tagged with the safe failure code,
         and the failed input is retried only after the exact batch is ACKed.
+
+        ``max_events`` bounds normalized events processed before coalescing and
+        must be between zero and 1024. If one raw input expands past this limit,
+        its unprocessed suffix remains at the head of the normalized pending
+        lane and is delivered by a later batch after the current batch is ACKed.
+        ``max_scan_items`` bounds the raw or pending input items examined by one
+        call, including items which normalize to no event. Its default is 256
+        and its accepted range is zero to 1024. The provider's ``get_data()`` is
+        still called once and its complete return is materialized in the SDK
+        pending lane; this budget does not bound that provider call or the
+        memory used by its returned fanout.
+        If this budget is exhausted with a visible pending input, the error
+        code is ``event_batch_scan_budget_exhausted``. Exhausting
+        ``max_raw_items`` with a visible raw-queue item uses
+        ``event_batch_raw_budget_exhausted``. A raw backlog that appears
+        concurrently without either budget being exhausted uses
+        ``event_batch_backlog_pending``. These are continuation signals, not
+        normalization failures; callers should continue only within their own
+        bounded drain and reschedule or wait between drain turns. The raw queue
+        check is a point-in-time positive backlog observation, not proof of
+        global quiescence. A concurrent later producer is signaled by the
+        provider's event waker when that producer is wired to it.
+        ``coalesce_market_snapshots`` uses the same per-kind, per-symbol,
+        barrier-preserving behavior as ``poll_events`` and only coalesces within
+        this batch's bounded normalized prefix. An already leased batch is
+        returned unchanged until ACK after new poll arguments validate.
 
         Queue task accounting is separate from this handoff: batch polling and
         ACK do not call ``Queue.task_done()``. The existing ``poll_event`` and
@@ -5423,6 +5483,21 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             raise ValueError("max_raw_items must be a non-negative integer or None")
         if max_raw_items is not None and max_raw_items < 0:
             raise ValueError("max_raw_items must be a non-negative integer or None")
+        if (
+            isinstance(max_events, bool)
+            or not isinstance(max_events, int)
+            or not 0 <= max_events <= _MAX_EVENT_BATCH_EVENTS
+        ):
+            raise ValueError(f"max_events must be an integer from 0 to {_MAX_EVENT_BATCH_EVENTS}")
+        if (
+            isinstance(max_scan_items, bool)
+            or not isinstance(max_scan_items, int)
+            or not 0 <= max_scan_items <= _MAX_EVENT_BATCH_SCAN_ITEMS
+        ):
+            raise ValueError(
+                f"max_scan_items must be an integer from 0 to {_MAX_EVENT_BATCH_SCAN_ITEMS}"
+            )
+        snapshot_kinds = _normalize_market_snapshot_kinds(coalesce_market_snapshots)
         handoff = self._event_batch_handoffs.get(exchange_name)
         if handoff is None:
             raise EventBatchHandoffError("event_consumer_not_registered")
@@ -5435,22 +5510,29 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         with handoff.polling(token) as outstanding:
             if outstanding is not None:
                 return outstanding
+            if max_events == 0 or max_scan_items == 0:
+                return None
             source = self.data_queues.get(exchange_name)
             if not isinstance(source, EventIngressQueue):
                 raise CapabilityNotSupportedError(
                     "poll_event_batch", detail="exchange queue does not support batch handoff"
                 )
             raw_budget = [source.qsize() if max_raw_items is None else max_raw_items]
+            scan_budget = [max_scan_items]
             events: list[dict[str, Any]] = []
             blocked_error_code = None
             pending = self._normalized_event_pending[exchange_name]
-            while raw_budget[0] > 0 or pending:
+            while (
+                len(events) < max_events and scan_budget[0] > 0 and (raw_budget[0] > 0 or pending)
+            ):
                 before_budget = raw_budget[0]
+                before_scan_budget = scan_budget[0]
                 before_pending = len(pending)
                 try:
                     event = self._poll_event_raw(
                         exchange_name,
                         source_budget=raw_budget,
+                        scan_budget=scan_budget,
                         _event_consumer_token=token,
                     )
                 except NormalizedApiError as exc:
@@ -5461,28 +5543,70 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                 if event is not None:
                     events.append(event)
                     continue
-                if raw_budget[0] == before_budget and len(pending) == before_pending:
+                if (
+                    raw_budget[0] == before_budget
+                    and scan_budget[0] == before_scan_budget
+                    and len(pending) == before_pending
+                ):
                     break
             if not events:
+                if self._event_batch_has_visible_backlog(exchange_name, source):
+                    if scan_budget[0] == 0:
+                        raise EventBatchHandoffError("event_batch_scan_budget_exhausted")
+                    if raw_budget[0] == 0:
+                        raise EventBatchHandoffError("event_batch_raw_budget_exhausted")
+                    raise EventBatchHandoffError("event_batch_backlog_pending")
                 return None
-            self._event_metrics["delivered_events"] += len(events)
-            return handoff.lease(events, blocked_error_code=blocked_error_code)
+            if snapshot_kinds:
+                result = self._coalesce_market_snapshot_events(events, snapshot_kinds)
+                self._event_metrics["coalesced_events"] += len(events) - len(result)
+            else:
+                result = events
+            if not result:
+                return None
+            self._event_metrics["delivered_events"] += len(result)
+            return handoff.lease(result, blocked_error_code=blocked_error_code)
+
+    def _event_batch_has_visible_backlog(
+        self, exchange_name: str, source: EventIngressQueue
+    ) -> bool:
+        """Return a point-in-time positive backlog observation for batch poll.
+
+        The pending lane is serialized by the handoff lock held by the caller.
+        The queue mutex makes the raw-lane snapshot atomic with ``put`` and
+        ``get`` at that instant; a false result does not fence future producers.
+        """
+        if self._normalized_event_pending.get(exchange_name):
+            return True
+        with source.mutex:
+            return bool(source._qsize())
 
     def ack_event_batch(
         self,
         exchange_name: str,
         token: object,
         batch: EventBatch,
-    ) -> None:
+    ) -> bool:
         """Acknowledge only the exact batch object currently held by the SDK.
 
         ACK releases the SDK batch lease; it does not update
-        ``Queue.unfinished_tasks`` or call ``Queue.task_done()``.
+        ``Queue.unfinished_tasks`` or call ``Queue.task_done()``. If a normalized
+        or raw input backlog is visible at the ACK boundary, registered event
+        wakers are notified so the consumer can schedule another bounded drain.
+        The return value reports that same point-in-time visible backlog. It
+        remains useful after client close, including after the one close hint;
+        existing subscribers continue to receive later producer wakes until
+        they explicitly unregister.
         """
         handoff = self._event_batch_handoffs.get(exchange_name)
         if handoff is None:
             raise EventBatchHandoffError("event_consumer_not_registered")
-        handoff.acknowledge(token, batch)
+        with handoff._lock:
+            handoff.acknowledge(token, batch)
+            backlog_visible = self._event_batch_has_visible_backlog(exchange_name, handoff.ingress)
+        if backlog_visible:
+            self._notify_event_wakers()
+        return backlog_visible
 
     def unregister_event_consumer(self, exchange_name: str, token: object) -> None:
         """Retire an idle handoff after both the raw and normalized lanes drain."""
@@ -5562,21 +5686,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             raise ValueError("max_raw_items must be a non-negative integer or None")
         if max_raw_items is not None and max_raw_items < 0:
             raise ValueError("max_raw_items must be a non-negative integer or None")
-        if isinstance(coalesce_market_snapshots, str):
-            raise ValueError("coalesce_market_snapshots must be an iterable of event kinds")
-        try:
-            snapshot_kinds = frozenset(
-                str(kind).strip().lower() for kind in coalesce_market_snapshots
-            )
-        except TypeError as exc:
-            raise ValueError(
-                "coalesce_market_snapshots must be an iterable of event kinds"
-            ) from exc
-        unsupported = snapshot_kinds - {"orderbook", "tick"}
-        if unsupported or "" in snapshot_kinds:
-            raise ValueError(
-                "coalesce_market_snapshots supports only complete orderbook and tick snapshots"
-            )
+        snapshot_kinds = _normalize_market_snapshot_kinds(coalesce_market_snapshots)
 
         self._begin_legacy_event_poll(exchange_name)
         session = self._execution_session
@@ -5823,6 +5933,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         exchange_name: str,
         *,
         source_budget: list[int] | None = None,
+        scan_budget: list[int] | None = None,
         _event_consumer_token: object | None = None,
     ) -> dict[str, Any] | None:
         """Return one normalized SDK event, preserving mixed queue arrival order.
@@ -5844,6 +5955,8 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         retry_input: PendingEventInput | None = None
         try:
             for _ in range(100):
+                if scan_budget is not None and scan_budget[0] <= 0:
+                    return None
                 from_ingress = False
                 prepared = False
                 ingress: EventIngressItem | None = None
@@ -5897,6 +6010,8 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                     retry_input = PendingEventInput(item=item, ingress=ingress)
                     if source_budget is not None:
                         source_budget[0] -= 1
+                if scan_budget is not None:
+                    scan_budget[0] -= 1
                 if from_ingress:
                     self._event_metrics["raw_ingress_items"] += 1
                 if not prepared:
@@ -6239,6 +6354,11 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                 else {}
             )
             data_queue: queue.Queue[Any] = EventIngressQueue()
+            if not _is_ctp_exchange(exchange_name):
+                # These provider feeds call put directly. CTP's managed stream
+                # wrapper carries the same callback already, so avoid a second
+                # notification for one market event.
+                data_queue.bind_event_waker(self._notify_event_wakers)
             self.data_queues[exchange_name] = data_queue
             self.exchange_kwargs[exchange_name] = stored_exchange_params
             self.log(f"adding exchange: {exchange_name}")
@@ -6292,6 +6412,8 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                 if feed is not None:
                     with suppress(Exception):
                         feed.disconnect()
+                if isinstance(data_queue, EventIngressQueue):
+                    data_queue.unbind_event_waker(self._notify_event_wakers)
                 self.data_queues.pop(exchange_name, None)
                 self.exchange_kwargs.pop(exchange_name, None)
                 raise
@@ -9686,6 +9808,13 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         Returns:
             Queue instance if exchange exists, None otherwise
 
+        The exact non-CTP ``EventIngressQueue`` returned here is bound to this
+        API's waker before its provider feed receives it. CTP exposes a
+        read-only queue view and uses its managed stream callback instead.
+        Arbitrary replacement queues are not bound. After successful API close,
+        exact queue callbacks stay bound until the final registered waker token
+        is explicitly unregistered, so in-flight provider puts remain visible.
+
         Example:
             >>> api = BtApi({"BINANCE___SPOT": {...}})
             >>> queue = api.get_data_queue("BINANCE___SPOT")
@@ -9704,19 +9833,30 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
     def _initialize_event_waker_state(self) -> None:
         self._event_waker_condition = threading.Condition()
         self._event_wakers: dict[object, _EventWakerSubscription] = {}
+        # A successful close ends registration, but an asynchronous producer
+        # (notably CTP) may still publish from an in-flight callback. Keep
+        # existing subscriptions dispatchable until their owners unregister.
         self._event_waker_closed = False
+        self._event_waker_close_notified = False
         self._event_waker_dispatch_context = threading.local()
         self._event_waker_callback_errors = 0
         self._event_waker_error_reported = False
 
     def register_event_waker(self, callback: Callable[[], Any]) -> object:
-        """Register a bounded, no-argument wake callback for CTP stream events.
+        """Register a bounded, no-argument wake callback for SDK event hints.
 
         Callbacks run after the SDK producer has successfully enqueued an event,
-        after a CTP connection-state transition, and once after a successful
-        client close. A state-change wake is only a hint to recheck the source;
-        it does not prove that the client is terminally closed. Callbacks should
-        return quickly; exceptions are isolated from producer and shutdown paths.
+        after a batch ACK when backlog is visible, after a CTP connection-state
+        transition, and once after a successful client close. Provider ``put``
+        calls on the exact non-CTP ``EventIngressQueue`` installed by this API
+        are bound to the callback before the provider receives that queue.
+        Arbitrary replacement queues are not bound. Successful close rejects
+        new registrations and emits one close hint, but existing subscriptions
+        and queue bindings remain active for in-flight or deferred provider
+        callbacks until each token is explicitly unregistered. A wake is only a
+        hint to recheck the source; it does not prove global quiescence or
+        terminal producer shutdown. Callbacks should return quickly; exceptions
+        are isolated from producer and shutdown paths.
         """
         if not callable(callback):
             raise TypeError("event waker callback must be callable")
@@ -9733,6 +9873,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         """Unregister an exact token; repeated or unknown tokens are harmless."""
         if type(token) is not object:
             return False
+        unbind_queues = False
         with self._event_waker_condition:
             subscription = self._event_wakers.pop(token, None)
             if subscription is None:
@@ -9742,17 +9883,24 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             if getattr(self._event_waker_dispatch_context, "depth", 0) == 0:
                 while subscription.in_flight:
                     self._event_waker_condition.wait()
-            return True
+            unbind_queues = self._event_waker_closed and not self._event_wakers
+        if unbind_queues:
+            self._unbind_event_queue_wakers()
+        return True
 
     def _notify_event_wakers(self, *, closing: bool = False) -> None:
-        """Wake registered readers after enqueue or after terminal close."""
+        """Wake registered readers after enqueue or after the one close hint.
+
+        Successful client close blocks new registrations, but ordinary wakes
+        remain enabled for existing tokens because provider callbacks can still
+        be in flight. Each subscription ends only when its owner unregisters.
+        """
         with self._event_waker_condition:
             if closing:
-                if self._event_waker_closed:
+                if self._event_waker_close_notified:
                     return
                 self._event_waker_closed = True
-            elif self._event_waker_closed:
-                return
+                self._event_waker_close_notified = True
             subscriptions = tuple(self._event_wakers.items())
             for _token, subscription in subscriptions:
                 if subscription.active:
@@ -9793,18 +9941,15 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
 
         if closing:
             with self._event_waker_condition:
-                for token, subscription in subscriptions:
-                    if self._event_wakers.get(token) is subscription:
-                        self._event_wakers.pop(token, None)
-                    subscription.active = False
-                    if not subscription.in_flight:
-                        subscription.callback = None
                 if getattr(self._event_waker_dispatch_context, "depth", 0) == 0:
                     while any(subscription.in_flight for _, subscription in subscriptions):
                         self._event_waker_condition.wait()
-                for _, subscription in subscriptions:
-                    if not subscription.in_flight:
-                        subscription.callback = None
+
+    def _unbind_event_queue_wakers(self) -> None:
+        """Release queue-to-API callbacks after close has no subscribers."""
+        for data_queue in tuple(self.data_queues.values()):
+            if isinstance(data_queue, EventIngressQueue):
+                data_queue.unbind_event_waker(self._notify_event_wakers)
 
     def subscribe(self, dataname: str, topics: list[dict[str, Any]]) -> None:
         """通过 ExchangeRegistry 查找订阅处理函数，无需硬编码交易所类型"""
@@ -9832,12 +9977,27 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         self.subscribe_bar_num += subscribe_bar_num
 
     def push_bar_data_to_queue(self, exchange_name: str, data: Any) -> None:
+        """Publish bars and wake after successful queue publication.
+
+        If a later queue put fails, already published bars remain queued and
+        still trigger a wake before the original error is re-raised. The
+        API-owned event queue wakes per put; arbitrary queues receive one
+        notification after the successfully published prefix.
+        """
         data_queue = self.get_data_queue(exchange_name)
         if data_queue is None:
             raise ExchangeNotFoundError(exchange_name, list(self.data_queues.keys()))
         bar_list = data.get_data()
-        for bar in bar_list:
-            data_queue.put(bar)
+        published = False
+        try:
+            for bar in bar_list:
+                data_queue.put(bar)
+                published = True
+        finally:
+            if published and not (
+                isinstance(data_queue, EventIngressQueue) and data_queue.event_waker_bound
+            ):
+                self._notify_event_wakers()
 
     def get_event_bus(self) -> EventBus:
         """获取事件总线实例"""
@@ -9861,10 +10021,13 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             with source._producer_reservation():
                 self.event_bus.emit("ticker", ticker_data)
                 source.put(ticker_data)
+            if not source.event_waker_bound:
+                self._notify_event_wakers()
             return ticker_data
         self.event_bus.emit("ticker", ticker_data)
         if source is not None:
             source.put(ticker_data)
+            self._notify_event_wakers()
         return ticker_data
 
     def list_exchanges(self) -> list[str]:
@@ -9876,10 +10039,13 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         )
 
     def close(self) -> None:
-        """Release transports and the execution lock, including on close failure.
+        """Release transports and close callback registration.
 
         The market clock verifier's background SNTP refresh stops here too; its
-        current evidence is kept (it still expires on its own validity).
+        current evidence is kept (it still expires on its own validity). A
+        successful close emits one close hint and rejects new waker tokens, but
+        retains existing subscriptions and queue callbacks until their tokens
+        are explicitly unregistered; provider stop may complete asynchronously.
         """
         with self._event_waker_condition:
             self._event_batch_closing = True
@@ -9895,6 +10061,10 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                 raise
         else:
             self._notify_event_wakers(closing=True)
+            with self._event_waker_condition:
+                no_subscribers = not self._event_wakers
+            if no_subscribers:
+                self._unbind_event_queue_wakers()
         finally:
             self.event_bus.off("ws.connected", self._on_websocket_connected)
             verifier = getattr(self, "_market_clock_verifier", None)

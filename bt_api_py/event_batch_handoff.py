@@ -68,6 +68,82 @@ class EventIngressQueue(queue.Queue[Any]):
         self._consumer_token: object | None = None
         self._consumer_retired = False
         self._producer_reservations = 0
+        self._event_wake_callback: Callable[[], Any] | None = None
+        self._event_wake_callback_errors = 0
+
+    def bind_event_waker(self, callback: Callable[[], Any]) -> None:
+        """Bind one callback to this exact queue; callbacks run after enqueue."""
+
+        if not callable(callback):
+            raise TypeError("event queue waker must be callable")
+        with self.mutex:
+            if self._consumer_retired:
+                raise EventBatchHandoffError("event_ingress_retired")
+            current = self._event_wake_callback
+            same_callback = current is callback or (
+                getattr(current, "__self__", None) is getattr(callback, "__self__", None)
+                and getattr(current, "__func__", None) is getattr(callback, "__func__", None)
+                and getattr(current, "__func__", None) is not None
+            )
+            if current is not None and not same_callback:
+                raise EventBatchHandoffError("event_ingress_waker_already_bound")
+            self._event_wake_callback = callback
+
+    def unbind_event_waker(self, callback: Callable[[], Any]) -> bool:
+        """Unbind only the exact callback owner previously installed."""
+
+        with self.mutex:
+            current = self._event_wake_callback
+            if current is None:
+                return False
+            same_callback = current is callback or (
+                getattr(current, "__self__", None) is getattr(callback, "__self__", None)
+                and getattr(current, "__func__", None) is getattr(callback, "__func__", None)
+                and getattr(current, "__func__", None) is not None
+            )
+            if not same_callback:
+                return False
+            self._event_wake_callback = None
+            return True
+
+    @property
+    def event_waker_bound(self) -> bool:
+        """Whether this exact queue still has its SDK enqueue callback."""
+
+        with self.mutex:
+            return self._event_wake_callback is not None
+
+    @property
+    def event_waker_callback_errors(self) -> int:
+        """Return the bounded count of callback failures after successful puts."""
+
+        with self.mutex:
+            return self._event_wake_callback_errors
+
+    def _notify_event_waker_after_put(self) -> None:
+        with self.mutex:
+            callback = self._event_wake_callback
+        if callback is None:
+            return
+        try:
+            callback()
+        except Exception:
+            # The item is already in the queue. A notification failure must
+            # not turn that successful put into an apparent publication error.
+            with self.mutex:
+                self._event_wake_callback_errors = min(
+                    self._event_wake_callback_errors + 1,
+                    2**31 - 1,
+                )
+
+    def put(
+        self,
+        item: Any,
+        block: bool = True,
+        timeout: float | None = None,
+    ) -> None:
+        super().put(item, block=block, timeout=timeout)
+        self._notify_event_waker_after_put()
 
     def _put(self, item: Any) -> None:
         if self._consumer_retired:

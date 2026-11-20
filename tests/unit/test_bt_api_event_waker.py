@@ -115,14 +115,17 @@ def test_real_ctp_plugin_binding_wakes_same_btapi_after_enqueue(monkeypatch) -> 
     assert wake_observations == [1, 2]
 
 
-def test_close_wakes_once_after_streams_are_terminal(monkeypatch) -> None:
+def test_close_wakes_once_and_keeps_ctp_deferred_callback_until_unregister(monkeypatch) -> None:
     plugin, _stream_type = _load_ctp_plugin_with_fake_native_leaf(monkeypatch)
     api = _new_api(monkeypatch)
     data_queue = queue.Queue()
     wake_observations = []
     token = api.register_event_waker(
         lambda: wake_observations.append(
-            (api._event_waker_closed, all(stream.disconnected for stream in api._subscription_streams))
+            (
+                api._event_waker_closed,
+                all(stream.disconnected for stream in api._subscription_streams),
+            )
         )
     )
     plugin._ctp_future_subscribe_handler(
@@ -131,12 +134,20 @@ def test_close_wakes_once_after_streams_are_terminal(monkeypatch) -> None:
         [{"topic": "tick", "symbol": "IF2612"}],
         api,
     )
+    deferred_stream = api._subscription_streams[0]
 
     api.close()
     api.close()
 
     assert wake_observations == [(True, True)]
-    assert api.unregister_event_waker(token) is False
+    # The native stream may finish asynchronously after close returns. Its
+    # already-bound callback must still wake the existing consumer.
+    deferred_stream.push_data("deferred-after-close")
+    assert wake_observations == [(True, True), (True, True)]
+    assert data_queue.get_nowait() == "deferred-after-close"
+    assert api.unregister_event_waker(token) is True
+    deferred_stream.push_data("after-unregister")
+    assert wake_observations == [(True, True), (True, True)]
     with pytest.raises(RuntimeError, match="client_closed"):
         api.register_event_waker(lambda: None)
 
