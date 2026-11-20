@@ -6998,6 +6998,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             stream_kwargs.update(
                 stream_name="ctp_trade_stream",
                 request_feed=feed,
+                _event_waker=self._notify_event_wakers,
             )
             stream = stream_class(producer_queue, **stream_kwargs)
             token["stream"] = stream
