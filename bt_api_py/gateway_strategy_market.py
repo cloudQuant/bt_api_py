@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import math
 import json
+import math
 import os
 import re
 import threading
 import time
 import uuid
 from collections.abc import Mapping
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import asdict, dataclass, field
 from types import MappingProxyType
 from typing import Any
@@ -34,8 +34,8 @@ from bt_api_py.service_market import (
 )
 from bt_api_py.service_runtime import PORT_OPERATIONS, ClientCurveKeys
 from bt_api_py.service_runtime_thread import (
-    OwnerOperationError,
     OwnerOperationContinuation,
+    OwnerOperationError,
     ThreadedRuntimeError,
     ThreadedServiceClientRuntime,
     _copy_owner_json,
@@ -59,10 +59,32 @@ _ASYNC_OPERATIONS = frozenset(
 )
 _LEGACY_REQUIRED = _REQUIRED - _ASYNC_OPERATIONS
 _METHODS = frozenset(
-    {"start", "poll", "poll_receipt", "clock_observation", "history", "recover", "accept_resync", "resync_after_regrant", "status"}
+    {
+        "claim",
+        "release",
+        "start",
+        "poll",
+        "poll_receipt",
+        "clock_observation",
+        "history",
+        "recover",
+        "accept_resync",
+        "resync_after_regrant",
+        "status",
+    }
 )
 _NAME = re.compile(r"[A-Za-z][A-Za-z0-9_-]{0,63}\Z")
 _TOKEN = re.compile(r"[0-9a-f]{32}\Z")
+_OWNER_CALL_NOT_SUBMITTED = frozenset(
+    {
+        "INVALID_OWNER_ARGUMENTS",
+        "NOT_READY",
+        "OWNER_THREAD_REENTRY",
+        "OWNER_UNAVAILABLE",
+        "QUEUE_FULL",
+        "WRONG_PROCESS",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -399,8 +421,13 @@ class GatewayMarketOwner:
         self._profiles = MappingProxyType(profiles)
         self._mount = mount
         self._clients: dict[str, ServiceMarketClient] = {}
+        self._raw = None
+        self._market_factory = None
         self._uncertain: set[str] = set()
         self._consumers: dict[str, str] = {}
+        self._leased_names: set[str] = set()
+        self._lease_tokens: dict[str, str] = {}
+        self._lease_generations: dict[str, int] = {}
         self._gaps: set[str] = set()
         self._closed = False
         self._strict_cleanup = strict_cleanup
@@ -419,20 +446,27 @@ class GatewayMarketOwner:
     def start(self, raw: Any) -> None:
         if self._strict_cleanup:
             return self._start_strict(raw)
-        factory = ZmqMarketTransportFactory(self._profiles)
-        for name, setting in self._settings.subscriptions.items():
-            self._clients[name] = ServiceMarketClient(
-                raw,
-                self._mount,
-                setting.key,
-                subscriber_factory=factory,
-                stream_scope=self._scope,
-                queue_capacity=setting.queue_capacity,
-                queue_max_bytes=setting.queue_max_bytes,
-                head_check_interval_seconds=setting.head_check_interval_seconds,
-                require_source_descriptor=setting.require_source_descriptor,
-                expected_source_identity=setting.expected_source_identity,
-            )
+        self._raw = raw
+        self._market_factory = ZmqMarketTransportFactory(self._profiles)
+        for name in self._settings.subscriptions:
+            self._clients[name] = self._new_market_client(name)
+
+    def _new_market_client(self, name: str) -> ServiceMarketClient:
+        setting = self._settings.subscriptions[name]
+        if self._raw is None or self._market_factory is None:
+            raise OwnerOperationError("MARKET_CLIENT_UNAVAILABLE")
+        return ServiceMarketClient(
+            self._raw,
+            self._mount,
+            setting.key,
+            subscriber_factory=self._market_factory,
+            stream_scope=self._scope,
+            queue_capacity=setting.queue_capacity,
+            queue_max_bytes=setting.queue_max_bytes,
+            head_check_interval_seconds=setting.head_check_interval_seconds,
+            require_source_descriptor=setting.require_source_descriptor,
+            expected_source_identity=setting.expected_source_identity,
+        )
 
     def _start_strict(self, raw: Any) -> None:
         with self._cleanup_lock:
@@ -488,15 +522,46 @@ class GatewayMarketOwner:
         if type(operation) is not str or operation.count(".") != 1:
             raise OwnerOperationError("INVALID_OWNER_OPERATION")
         name, method = operation.split(".")
-        if name not in self._clients or method not in _METHODS or type(arguments) is not dict:
+        if (
+            name not in self._settings.subscriptions
+            or method not in _METHODS
+            or type(arguments) is not dict
+        ):
             raise OwnerOperationError("INVALID_OWNER_OPERATION")
+        if method == "claim":
+            return self._claim_market_lease(name, arguments)
+        if method == "release":
+            return self._release_market_lease(name, arguments)
         # Strict factory custody and recovery are not yet composed; reject
         # before binding lookup, consumer binding, subscriber actions, or RPC.
         if self._strict_cleanup and method in {
             "start", "recover", "accept_resync", "resync_after_regrant"
         }:
             raise OwnerOperationError("STRICT_MARKET_FACTORY_UNAVAILABLE")
-        if method != "status":
+        lease_generation = None
+        if name in self._leased_names:
+            token = arguments.get("_consumer_token")
+            lease_generation = arguments.get("_lease_generation")
+            if (
+                type(token) is not str
+                or _TOKEN.fullmatch(token) is None
+                or type(lease_generation) is not int
+                or not 1 <= lease_generation <= 2**63 - 1
+                or self._lease_tokens.get(name) != token
+                or self._consumers.get(name) != token
+                or self._lease_generations.get(name) != lease_generation
+            ):
+                raise OwnerOperationError("MARKET_LEASE_OWNER_MISMATCH")
+            if name in self._uncertain and method != "status":
+                raise OwnerOperationError("UNSUBSCRIPTION_UNCERTAIN")
+            arguments = {
+                key: value
+                for key, value in arguments.items()
+                if key not in {"_consumer_token", "_lease_generation"}
+            }
+            if method == "status" and arguments:
+                raise OwnerOperationError("INVALID_OWNER_ARGUMENTS")
+        elif method != "status":
             if name in self._gaps:
                 raise OwnerOperationError("LOCAL_RESULT_GAP")
             token = arguments.get("_consumer_token")
@@ -506,7 +571,12 @@ class GatewayMarketOwner:
             if previous != token:
                 raise OwnerOperationError("CONSUMER_ALREADY_BOUND")
             arguments = {k: v for k, v in arguments.items() if k != "_consumer_token"}
-        client = self._clients[name]
+        client = self._clients.get(name)
+        if client is None and method == "start" and lease_generation is not None:
+            client = self._new_market_client(name)
+            self._clients[name] = client
+        if client is None:
+            raise OwnerOperationError("MARKET_CLIENT_UNAVAILABLE")
         try:
             if (
                 method in {"start", "poll", "poll_receipt", "recover", "resync_after_regrant", "status"}
@@ -603,6 +673,73 @@ class GatewayMarketOwner:
         except Exception:
             raise OwnerOperationError("MARKET_OPERATION_FAILED") from None
 
+    def _claim_market_lease(self, name: str, arguments: dict[str, Any]) -> dict[str, int]:
+        if self._strict_cleanup:
+            raise OwnerOperationError("MARKET_LEASE_UNAVAILABLE")
+        if set(arguments) != {"_consumer_token"}:
+            raise OwnerOperationError("INVALID_OWNER_ARGUMENTS")
+        token = arguments["_consumer_token"]
+        if type(token) is not str or _TOKEN.fullmatch(token) is None:
+            raise OwnerOperationError("INVALID_CONSUMER_TOKEN")
+        current = self._lease_tokens.get(name)
+        if current == token:
+            return {"generation": self._lease_generations[name]}
+        if current is not None:
+            raise OwnerOperationError("MARKET_LEASE_ALREADY_CLAIMED")
+        if name in self._uncertain:
+            raise OwnerOperationError("UNSUBSCRIPTION_UNCERTAIN")
+        if name in self._consumers:
+            raise OwnerOperationError("CONSUMER_ALREADY_BOUND")
+        previous = self._lease_generations.get(name, 0)
+        if previous >= 2**63 - 1:
+            raise OwnerOperationError("MARKET_LEASE_GENERATION_EXHAUSTED")
+        generation = previous + 1
+        self._lease_generations[name] = generation
+        self._leased_names.add(name)
+        self._lease_tokens[name] = token
+        self._consumers[name] = token
+        return {"generation": generation}
+
+    def _release_market_lease(self, name: str, arguments: dict[str, Any]) -> dict[str, bool]:
+        if self._strict_cleanup:
+            raise OwnerOperationError("MARKET_LEASE_UNAVAILABLE")
+        if set(arguments) != {"_consumer_token", "_lease_generation"}:
+            raise OwnerOperationError("INVALID_OWNER_ARGUMENTS")
+        token, generation = arguments["_consumer_token"], arguments["_lease_generation"]
+        if (
+            type(token) is not str
+            or _TOKEN.fullmatch(token) is None
+            or type(generation) is not int
+            or not 1 <= generation <= 2**63 - 1
+            or name not in self._leased_names
+            or self._lease_tokens.get(name) != token
+            or self._consumers.get(name) != token
+            or self._lease_generations.get(name) != generation
+        ):
+            raise OwnerOperationError("MARKET_LEASE_OWNER_MISMATCH")
+        if name in self._uncertain:
+            raise OwnerOperationError("UNSUBSCRIPTION_UNCERTAIN")
+        client = self._clients.get(name)
+        if client is not None:
+            try:
+                client.close()
+                if getattr(client, "unsubscription_uncertain", None) is not False:
+                    raise ServiceMarketError("UNSUBSCRIPTION_UNCERTAIN")
+            except ServiceMarketError as exc:
+                self._uncertain.add(name)
+                if exc.code == "UNSUBSCRIPTION_UNCERTAIN":
+                    raise OwnerOperationError("UNSUBSCRIPTION_UNCERTAIN") from None
+                raise OwnerOperationError("LOCAL_CLOSE_FAILED") from None
+            except Exception:
+                self._uncertain.add(name)
+                raise OwnerOperationError("LOCAL_CLOSE_FAILED") from None
+            del self._clients[name]
+        self._consumers.pop(name, None)
+        self._lease_tokens.pop(name, None)
+        self._gaps.discard(name)
+        self._uncertain.discard(name)
+        return {"released": True}
+
     def _continue_bootstrap(self, operation):
         def resume():
             try:
@@ -616,7 +753,7 @@ class GatewayMarketOwner:
         return resume()
 
     def close(self) -> None:
-        if self._strict_cleanup:
+        if getattr(self, "_strict_cleanup", False):
             return self._close_strict()
         self._closed = True
         failed = False
@@ -657,10 +794,8 @@ class GatewayMarketOwner:
 
     def _notify_cleanup_sticky(self) -> None:
         if self._cleanup_uncertain_callback is not None:
-            try:
+            with suppress(BaseException):
                 self._cleanup_uncertain_callback()
-            except BaseException:
-                pass
 
     def _strict_guard_clear(self) -> bool:
         try:
@@ -721,13 +856,26 @@ class GatewayMarketOwner:
 
 
 class GatewayMarketSubscriptionClient:
-    def __init__(self, runtime: ThreadedServiceClientRuntime, name: str):
+    def __init__(
+        self,
+        runtime: ThreadedServiceClientRuntime,
+        name: str,
+        *,
+        _lease_manager=None,
+    ):
         self._runtime, self._name = runtime, name
         self._owner_pid = os.getpid()
         self._consumer_token = uuid.uuid4().hex
+        self._lease_manager = _lease_manager
+        self._lease_generation = None
+        self._lease_state = "claiming" if _lease_manager is not None else None
+        self._legacy_blocked = False
+        self._legacy_block_code = None
+        self._legacy_block_snapshot = None
         self._pending = None
         self._result_gap_handle = None
         self._lock = threading.Lock()
+        self._lease_close_guard = threading.Lock()
         # Only the latest event actually delivered by this subscription is
         # eligible for the Gateway's optional order-time clock check.
         self._issued_received_event = None
@@ -800,16 +948,62 @@ class GatewayMarketSubscriptionClient:
         _timeout(timeout_seconds)
         arguments = _copy_owner_json(arguments, error_code="INVALID_OWNER_ARGUMENTS")
         with self._caller_guard():
-            if self._result_gap_handle is not None and method != "status":
+            leased = self._lease_manager is not None
+            if not leased and self._legacy_blocked:
+                raise ThreadedRuntimeError(
+                    self._legacy_block_code or "MARKET_LEASE_REQUIRED"
+                )
+            if leased:
+                if method == "claim":
+                    if self._lease_state != "claiming":
+                        raise ThreadedRuntimeError("MARKET_LEASE_NOT_CLAIMING")
+                elif method == "release":
+                    if self._lease_state not in {"active", "closing"}:
+                        code = (
+                            "MARKET_LEASE_UNCERTAIN"
+                            if self._lease_state == "uncertain"
+                            else "MARKET_LEASE_NOT_ACTIVE"
+                        )
+                        raise ThreadedRuntimeError(code)
+                elif self._lease_state != "active":
+                    code = (
+                        "MARKET_LEASE_UNCERTAIN"
+                        if self._lease_state == "uncertain"
+                        else "MARKET_LEASE_RELEASED"
+                        if self._lease_state == "released"
+                        else "MARKET_LEASE_NOT_ACTIVE"
+                    )
+                    raise ThreadedRuntimeError(code)
+            if self._result_gap_handle is not None and method not in {
+                "status", "release"
+            }:
                 raise ThreadedRuntimeError("LOCAL_RESULT_GAP")
-            if method != "status":
+            if leased:
+                arguments["_consumer_token"] = self._consumer_token
+                if method != "claim":
+                    if self._lease_generation is None:
+                        raise ThreadedRuntimeError("MARKET_LEASE_NOT_ACTIVE")
+                    arguments["_lease_generation"] = self._lease_generation
+            elif method != "status":
                 arguments["_consumer_token"] = self._consumer_token
             if self._pending is not None:
                 old_method, old_arguments, handle = self._pending
-                if (method != old_method or arguments != old_arguments) and not self._retire_finished_read():
+                if (
+                    (method != old_method or arguments != old_arguments)
+                    and (leased or not self._retire_finished_read())
+                ):
                     raise ThreadedRuntimeError("OWNER_OPERATION_PENDING")
             if self._pending is None:
-                handle = self._runtime.submit_owner(f"market.{self._name}.{method}", arguments)
+                try:
+                    handle = self._runtime.submit_owner(
+                        f"market.{self._name}.{method}", arguments
+                    )
+                except ThreadedRuntimeError as exc:
+                    if exc.code in _OWNER_CALL_NOT_SUBMITTED:
+                        exc._owner_call_not_submitted = True
+                    raise
+                if leased and method == "release":
+                    self._lease_state = "closing"
                 self._pending = (method, arguments, handle)
             try:
                 result = handle.result(timeout_seconds=timeout_seconds)
@@ -979,6 +1173,77 @@ class GatewayMarketSubscriptionClient:
             )
         return result
 
+    def _claim_lease(self, *, timeout_seconds: float) -> None:
+        raw = self._call("claim", {}, timeout_seconds)
+        if (
+            type(raw) is not dict
+            or set(raw) != {"generation"}
+            or type(raw["generation"]) is not int
+            or not 1 <= raw["generation"] <= 2**63 - 1
+        ):
+            raise ThreadedRuntimeError("INVALID_MARKET_LEASE_CLAIM")
+        self._lease_generation = raw["generation"]
+        self._lease_state = "active"
+
+    def close(self, *, timeout_seconds: float = 5.0) -> bool:
+        """Release this explicit registration lease after owner confirmation.
+
+        Legacy ``subscription(name)`` clients do not own a releasable lease.
+        A timed-out release retains its original owner-call handle; any terminal
+        error leaves the name blocked for this runtime.
+        """
+        if self._lease_manager is None:
+            raise ThreadedRuntimeError("MARKET_LEASE_REQUIRED")
+        if os.getpid() != self._owner_pid:
+            raise ThreadedRuntimeError("WRONG_PROCESS")
+        _timeout(timeout_seconds)
+        if not self._lease_close_guard.acquire(blocking=False):
+            raise ThreadedRuntimeError("OWNER_OPERATION_PENDING")
+        try:
+            if self._lease_state == "released":
+                return True
+            if self._lease_state == "uncertain":
+                raise ThreadedRuntimeError("MARKET_LEASE_UNCERTAIN")
+            if self._lease_state == "claiming":
+                raise ThreadedRuntimeError("MARKET_LEASE_NOT_ACTIVE")
+            try:
+                raw = self._call(
+                    "release", {}, timeout_seconds, _market_lease_release_from_wire
+                )
+            except ThreadedRuntimeError as exc:
+                if exc.code in {"OWNER_TIMEOUT_QUEUED", "OWNER_TIMEOUT_RUNNING"}:
+                    raise
+                if (
+                    getattr(exc, "_owner_call_not_submitted", False)
+                    and exc.code in _OWNER_CALL_NOT_SUBMITTED
+                ):
+                    raise
+                if exc.code == "OWNER_OPERATION_PENDING" and self._lease_state == "active":
+                    raise
+                self._lease_state = "uncertain"
+                self._lease_manager._release_uncertain(self)
+                raise
+            except Exception:
+                self._lease_state = "uncertain"
+                self._lease_manager._release_uncertain(self)
+                raise
+            if raw is not True:
+                self._lease_state = "uncertain"
+                self._lease_manager._release_uncertain(self)
+                raise ThreadedRuntimeError("INVALID_MARKET_LEASE_RELEASE")
+            self._lease_state = "released"
+            self._result_gap_handle = None
+            self._lease_manager._release_confirmed(self)
+            return True
+        finally:
+            self._lease_close_guard.release()
+
+
+def _market_lease_release_from_wire(raw) -> bool:
+    if type(raw) is not dict or raw != {"released": True}:
+        raise ValueError("INVALID_MARKET_LEASE_RELEASE")
+    return True
+
 
 class GatewayStrategyMarketClient:
     def __init__(
@@ -990,9 +1255,125 @@ class GatewayStrategyMarketClient:
         self._clients = {
             name: GatewayMarketSubscriptionClient(runtime, name) for name in copied.subscriptions
         }
+        self._runtime = runtime
+        self._owner_pid = os.getpid()
+        self._lease_lock = threading.Lock()
+        self._leases: dict[str, GatewayMarketSubscriptionClient] = {}
+        self._claim_inflight: set[str] = set()
+
+    def _check_process(self) -> None:
+        if os.getpid() != self._owner_pid:
+            raise ThreadedRuntimeError("WRONG_PROCESS")
 
     def subscription(self, name: str) -> GatewayMarketSubscriptionClient:
         return self._clients[name]
+
+    def acquire_subscription(
+        self, name: str, *, timeout_seconds: float = 5.0
+    ) -> GatewayMarketSubscriptionClient:
+        """Acquire a distinct, owner-claimed client for one configured name.
+
+        A claim timeout preserves the same client and call handle so a later
+        acquisition call can observe that result without issuing another claim.
+        """
+        self._check_process()
+        _timeout(timeout_seconds)
+        if type(name) is not str or name not in self._clients:
+            raise ThreadedRuntimeError("MARKET_SUBSCRIPTION_UNAVAILABLE")
+        with self._lease_lock:
+            if name in self._claim_inflight:
+                raise ThreadedRuntimeError("OWNER_OPERATION_PENDING")
+            client = self._leases.get(name)
+            if client is not None:
+                if client._lease_state == "claiming":
+                    pass
+                elif client._lease_state == "uncertain":
+                    raise ThreadedRuntimeError("MARKET_LEASE_UNCERTAIN")
+                else:
+                    raise ThreadedRuntimeError("MARKET_LEASE_ALREADY_ACQUIRED")
+            else:
+                client = GatewayMarketSubscriptionClient(
+                    self._runtime, name, _lease_manager=self
+                )
+                client._legacy_block_snapshot = (
+                    self._clients[name]._legacy_blocked,
+                    self._clients[name]._legacy_block_code,
+                )
+                self._leases[name] = client
+                self._clients[name]._legacy_blocked = True
+                self._clients[name]._legacy_block_code = "OWNER_OPERATION_PENDING"
+            self._claim_inflight.add(name)
+        try:
+            client._claim_lease(timeout_seconds=timeout_seconds)
+        except OwnerOperationError:
+            with self._lease_lock:
+                # Owner claim errors are emitted before any lease mutation.
+                blocked, block_code = client._legacy_block_snapshot
+                self._clients[name]._legacy_blocked = blocked
+                self._clients[name]._legacy_block_code = block_code
+                if self._leases.get(name) is client:
+                    del self._leases[name]
+                client._lease_state = "released"
+                self._claim_inflight.discard(name)
+            raise
+        except ThreadedRuntimeError as exc:
+            with self._lease_lock:
+                self._claim_inflight.discard(name)
+                if exc.code in {"OWNER_TIMEOUT_QUEUED", "OWNER_TIMEOUT_RUNNING"}:
+                    raise
+                if (
+                    getattr(exc, "_owner_call_not_submitted", False)
+                    and exc.code in _OWNER_CALL_NOT_SUBMITTED
+                ):
+                    if self._leases.get(name) is client:
+                        del self._leases[name]
+                    client._lease_state = "released"
+                    blocked, block_code = client._legacy_block_snapshot
+                    self._clients[name]._legacy_blocked = blocked
+                    self._clients[name]._legacy_block_code = block_code
+                    raise
+                client._lease_state = "uncertain"
+                self._clients[name]._legacy_block_code = "MARKET_LEASE_UNCERTAIN"
+            raise
+        except Exception:
+            with self._lease_lock:
+                self._claim_inflight.discard(name)
+                client._lease_state = "uncertain"
+                self._clients[name]._legacy_block_code = "MARKET_LEASE_UNCERTAIN"
+            raise
+        else:
+            with self._lease_lock:
+                self._claim_inflight.discard(name)
+                if self._leases.get(name) is not client:
+                    client._lease_state = "uncertain"
+                    self._clients[name]._legacy_block_code = "MARKET_LEASE_UNCERTAIN"
+                    raise ThreadedRuntimeError("MARKET_LEASE_OWNER_MISMATCH")
+                self._clients[name]._legacy_blocked = True
+                self._clients[name]._legacy_block_code = "MARKET_LEASE_REQUIRED"
+        return client
+
+    def _release_confirmed(self, client: GatewayMarketSubscriptionClient) -> None:
+        self._check_process()
+        with self._lease_lock:
+            if self._leases.get(client._name) is not client:
+                raise ThreadedRuntimeError("MARKET_LEASE_OWNER_MISMATCH")
+            del self._leases[client._name]
+            # The fixed legacy proxy has an older cursor/token and is never
+            # revived after the owner has entered lease mode for this name.
+            self._clients[client._name]._legacy_blocked = True
+            self._clients[client._name]._legacy_block_code = "MARKET_LEASE_RELEASED"
+
+    def _release_uncertain(self, client: GatewayMarketSubscriptionClient) -> None:
+        self._check_process()
+        with self._lease_lock:
+            if self._leases.get(client._name) is client:
+                self._clients[client._name]._legacy_blocked = True
+                self._clients[client._name]._legacy_block_code = "MARKET_LEASE_UNCERTAIN"
+
+    def _lease_snapshot(self) -> tuple[tuple[str, GatewayMarketSubscriptionClient], ...]:
+        self._check_process()
+        with self._lease_lock:
+            return tuple(self._leases.items())
 
     def __getitem__(self, name: str) -> GatewayMarketSubscriptionClient:
         return self.subscription(name)

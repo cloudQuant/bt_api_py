@@ -181,6 +181,9 @@ class GatewayBtApi:
     def _check_binding(self):
         self._check_process()
         session = self._session
+        market_leases = (
+            () if self._market is None else self._market._lease_snapshot()
+        )
         if (
             session._binding is not self._binding_object
             or session._route is not self._route_object
@@ -254,6 +257,13 @@ class GatewayBtApi:
             or any(
                 self._market._clients[name] is not client
                 for name, client in self._subscriptions.items()
+            )
+            or any(
+                name not in self._subscriptions
+                or client._runtime is not self._runtime
+                or client._name != name
+                or client._lease_manager is not self._market
+                for name, client in market_leases
             )
         ):
             raise RuntimeError("GATEWAY_BINDING_CHANGED")
@@ -350,7 +360,7 @@ class GatewayBtApi:
             if self._execution_start_failed or self.lifecycle_state != "open":
                 return False
             from bt_api_py.execution_parent_client import ExecutionParentClient
-            from bt_api_py.execution_parent_grant import SUBMIT, QUERY
+            from bt_api_py.execution_parent_grant import QUERY, SUBMIT
             return all(ExecutionParentClient._registration(self._execution_client, op) for op in (SUBMIT, QUERY))
         except Exception:
             return False
@@ -1089,6 +1099,15 @@ class GatewayBtApi:
         if type(name) is not str or name not in self._subscriptions:
             raise RuntimeError("MARKET_SUBSCRIPTION_UNAVAILABLE")
         return self._subscriptions[name]
+
+    def acquire_market_subscription(
+        self, exchange_name, name, *, timeout_seconds=5.0
+    ):
+        """Acquire a distinct market client with an owner-confirmed local lease."""
+        self._check(exchange_name)
+        if self._market is None or type(name) is not str or name not in self._subscriptions:
+            raise RuntimeError("MARKET_SUBSCRIPTION_UNAVAILABLE")
+        return self._market.acquire_subscription(name, timeout_seconds=timeout_seconds)
 
     def trading_calendar_query(self, exchange_name, *, route, venue, kind, product, contract, trading_day, timeout_seconds=5.0):
         """Read the explicitly configured simulation calendar through Gateway."""
