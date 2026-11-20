@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import queue
 import threading
+from unittest.mock import Mock
 
 import pytest
 
@@ -683,6 +684,102 @@ def test_failed_api_close_retains_live_provider_queue_waker(monkeypatch) -> None
     assert source.event_waker_bound
     source.put({"kind": "tick", "symbol": "live-after-failed-close"})
     assert wake_count == [True]
+
+
+def test_market_stream_owner_false_close_retains_queue_waker_until_retry(monkeypatch) -> None:
+    api = _new_api(monkeypatch)
+    source = api.data_queues[EXCHANGE]
+    wake_count = []
+    token = api.register_event_waker(lambda: wake_count.append(True))
+    owner_close = Mock(side_effect=[False, None])
+
+    class _Owner:
+        pass
+
+    owner = _Owner()
+    owner.close = owner_close
+    api._market_stream_owner = owner
+
+    with pytest.raises(RuntimeError, match="market stream: close unverified"):
+        api.close()
+
+    assert api._market_stream_owner is owner
+    assert owner_close.call_count == 1
+    assert not api._event_waker_closed
+    assert source.event_waker_bound
+    source.put({"kind": "tick", "symbol": "after-false-close"})
+    assert wake_count == [True]
+
+    api.close()
+    assert owner_close.call_count == 2
+    assert api._event_waker_closed
+    assert source.event_waker_bound
+    source.put({"kind": "tick", "symbol": "after-successful-close"})
+    assert wake_count == [True, True, True]
+    assert api.unregister_event_waker(token)
+    assert not source.event_waker_bound
+
+
+def test_subscription_stream_without_lifecycle_method_fails_closed_and_can_retry(
+    monkeypatch,
+) -> None:
+    api = _new_api(monkeypatch)
+    source = api.data_queues[EXCHANGE]
+    wake_count = []
+    token = api.register_event_waker(lambda: wake_count.append(True))
+    stream = type("_OpaqueStream", (), {})()
+    api._subscription_streams.append(stream)
+    api._subscription_flags["synthetic"] = True
+
+    with pytest.raises(RuntimeError, match="no stop/disconnect/close lifecycle method"):
+        api.close()
+
+    assert api._subscription_streams == [stream]
+    assert api._subscription_flags == {"synthetic": True}
+    assert not api._event_waker_closed
+    assert source.event_waker_bound
+    source.put({"kind": "tick", "symbol": "after-unsupported-close"})
+    assert wake_count == [True]
+
+    stream.stop = lambda: None
+    api.close()
+    assert api._subscription_streams == []
+    assert api._subscription_flags == {}
+    assert api._event_waker_closed
+    assert source.event_waker_bound
+    assert api.unregister_event_waker(token)
+    assert not source.event_waker_bound
+
+
+def test_subscription_stream_false_stop_is_retained_but_none_stop_is_compatible(
+    monkeypatch,
+) -> None:
+    api = _new_api(monkeypatch)
+    source = api.data_queues[EXCHANGE]
+    wake_count = []
+    token = api.register_event_waker(lambda: wake_count.append(True))
+    stop = Mock(side_effect=[False, None])
+    stream = type("_StopOnlyStream", (), {})()
+    stream.stop = stop
+    api._subscription_streams.append(stream)
+
+    with pytest.raises(RuntimeError, match="subscription 0: stop returned False"):
+        api.close()
+
+    assert stop.call_count == 1
+    assert api._subscription_streams == [stream]
+    assert not api._event_waker_closed
+    assert source.event_waker_bound
+    source.put({"kind": "tick", "symbol": "after-false-stop"})
+    assert wake_count == [True]
+
+    api.close()
+    assert stop.call_count == 2
+    assert api._subscription_streams == []
+    assert api._event_waker_closed
+    assert source.event_waker_bound
+    assert api.unregister_event_waker(token)
+    assert not source.event_waker_bound
 
 
 def test_push_bar_data_wakes_after_successful_batch_publication(monkeypatch) -> None:

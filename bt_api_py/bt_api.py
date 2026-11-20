@@ -10085,7 +10085,9 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         market_stream_owner = getattr(self, "_market_stream_owner", None)
         if market_stream_owner is not None:
             try:
-                market_stream_owner.close()
+                close_result = market_stream_owner.close()
+                if close_result is False:
+                    market_stream_error = "market stream: close unverified"
             except Exception as exc:
                 code = getattr(exc, "code", None)
                 market_stream_error = (
@@ -10119,13 +10121,27 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             stream_failed = False
             stop = getattr(stream, "stop", None)
             disconnect = getattr(stream, "disconnect", None)
-            methods = [method for method in (stop, disconnect) if callable(method)]
+            methods = [
+                (name, method)
+                for name, method in (("stop", stop), ("disconnect", disconnect))
+                if callable(method)
+            ]
             if not methods:
                 close = getattr(stream, "close", None)
-                methods = [close] if callable(close) else []
-            for method in methods:
+                methods = [("close", close)] if callable(close) else []
+            if not methods:
+                stream_failed = True
+                errors.append(
+                    f"subscription {index}: no stop/disconnect/close lifecycle method"
+                )
+            for method_name, method in methods:
                 try:
-                    method()
+                    result = method()
+                    if result is False:
+                        stream_failed = True
+                        errors.append(
+                            f"subscription {index}: {method_name} returned False"
+                        )
                 except Exception as exc:
                     stream_failed = True
                     errors.append(f"subscription {index}: {type(exc).__name__}: {exc}")
