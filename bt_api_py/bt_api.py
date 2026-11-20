@@ -103,6 +103,14 @@ from ._ctp_execution_authorization import (
 
 from .balance_manager import BalanceManagerMixin
 from .data_downloader import DataDownloaderMixin
+from .event_batch_handoff import (
+    EventBatch,
+    EventBatchHandoff,
+    EventBatchHandoffError,
+    EventIngressItem,
+    EventIngressQueue,
+    PendingEventInput,
+)
 
 if TYPE_CHECKING:
     from bt_api_ctp.managed_request_identity import CtpCancelIdentityBinding
@@ -261,6 +269,7 @@ def _account_risk_snapshot_error(code):
     if contract_types is not None:
         return contract_types[1](code)
     return NormalizedApiError("account_risk_snapshot", code, definite_reject=True)
+
 
 DATANAME_SEPARATOR = "___"
 _NORMALIZED_WRITE_OPERATIONS = frozenset({"make_order", "cancel_order", "set_position_mode"})
@@ -432,9 +441,7 @@ def _require_ctp_read_only_settings(
         return
     from bt_api_ctp.preflight_settings import require_read_only_settings
 
-    require_read_only_settings(
-        exchange_params, operation=operation, error_type=NormalizedApiError
-    )
+    require_read_only_settings(exchange_params, operation=operation, error_type=NormalizedApiError)
 
 
 def _is_native_ctp_quote_v2_ticker(item: Any) -> bool:
@@ -444,8 +451,6 @@ def _is_native_ctp_quote_v2_ticker(item: Any) -> bool:
     except Exception:
         return False
     return check(item)
-
-
 
 
 def _serialized_ctp_execution_transition(
@@ -878,9 +883,8 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
 
             if type(reconciliation_composer) is not ReconciliationRouteComposer:
                 raise TypeError("reconciliation_composer must be an exact SDK route composer")
-        if (
-            execution_economics_owner_resolver is not None
-            and not callable(execution_economics_owner_resolver)
+        if execution_economics_owner_resolver is not None and not callable(
+            execution_economics_owner_resolver
         ):
             raise TypeError("execution_economics_owner_resolver must be callable")
         if market_runtime_factory is not None:
@@ -915,7 +919,11 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         self._subscription_flags = {}
         self._subscription_streams: list[Any] = []
         self._initialize_event_waker_state()
+        self._event_batch_closing = False
         self._normalized_event_pending: defaultdict[str, deque[Any]] = defaultdict(deque)
+        self._event_batch_handoffs: dict[str, EventBatchHandoff] = {}
+        self._event_poll_started: set[str] = set()
+        self._event_batch_lock = threading.RLock()
         self._position_modes: dict[str, str] = {}
         self._position_mode_lock = threading.RLock()
         self._ctp_execution_transition_lock = threading.RLock()
@@ -972,14 +980,10 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                 if isinstance(market_clock_verification, Mapping)
                 else {}
             )
-            self._market_clock_max_latency_seconds = float(
-                options.pop("max_latency_seconds", 2.0)
-            )
+            self._market_clock_max_latency_seconds = float(options.pop("max_latency_seconds", 2.0))
             allow_stale = options.pop("allow_stale_event_time", False)
             if type(allow_stale) is not bool:
-                raise ValueError(
-                    "market_clock_verification: allow_stale_event_time must be a bool"
-                )
+                raise ValueError("market_clock_verification: allow_stale_event_time must be a bool")
             self._market_clock_allow_stale_event_time = allow_stale
             refresh_interval = float(options.pop("refresh_interval_seconds", 300.0))
             by_instrument = options.pop("max_latency_seconds_by_instrument", None) or {}
@@ -990,8 +994,10 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                 )
             for instrument_id, seconds in by_instrument.items():
                 value = float(seconds)
-                if type(instrument_id) is not str or not instrument_id or not (
-                    0.0 < value < float("inf")
+                if (
+                    type(instrument_id) is not str
+                    or not instrument_id
+                    or not (0.0 < value < float("inf"))
                 ):
                     raise ValueError(
                         "market_clock_verification: max_latency_seconds_by_instrument "
@@ -1078,13 +1084,23 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         if execution_config is None:
             return
         with self._sdk_capability_lock:
+            if getattr(self, "_event_batch_handoffs", {}):
+                raise CapabilityNotSupportedError(
+                    "configure_execution",
+                    detail="execution sessions cannot be enabled after event batch ownership",
+                    definite_reject=True,
+                )
             if self._direct_order_selection_started:
                 raise NormalizedApiError(
-                    "configure_execution", "direct_order_route_already_selected", definite_reject=True
+                    "configure_execution",
+                    "direct_order_route_already_selected",
+                    definite_reject=True,
                 )
             if self._execution_configuration_in_progress:
                 raise NormalizedApiError(
-                    "configure_execution", "execution_configuration_in_progress", definite_reject=True
+                    "configure_execution",
+                    "execution_configuration_in_progress",
+                    definite_reject=True,
                 )
             self._managed_configuration_requested = True
             self._execution_configuration_in_progress = True
@@ -1141,10 +1157,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                 policy = _provider_execution_configuration_policy(
                     venue, operation="configure_execution"
                 )
-                if (
-                    policy.require_environment
-                    and venue not in config["required_environments"]
-                ):
+                if policy.require_environment and venue not in config["required_environments"]:
                     raise NormalizedApiError(
                         "configure_execution",
                         "required_environment_missing",
@@ -1589,9 +1602,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             or not expectations
             or any(type(item) is not expectation_type for item in expectations)
         ):
-            raise _execution_identity_evidence_error(
-                "execution_identity_evidence_vector_invalid"
-            )
+            raise _execution_identity_evidence_error("execution_identity_evidence_vector_invalid")
         try:
             for expectation in expectations:
                 expectation_type.__post_init__(expectation)
@@ -1602,9 +1613,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         ordered_expectations = tuple(sorted(expectations, key=lambda item: item.exchange_name))
         route_names = tuple(item.exchange_name for item in ordered_expectations)
         if len(set(route_names)) != len(route_names):
-            raise _execution_identity_evidence_error(
-                "execution_identity_evidence_vector_invalid"
-            )
+            raise _execution_identity_evidence_error("execution_identity_evidence_vector_invalid")
 
         session = self._execution_session
         if session is None:
@@ -1628,19 +1637,14 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         try:
             assurance_router = self._execution_identity_assurance_capability_router()
             for expectation in ordered_expectations:
-                route = self._resolve_execution_identity_assurance_route(
-                    expectation.exchange_name
-                )
+                route = self._resolve_execution_identity_assurance_route(expectation.exchange_name)
                 if type(route) is not route_type:
                     raise _execution_identity_evidence_error(
                         "execution_identity_evidence_route_unavailable"
                     )
-                if (
-                    route.provider != expectation.expected_provider
-                    or (
-                        expectation.expected_environment is not None
-                        and route.environment != expectation.expected_environment
-                    )
+                if route.provider != expectation.expected_provider or (
+                    expectation.expected_environment is not None
+                    and route.environment != expectation.expected_environment
                 ):
                     raise _execution_identity_evidence_error(
                         "execution_identity_evidence_config_mismatch"
@@ -1672,9 +1676,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                 # snapshot. The route-bound provider port rechecks this exact
                 # client, ledger binding, session generation, and fence before
                 # and after its provider-owned identity observation.
-                assurance_port = assurance_router._execution_identity_assurance_for_route(
-                    route
-                )
+                assurance_port = assurance_router._execution_identity_assurance_for_route(route)
                 if not isinstance(assurance_port, assurance_port_type):
                     raise _execution_identity_evidence_error(
                         "execution_identity_evidence_provider_unavailable"
@@ -1716,9 +1718,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                 or binding.exchange_names != route_names
                 or self.validate_execution_identity_evidence(binding, expectations) is not True
             ):
-                raise _execution_identity_evidence_error(
-                    "execution_identity_evidence_not_current"
-                )
+                raise _execution_identity_evidence_error("execution_identity_evidence_not_current")
             return binding
         except unavailable_type:
             raise
@@ -1808,9 +1808,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             return False
         try:
             for expectation, snapshot in zip(ordered_expectations, snapshots):
-                route = self._resolve_execution_identity_assurance_route(
-                    expectation.exchange_name
-                )
+                route = self._resolve_execution_identity_assurance_route(expectation.exchange_name)
                 if (
                     type(route) is not route_type
                     or route.provider != expectation.expected_provider
@@ -1852,9 +1850,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         """
         contract_types = _execution_identity_snapshot_contract_types()
         if contract_types is None:
-            raise _execution_identity_snapshot_error(
-                "execution_identity_snapshot_unavailable"
-            )
+            raise _execution_identity_snapshot_error("execution_identity_snapshot_unavailable")
         snapshot_type = contract_types[0]
         session = self._execution_session
         if session is None:
@@ -1868,9 +1864,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             )
         capture = getattr(session, "execution_identity_snapshot", None)
         if not callable(capture):
-            raise _execution_identity_snapshot_error(
-                "execution_identity_snapshot_unavailable"
-            )
+            raise _execution_identity_snapshot_error("execution_identity_snapshot_unavailable")
         try:
             snapshot = capture(
                 route,
@@ -1888,9 +1882,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                 "execution_identity_snapshot_projection_invalid"
             )
         if self.validate_execution_identity_snapshot(snapshot) is not True:
-            raise _execution_identity_snapshot_error(
-                "execution_identity_snapshot_not_current"
-            )
+            raise _execution_identity_snapshot_error("execution_identity_snapshot_not_current")
         return snapshot
 
     def validate_execution_identity_snapshot(self, snapshot: Any) -> bool:
@@ -1960,9 +1952,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         """
         contract_types = _execution_identity_snapshot_contract_types()
         if contract_types is None:
-            raise _execution_identity_snapshot_error(
-                "execution_identity_snapshot_unavailable"
-            )
+            raise _execution_identity_snapshot_error("execution_identity_snapshot_unavailable")
         snapshot_type, assurance_type, _error_type, assurance_port_type = contract_types
         if type(snapshots) is not tuple or type(assurances) is not tuple:
             raise _execution_identity_snapshot_error("execution_identity_vector_invalid")
@@ -1975,38 +1965,28 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         assurance_by_route = {}
         for snapshot in snapshots:
             if type(snapshot) is not snapshot_type or snapshot.exchange_name in snapshot_by_route:
-                raise _execution_identity_snapshot_error(
-                    "execution_identity_vector_invalid"
-                )
+                raise _execution_identity_snapshot_error("execution_identity_vector_invalid")
             snapshot_by_route[snapshot.exchange_name] = snapshot
         for assurance in assurances:
             if (
                 type(assurance) is not assurance_type
                 or assurance.exchange_name in assurance_by_route
             ):
-                raise _execution_identity_snapshot_error(
-                    "execution_identity_vector_invalid"
-                )
+                raise _execution_identity_snapshot_error("execution_identity_vector_invalid")
             assurance_by_route[assurance.exchange_name] = assurance
         if set(snapshot_by_route) != set(assurance_by_route):
-            raise _execution_identity_snapshot_error(
-                "execution_identity_vector_invalid"
-            )
+            raise _execution_identity_snapshot_error("execution_identity_vector_invalid")
 
         session = self._execution_session
         row_builder = getattr(session, "_execution_identity_vector_row", None)
         if session is None or not callable(row_builder):
-            raise _execution_identity_snapshot_error(
-                "execution_identity_snapshot_unavailable"
-            )
+            raise _execution_identity_snapshot_error("execution_identity_snapshot_unavailable")
         rows = []
         for exchange_name in sorted(snapshot_by_route):
             snapshot = snapshot_by_route[exchange_name]
             assurance = assurance_by_route[exchange_name]
             if self.validate_execution_identity_snapshot(snapshot) is not True:
-                raise _execution_identity_snapshot_error(
-                    "execution_identity_vector_not_current"
-                )
+                raise _execution_identity_snapshot_error("execution_identity_vector_not_current")
             try:
                 port = self.execution_identity_assurance(exchange_name)
             except Exception:
@@ -2028,9 +2008,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                 )
             route = self._resolve_execution_identity_assurance_route(exchange_name)
             if route is None:
-                raise _execution_identity_snapshot_error(
-                    "execution_identity_vector_not_current"
-                )
+                raise _execution_identity_snapshot_error("execution_identity_vector_not_current")
             try:
                 row = row_builder(snapshot, assurance, route)
             except Exception as exc:
@@ -2040,9 +2018,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                     "execution_identity_vector_invalid"
                 ) from None
             if type(row) is not dict or row.get("exchange_name") != exchange_name:
-                raise _execution_identity_snapshot_error(
-                    "execution_identity_vector_invalid"
-                )
+                raise _execution_identity_snapshot_error("execution_identity_vector_invalid")
             # Provider and ledger currentness are both rechecked after the
             # private canonical row is assembled and before hashing it.
             if (
@@ -2050,9 +2026,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                 or port.validate_execution_identity(assurance, now_utc=datetime.now(UTC))
                 is not True
             ):
-                raise _execution_identity_snapshot_error(
-                    "execution_identity_vector_not_current"
-                )
+                raise _execution_identity_snapshot_error("execution_identity_vector_not_current")
             rows.append(row)
         payload = json.dumps(rows, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
@@ -2071,9 +2045,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         """
         contract_types = _account_risk_snapshot_contract_types()
         if contract_types is None:
-            raise _account_risk_snapshot_error(
-                "execution_identity_vector_binding_unavailable"
-            )
+            raise _account_risk_snapshot_error("execution_identity_vector_binding_unavailable")
         binding_type, ref_type = contract_types[2], contract_types[3]
         digest = self.execution_identity_vector_digest(snapshots, assurances)
         if not digest:
@@ -2081,9 +2053,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         identity_types = _execution_identity_snapshot_contract_types()
         session = self._execution_session
         if identity_types is None or session is None:
-            raise _account_risk_snapshot_error(
-                "execution_identity_vector_binding_unavailable"
-            )
+            raise _account_risk_snapshot_error("execution_identity_vector_binding_unavailable")
         snapshot_type, assurance_type = identity_types[0], identity_types[1]
         snapshot_by_route = {snapshot.exchange_name: snapshot for snapshot in snapshots}
         assurance_by_route = {assurance.exchange_name: assurance for assurance in assurances}
@@ -2104,16 +2074,12 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         scope_ref_type = _execution_identity_scope_ref_contract_type()
         scope_resolver = getattr(session, "execution_identity_scope_ref", None)
         if scope_ref_type is None or not callable(scope_resolver):
-            raise _account_risk_snapshot_error(
-                "execution_identity_vector_binding_unavailable"
-            )
+            raise _account_risk_snapshot_error("execution_identity_vector_binding_unavailable")
         identity_scope_refs = []
         for exchange_name, snapshot in zip(exchange_names, ordered_snapshots):
             route = self._resolve_execution_identity_assurance_route(exchange_name)
             if route is None:
-                raise _account_risk_snapshot_error(
-                    "execution_identity_vector_binding_not_current"
-                )
+                raise _account_risk_snapshot_error("execution_identity_vector_binding_not_current")
             try:
                 scope_ref = scope_resolver(snapshot, route)
             except Exception:
@@ -2121,9 +2087,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                     "execution_identity_vector_binding_unavailable"
                 ) from None
             if type(scope_ref) is not scope_ref_type:
-                raise _account_risk_snapshot_error(
-                    "execution_identity_vector_binding_unavailable"
-                )
+                raise _account_risk_snapshot_error("execution_identity_vector_binding_unavailable")
             identity_scope_refs.append(scope_ref)
         epochs = {snapshot.fencing_epoch for snapshot in ordered_snapshots}
         if len(epochs) != 1:
@@ -2136,9 +2100,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             or not owner_token
             or getattr(session, "fencing_epoch", None) != fencing_epoch
         ):
-            raise _account_risk_snapshot_error(
-                "execution_identity_vector_binding_not_current"
-            )
+            raise _account_risk_snapshot_error("execution_identity_vector_binding_not_current")
         try:
             binding = binding_type(
                 identity_binding_sha256=digest,
@@ -2172,9 +2134,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                 if self._execution_identity_vector_bindings.get(binding.binding_ref) is record:
                     self._execution_identity_vector_bindings.pop(binding.binding_ref, None)
                     self._account_risk_bound_snapshots.pop(binding.binding_ref, None)
-            raise _account_risk_snapshot_error(
-                "execution_identity_vector_binding_not_current"
-            )
+            raise _account_risk_snapshot_error("execution_identity_vector_binding_not_current")
         return binding
 
     def _execution_identity_vector_binding_record(self, binding: Any) -> tuple[Any, ...] | None:
@@ -2207,8 +2167,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             or getattr(session, "closed", True)
             or getattr(session, "owner_token", None) != owner_token
             or getattr(session, "fencing_epoch", None) != binding.fencing_epoch
-            or tuple(snapshot.exchange_name for snapshot in snapshots)
-            != binding.exchange_names
+            or tuple(snapshot.exchange_name for snapshot in snapshots) != binding.exchange_names
             or tuple(snapshot.session_generation for snapshot in snapshots)
             != binding.session_generations
             or type(identity_scope_refs) is not tuple
@@ -2257,7 +2216,10 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         provider = identity.get("provider")
         environment = identity.get("environment")
         account_id = identity.get("account_id")
-        if any(type(value) is not str or not value.strip() for value in (provider, environment, account_id)):
+        if any(
+            type(value) is not str or not value.strip()
+            for value in (provider, environment, account_id)
+        ):
             return None
         result = {
             "provider": provider.strip().upper(),
@@ -2293,13 +2255,9 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             raise _account_risk_snapshot_error("account_risk_snapshot_unavailable")
         snapshot_type, unavailable_type, binding_type = contract_types[:3]
         if type(initialize_baseline) is not bool or type(reset_loss_latch) is not bool:
-            raise _account_risk_snapshot_error(
-                "account_risk_snapshot_projection_invalid"
-            )
+            raise _account_risk_snapshot_error("account_risk_snapshot_projection_invalid")
         if type(binding) is not binding_type:
-            raise _account_risk_snapshot_error(
-                "execution_identity_vector_binding_invalid"
-            )
+            raise _account_risk_snapshot_error("execution_identity_vector_binding_invalid")
 
         identity_types = _execution_identity_snapshot_contract_types()
         session = self._execution_session
@@ -2313,28 +2271,17 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             or session.config.get("market_data_only") is True
             or self.validate_execution_identity_vector_binding(binding) is not True
         ):
-            raise _account_risk_snapshot_error(
-                "execution_identity_vector_binding_not_current"
-            )
+            raise _account_risk_snapshot_error("execution_identity_vector_binding_not_current")
 
         risk_venues = tuple(session.risk_venues())
         if not risk_venues or tuple(sorted(risk_venues)) != binding.exchange_names:
-            raise _account_risk_snapshot_error(
-                "execution_identity_vector_binding_invalid"
-            )
-        snapshots_by_route = {
-            item.exchange_name: item for item in binding_record[1]
-        }
-        assurances_by_route = {
-            item.exchange_name: item for item in binding_record[2]
-        }
-        if (
-            set(snapshots_by_route) != set(risk_venues)
-            or set(assurances_by_route) != set(risk_venues)
+            raise _account_risk_snapshot_error("execution_identity_vector_binding_invalid")
+        snapshots_by_route = {item.exchange_name: item for item in binding_record[1]}
+        assurances_by_route = {item.exchange_name: item for item in binding_record[2]}
+        if set(snapshots_by_route) != set(risk_venues) or set(assurances_by_route) != set(
+            risk_venues
         ):
-            raise _account_risk_snapshot_error(
-                "execution_identity_vector_binding_invalid"
-            )
+            raise _account_risk_snapshot_error("execution_identity_vector_binding_invalid")
 
         # The selected provider may require native account binding that the
         # current neutral query/assurance contracts cannot yet express.
@@ -2347,13 +2294,9 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                 for venue in risk_venues
             )
         except Exception:
-            raise _account_risk_snapshot_error(
-                "account_risk_source_binding_unavailable"
-            ) from None
+            raise _account_risk_snapshot_error("account_risk_source_binding_unavailable") from None
         if native_binding_required:
-            raise _account_risk_snapshot_error(
-                "account_risk_source_binding_unavailable"
-            )
+            raise _account_risk_snapshot_error("account_risk_source_binding_unavailable")
 
         try:
             from bt_api_base.execution_identity_protocol import (
@@ -2373,9 +2316,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             from .query_facade import QueryFacade
             from .query_composition import create_query_facade
         except Exception:
-            raise _account_risk_snapshot_error(
-                "account_risk_snapshot_unavailable"
-            ) from None
+            raise _account_risk_snapshot_error("account_risk_snapshot_unavailable") from None
 
         try:
             max_age_seconds = float(session.config["account_risk_max_age_seconds"])
@@ -2385,9 +2326,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             if type(max_age_ns) is not int or max_age_ns <= 0:
                 raise ValueError
         except Exception:
-            raise _account_risk_snapshot_error(
-                "account_risk_snapshot_unavailable"
-            ) from None
+            raise _account_risk_snapshot_error("account_risk_snapshot_unavailable") from None
 
         route_states: dict[str, dict[str, Any]] = {}
         lease_records: list[tuple[Any, Any, Any]] = []
@@ -2433,8 +2372,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             try:
                 current_route = self._resolve_execution_identity_assurance_route(venue)
                 route_current = (
-                    session.validate_execution_identity_assurance_route(identity_route)
-                    is True
+                    session.validate_execution_identity_assurance_route(identity_route) is True
                 )
             except Exception:
                 return False
@@ -2464,27 +2402,19 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             now_utc = datetime.now(UTC)
             deadline = now_utc + timedelta(seconds=max_age_seconds)
             if not query_route_matches_identity(venue, identity_route, query_route):
-                raise _account_risk_snapshot_error(
-                    "account_risk_source_binding_unavailable"
-                )
+                raise _account_risk_snapshot_error("account_risk_source_binding_unavailable")
             receipt = facade.refresh(requests, deadline=deadline)
             if type(receipt) is not QueryBatchReceipt:
-                raise _account_risk_snapshot_error(
-                    "account_risk_snapshot_unavailable"
-                )
+                raise _account_risk_snapshot_error("account_risk_snapshot_unavailable")
             if (
                 type(receipt.source_ref) is not str
                 or type(receipt.generation) is not str
                 or receipt.source_ref != assurance.source_ref
                 or receipt.generation != assurance.session_generation
             ):
-                raise _account_risk_snapshot_error(
-                    "account_risk_source_binding_unavailable"
-                )
+                raise _account_risk_snapshot_error("account_risk_source_binding_unavailable")
             if not receipt.complete or receipt.completed_at > deadline:
-                raise _account_risk_snapshot_error(
-                    "account_risk_snapshot_unavailable"
-                )
+                raise _account_risk_snapshot_error("account_risk_snapshot_unavailable")
 
             snapshots_by_family: dict[str, Any] = {}
             expiries = [deadline]
@@ -2502,36 +2432,27 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                     or result.observed_at is None
                     or result.completed_at is None
                     or result.observed_at > now_after_query
-                    or (now_after_query - result.observed_at).total_seconds()
-                    > max_age_seconds
+                    or (now_after_query - result.observed_at).total_seconds() > max_age_seconds
                 ):
-                    raise _account_risk_snapshot_error(
-                        "account_risk_snapshot_unavailable"
-                    )
+                    raise _account_risk_snapshot_error("account_risk_snapshot_unavailable")
                 expiries.append(result.observed_at + timedelta(seconds=max_age_seconds))
                 snapshots_by_family[request.family] = result
 
             expires_at = min(expiries)
             if expires_at <= now_after_query:
-                raise _account_risk_snapshot_error(
-                    "account_risk_snapshot_not_current"
-                )
+                raise _account_risk_snapshot_error("account_risk_snapshot_not_current")
             lease = facade.acquire_snapshot_lease(
                 receipt,
                 purpose="bt_api.account_risk.snapshot",
                 expires_at=expires_at,
             )
             if facade.validate_lease(lease, receipt, now=datetime.now(UTC)) is not True:
-                raise _account_risk_snapshot_error(
-                    "account_risk_snapshot_not_current"
-                )
+                raise _account_risk_snapshot_error("account_risk_snapshot_not_current")
             if (
                 not query_route_matches_identity(venue, identity_route, query_route)
                 or self.validate_execution_identity_vector_binding(binding) is not True
             ):
-                raise _account_risk_snapshot_error(
-                    "account_risk_source_binding_unavailable"
-                )
+                raise _account_risk_snapshot_error("account_risk_source_binding_unavailable")
             lease_records.append((facade, receipt, lease))
             return receipt, snapshots_by_family
 
@@ -2548,13 +2469,10 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             with session.risk_collection():
                 revision = session.current_risk_snapshot_revision()
                 if type(revision) is not int or revision <= 0:
-                    raise _account_risk_snapshot_error(
-                        "account_risk_snapshot_unavailable"
-                    )
+                    raise _account_risk_snapshot_error("account_risk_snapshot_unavailable")
                 observations: dict[str, dict[str, Any]] = {}
                 needs_open_orders = bool(
-                    reset_loss_latch
-                    or (initialize_baseline and session.requires_risk_baseline())
+                    reset_loss_latch or (initialize_baseline and session.requires_risk_baseline())
                 )
                 for venue in risk_venues:
                     identity = snapshots_by_route[venue]
@@ -2570,17 +2488,14 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                         )
 
                     try:
-                        identity_route = self._resolve_execution_identity_assurance_route(
-                            venue
-                        )
+                        identity_route = self._resolve_execution_identity_assurance_route(venue)
                         if (
                             type(identity_route) is not SelectedExecutionIdentityRoute
                             or assurance.exchange_name != identity_route.exchange_name
                             or assurance.provider != identity_route.provider
                             or assurance.environment != identity_route.environment
                             or assurance.account_ref != identity_route.account_ref
-                            or assurance.session_generation
-                            != identity_route.session_generation
+                            or assurance.session_generation != identity_route.session_generation
                         ):
                             raise _account_risk_snapshot_error(
                                 "account_risk_source_binding_unavailable"
@@ -2596,9 +2511,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                             "account_risk_source_binding_unavailable"
                         ) from None
                     if type(facade) is not QueryFacade:
-                        raise _account_risk_snapshot_error(
-                            "account_risk_snapshot_unavailable"
-                        )
+                        raise _account_risk_snapshot_error("account_risk_snapshot_unavailable")
                     if not query_route_matches_identity(
                         venue,
                         identity_route,
@@ -2654,16 +2567,17 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                             "account_risk_snapshot_projection_invalid"
                         ) from None
                     if len(valuations) != 1 or valuations[0].equity is None:
-                        raise _account_risk_snapshot_error(
-                            "account_risk_snapshot_unavailable"
-                        )
+                        raise _account_risk_snapshot_error("account_risk_snapshot_unavailable")
                     valuation = valuations[0]
                     if valuation.currency != valuation.currency.strip().upper():
                         raise _account_risk_snapshot_error(
                             "account_risk_snapshot_projection_invalid"
                         )
                     configured_currency = session._configured_risk_currency(venue)
-                    if configured_currency is not None and valuation.currency != configured_currency:
+                    if (
+                        configured_currency is not None
+                        and valuation.currency != configured_currency
+                    ):
                         raise _account_risk_snapshot_error(
                             "account_risk_snapshot_projection_invalid"
                         )
@@ -2673,9 +2587,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                             balance.observed_at_utc,
                             datetime.now(UTC),
                         ):
-                            raise _account_risk_snapshot_error(
-                                "account_risk_snapshot_not_current"
-                            )
+                            raise _account_risk_snapshot_error("account_risk_snapshot_not_current")
                     for position in positions:
                         if (
                             position.instrument.provider != identity.provider
@@ -2692,9 +2604,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                         valuation.observed_at_utc,
                         datetime.now(UTC),
                     ):
-                        raise _account_risk_snapshot_error(
-                            "account_risk_snapshot_not_current"
-                        )
+                        raise _account_risk_snapshot_error("account_risk_snapshot_not_current")
                     if open_orders is not None:
                         for order in open_orders:
                             if (
@@ -2812,9 +2722,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         except unavailable_type:
             raise
         except Exception:
-            raise _account_risk_snapshot_error(
-                "account_risk_snapshot_unavailable"
-            ) from None
+            raise _account_risk_snapshot_error("account_risk_snapshot_unavailable") from None
 
         if (
             session.current_risk_snapshot_revision() != revision
@@ -2822,16 +2730,12 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             or not validate_leases()
             or self.validate_execution_identity_vector_binding(binding) is not True
         ):
-            raise _account_risk_snapshot_error(
-                "account_risk_snapshot_not_current"
-            )
+            raise _account_risk_snapshot_error("account_risk_snapshot_not_current")
         facts = {name: result.get(name) for name in contract_types[4]}
         try:
             snapshot = snapshot_type(facts=facts, identity_binding=binding)
         except Exception:
-            raise _account_risk_snapshot_error(
-                "account_risk_snapshot_projection_invalid"
-            ) from None
+            raise _account_risk_snapshot_error("account_risk_snapshot_projection_invalid") from None
         owner_token = getattr(session, "owner_token", None)
         record = (
             snapshot,
@@ -2842,10 +2746,11 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             tuple(lease_records),
         )
         with self._sdk_capability_lock:
-            if self._execution_identity_vector_bindings.get(binding.binding_ref) is not binding_record:
-                raise _account_risk_snapshot_error(
-                    "execution_identity_vector_binding_not_current"
-                )
+            if (
+                self._execution_identity_vector_bindings.get(binding.binding_ref)
+                is not binding_record
+            ):
+                raise _account_risk_snapshot_error("execution_identity_vector_binding_not_current")
             self._account_risk_bound_snapshots[binding.binding_ref] = record
         if self.validate_account_risk_snapshot(snapshot) is not True:
             with self._sdk_capability_lock:
@@ -3118,9 +3023,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         if session is None or session.config.get("market_data_only") is True:
             raise _account_risk_snapshot_error("account_risk_snapshot_unavailable")
         if type(initialize_baseline) is not bool or type(reset_loss_latch) is not bool:
-            raise _account_risk_snapshot_error(
-                "account_risk_snapshot_projection_invalid"
-            )
+            raise _account_risk_snapshot_error("account_risk_snapshot_projection_invalid")
 
         snapshots = []
         assurances = []
@@ -3132,9 +3035,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                     expected_strategy_id=session.config["strategy_id"],
                     expected_account_alias=local_identity.get("account_alias"),
                 )
-                assurance = self.execution_identity_assurance(
-                    venue
-                ).assure_execution_identity()
+                assurance = self.execution_identity_assurance(venue).assure_execution_identity()
             except Exception:
                 raise _account_risk_snapshot_error(
                     "account_risk_source_binding_unavailable"
@@ -3155,9 +3056,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             contract_types = _account_risk_snapshot_contract_types()
             if contract_types is not None and type(error) is contract_types[1]:
                 raise
-            raise _account_risk_snapshot_error(
-                "account_risk_snapshot_unavailable"
-            ) from None
+            raise _account_risk_snapshot_error("account_risk_snapshot_unavailable") from None
 
         def thaw(value: Any) -> Any:
             if isinstance(value, Mapping):
@@ -3167,9 +3066,6 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             return value
 
         return thaw(snapshot.facts)
-
-
-
 
     def _ctp_private_ingress_fence(self, exchange_name: str) -> _CtpPrivateIngressFence:
         fences = getattr(self, "_ctp_private_ingress_fences", None)
@@ -3378,7 +3274,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         )
         if not managed_ctp:
             if normalized:
-                self._normalized_event_pending[exchange_name].append(item)
+                self._append_normalized_event_pending(exchange_name, item)
             else:
                 source.put(item)
             return
@@ -3390,6 +3286,16 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             )
         else:
             producer.put(item)
+
+    def _append_normalized_event_pending(self, exchange_name: str, item: Any) -> None:
+        """Append a normalized producer item under any active batch handoff lock."""
+        with self._event_batch_lock:
+            pending = self._normalized_event_pending[exchange_name]
+            handoff = self._event_batch_handoffs.get(exchange_name)
+            if handoff is None:
+                pending.append(item)
+                return
+            handoff._append_pending(pending, item)
 
     def _ingest_ctp_private_queue(
         self,
@@ -3439,9 +3345,6 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                 session.pending[exchange_name].append(event)
         return private_events
 
-
-
-
     def _ctp_account_risk_observation(
         self,
         session: Any,
@@ -3489,11 +3392,15 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
 
         def invalid_position():
             return NormalizedApiError(
-                "get_account_risk_snapshot", "ctp_position_schema_invalid", definite_reject=True,
+                "get_account_risk_snapshot",
+                "ctp_position_schema_invalid",
+                definite_reject=True,
             )
 
         positions_flat = normalized_positions_are_flat(
-            positions, invalid_shape=invalid_position, invalid_quantity=invalid_position,
+            positions,
+            invalid_shape=invalid_position,
+            invalid_quantity=invalid_position,
             known_before_quantity=True,
         )
         return {
@@ -3898,9 +3805,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         )
         return compose_query_facade(
             route,
-            account_session_snapshot_validator=(
-                self._validate_query_account_session_snapshot
-            ),
+            account_session_snapshot_validator=(self._validate_query_account_session_snapshot),
         )
 
     def _validate_query_account_session_snapshot(
@@ -4074,7 +3979,8 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         with self._sdk_capability_lock:
             if self._execution_configuration_in_progress:
                 raise NormalizedApiError(
-                    "correlated_order_execution", "execution_configuration_in_progress",
+                    "correlated_order_execution",
+                    "execution_configuration_in_progress",
                     definite_reject=True,
                 )
             direct = (
@@ -4085,14 +3991,18 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             if direct:
                 if self._managed_order_selection_started:
                     raise NormalizedApiError(
-                        "correlated_order_execution", "order_owner_mode_changed", definite_reject=True
+                        "correlated_order_execution",
+                        "order_owner_mode_changed",
+                        definite_reject=True,
                     )
                 self._direct_order_selection_started = True
                 selected = self._direct_order_capability_router()
             else:
                 if self._direct_order_selection_started:
                     raise NormalizedApiError(
-                        "correlated_order_execution", "order_owner_mode_changed", definite_reject=True
+                        "correlated_order_execution",
+                        "order_owner_mode_changed",
+                        definite_reject=True,
                     )
                 self._managed_order_selection_started = True
                 selected = self._typed_order_capability_router()
@@ -4106,9 +4016,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         its evaluation returns a typed unavailable decision and revalidation
         returns exact ``False``.
         """
-        return self._execution_economics_capability_router().execution_economics(
-            exchange_name
-        )
+        return self._execution_economics_capability_router().execution_economics(exchange_name)
 
     def execution_identity_assurance(
         self,
@@ -4337,9 +4245,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             raise NormalizedApiError(operation, "result_scope_invalid", definite_reject=True)
         return result
 
-    def direct_trading_permissions(
-        self, exchange_name: str, symbols: Any, **kwargs: Any
-    ) -> Any:
+    def direct_trading_permissions(self, exchange_name: str, symbols: Any, **kwargs: Any) -> Any:
         """Read-only trading-permission facts of ``symbols`` (D62-25, 62.03).
 
         Returns the provider's instrument-permission result: per instrument a
@@ -4433,9 +4339,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
 
             from .provider_entrypoints import load_route_entrypoint
 
-            factory = load_route_entrypoint(
-                "bt_api.trading_session_providers", exchange_name
-            )
+            factory = load_route_entrypoint("bt_api.trading_session_providers", exchange_name)
             if is_legacy_ctp_trading_session_factory(factory):
                 schedule = FileBackedTradingSessionSchedule(
                     route=exchange_name,
@@ -4491,8 +4395,15 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         return self._trading_calendar_status_reader.configuration_is_current(token)
 
     def trading_calendar_query(
-        self, exchange_name: str, *, venue: str, kind: str, product: str,
-        contract: str, trading_day: Any, mode: str | None = None,
+        self,
+        exchange_name: str,
+        *,
+        venue: str,
+        kind: str,
+        product: str,
+        contract: str,
+        trading_day: Any,
+        mode: str | None = None,
     ) -> Any:
         """Read a CTP simulation snapshot from local CURRENT without source proof."""
         return self._trading_calendar_status_reader.query(
@@ -4531,8 +4442,10 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             return cached
         times = observation.get("exchange_times") or {}
         local_ns = observation.get("local_received_ns")
-        hms = times.get(venue) or times.get("SHFE") or next(
-            (value for value in times.values() if value), ""
+        hms = (
+            times.get(venue)
+            or times.get("SHFE")
+            or next((value for value in times.values() if value), "")
         )
         if not hms or type(local_ns) is not int:
             return None
@@ -4600,9 +4513,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             evidence,
             check,
             max_latency_seconds=max_latency,
-            allow_stale_event_time=getattr(
-                self, "_market_clock_allow_stale_event_time", False
-            ),
+            allow_stale_event_time=getattr(self, "_market_clock_allow_stale_event_time", False),
         )
 
     def market_stream(self) -> MarketStreamPort:
@@ -4654,9 +4565,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         A missing or conflicting route provider raises a finite typed
         composition error; no venue-name fallback is used.
         """
-        return self._futures_expected_calendar_capability_router().expected_calendar(
-            exchange_name
-        )
+        return self._futures_expected_calendar_capability_router().expected_calendar(exchange_name)
 
     def reconciliation(self, exchange_name: str) -> ReconciliationFacadePort:
         """Select an explicitly configured neutral reconciliation facade."""
@@ -4961,6 +4870,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                 or self._futures_expected_calendar_router_token is not current_token
                 or not reader.configuration_is_current(current_token)
             ):
+
                 def resolve_route(exchange_name: str) -> Any | None:
                     return self._resolve_futures_expected_calendar_route(exchange_name)
 
@@ -5433,12 +5343,174 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             updates.append(pending.popleft())
         return updates
 
+    def register_event_consumer(self, exchange_name: str) -> object:
+        """Claim one direct ingress queue for an opt-in acknowledged consumer.
+
+        Items already in the producer queue are retained and replayed. This
+        process-local handoff cannot be enabled after legacy polling began or
+        while an execution session owns event reconciliation.
+        """
+        operation = "register_event_consumer"
+        if self.transport_mode is not TransportMode.DIRECT:
+            raise CapabilityNotSupportedError(
+                operation, detail="event batch handoff requires direct transport"
+            )
+        if self._execution_session is not None:
+            raise CapabilityNotSupportedError(
+                operation,
+                detail="event batch handoff is unavailable with an execution session",
+                definite_reject=True,
+            )
+        source = self.data_queues.get(exchange_name)
+        if source is None:
+            raise CapabilityNotSupportedError(
+                operation, detail="exchange has no direct event queue"
+            )
+        if not isinstance(source, EventIngressQueue):
+            raise CapabilityNotSupportedError(
+                operation, detail="exchange queue does not support batch handoff"
+            )
+        with (
+            self._sdk_capability_lock,
+            self._event_batch_lock,
+            self._event_waker_condition,
+        ):
+            if self._event_batch_closing or self._event_waker_closed:
+                raise EventBatchHandoffError("event_consumer_client_closed")
+            if self._execution_configuration_in_progress:
+                raise CapabilityNotSupportedError(
+                    operation,
+                    detail="execution configuration is in progress",
+                    definite_reject=True,
+                )
+            if self._execution_session is not None:
+                raise CapabilityNotSupportedError(
+                    operation,
+                    detail="event batch handoff is unavailable with an execution session",
+                    definite_reject=True,
+                )
+            if exchange_name in self._event_batch_handoffs:
+                raise EventBatchHandoffError("event_consumer_already_claimed")
+            if exchange_name in self._event_poll_started or self._normalized_event_pending.get(
+                exchange_name
+            ):
+                raise EventBatchHandoffError("event_consumer_late_registration")
+            handoff = EventBatchHandoff(exchange_name, source)
+            self._event_batch_handoffs[exchange_name] = handoff
+            return handoff.token
+
+    def poll_event_batch(
+        self,
+        exchange_name: str,
+        token: object,
+        *,
+        max_raw_items: int | None = 100,
+    ) -> EventBatch | None:
+        """Return the current unacknowledged batch, or ``None`` when empty.
+
+        A normalization error retains its input at the head of the pending
+        lane. A valid prefix is leased first, tagged with the safe failure code,
+        and the failed input is retried only after the exact batch is ACKed.
+
+        Queue task accounting is separate from this handoff: batch polling and
+        ACK do not call ``Queue.task_done()``. The existing ``poll_event`` and
+        ``poll_events`` methods do not call it either, so ``Queue.join()`` is
+        not a completion signal for this API.
+        """
+        if max_raw_items is not None and (
+            isinstance(max_raw_items, bool) or not isinstance(max_raw_items, int)
+        ):
+            raise ValueError("max_raw_items must be a non-negative integer or None")
+        if max_raw_items is not None and max_raw_items < 0:
+            raise ValueError("max_raw_items must be a non-negative integer or None")
+        handoff = self._event_batch_handoffs.get(exchange_name)
+        if handoff is None:
+            raise EventBatchHandoffError("event_consumer_not_registered")
+        if self._execution_session is not None:
+            raise CapabilityNotSupportedError(
+                "poll_event_batch",
+                detail="event batch handoff is unavailable with an execution session",
+                definite_reject=True,
+            )
+        with handoff.polling(token) as outstanding:
+            if outstanding is not None:
+                return outstanding
+            source = self.data_queues.get(exchange_name)
+            if not isinstance(source, EventIngressQueue):
+                raise CapabilityNotSupportedError(
+                    "poll_event_batch", detail="exchange queue does not support batch handoff"
+                )
+            raw_budget = [source.qsize() if max_raw_items is None else max_raw_items]
+            events: list[dict[str, Any]] = []
+            blocked_error_code = None
+            pending = self._normalized_event_pending[exchange_name]
+            while raw_budget[0] > 0 or pending:
+                before_budget = raw_budget[0]
+                before_pending = len(pending)
+                try:
+                    event = self._poll_event_raw(
+                        exchange_name,
+                        source_budget=raw_budget,
+                        _event_consumer_token=token,
+                    )
+                except NormalizedApiError as exc:
+                    if not events:
+                        raise
+                    blocked_error_code = exc.code
+                    break
+                if event is not None:
+                    events.append(event)
+                    continue
+                if raw_budget[0] == before_budget and len(pending) == before_pending:
+                    break
+            if not events:
+                return None
+            self._event_metrics["delivered_events"] += len(events)
+            return handoff.lease(events, blocked_error_code=blocked_error_code)
+
+    def ack_event_batch(
+        self,
+        exchange_name: str,
+        token: object,
+        batch: EventBatch,
+    ) -> None:
+        """Acknowledge only the exact batch object currently held by the SDK.
+
+        ACK releases the SDK batch lease; it does not update
+        ``Queue.unfinished_tasks`` or call ``Queue.task_done()``.
+        """
+        handoff = self._event_batch_handoffs.get(exchange_name)
+        if handoff is None:
+            raise EventBatchHandoffError("event_consumer_not_registered")
+        handoff.acknowledge(token, batch)
+
+    def unregister_event_consumer(self, exchange_name: str, token: object) -> None:
+        """Retire an idle handoff after both the raw and normalized lanes drain."""
+        handoff = self._event_batch_handoffs.get(exchange_name)
+        if handoff is None:
+            raise EventBatchHandoffError("event_consumer_not_registered")
+        source = self.data_queues.get(exchange_name)
+        if not getattr(self, "_event_waker_closed", False) or source is not handoff.ingress:
+            raise EventBatchHandoffError("event_consumer_backlog_pending")
+        handoff.retire(
+            token,
+            pending_is_empty=lambda: not self._normalized_event_pending.get(exchange_name),
+        )
+
+    def _begin_legacy_event_poll(self, exchange_name: str) -> None:
+        """Fence legacy destructive readers against an opt-in batch owner."""
+        with self._event_batch_lock:
+            if exchange_name in self._event_batch_handoffs:
+                raise EventBatchHandoffError("event_batch_consumer_owns_queue")
+            self._event_poll_started.add(exchange_name)
+
     def poll_event(self, exchange_name: str) -> dict[str, Any] | None:
         """Poll normalized events and advance configured pending-order reconciliation.
 
         Reconciliation is time based and runs even while market events keep
         arriving. No placement is retried. Call this without requiring a bar.
         """
+        self._begin_legacy_event_poll(exchange_name)
         session = self._execution_session
         if session is None:
             event = self._poll_event_raw(exchange_name)
@@ -5506,6 +5578,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                 "coalesce_market_snapshots supports only complete orderbook and tick snapshots"
             )
 
+        self._begin_legacy_event_poll(exchange_name)
         session = self._execution_session
         if session is not None:
             if session.closed:
@@ -5746,7 +5819,11 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         return _issue_ctp_quote_v2_parent_attestation(**fields)
 
     def _poll_event_raw(
-        self, exchange_name: str, *, source_budget: list[int] | None = None
+        self,
+        exchange_name: str,
+        *,
+        source_budget: list[int] | None = None,
+        _event_consumer_token: object | None = None,
     ) -> dict[str, Any] | None:
         """Return one normalized SDK event, preserving mixed queue arrival order.
 
@@ -5756,13 +5833,35 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         """
         from ._normalization import normalize_error, normalize_event
 
+        handoff = self._event_batch_handoffs.get(exchange_name)
+        if _event_consumer_token is None:
+            self._begin_legacy_event_poll(exchange_name)
+        elif handoff is None or handoff.token is not _event_consumer_token:
+            raise EventBatchHandoffError("event_consumer_token_invalid")
+
         pending = self._normalized_event_pending[exchange_name]
         failure = None
+        retry_input: PendingEventInput | None = None
         try:
             for _ in range(100):
                 from_ingress = False
+                prepared = False
+                ingress: EventIngressItem | None = None
+                sealed_row: dict[str, Any] | None = None
                 if pending:
-                    item = pending.popleft()
+                    pending_item = pending.popleft()
+                    if (
+                        _event_consumer_token is not None
+                        and type(pending_item) is PendingEventInput
+                    ):
+                        retry_input = pending_item
+                        item = pending_item.item
+                        ingress = pending_item.ingress
+                        sealed_row = pending_item.sealed_row
+                        prepared = pending_item.prepared
+                    else:
+                        retry_input = None
+                        item = pending_item
                 elif self.transport_mode is TransportMode.ZMQ:
                     if source_budget is not None and source_budget[0] <= 0:
                         return None
@@ -5770,6 +5869,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                     if item is None:
                         return None
                     from_ingress = True
+                    retry_input = None
                     if source_budget is not None:
                         source_budget[0] -= 1
                 else:
@@ -5781,22 +5881,53 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                     if source_budget is not None and source_budget[0] <= 0:
                         return None
                     try:
-                        item = source.get_nowait()
+                        if _event_consumer_token is not None:
+                            if not isinstance(source, EventIngressQueue):
+                                raise CapabilityNotSupportedError(
+                                    "poll_event_batch",
+                                    detail="exchange queue does not support batch handoff",
+                                )
+                            ingress = source._get_for_consumer(_event_consumer_token)
+                            item = ingress.item
+                        else:
+                            item = source.get_nowait()
                     except queue.Empty:
                         return None
                     from_ingress = True
+                    retry_input = PendingEventInput(item=item, ingress=ingress)
                     if source_budget is not None:
                         source_budget[0] -= 1
                 if from_ingress:
                     self._event_metrics["raw_ingress_items"] += 1
-                ingress_item = self._consume_ctp_market_ingress(exchange_name, item)
-                if ingress_item is None:
-                    continue
-                item, sealed_row = ingress_item
+                if not prepared:
+                    ingress_item = self._consume_ctp_market_ingress(exchange_name, item)
+                    if ingress_item is None:
+                        retry_input = None
+                        continue
+                    item, sealed_row = ingress_item
+                    if _event_consumer_token is not None:
+                        retry_input = PendingEventInput(
+                            item=item,
+                            ingress=ingress,
+                            sealed_row=sealed_row,
+                            prepared=True,
+                        )
                 getter = getattr(item, "get_data", None)
                 if callable(getter):
                     values = getter()
-                    pending.extend(values if isinstance(values, (tuple, list)) else [values])
+                    expanded = values if isinstance(values, (tuple, list)) else [values]
+                    if _event_consumer_token is None:
+                        pending.extend(expanded)
+                    else:
+                        pending.extend(
+                            PendingEventInput(
+                                item=value,
+                                ingress=ingress,
+                                prepared=True,
+                            )
+                            for value in expanded
+                        )
+                    retry_input = None
                     continue
                 cohort_now_monotonic_ns = time.monotonic_ns()
                 cohort_now_epoch = time.time()
@@ -5813,9 +5944,13 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                 )
                 if event is not None:
                     self._event_metrics["normalized_events"] += 1
+                    retry_input = None
                     return event
+                retry_input = None
             return None
         except Exception as exc:
+            if _event_consumer_token is not None and retry_input is not None:
+                pending.appendleft(retry_input)
             failure = normalize_error(exc, "poll_event", exchange_name=exchange_name)
         raise failure from None
 
@@ -6103,7 +6238,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                 if session is not None
                 else {}
             )
-            data_queue: queue.Queue[Any] = queue.Queue()
+            data_queue: queue.Queue[Any] = EventIngressQueue()
             self.data_queues[exchange_name] = data_queue
             self.exchange_kwargs[exchange_name] = stored_exchange_params
             self.log(f"adding exchange: {exchange_name}")
@@ -7145,9 +7280,9 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             verifier,
             operation=operation,
             exchange_feeds=lambda: getattr(self, "exchange_feeds", {}),
-            market_ingress_for=lambda route: getattr(
-                self, "_ctp_market_ingress_queues", {}
-            ).get(route),
+            market_ingress_for=lambda route: getattr(self, "_ctp_market_ingress_queues", {}).get(
+                route
+            ),
             subscription_streams=lambda: getattr(self, "_subscription_streams", None),
             error_type=NormalizedApiError,
         )
@@ -9717,9 +9852,19 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                 detail="CTP market-data queues accept only managed native stream ingress",
                 definite_reject=True,
             )
+        source = self.data_queues.get(exchange_name) if exchange_name is not None else None
+        if isinstance(source, EventIngressQueue):
+            # Retain the historical event-bus-before-queue order while holding
+            # an ingress reservation. unregister_event_consumer must see this
+            # producer or reject retirement, and a retired queue fails before
+            # the event bus can observe a partial publication.
+            with source._producer_reservation():
+                self.event_bus.emit("ticker", ticker_data)
+                source.put(ticker_data)
+            return ticker_data
         self.event_bus.emit("ticker", ticker_data)
-        if exchange_name is not None and exchange_name in self.data_queues:
-            self.data_queues[exchange_name].put(ticker_data)
+        if source is not None:
+            source.put(ticker_data)
         return ticker_data
 
     def list_exchanges(self) -> list[str]:
@@ -9736,6 +9881,8 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         The market clock verifier's background SNTP refresh stops here too; its
         current evidence is kept (it still expires on its own validity).
         """
+        with self._event_waker_condition:
+            self._event_batch_closing = True
         failure = None
         try:
             self._close_transports()
@@ -9772,8 +9919,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             except Exception as exc:
                 code = getattr(exc, "code", None)
                 market_stream_error = (
-                    "market stream: "
-                    + code
+                    "market stream: " + code
                     if type(code) is str and code.startswith("MARKET_STREAM_")
                     else "market stream: close unverified"
                 )
@@ -10122,8 +10268,13 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             projection = _fee_projection(exchange_name)
             if projection is not None:
                 return projection.read(
-                    method, self.get_exchange_info, exchange_name, symbol,
-                    account_id, extra_data, kwargs,
+                    method,
+                    self.get_exchange_info,
+                    exchange_name,
+                    symbol,
+                    account_id,
+                    extra_data,
+                    kwargs,
                 )
             native = method(symbol, extra_data=extra_data, **kwargs)
             return fee_schedule(native, exchange_name, symbol, account_id)
@@ -10592,7 +10743,6 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             self._record_verified_position_mode(exchange_name, position_mode)
             return result
 
-
     def get_order_readiness(
         self,
         exchange_name: str,
@@ -10639,9 +10789,14 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         try:
             account_config = self._backend.get_account_config(exchange_name, extra_data=options())
             return readiness_provider(
-                self._backend, exchange_name, symbol, quantity_native,
-                margin_mode=margin_mode, position_mode=position_mode,
-                account_config=account_config, extra_data=extra_data,
+                self._backend,
+                exchange_name,
+                symbol,
+                quantity_native,
+                margin_mode=margin_mode,
+                position_mode=position_mode,
+                account_config=account_config,
+                extra_data=extra_data,
                 normalizers=readiness_normalizers(exchange_name),
             )
         except Exception as exc:
