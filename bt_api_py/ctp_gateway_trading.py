@@ -1964,12 +1964,17 @@ def build_ctp_gateway_trading_profile(
                         holder["strategy_ledger"] = state["strategy_ledger"]
 
                 def gate(record):
-                    return (
-                        # The installed CTP strategy ledger cannot establish a
-                        # venue-bound snapshot/stream cut. A locally ready
-                        # baseline is therefore not dispatch authority, even
-                        # for a reservation persisted before this check existed.
+                    strategy_ledger = state.get("strategy_ledger")
+                    ledger_ok = (
                         not ledger_enabled
+                        or (
+                            strategy_ledger_source_cut_mode == "returns_bracket_v1"
+                            and strategy_ledger is not None
+                            and strategy_ledger.ready
+                        )
+                    )
+                    return (
+                        ledger_ok
                         and admission.is_enabled(ROUTE)
                         and state["controller"].ready
                         and state.get("returns") is not None

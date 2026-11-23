@@ -823,6 +823,7 @@ def test_builtin_is_registered_and_requires_the_typed_service():
     (prepared,) = validate_components(component_specs(parsed.components))
     assert prepared.write_operations_by_port["service.risk_order"] == {
         "risk.order.reserve", "risk.order.dispatch", "risk.order.release",
+        "risk.order.reserve.v2", "risk.order.dispatch.v2",
         "risk.parent.reserve", "risk.parent.release"}
     assert prepared.write_operations_by_port["service.risk_admin"] == {
         "risk.policy.publish", "risk.latch.release", "risk.cancel.request"}

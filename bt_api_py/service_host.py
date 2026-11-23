@@ -482,6 +482,7 @@ class ServiceHost:
         migration_deployment_epoch: str | None = None,
         risk_admin_cancel_service: object | None = None,
         trusted_atomic_monitors: tuple[object, ...] = (),
+        enable_risk_parent_execution_writes: bool = False,
     ) -> None:
         if type(config) is not ServiceConfig:
             raise ServiceHostError("PARSED_SERVICE_CONFIG_REQUIRED")
@@ -547,7 +548,10 @@ class ServiceHost:
                     or getattr(risk_admin_cancel_service, "_strict_admin_cancel", None) is not True
                     or len(risk_specs) != 1 or config.clients):
                 raise ServiceHostError("RISK_ADMIN_CANCEL_COMPOSITION_INVALID")
+        if type(enable_risk_parent_execution_writes) is not bool:
+            raise ServiceHostError("INVALID_RISK_PARENT_EXECUTION_CONFIGURATION")
         self._risk_admin_cancel_service = risk_admin_cancel_service
+        self._enable_risk_parent_execution_writes = enable_risk_parent_execution_writes
         self._state = "new"
         self._owner_thread: int | None = None
         self._prepared: tuple[PreparedComponent, ...] = ()
@@ -1416,6 +1420,8 @@ class ServiceHost:
                     ),
                     migration_deployment_epoch=self._migration_deployment_epoch,
                     migration_start_guard=migration_start_snapshot,
+                    enable_risk_v2_dispatch_admission=self._enable_risk_parent_execution_writes,
+                    enable_risk_parent_execution_writes=self._enable_risk_parent_execution_writes,
                     enable_risk_admin_cancel_admission=self._risk_admin_cancel_service is not None,
                     enable_gateway_risk_first_reserve_admission=any(
                         item.settings.risk_first_enabled for item in self._gateway_delegations

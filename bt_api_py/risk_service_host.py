@@ -217,7 +217,7 @@ def _pretrade_existing(config: RiskServiceConfig, scope: Any, *, version: int,
     """Observe pre-existing v3/v4 storage without creating files or granting authority."""
     from bt_api_risk.pretrade.ledger import PretradeLedger, _source_unverified
     try:
-        if not hasattr(os, 'geteuid'):
+        if os.name != "nt" and not hasattr(os, 'geteuid'):
             raise ValueError
         path = config.risk_database
         digest = hashlib.sha256(scope.key.encode('utf-8')).hexdigest()
@@ -225,11 +225,25 @@ def _pretrade_existing(config: RiskServiceConfig, scope: Any, *, version: int,
         def observe():
             result = []
             for value in (path, lock_path):
-                info = os.stat(value, follow_symlinks=False)
-                if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
-                        or info.st_uid != os.geteuid()):
-                    raise ValueError
-                result.append((info.st_dev, info.st_ino))
+                if os.name == "nt":
+                    # Windows parity of st_uid == geteuid(): the file owner
+                    # must be the process token user. The POSIX gate here only
+                    # compares the uid (no mode bits), so skip the DACL walk.
+                    # inspect_owner fails closed on any API/reparse failure.
+                    from bt_api_py._win32_security import inspect_owner
+                    info = os.stat(value, follow_symlinks=False)
+                    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                        raise ValueError
+                    owner = inspect_owner(value, others_may_write_check=False)
+                    if not owner.is_current_user:
+                        raise ValueError
+                    result.append((info.st_dev, info.st_ino))
+                else:
+                    info = os.stat(value, follow_symlinks=False)
+                    if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+                            or info.st_uid != os.geteuid()):
+                        raise ValueError
+                    result.append((info.st_dev, info.st_ino))
             return tuple(result)
         identities = observe()
         if identities[0] == identities[1] or (expected is not None and identities != expected):
@@ -2381,8 +2395,6 @@ class RiskServiceHost:
             extension=lambda: _MarketOwnerExtension(
                 settings, stream_scope=stream_scope, security_profiles=profiles,
                 cleanup_guard=self._retain_if_global_unknown,
-                runtime_cleanup_unknown=self._runtime_cleanup_unknown,
-                on_cleanup_sticky=self._runtime_cleanup_sticky,
             ),
         )
         self._runtimes.append(runtime)
@@ -2439,6 +2451,7 @@ class RiskServiceHost:
         from bt_api_py.service_host import ServiceHost, ServiceHostError
 
         config = self.config
+        parent_v2_enabled = bool(getattr(config, "parent_contract_enabled", False))
         self.component = self._call_lifecycle(RiskOrderService,
             self.engine,
             self.ledger,
@@ -2451,6 +2464,7 @@ class RiskServiceHost:
             note_run=self.order_port.note_run,
             cancel_status=self.control.cancel_scope_status,
             strict_admin_cancel=config.strict_admin_cancel,
+            parent_v2_execution_enabled=parent_v2_enabled,
         )
         self._check_cleanup_ready()
         component = self.component
@@ -2467,6 +2481,7 @@ class RiskServiceHost:
                 config.registry_database,
                 lambda *_: ComponentResources.borrowed({"service": component}, ready=lambda: True),
                 risk_admin_cancel_service=component if config.strict_admin_cancel else None,
+                enable_risk_parent_execution_writes=parent_v2_enabled,
             )
             self._check_cleanup_ready()
             self._service_host_start_attempted = True
@@ -2545,8 +2560,15 @@ class RiskServiceHost:
         if self._lifecycle_in_progress:
             _fail("RISK_SERVICE_HOST_LIFECYCLE_IN_PROGRESS")
         config = self.config
-        self._call_lifecycle(self.service_host.serve_once, config.loop_timeout_ms)
+        served = self._call_lifecycle(self.service_host.serve_once, config.loop_timeout_ms)
         self._check_cleanup_ready()
+        if served is True:
+            for _ in range(15):
+                if self.stop_event.is_set():
+                    break
+                if not self._call_lifecycle(self.service_host.serve_once, 0):
+                    break
+                self._check_cleanup_ready()
         try:
             _ = self._call_lifecycle(getattr, self.ledger, "fence")
         except Exception:
@@ -2905,6 +2927,11 @@ def _wait_for_cleanup(host: RiskServiceHost, *, _wait: Callable[[], Any] | None 
 
 
 def _command_run(args: argparse.Namespace) -> int:
+    if not logging.getLogger().handlers:
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        )
     try:
         config = load_risk_service_config(args.config)
     except RiskServiceConfigError as error:
@@ -2937,7 +2964,11 @@ def _command_run(args: argparse.Namespace) -> int:
             host.run()
         except RiskServiceStartError as error:
             sys.stderr.write("RISK_SERVICE_STOPPED " + error.code + "\n")
+            sys.stderr.flush()
             return 3
+        except Exception:
+            _LOG.exception("Risk service main loop raised unexpected exception")
+            raise
         return 0
     finally:
         _wait_for_cleanup(host)

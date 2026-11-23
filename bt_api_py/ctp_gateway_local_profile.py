@@ -86,8 +86,48 @@ def _curve(value):
     return result
 
 
+def _parse_strict_json_object(content: bytes) -> dict:
+    def pairs(values):
+        result = {}
+        for key, value in values:
+            if key in result:
+                _invalid()
+            result[key] = value
+        return result
+    raw = json.loads(content.decode("utf-8-sig", errors="strict"), object_pairs_hook=pairs,
+                     parse_constant=lambda _value: _invalid())
+    if type(raw) is not dict:
+        _invalid()
+    return raw
+
+
 def _protected_json(path):
     """Read without symlink traversal or accepting mutable/public resource files."""
+    if os.name == "nt":
+        if type(path) is not str or not path or "\x00" in path or not os.path.isabs(path):
+            _invalid()
+        target = Path(path)
+        parts = target.parts
+        if len(parts) < 3 or any(part in (".", "..") for part in parts):
+            _invalid()
+        try:
+            from bt_api_py._win32_security import (
+                Win32SecurityUnavailable,
+                inspect_owner,
+                read_bounded_windows,
+            )
+
+            parent_owner = inspect_owner(target.parent)
+            if not parent_owner.is_current_user:
+                _invalid()
+            content = read_bounded_windows(target, _MAX_BYTES, protected=True)
+            if len(content) > _MAX_BYTES:
+                _invalid()
+            return _parse_strict_json_object(content)
+        except CtpLocalProfileError:
+            raise
+        except (Win32SecurityUnavailable, OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+            _invalid()
     if os.name != "posix" or not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_DIRECTORY"):
         _invalid()
     if type(path) is not str or not path.startswith("/") or "\x00" in path:
@@ -120,18 +160,7 @@ def _protected_json(path):
         if len(content) > _MAX_BYTES or any(getattr(before, key) != getattr(after, key)
             for key in ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns", "st_mode", "st_uid", "st_nlink")):
             _invalid()
-        def pairs(values):
-            result = {}
-            for key, value in values:
-                if key in result:
-                    _invalid()
-                result[key] = value
-            return result
-        raw = json.loads(content.decode("utf-8-sig", errors="strict"), object_pairs_hook=pairs,
-                         parse_constant=lambda _value: _invalid())
-        if type(raw) is not dict:
-            _invalid()
-        return raw
+        return _parse_strict_json_object(content)
     except CtpLocalProfileError:
         raise
     except Exception:

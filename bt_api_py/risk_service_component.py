@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
 from collections import Counter
 from collections.abc import Callable, Mapping
@@ -34,6 +35,7 @@ from bt_api_base.risk_service_protocol import (
     RISK_ADMIN_OPERATIONS,
     RISK_ADMIN_PORT,
     RISK_ORDER_OPERATIONS,
+    RISK_ORDER_V2_OPERATIONS,
     RISK_REFUSAL_CODES,
     RISK_SERVICE_PORT,
     RISK_SERVICE_SCHEMA,
@@ -166,12 +168,13 @@ class RiskOrderService:
         note_run: Callable[[str, str], None] | None = None,
         cancel_status: Callable[..., Mapping | None] | None = None,
         strict_admin_cancel: bool = False,
+        parent_v2_execution_enabled: bool = False,
     ) -> None:
         if not all(_ref(x) for x in (account_scope, route, execution_domain_ref)):
             raise ValueError("RISK_ORDER_SERVICE_INVALID")
         if not isinstance(principals, Mapping) or not callable(instrument_for) or not callable(ready):
             raise ValueError("RISK_ORDER_SERVICE_INVALID")
-        if type(strict_admin_cancel) is not bool:
+        if type(strict_admin_cancel) is not bool or type(parent_v2_execution_enabled) is not bool:
             raise ValueError("RISK_ORDER_SERVICE_INVALID")
         self._engine, self._ledger = engine, ledger
         self._account, self._route, self._domain = account_scope, route, execution_domain_ref
@@ -183,6 +186,9 @@ class RiskOrderService:
         # Explicitly opt in only when the Registry is configured to issue the
         # matching admission. This mode performs local acceptance only.
         self._strict_admin_cancel = strict_admin_cancel
+        # Explicitly opt in for Execution parent-bound v2 child writes
+        # (risk.order.reserve.v2 / risk.order.dispatch.v2); v1 stays fail-closed.
+        self._parent_v2_execution_enabled = parent_v2_execution_enabled
         # Refusal counts since this process started, per represented strategy (risk.status).
         self._refusals: dict[str, Counter] = {}
         # Admin/operator refusals since this process started, per finite code.
@@ -336,6 +342,7 @@ class RiskOrderService:
             return _rejected("risk_request_invalid")
         if not isinstance(arguments, Mapping):
             return self._refuse_admin_arguments(operation, context)
+        raw_arguments = arguments
         try:
             # The Registry hands frozen wire containers; work on bounded plain copies.
             arguments = _detach_wire(arguments)
@@ -375,7 +382,135 @@ class RiskOrderService:
             return self._status(caller)
         if operation.startswith("risk.parent."):
             return self._parent(operation, caller, code, arguments)
+        if operation in RISK_ORDER_V2_OPERATIONS:
+            return self._order_v2(operation, caller, code, context, raw_arguments, arguments)
         return self._order(operation, caller, code, arguments)
+
+    def _order_v2(
+        self,
+        operation: str,
+        caller: Any,
+        code: str | None,
+        context: Any,
+        raw_arguments: Mapping[str, Any],
+        arguments: dict,
+    ) -> Mapping:
+        """Parent-bound Execution v2 child reserve/dispatch via RiskParentChildCoordinator."""
+        from dataclasses import replace as _dc_replace
+
+        from bt_api_risk.pretrade import RiskRequestError
+        from bt_api_risk.pretrade.v2_child_coordinator import RiskParentChildCoordinator
+
+        from bt_api_py.service_registry import ServiceCallContext, ServiceDispatchAdmission
+
+        key = arguments.get("request_key")
+        if not _ref(key):
+            return _rejected("risk_request_invalid")
+        admission = getattr(context, "dispatch_admission", None)
+        try:
+            if (
+                not self._parent_v2_execution_enabled
+                or caller is None
+                or caller.role != "execution"
+                or type(context) is not ServiceCallContext
+                or type(admission) is not ServiceDispatchAdmission
+                or not admission.matches_context(context)
+                or not admission.matches_operation(operation)
+                or not context._is_registry_wire_arguments(raw_arguments)
+                or not admission.matches(raw_arguments)
+            ):
+                if caller is None:
+                    return RiskOrderResult(key, "DENIED", code=code or "risk_unauthorized").to_mapping()
+                return RiskOrderResult(key, "UNKNOWN", code="risk_permit_mismatch").to_mapping()
+
+            fields = {
+                "risk.order.reserve.v2": ({"request_key", "payload", "parent_ref", "child_id"}, set()),
+                "risk.order.dispatch.v2": (
+                    {"request_key", "permit_id", "reservation_id", "view_digest"},
+                    {"market_ref"},
+                ),
+            }[operation]
+            if not fields[0] <= set(arguments) <= fields[0] | fields[1]:
+                return RiskOrderResult(key, "DENIED", code="risk_request_invalid").to_mapping()
+
+            mapped_op = (
+                "risk.order.reserve"
+                if operation == "risk.order.reserve.v2"
+                else "risk.order.dispatch"
+            )
+            exec_caller = _dc_replace(
+                caller,
+                operations=frozenset(caller.operations | {mapped_op}),
+            )
+            coordinator = RiskParentChildCoordinator(self._engine)
+            (strategy,) = tuple(caller.strategy_refs)
+            try:
+                if operation == "risk.order.reserve.v2":
+                    parent_ref = arguments["parent_ref"]
+                    child_id = arguments["child_id"]
+                    if not _ref(parent_ref) or not _ref(child_id):
+                        result = RiskOrderResult(key, "DENIED", code="risk_request_invalid")
+                    else:
+                        view, canonical, refusal = self.build_view(
+                            exec_caller, key, arguments["payload"], parent_ref, child_id
+                        )
+                        if refusal is not None or view is None or canonical is None:
+                            result = RiskOrderResult(
+                                key, "DENIED", code=refusal or "risk_request_invalid"
+                            )
+                        else:
+                            if self._note_run is not None:
+                                self._note_run(strategy, caller.run_id)
+                            result = coordinator.reserve_child(
+                                exec_caller, parent_ref, view, canonical, caller.run_id
+                            )
+                else:
+                    permit_id = arguments.get("permit_id")
+                    reservation_id = arguments.get("reservation_id")
+                    view_digest = arguments.get("view_digest")
+                    if (
+                        not _ref(permit_id)
+                        or not _ref(reservation_id)
+                        or type(view_digest) is not str
+                        or len(view_digest) != 64
+                        or any(ch not in "0123456789abcdef" for ch in view_digest)
+                    ):
+                        result = RiskOrderResult(key, "DENIED", code="risk_permit_mismatch")
+                    else:
+                        if self._note_run is not None:
+                            self._note_run(strategy, caller.run_id)
+                        result = coordinator.dispatch_child(
+                            exec_caller,
+                            key,
+                            permit_id,
+                            reservation_id,
+                            view_digest,
+                        )
+            except RiskRequestError as error:
+                result = RiskOrderResult(
+                    key,
+                    "DENIED",
+                    code=error.code if error.code in RISK_REFUSAL_CODES else "risk_request_invalid",
+                )
+            if type(result) is not RiskOrderResult:
+                raise TypeError("RISK_ENGINE_RESULT_INVALID")
+            logging.getLogger(__name__).info(
+                "risk %s key=%s outcome=%s code=%s gateway_code=%s gateway_state=%s",
+                operation,
+                key,
+                result.outcome,
+                result.code,
+                result.gateway_code,
+                result.gateway_state,
+            )
+            self._count(caller, result)
+            return result.to_mapping()
+        finally:
+            if type(admission) is ServiceDispatchAdmission:
+                try:
+                    admission.close()
+                except Exception:
+                    pass
 
     def _count(self, caller: Any, result: RiskOrderResult) -> None:
         if caller is None or result.outcome != "DENIED" or result.code not in RISK_REFUSAL_CODES:

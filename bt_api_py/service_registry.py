@@ -220,6 +220,9 @@ _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS = frozenset({'account.strategy_financi
 _RISK_V2_RESERVE = "risk.order.reserve.v2"
 _RISK_V2_DISPATCH = "risk.order.dispatch.v2"
 _RISK_V2_ADMISSION_OPERATIONS = frozenset({_RISK_V2_RESERVE, _RISK_V2_DISPATCH})
+_RISK_EXECUTION_PARENT_WRITE_OPERATIONS = frozenset(
+    {"risk.parent.reserve", "risk.parent.release", _RISK_V2_RESERVE, _RISK_V2_DISPATCH}
+)
 _RISK_ADMIN_CANCEL = "risk.cancel.request"
 _RISK_ADMIN_WRITE_OPERATIONS = frozenset({
     "risk.policy.publish", "risk.latch.release", _RISK_ADMIN_CANCEL,
@@ -2783,6 +2786,7 @@ class ServiceRegistry:
         enable_risk_v2_dispatch_admission: bool = False,
         enable_gateway_risk_first_reserve_admission: bool = False,
         enable_risk_admin_cancel_admission: bool = False,
+        enable_risk_parent_execution_writes: bool = False,
     ) -> None:
         if not _text(service_id):
             raise ValueError("service_id is invalid")
@@ -2794,6 +2798,8 @@ class ServiceRegistry:
             raise TypeError("enable_gateway_risk_first_reserve_admission must be a bool")
         if type(enable_risk_admin_cancel_admission) is not bool:
             raise TypeError("enable_risk_admin_cancel_admission must be a bool")
+        if type(enable_risk_parent_execution_writes) is not bool:
+            raise TypeError("enable_risk_parent_execution_writes must be a bool")
         if type(lease_seconds) not in (int, float) or not math.isfinite(lease_seconds):
             raise ValueError("lease_seconds is invalid")
         if lease_seconds <= 0:
@@ -3033,6 +3039,7 @@ class ServiceRegistry:
         # reserve and dispatch. Both remain disabled by default; a production
         # handler must consume and recheck its own operation-bound admission.
         self._risk_v2_dispatch_admission_enabled = enable_risk_v2_dispatch_admission
+        self._risk_parent_execution_writes_enabled = enable_risk_parent_execution_writes
         self._gateway_risk_first_reserve_admission_enabled = enable_gateway_risk_first_reserve_admission
         # This opt-in only supplies a Registry admission. The Risk handler must
         # consume it and independently recheck its operator's scope grant.
@@ -5134,6 +5141,22 @@ class ServiceRegistry:
     def _resource_scope_matches(self, resource, requested, identity):
         if self._scope_matches(resource.scope, requested, identity, port=resource.port):
             return True
+        if (
+            self._risk_parent_execution_writes_enabled
+            and identity.role is WireRole.SERVICE
+            and identity.delegate_ref is None
+            and resource.port == "service.risk_order"
+            and resource.scope.run_id is None
+            and requested.run_id is not None
+            and requested.account_ref is not None
+            and not requested.account_refs
+            and requested.strategy_ref is not None
+            and requested.manual_book_ref is None
+            and requested.portfolio_ref is None
+            and requested.group_id is None
+            and requested.leg_id is None
+        ):
+            return requested == replace(resource.scope, run_id=requested.run_id)
         if (identity.role is not WireRole.SERVICE or resource.port != 'service.direct_write'
                 or not resource.operations or not resource.operations <= (_GATEWAY_ALL_DELEGATE_OPERATIONS | _GATEWAY_PARENT_OPERATIONS)
                 or resource.scope.run_id is not None or requested.run_id is None):
@@ -5622,6 +5645,24 @@ class ServiceRegistry:
                           is not None for op in granted_write_operations)):
                 if not self._gateway_delegate_strategy_run_current(scope, instance_id=instance_id):
                     return "DUPLICATE_ACTIVE_RUN", capability, frozenset()
+            elif (
+                self._risk_parent_execution_writes_enabled
+                and identity.role is WireRole.SERVICE
+                and port == "service.risk_order"
+                and granted_write_operations <= _RISK_EXECUTION_PARENT_WRITE_OPERATIONS
+            ):
+                if (
+                    scope.account_ref is None
+                    or scope.account_refs
+                    or scope.strategy_ref is None
+                    or scope.run_id is None
+                    or scope.manual_book_ref is not None
+                    or scope.portfolio_ref is not None
+                    or scope.group_id is not None
+                    or scope.leg_id is not None
+                    or identity.delegate_ref is not None
+                ):
+                    return "SCOPE_DENIED", capability, frozenset()
             elif identity.role is WireRole.STRATEGY_CLIENT:
                 # Strategy writes are admitted below only when the concrete
                 # scope supplies both strategy and run identifiers.
@@ -5687,16 +5728,28 @@ class ServiceRegistry:
         return tuple((key, row[key]) for key in row.keys() if key != 'expires_at')
 
     def _execution_release_mono_now(self):
-        if (self._execution_action_pid != _INTAKE_GETPID()
-                or type(_RELEASE_SLEEP_CLOCK) is not BuiltinFunctionType
-                or _RELEASE_SLEEP_CLOCK.__module__ != 'time'
-                or _RELEASE_SLEEP_CLOCK.__name__ != 'clock_gettime'
-                or type(_RELEASE_SLEEP_CLOCK_ID) is not int):
+        if self._execution_action_pid != _INTAKE_GETPID():
             raise ServiceDispatchAdmissionError('UNAVAILABLE')
-        try:
-            value = _RELEASE_SLEEP_CLOCK(_RELEASE_SLEEP_CLOCK_ID)
-        except (OSError, OverflowError, ValueError):
-            raise ServiceDispatchAdmissionError('UNAVAILABLE') from None
+        if os.name == 'nt':
+            from bt_api_py._win32_security import (
+                Win32SecurityUnavailable,
+                sleep_inclusive_clock_ns,
+            )
+
+            try:
+                value = sleep_inclusive_clock_ns() / 1_000_000_000.0
+            except (Win32SecurityUnavailable, OSError, OverflowError, TypeError, ValueError):
+                raise ServiceDispatchAdmissionError('UNAVAILABLE') from None
+        else:
+            if (type(_RELEASE_SLEEP_CLOCK) is not BuiltinFunctionType
+                    or _RELEASE_SLEEP_CLOCK.__module__ != 'time'
+                    or _RELEASE_SLEEP_CLOCK.__name__ != 'clock_gettime'
+                    or type(_RELEASE_SLEEP_CLOCK_ID) is not int):
+                raise ServiceDispatchAdmissionError('UNAVAILABLE')
+            try:
+                value = _RELEASE_SLEEP_CLOCK(_RELEASE_SLEEP_CLOCK_ID)
+            except (OSError, OverflowError, ValueError):
+                raise ServiceDispatchAdmissionError('UNAVAILABLE') from None
         if type(value) not in (int, float) or not math.isfinite(value):
             raise ServiceDispatchAdmissionError('UNAVAILABLE')
         return value
@@ -5720,12 +5773,23 @@ class ServiceRegistry:
             if self._execution_parent_clock_failed:
                 raise ServiceDispatchAdmissionError('UNAVAILABLE')
             try:
-                if (type(_RELEASE_SLEEP_CLOCK) is not BuiltinFunctionType
-                        or _RELEASE_SLEEP_CLOCK.__module__ != 'time'
-                        or _RELEASE_SLEEP_CLOCK.__name__ != 'clock_gettime'
-                        or type(_PARENT_SLEEP_CLOCK_ID) is not int):
-                    raise ValueError
-                value = _RELEASE_SLEEP_CLOCK(_PARENT_SLEEP_CLOCK_ID)
+                if os.name == 'nt':
+                    from bt_api_py._win32_security import (
+                        Win32SecurityUnavailable,
+                        sleep_inclusive_clock_ns,
+                    )
+
+                    try:
+                        value = sleep_inclusive_clock_ns() / 1_000_000_000.0
+                    except Win32SecurityUnavailable:
+                        raise ValueError from None
+                else:
+                    if (type(_RELEASE_SLEEP_CLOCK) is not BuiltinFunctionType
+                            or _RELEASE_SLEEP_CLOCK.__module__ != 'time'
+                            or _RELEASE_SLEEP_CLOCK.__name__ != 'clock_gettime'
+                            or type(_PARENT_SLEEP_CLOCK_ID) is not int):
+                        raise ValueError
+                    value = _RELEASE_SLEEP_CLOCK(_PARENT_SLEEP_CLOCK_ID)
                 if (type(value) not in (int, float) or not math.isfinite(value) or value < 0
                         or (self._execution_parent_clock_last is not None
                             and value < self._execution_parent_clock_last)):
@@ -7023,20 +7087,28 @@ class ServiceRegistry:
             return "DENIED"
         if self._stored_scope(row["scope_json"]) != scope:
             return "SCOPE_DENIED"
-        if operation in _RISK_V2_ADMISSION_OPERATIONS and (
-            identity.role is not WireRole.STRATEGY_CLIENT
-            or identity.actor_ref != scope.strategy_ref
-            or identity.delegate_ref is not None
-            or scope.account_ref is None
-            or scope.account_refs
-            or scope.strategy_ref is None
-            or scope.run_id is None
-            or scope.manual_book_ref is not None
-            or scope.portfolio_ref is not None
-            or scope.group_id is not None
-            or scope.leg_id is not None
-        ):
-            return "SCOPE_DENIED"
+        if operation in _RISK_V2_ADMISSION_OPERATIONS:
+            strategy_v2_ok = (
+                identity.role is WireRole.STRATEGY_CLIENT
+                and identity.actor_ref == scope.strategy_ref
+            )
+            execution_v2_ok = (
+                self._risk_parent_execution_writes_enabled
+                and identity.role is WireRole.SERVICE
+            )
+            if (
+                not (strategy_v2_ok or execution_v2_ok)
+                or identity.delegate_ref is not None
+                or scope.account_ref is None
+                or scope.account_refs
+                or scope.strategy_ref is None
+                or scope.run_id is None
+                or scope.manual_book_ref is not None
+                or scope.portfolio_ref is not None
+                or scope.group_id is not None
+                or scope.leg_id is not None
+            ):
+                return "SCOPE_DENIED"
         if observer and not self._account_observer_registration_unique(instance_id=instance_id,
                 principal=principal, identity=identity, scope=scope, registration_id=registration_id, operation=operation):
             return 'SCOPE_DENIED'
@@ -7044,7 +7116,7 @@ class ServiceRegistry:
                          WireRole.SERVICE if operation in _GATEWAY_ALL_DELEGATE_OPERATIONS else WireRole.STRATEGY_CLIENT)
         allowed_roles = ({WireRole.SERVICE} if operation == _GATEWAY_ACCEPTANCE_OPERATION or operation in _GATEWAY_ORDER_CUT_OPERATIONS else
                          {WireRole.STRATEGY_CLIENT, WireRole.SERVICE, WireRole.APPLICATION_CLIENT} if observer else
-                         {WireRole.STRATEGY_CLIENT, WireRole.SERVICE} if operation in _GATEWAY_PARENT_OPERATIONS else {expected_role})
+                         {WireRole.STRATEGY_CLIENT, WireRole.SERVICE} if (operation in _GATEWAY_PARENT_OPERATIONS or (operation in _RISK_V2_ADMISSION_OPERATIONS and self._risk_parent_execution_writes_enabled)) else {expected_role})
         if identity.role not in allowed_roles or identity.delegate_ref is not None or not self._identity_is_trusted(principal, identity):
             return "DENIED"
         if not self._ready:
@@ -7086,6 +7158,12 @@ class ServiceRegistry:
                 return 'SCOPE_DENIED'
             if not self._gateway_delegate_strategy_run_current(scope, instance_id=instance_id):
                 return "DUPLICATE_ACTIVE_RUN"
+        elif (
+            self._risk_parent_execution_writes_enabled
+            and identity.role is WireRole.SERVICE
+            and operation in _RISK_V2_ADMISSION_OPERATIONS
+        ):
+            pass
         elif operation not in (_GATEWAY_CONTROL_OPERATIONS | _GATEWAY_DELEGATED_READ_OPERATIONS | _GATEWAY_ACCOUNT_OBSERVER_OPERATIONS | _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS | _GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS) and not self._strategy_claim_exists(scope, registration_id):
             return "DUPLICATE_ACTIVE_RUN"
         if (operation == _GATEWAY_RISK_FIRST_RESERVE_V2
@@ -7389,6 +7467,17 @@ class ServiceRegistry:
                 ):
                     if not self._strategy_owner_run_claim_exists(scope):
                         return self._failure("DUPLICATE_ACTIVE_RUN")
+                elif (
+                    self._risk_parent_execution_writes_enabled
+                    and capability.port == "service.risk_order"
+                    and operation in _RISK_EXECUTION_PARENT_WRITE_OPERATIONS
+                    and scope.account_ref is not None
+                    and not scope.account_refs
+                    and scope.strategy_ref is not None
+                    and scope.run_id is not None
+                    and identity.delegate_ref is None
+                ):
+                    pass
                 elif not self._trusted_group_write_run_matches(
                     principal,
                     identity,
@@ -7881,6 +7970,24 @@ class ServiceRegistry:
                   and self.gateway_delegate_grant(instance_id=instance_id,scope_ref=scope_ref,
                       identity=identity,scope=scope,operation=operation) is not None):
                 pass
+            elif (
+                self._risk_parent_execution_writes_enabled
+                and identity.role is WireRole.SERVICE
+                and port == "service.risk_order"
+                and operation in _RISK_EXECUTION_PARENT_WRITE_OPERATIONS
+            ):
+                if (
+                    scope.account_ref is None
+                    or scope.account_refs
+                    or scope.strategy_ref is None
+                    or scope.run_id is None
+                    or scope.manual_book_ref is not None
+                    or scope.portfolio_ref is not None
+                    or scope.group_id is not None
+                    or scope.leg_id is not None
+                    or identity.delegate_ref is not None
+                ):
+                    return False
             elif identity.role is WireRole.STRATEGY_CLIENT:
                 if scope.strategy_ref is None or scope.run_id is None:
                     return False

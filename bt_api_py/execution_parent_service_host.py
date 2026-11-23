@@ -95,14 +95,19 @@ class ParentConfig:
     writer_mode: str = 'quarantined'
     require_existing: bool = False
     initial_claim: tuple | None = None
+    dispatch: object | None = None
 
 
 def parse_config(raw):
     try:
-        top = _map(raw, ('schema', 'service', 'service_identity', 'authority_versions',
-                         'execution_scope', 'wire_scope', 'storage', 'server_keys',
-                         'strategy_grants', 'action_grant', 'schedule_build_id',
-                         'algorithm_policies', 'lease'))
+        required_top = ('schema', 'service', 'service_identity', 'authority_versions',
+                        'execution_scope', 'wire_scope', 'storage', 'server_keys',
+                        'strategy_grants', 'action_grant', 'schedule_build_id',
+                        'algorithm_policies', 'lease')
+        if (type(raw) is not dict or not set(required_top) <= set(raw)
+                or set(raw) - set(required_top) - {'dispatch'}):
+            raise ParentServiceError('INVALID_CONFIGURATION')
+        top = raw
         if top['schema'] != SCHEMA:
             raise ValueError
         service = parse_service_config(top['service'])
@@ -209,13 +214,47 @@ def parse_config(raw):
                 rules.append(allowed)
             policies.append(AlgorithmPolicy(wire.account_ref, wire.strategy_ref, wire.execution_domain_ref,
                                             plan_version, build_id, tuple(rules)))
+        dispatch_cfg = None
+        dispatch_key_paths: tuple[Path, ...] = ()
+        if 'dispatch' in top:
+            from .execution_parent_dispatcher import ParentDispatchConfig
+
+            d_raw = top['dispatch']
+            d_req = {'route', 'risk_endpoint', 'risk_service_id', 'risk_instance_id',
+                     'risk_scope_ref', 'risk_peer', 'risk_server_public',
+                     'client_public', 'client_secret'}
+            if type(d_raw) is not dict or not d_req <= set(d_raw) or set(d_raw) - d_req - {'poll_interval_seconds'}:
+                raise ValueError
+            _endpoint(d_raw['risk_endpoint'])
+            poll_interval = float(d_raw.get('poll_interval_seconds', 0.2))
+            if not 0.02 <= poll_interval <= 10.0:
+                raise ValueError
+            risk_peer = _identity(d_raw['risk_peer'], WireRole.SERVICE)
+            risk_srv_pub = _path(d_raw['risk_server_public'])
+            cli_pub = _path(d_raw['client_public'])
+            cli_sec = _path(d_raw['client_secret'])
+            dispatch_key_paths = (risk_srv_pub, cli_pub, cli_sec)
+            if any(p == journal_root or journal_root in p.parents for p in dispatch_key_paths):
+                raise ValueError
+            dispatch_cfg = ParentDispatchConfig(
+                route=_text(d_raw['route']),
+                risk_endpoint=_text(d_raw['risk_endpoint']),
+                risk_service_id=_text(d_raw['risk_service_id']),
+                risk_instance_id=_text(d_raw['risk_instance_id']),
+                risk_scope_ref=_text(d_raw['risk_scope_ref']),
+                risk_peer=risk_peer,
+                risk_server_public=risk_srv_pub,
+                client_public=cli_pub,
+                client_secret=cli_sec,
+                poll_interval_seconds=poll_interval,
+            )
         paths = [server_public, server_secret, *(p for _, p in principal_keys), registry_path]
         if len(set(paths)) != len(paths) or any(p == journal_root or journal_root in p.parents for p in paths):
             raise ValueError
         return ParentConfig(service, identity, local, wire, journal_root, registry_path, storage_id,
                             server_public, server_secret, tuple(principal_keys), tuple(grants), action_grant,
                             tuple(policies), build_id, _text(lease['owner']), ttl, versions,
-                            writer_mode, require_existing, initial_claim)
+                            writer_mode, require_existing, initial_claim, dispatch_cfg)
     except Exception:
         raise ParentServiceError('INVALID_CONFIGURATION') from None
 
@@ -266,7 +305,24 @@ def _check_paths(config):
     except FileNotFoundError:
         pass
     else:
-        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
+        if os.name == "nt":
+            # Windows parity of the POSIX regular/private/single-link check.
+            from bt_api_py._win32_security import (
+                Win32SecurityUnavailable,
+                inspect_owner,
+                is_reparse_point,
+            )
+
+            try:
+                info = config.registry_path.stat(follow_symlinks=False)
+                owner = inspect_owner(config.registry_path)
+                if (is_reparse_point(config.registry_path) or not stat.S_ISREG(info.st_mode)
+                        or not owner.is_current_user or owner.others_writable
+                        or info.st_nlink != 1):
+                    raise ValueError
+            except (OSError, ValueError, Win32SecurityUnavailable):
+                raise ParentServiceError('INVALID_STORAGE') from None
+        elif (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
                 or info.st_mode & 0o077 or info.st_nlink != 1):
             raise ParentServiceError('INVALID_STORAGE')
     _check_existing(config)
@@ -274,6 +330,54 @@ def _check_paths(config):
 
 def _prepare_registry(config):
     """Ensure a new SQLite registry has private permissions from its first open."""
+    if os.name == "nt":
+        # O_NOFOLLOW does not exist on Windows.  CREATE_NEW (O_CREAT|O_EXCL)
+        # fails when the path already exists, including a reparse point; refuse
+        # an existing reparse point explicitly and verify the new file's owner
+        # and DACL with the same rules as the protected reads.
+        from bt_api_py._win32_security import (
+            Win32SecurityUnavailable,
+            inspect_owner,
+            is_reparse_point,
+        )
+
+        try:
+            fd = os.open(config.registry_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError:
+            try:
+                if is_reparse_point(config.registry_path):
+                    raise ParentServiceError('INVALID_STORAGE')
+            except Win32SecurityUnavailable:
+                raise ParentServiceError('INVALID_STORAGE') from None
+            return
+        except OSError:
+            raise ParentServiceError('INVALID_STORAGE') from None
+        try:
+            # os.open's mode argument does not set a Windows DACL.  Apply the
+            # POSIX 0600 equivalent (owner only, plus the privileged SIDs the
+            # compat layer treats like POSIX root) before accepting the file.
+            import win32con
+            import win32security
+
+            sd = win32security.GetFileSecurity(
+                os.fspath(config.registry_path), win32security.OWNER_SECURITY_INFORMATION)
+            dacl = win32security.ACL()
+            for text in ('S-1-5-18', 'S-1-5-32-544'):
+                dacl.AddAccessAllowedAce(win32security.ACL_REVISION, win32con.GENERIC_ALL,
+                                         win32security.ConvertStringSidToSid(text))
+            dacl.AddAccessAllowedAce(win32security.ACL_REVISION, win32con.GENERIC_ALL,
+                                     sd.GetSecurityDescriptorOwner())
+            sd.SetSecurityDescriptorDacl(1, dacl, 0)
+            win32security.SetFileSecurity(
+                os.fspath(config.registry_path), win32security.DACL_SECURITY_INFORMATION, sd)
+            owner = inspect_owner(config.registry_path)
+            if not owner.is_current_user or owner.others_writable:
+                raise ParentServiceError('INVALID_STORAGE')
+        except (OSError, Win32SecurityUnavailable):
+            raise ParentServiceError('INVALID_STORAGE') from None
+        finally:
+            os.close(fd)
+        return
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
     try:
         fd = os.open(config.registry_path, flags, 0o600)
@@ -292,6 +396,7 @@ class ParentServiceHost:
             raise ParentServiceError('INVALID_CONFIGURATION')
         self.config, self.host, self.journal = config, None, None
         self.risk_port = risk_port
+        self.dispatcher = None
         self.state = 'new'
 
     def start(self):
@@ -343,6 +448,19 @@ class ParentServiceHost:
 
             self.host = ServiceHost(service, authority, config.registry_path, provider)
             self.host.start()
+            if config.dispatch is not None:
+                from .execution_parent_dispatcher import ExecutionParentDispatcher
+
+                dispatcher = ExecutionParentDispatcher(
+                    dispatch_config=config.dispatch,
+                    service_id=service.service_id,
+                    identity=config.identity,
+                    wire_scope=config.wire_scope,
+                    local_scope=config.local_scope,
+                    journal=self.journal,
+                )
+                dispatcher.start()
+                self.dispatcher = dispatcher
             self.state = 'running'
         except BaseException:
             try:
@@ -355,6 +473,8 @@ class ParentServiceHost:
         if self.state != 'running' or self.host is None:
             raise ParentServiceError('LISTENER_UNAVAILABLE')
         self.host.serve_once(100)
+        if self.dispatcher is not None and self.host.healthy:
+            self.dispatcher.step()
         return 'READY' if self.host.healthy else 'UNREADY'
 
     def close(self):
@@ -362,6 +482,9 @@ class ParentServiceHost:
             return
         self.state = 'close_uncertain'
         try:
+            if self.dispatcher is not None:
+                self.dispatcher.close()
+                self.dispatcher = None
             if self.host is not None:
                 self.host.close()
                 self.host = None

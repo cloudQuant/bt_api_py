@@ -1,6 +1,7 @@
 """Explicitly granted SERVICE delegation onto one Gateway account owner."""
 from __future__ import annotations
 
+import logging
 import threading
 import math
 from collections.abc import Mapping
@@ -17,6 +18,7 @@ from bt_api_py.gateway_direct_owner import GatewayDirectOwner, GatewayDispatchCo
 from bt_api_py.gateway_direct_service import _reservation_admission, _ReservationAdmissionRejected
 from bt_api_py.service_registry import ServiceCallContext, ServiceDispatchAdmission
 
+_LOG = logging.getLogger(__name__)
 OPERATIONS = frozenset({'direct.delegated_reserve','direct.delegated_dispatch'})
 RISK_FIRST_RESERVE_OPERATION = 'direct.risk_first_reserve.v2'
 
@@ -328,6 +330,7 @@ class GatewayDelegationService:
             market_gate = market_permit = market_registration = None
             if self._market_gate_required:
                 if 'market_ref' not in arguments:
+                    _LOG.warning("delegated_dispatch rejected: MARKET_GATE_UNAVAILABLE (missing_market_ref)")
                     return {'status':'REQUEST_REJECTED','code':'MARKET_GATE_UNAVAILABLE'}
                 try:
                     from bt_api_py.gateway_execution_stream_client import _detach_wire
@@ -353,7 +356,11 @@ class GatewayDelegationService:
                                 reservation_id=row.reservation_id, digest=row.digest, delegation_permit=permit)
                         finally:
                             active.host_check = None
-                except Exception:
+                except Exception as exc:
+                    _LOG.warning(
+                        "delegated_dispatch rejected: MARKET_GATE_UNAVAILABLE (%s)",
+                        getattr(exc, "code", None) or type(exc).__name__,
+                    )
                     return {'status':'REQUEST_REJECTED','code':'MARKET_GATE_UNAVAILABLE'}
             @contextmanager
             def request_fence(current):

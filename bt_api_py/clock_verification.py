@@ -82,7 +82,12 @@ class VenueClockCheck:
 def _sntp_query(host: str, timeout: float) -> tuple[int, int]:
     """Return a correlated SNTP sample; SNTP itself is not authenticated."""
 
-    addresses = socket.getaddrinfo(host, 123, socket.AF_INET, socket.SOCK_DGRAM)
+    port = 123
+    if ":" in host:
+        h_part, _, p_part = host.rpartition(":")
+        if h_part and p_part.isdigit():
+            host, port = h_part, int(p_part)
+    addresses = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_DGRAM)
     if not addresses:
         raise OSError("SNTP server not resolved")
     target = addresses[0][4]
@@ -469,6 +474,17 @@ def qualify_market_tick_event(
     return bind_market_tick_event(qualified, event.source, event.cursor)
 
 
+_CLOCK_QUANTIZATION_NS = int(
+    math.ceil(
+        (time.get_clock_info("monotonic").resolution + time.get_clock_info("time").resolution)
+        * 1_000_000_000
+    )
+)
+_DEFAULT_MAX_WALL_JUMP_NS = (
+    10_000_000 if _CLOCK_QUANTIZATION_NS <= 1_000_000 else 10_000_000 + _CLOCK_QUANTIZATION_NS
+)
+
+
 class GatewayClockVerifier:
     """Bind an actual local SNTP sample to a stable local wall/monotonic pair.
 
@@ -476,7 +492,7 @@ class GatewayClockVerifier:
     ``refresh`` from the application's explicit clock-maintenance context.
     """
 
-    def __init__(self, verifier: ClockVerifier, *, max_wall_jump_ns: int = 10_000_000):
+    def __init__(self, verifier: ClockVerifier, *, max_wall_jump_ns: int = _DEFAULT_MAX_WALL_JUMP_NS):
         if (type(verifier) is not ClockVerifier or verifier._query is not _sntp_query
                 or type(max_wall_jump_ns) is not int
                 or not 0 <= max_wall_jump_ns <= 1_000_000_000):
@@ -535,6 +551,10 @@ class GatewayClockVerifier:
             self._stop.clear()
             def run():
                 failures = 0
+                with self._lock:
+                    initial_sample = self._sample
+                if initial_sample is not None and initial_sample[0].is_valid(time.monotonic_ns()):
+                    self._stop.wait(interval_seconds)
                 while not self._stop.is_set():
                     try:
                         result = self.refresh()

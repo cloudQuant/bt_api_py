@@ -1240,6 +1240,7 @@ class RiskFactsCache:
         self._account_received_ns: int | None = None
         self._market_days: dict[str, str] = {}
         self._event_day: str | None = None
+        self._market_feed: Any = None
 
     def note_tick(self, instrument_id: str, price: Any, market_ref: dict | None, trading_day: str | None, *, _local_receive: tuple[int, int] | None = None) -> None:
         if type(instrument_id) is not str:
@@ -1353,13 +1354,36 @@ class RiskFactsCache:
         return price
 
     def market_ref(self, instrument: Any) -> dict | None:
+        if type(instrument) is not MarketInstrumentKey:
+            return None
+        feed = self._market_feed
+        if feed is not None:
+            refresh = getattr(feed, "ensure_fresh_market_ref", None)
+            if callable(refresh):
+                try:
+                    refresh(instrument.instrument_id)
+                except Exception:
+                    pass
         if self.reference_price(instrument) is None:
+            logging.getLogger(__name__).warning(
+                "risk market_ref unavailable: instrument=%s reason=no_reference_price has_ref=%s",
+                instrument.instrument_id,
+                instrument.instrument_id in self._market_refs,
+            )
             return None
         value = self._market_refs.get(instrument.instrument_id)
         if value is None:
+            logging.getLogger(__name__).warning(
+                "risk market_ref unavailable: instrument=%s reason=no_attested_ref",
+                instrument.instrument_id,
+            )
             return None
         snapshot = _market_ref_snapshot(value)
         if snapshot is None:
+            logging.getLogger(__name__).warning(
+                "risk market_ref unavailable: instrument=%s reason=invalid_ref_snapshot",
+                instrument.instrument_id,
+            )
             return None
         key = MarketSubscriptionKey.from_dict(snapshot["key"])
         return snapshot if key.instrument == instrument else None
@@ -1470,7 +1494,11 @@ def risk_market_settings(subscriptions: Mapping[str, MarketSubscriptionKey]) -> 
 
     settings = GatewayMarketClientSettings(
         {
-            name: GatewayMarketSubscriptionSettings(key, require_source_descriptor=True)
+            name: GatewayMarketSubscriptionSettings(
+                key,
+                require_source_descriptor=True,
+                head_check_interval_seconds=15.0,
+            )
             for name, key in subscriptions.items()
         }
     )
@@ -1509,8 +1537,17 @@ class RiskMarketFeed:
         self._max = max_events
         self._poll_lock = threading.Lock()
         self._next_subscription = 0
+        self._by_instrument = {
+            instrument_id: (client, key)
+            for client, key, instrument_id in self._subscriptions.values()
+        }
+        self._last_received: dict[str, tuple[Any, Any, int]] = {}
         self.failures = 0
         self.attestation_failures = 0
+        try:
+            self._facts._market_feed = self
+        except Exception:
+            pass
 
     def start(self) -> None:
         for client, _key, _instrument in self._subscriptions.values():
@@ -1519,12 +1556,149 @@ class RiskMarketFeed:
     def _attested(self, client: Any, received: Any) -> bool:
         receipt = getattr(received, "receipt", None)
         if receipt is None or getattr(receipt, "source", None) != "pub":
+            logging.getLogger(__name__).warning(
+                "risk market attestation skipped: receipt_source=%s",
+                None if receipt is None else getattr(receipt, "source", None),
+            )
             return False  # a replayed or unreceipted frame cannot be attested
         try:
             client.clock_observation(receipt=receipt, timeout_seconds=self._timeout)
-        except Exception:
+        except Exception as exc:
+            logging.getLogger(__name__).warning(
+                "risk market attestation failed: %s",
+                getattr(exc, "code", None) or type(exc).__name__,
+            )
             return False
         return True
+
+    def _recover_subscription(self, client: Any, exc: Exception) -> bool:
+        code = getattr(exc, "code", None)
+        if code in ("RESYNC_REQUIRED", "PROVIDER_RESYNC_REQUIRED"):
+            accept = getattr(client, "accept_resync", None)
+            if callable(accept):
+                try:
+                    accept(acknowledge_data_loss=True, timeout_seconds=self._timeout)
+                    return True
+                except Exception:
+                    return False
+        elif code == "RECOVERY_REQUIRED":
+            recover = getattr(client, "recover", None)
+            if callable(recover):
+                try:
+                    recover(timeout_seconds=self._timeout)
+                    return True
+                except Exception:
+                    return False
+        return False
+
+    def _poll_one(self, client: Any, key: MarketSubscriptionKey, instrument_id: str, remaining_budget: int) -> tuple[int, int]:
+        count = 0
+        consumed = 0
+        latest = None
+        while consumed < remaining_budget:
+            try:
+                received = client.poll_with_receipt(timeout_seconds=self._timeout)
+            except Exception as exc:
+                # A broken subscription leaves no usable reference: refuse rather than reuse.
+                logging.getLogger(__name__).warning(
+                    "risk market poll failed: instrument=%s code=%s",
+                    instrument_id,
+                    getattr(exc, "code", None) or type(exc).__name__,
+                )
+                self._facts.note_tick(instrument_id, None, None, None)
+                self._last_received.pop(instrument_id, None)
+                latest = None
+                if self._recover_subscription(client, exc):
+                    break
+                self.failures += 1
+                break
+            if received is None:
+                break
+            consumed += 1
+            try:
+                mapped = price_fact_from_market_event(received, key)
+            except Exception as exc:
+                logging.getLogger(__name__).warning(
+                    "risk market map failed: instrument=%s err=%s",
+                    instrument_id,
+                    f"{type(exc).__name__}:{str(exc)[:80]}",
+                )
+                self.failures += 1
+                self._facts.note_tick(instrument_id, None, None, None)
+                self._last_received.pop(instrument_id, None)
+                latest = None
+                continue
+            latest = (received, mapped)
+            count += 1
+        if latest is None:
+            return count, consumed
+        received, (fact, ref, day) = latest
+        # The attestation binds the client's last issued frame: this one.
+        attested = self._attested(client, received)
+        if not attested:
+            self.attestation_failures += 1
+            ref = None
+        try:
+            local_receive = self._local_receive(client, received, key)
+        except Exception:
+            local_receive = None
+        if local_receive is None:
+            self._facts.note_tick(instrument_id, fact, ref, day)
+        else:
+            self._facts.note_tick(instrument_id, fact, ref, day, _local_receive=local_receive)
+        self._last_received[instrument_id] = (
+            received,
+            (fact, ref, day),
+            time.monotonic_ns() if attested else 0,
+        )
+        return count, consumed
+
+    def ensure_fresh_market_ref(self, instrument_id: str) -> None:
+        """Before a live delegated dispatch, drain any new PUB tick and ensure a fresh attestation."""
+        from bt_api_py.gateway_strategy_market import GatewayMarketSubscriptionClient
+
+        entry = self._by_instrument.get(instrument_id)
+        if entry is None:
+            return
+        client, key = entry
+        if type(client) is not GatewayMarketSubscriptionClient:
+            return
+        if not self._poll_lock.acquire(blocking=False):
+            return
+        try:
+            polled, _ = self._poll_one(client, key, instrument_id, self._max)
+            if polled > 0:
+                return
+            cached = self._last_received.get(instrument_id)
+            if cached is None:
+                return
+            received, (fact, _old_ref, day), attested_ns = cached
+            receipt = getattr(received, "receipt", None)
+            if receipt is None or getattr(receipt, "source", None) != "pub":
+                return
+            has_ref = instrument_id in self._facts._market_refs
+            if has_ref and attested_ns > 0 and (time.monotonic_ns() - attested_ns) < 1_000_000_000:
+                return
+            try:
+                _fact, fresh_ref, _day = price_fact_from_market_event(received, key)
+            except Exception:
+                return
+            if self._attested(client, received):
+                try:
+                    local_receive = self._local_receive(client, received, key)
+                except Exception:
+                    local_receive = None
+                if local_receive is None:
+                    self._facts.note_tick(instrument_id, fact, fresh_ref, day)
+                else:
+                    self._facts.note_tick(instrument_id, fact, fresh_ref, day, _local_receive=local_receive)
+                self._last_received[instrument_id] = (
+                    received,
+                    (fact, fresh_ref, day),
+                    time.monotonic_ns(),
+                )
+        finally:
+            self._poll_lock.release()
 
     @staticmethod
     def _local_receive(client: Any, received: Any, key: MarketSubscriptionKey) -> tuple[int, int] | None:
@@ -1572,43 +1746,11 @@ class RiskMarketFeed:
         self._next_subscription = (start + 1) % len(subscriptions)
         ordered = subscriptions[start:] + subscriptions[:start]
         for client, key, instrument_id in ordered:
-            latest = None
-            while consumed < self._max:
-                try:
-                    received = client.poll_with_receipt(timeout_seconds=self._timeout)
-                except Exception:
-                    # A broken subscription leaves no usable reference: refuse rather than reuse.
-                    self.failures += 1
-                    self._facts.note_tick(instrument_id, None, None, None)
-                    latest = None
-                    break
-                if received is None:
-                    break
-                consumed += 1
-                try:
-                    mapped = price_fact_from_market_event(received, key)
-                except Exception:
-                    self.failures += 1
-                    self._facts.note_tick(instrument_id, None, None, None)
-                    latest = None
-                    continue
-                latest = (received, mapped)
-                count += 1
-            if latest is None:
-                continue
-            received, (fact, ref, day) = latest
-            # The attestation binds the client's last issued frame: this one.
-            if not self._attested(client, received):
-                self.attestation_failures += 1
-                ref = None
-            try:
-                local_receive = self._local_receive(client, received, key)
-            except Exception:
-                local_receive = None
-            if local_receive is None:
-                self._facts.note_tick(instrument_id, fact, ref, day)
-            else:
-                self._facts.note_tick(instrument_id, fact, ref, day, _local_receive=local_receive)
+            if consumed >= self._max:
+                break
+            c, used = self._poll_one(client, key, instrument_id, self._max - consumed)
+            count += c
+            consumed += used
         return count
 
 

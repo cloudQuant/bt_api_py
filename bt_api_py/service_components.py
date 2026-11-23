@@ -1026,7 +1026,8 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                     "service.risk_order": frozenset(
                         {
                             "risk.order.reserve", "risk.order.dispatch", "risk.order.release",
-                            "risk.order.status", "risk.parent.reserve", "risk.parent.release",
+                            "risk.order.status", "risk.order.reserve.v2", "risk.order.dispatch.v2",
+                            "risk.parent.reserve", "risk.parent.release",
                             "risk.parent.status", "risk.status",
                         }
                     ),
@@ -1048,6 +1049,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                 {
                     "service.risk_order": frozenset(
                         {"risk.order.reserve", "risk.order.dispatch", "risk.order.release",
+                         "risk.order.reserve.v2", "risk.order.dispatch.v2",
                          "risk.parent.reserve", "risk.parent.release"}
                     ),
                     "service.risk_admin": frozenset(

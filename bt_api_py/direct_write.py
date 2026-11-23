@@ -532,7 +532,14 @@ class DirectWriteCoordinator:
             return None
         try:
             marker = port.commit(record)
-        except Exception:
+        except Exception as exc:
+            import logging as _logging
+
+            _logging.getLogger(__name__).warning(
+                "direct_write _commit failed: type=%s code=%s",
+                type(exc).__name__,
+                getattr(exc, "code", None),
+            )
             return None
         return marker if type(marker) is str and marker else None
 
@@ -654,6 +661,13 @@ class DirectWriteCoordinator:
             try:
                 prepared = prepare(request)
             except Exception as exc:
+                import logging as _logging
+
+                _logging.getLogger(__name__).warning(
+                    "direct_write place_prepared prepare failed: type=%s code=%s",
+                    type(exc).__name__,
+                    getattr(exc, "code", None),
+                )
                 return DirectWriteOutcome(False, None, None, "place_prepare_failed", type(exc).__name__)
 
             identity = prepared.identity if type(prepared) is PreparedPlaceRequest else None

@@ -68,6 +68,7 @@ _MAX_POLL_TIMEOUT_MS = 60_000
 _MAX_QUEUE_CAPACITY = 100_000
 _MAX_QUEUE_BYTES = 64 * 1024 * 1024
 _MAX_READ_AFTER_LIMIT = 1_000
+_MAX_POLL_SUBSCRIBER_DRAIN = 256
 _BOUNDED_READ_AFTER_OPERATION = "market.read_after_bounded"
 MARKET_WIRE_VERSION_LEGACY = 1
 MARKET_WIRE_VERSION_TOPIC_FILTERED = 2
@@ -913,17 +914,27 @@ class ServiceMarketClient:
         maintenance_delay = self._runtime.next_maintenance_delay()
         if maintenance_delay is not None:
             wait_seconds = min(wait_seconds, max(0.0, maintenance_delay))
-        try:
-            subscriber = self._require_subscriber()
-            event = subscriber.receive(timeout=wait_seconds)
-        except Exception as error:
-            self._recovery_required = True
-            raise ServiceMarketError("RECEIVE_FAILED", cause_code=self._cause_code(error)) from None
-        self._maintain_runtime()
-        self._check_binding()
-        if event is not None:
+        for attempt in range(_MAX_POLL_SUBSCRIBER_DRAIN):
+            try:
+                subscriber = self._require_subscriber()
+                event = subscriber.receive(timeout=wait_seconds if attempt == 0 else 0.0)
+            except Exception as error:
+                self._recovery_required = True
+                raise ServiceMarketError("RECEIVE_FAILED", cause_code=self._cause_code(error)) from None
+            self._maintain_runtime()
+            self._check_binding()
+            if event is None:
+                break
             self._ingest_event(event, page_budget=replay_page_budget,
                                receipt=self._pub_receipt(subscriber, event))
+            if (
+                self._queue
+                or self._resync_required
+                or self._recovery_required
+                or self._authorization_interrupted is not None
+                or self._pending_poll_replay is not None
+            ):
+                break
 
         if self._queue:
             return self._dequeue()

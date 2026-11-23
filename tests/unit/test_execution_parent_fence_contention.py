@@ -158,3 +158,53 @@ def test_real_atomic_service_cannot_use_legacy_boolean_fallback(running_parent, 
     parent.host._refresh_registry_readiness()
     assert not registry.ready and not registry._parent_retry_unready
     assert not registry._execution_parent_monotonic_leases
+
+
+@pytest.mark.parametrize('lock_name', ['host', 'store'])
+def test_lease_worker_survives_transient_lock_contention_across_renewal_tick(running_parent, lock_name):
+    parent, registry, registration = running_parent
+    journal = parent.journal
+    service, = parent.host._atomic_intake_services
+    lock = journal._lock if lock_name == 'host' else journal._store._lock
+    token = registry._execution_parent_monotonic_leases[registration['registration_id']]
+    with service._lease_lock:
+        rev_before = service._lease_revision
+    holder, release = hold_lock(lock)
+    try:
+        # Hold across one 0.5s renewal tick (well under the 2.0s watchdog deadline).
+        time.sleep(0.75)
+    finally:
+        release.set()
+        holder.join(2)
+    assert not holder.is_alive()
+    deadline = time.monotonic() + 2.0
+    while time.monotonic() < deadline:
+        with service._lease_lock:
+            if service._lease_revision > rev_before and not service._lease_fault:
+                break
+        time.sleep(0.02)
+    parent.host._refresh_registry_readiness()
+    assert service._lease_thread.is_alive()
+    assert service.lease_ready and parent.host.healthy and registry.ready
+    assert registry._execution_parent_monotonic_leases[registration['registration_id']] is token
+
+
+def test_lease_watchdog_still_fails_closed_on_persistent_host_lock_hold(running_parent):
+    parent, registry, _ = running_parent
+    journal = parent.journal
+    service, = parent.host._atomic_intake_services
+    holder, release = hold_lock(journal._lock)
+    try:
+        # Exceed the 2.0s _lease_valid_until window while renewal cannot acquire the lock.
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline and service.lease_ready:
+            time.sleep(0.05)
+        assert not service.lease_ready
+        assert not registry.ready
+    finally:
+        release.set()
+        holder.join(2)
+    assert not holder.is_alive()
+    # Fault is sticky: releasing the lock never revives readiness.
+    parent.host._refresh_registry_readiness()
+    assert not service.lease_ready and not parent.host.healthy and not registry.ready
