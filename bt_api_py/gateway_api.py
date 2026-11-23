@@ -866,10 +866,61 @@ class GatewayBtApi:
                     self._risk_uncertain_keys.add(key)
                 return GatewayRiskRoutedResult("UNKNOWN", code="RISK_OUTCOME_UNKNOWN")
             return GatewayRiskRoutedResult("TRANSPORT_NOT_STARTED", code="INTENT_NOT_DURABLE")
-        # V1 cannot establish first creation in the Gateway journal. Do not
-        # create a reservation that this facade could neither dispatch nor
-        # release: the key's earlier history remains unknown until the v2
-        # first-creation proof is wired end to end.
+        # V1 cannot establish first creation in the Gateway journal. Only when
+        # the Risk client implements the v2 first-creation proof surface
+        # (``reserve_v2``) and returns a strictly verified
+        # ``GatewayRiskFirstReserveResultV2`` bound to this exact intent may
+        # this facade record the reservation permit (T-R2-03). Otherwise stay
+        # strictly fail-closed UNKNOWN.
+        reserve_v2 = getattr(self._risk, "reserve_v2", None)
+        if not callable(reserve_v2):
+            return GatewayRiskRoutedResult("UNKNOWN", code="RISK_OUTCOME_UNKNOWN")
+        from bt_api_base.gateway_risk_first_reserve_v2 import (
+            GatewayRiskFirstReserveRequestV2,
+            GatewayRiskFirstReserveResultV2,
+        )
+
+        try:
+            self._risk_reconnect(timeout_seconds)
+            call = reserve_v2(candidate, timeout_seconds=timeout_seconds)
+        except Exception:
+            return GatewayRiskRoutedResult("UNKNOWN", code="RISK_OUTCOME_UNKNOWN")
+        if getattr(call, "outcome", None) == "NOT_SENT":
+            return self._risk_not_sent(call)
+        if getattr(call, "outcome", None) != "ANSWERED":
+            return GatewayRiskRoutedResult("UNKNOWN", code="RISK_OUTCOME_UNKNOWN")
+        answer = getattr(call, "answer", None)
+        if answer is None:
+            return GatewayRiskRoutedResult("UNKNOWN", code="RISK_OUTCOME_UNKNOWN")
+        if getattr(answer, "outcome", None) == "DENIED":
+            return self._risk_refusal(answer)
+        proof = getattr(call, "first_reserve_proof", None)
+        v2_request = getattr(call, "first_reserve_request", None)
+        if (
+            getattr(answer, "outcome", None) == "RESERVED"
+            and isinstance(proof, GatewayRiskFirstReserveResultV2)
+            and isinstance(v2_request, GatewayRiskFirstReserveRequestV2)
+            and proof.matches_request(v2_request)
+            and proof.account_scope == candidate.binding.account_scope
+            and proof.strategy_scope == candidate.binding.strategy_scope
+            and proof.request_key == key
+            and proof.payload_digest == candidate.digest
+            and proof.reservation_id == getattr(answer, "reservation_id", None)
+        ):
+            with self._lock:
+                self._risk_uncertain_keys.discard(key)
+                self._risk_permits[key] = answer
+            return GatewayRiskRoutedResult(
+                "RESERVED",
+                record=GatewayRiskPermitRecord(
+                    key,
+                    answer.outcome,
+                    answer.permit_id,
+                    answer.reservation_id,
+                    answer.view_digest,
+                    proof.journal_id,
+                ),
+            )
         return GatewayRiskRoutedResult("UNKNOWN", code="RISK_OUTCOME_UNKNOWN")
 
     def _risk_reconnect(self, timeout_seconds):

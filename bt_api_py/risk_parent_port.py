@@ -13,7 +13,7 @@ from collections.abc import Mapping
 from decimal import Decimal, InvalidOperation
 
 from bt_api_base.market_protocol import MarketInstrumentKey
-from bt_api_base.risk_service_protocol import RiskParentView
+from bt_api_base.risk_service_protocol import RiskOrderResult, RiskOrderView, RiskParentView
 
 from bt_api_py.risk_service_client import RiskParentCallResult, RiskServiceClient
 
@@ -126,12 +126,107 @@ class RiskParentPort:
     def reserve_child(self, payload: Mapping) -> Mapping:
         if type(payload) is not dict or not self._parent_reserved(payload.get("parent_ref")):
             return {"status": "UNKNOWN", "code": _PARENT_NOT_RESERVED}
-        # A formally reserved parent is not itself child dispatch authority:
-        # the execution-origin risk.order.* child path is not part of this
-        # adapter and must not fabricate a Gateway result.
-        return {"status": "UNKNOWN", "code": _CHILD_UNAVAILABLE}
+        child_reserve = getattr(self._client, "child_reserve", None)
+        if not callable(child_reserve):
+            return {"status": "UNKNOWN", "code": _CHILD_UNAVAILABLE}
+        parent_ref = payload["parent_ref"]
+        raw_view = payload.get("child_view")
+        canonical_payload = payload.get("canonical_payload")
+        run_id = payload.get("run_id")
+        try:
+            child_view = (
+                raw_view
+                if isinstance(raw_view, RiskOrderView)
+                else RiskOrderView.from_mapping(raw_view)
+            )
+        except Exception:
+            return {"status": "REJECTED", "code": "risk_request_invalid"}
+        if (
+            child_view.origin != "execution"
+            or child_view.parent_ref != parent_ref
+            or child_view.child_id is None
+            or type(canonical_payload) is not str
+            or not canonical_payload
+        ):
+            return {"status": "REJECTED", "code": "risk_request_invalid"}
+        try:
+            result = child_reserve(parent_ref, child_view, canonical_payload, run_id)
+        except Exception:
+            return {"status": "UNKNOWN", "code": "risk_child_reserve_uncertain"}
+        return self._map_child_result(result, success_outcome="RESERVED", accepted_status="ACCEPTED")
 
     def dispatch_child(self, payload: Mapping) -> Mapping:
         if type(payload) is not dict or not self._parent_reserved(payload.get("parent_ref")):
             return {"status": "UNKNOWN", "code": _PARENT_NOT_RESERVED}
-        return {"status": "UNKNOWN", "code": _CHILD_UNAVAILABLE}
+        child_dispatch = getattr(self._client, "child_dispatch", None)
+        if not callable(child_dispatch):
+            return {"status": "UNKNOWN", "code": _CHILD_UNAVAILABLE}
+        parent_ref = payload["parent_ref"]
+        request_key = payload.get("request_key")
+        permit_id = payload.get("permit_id")
+        reservation_id = payload.get("reservation_id")
+        view_digest = payload.get("view_digest")
+        if any(
+            type(v) is not str or not v
+            for v in (request_key, permit_id, reservation_id, view_digest)
+        ):
+            return {"status": "REJECTED", "code": "risk_request_invalid"}
+        try:
+            result = child_dispatch(
+                parent_ref,
+                request_key,
+                permit_id,
+                reservation_id,
+                view_digest,
+            )
+        except Exception:
+            return {"status": "UNKNOWN", "code": "risk_child_dispatch_uncertain"}
+        return self._map_child_result(
+            result, success_outcome="DISPATCHED", accepted_status="DISPATCHED"
+        )
+
+    @staticmethod
+    def _map_child_result(
+        result: object,
+        *,
+        success_outcome: str,
+        accepted_status: str,
+    ) -> dict:
+        if isinstance(result, RiskOrderResult):
+            if result.outcome == success_outcome:
+                return {
+                    "status": accepted_status,
+                    "code": None,
+                    "permit_id": result.permit_id,
+                    "reservation_id": result.reservation_id,
+                    "view_digest": result.view_digest,
+                }
+            if result.outcome == "DENIED":
+                return {
+                    "status": "REJECTED",
+                    "code": result.code or "risk_child_denied",
+                }
+            return {
+                "status": "UNKNOWN",
+                "code": result.code or "risk_child_outcome_unknown",
+            }
+        if isinstance(result, Mapping):
+            raw_status = str(result.get("status") or result.get("outcome") or "UNKNOWN").upper()
+            if raw_status in {success_outcome, accepted_status}:
+                return {
+                    "status": accepted_status,
+                    "code": None,
+                    "permit_id": result.get("permit_id"),
+                    "reservation_id": result.get("reservation_id"),
+                    "view_digest": result.get("view_digest"),
+                }
+            if raw_status in {"DENIED", "REJECTED"}:
+                return {
+                    "status": "REJECTED",
+                    "code": result.get("code") or "risk_child_denied",
+                }
+            return {
+                "status": "UNKNOWN",
+                "code": result.get("code") or "risk_child_outcome_unknown",
+            }
+        return {"status": "UNKNOWN", "code": "risk_child_outcome_unknown"}

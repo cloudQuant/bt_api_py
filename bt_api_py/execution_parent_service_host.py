@@ -285,10 +285,13 @@ def _prepare_registry(config):
 
 class ParentServiceHost:
     """Single-use owner of the original Host and journal; close is retryable."""
-    def __init__(self, config):
+    def __init__(self, config, *, risk_port=None):
         if type(config) is not ParentConfig:
             raise ParentServiceError('INVALID_CONFIGURATION')
+        if risk_port is not None and not callable(getattr(risk_port, 'reserve_parent', None)):
+            raise ParentServiceError('INVALID_CONFIGURATION')
         self.config, self.host, self.journal = config, None, None
+        self.risk_port = risk_port
         self.state = 'new'
 
     def start(self):
@@ -330,7 +333,8 @@ class ParentServiceHost:
                         lease=lease, schedule_registry=ScheduleRegistry(), schedule_build_id=config.build_id,
                         algorithm_policies=config.policies)
                     adapter = AtomicIntakeService(config.action_grant.instance_id, intake,
-                        config.parent_grants, (config.action_grant,), config.identity)
+                        config.parent_grants, (config.action_grant,), config.identity,
+                        risk_port=self.risk_port)
                     return ComponentResources.owned({'service': adapter}, ready=lambda: True, close=journal.close)
                 except BaseException:
                     journal.close()

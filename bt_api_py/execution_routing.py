@@ -50,7 +50,13 @@ from bt_api_py._execution_route_journal import (
     load_route_candidate,
     record_route_candidate,
 )
-from bt_api_py._execution_route_match import _OrderFacts, _Outcome, _Rule, _RuleSet
+from bt_api_py._execution_route_match import (
+    _PASS_V2_ORDER_TYPES,
+    _OrderFacts,
+    _Outcome,
+    _Rule,
+    _RuleSet,
+)
 from bt_api_py.gateway_direct_client import GatewayOrderIntent, _check_intent
 from bt_api_py.gateway_order_contract import decode_gateway_order_request
 
@@ -289,7 +295,9 @@ class RulePolicy:
             match["side"] = self.rule.side
         if self.rule.offset is not None:
             match["offset"] = self.rule.offset
-        if self.rule.order_type is not None:
+        if self.rule.allowed_order_types is not None:
+            match["order_types"] = sorted(self.rule.allowed_order_types)
+        elif self.rule.order_type is not None:
             match["order_types"] = [self.rule.order_type]
         if self.rule.minimum_quantity is not None:
             match["minimum_quantity"] = format(self.rule.minimum_quantity, "f")
@@ -419,16 +427,32 @@ def _policy(
     offset = match.get("offset")
     if "offset" in match and (type(offset) is not str or offset not in _OFFSETS):
         return None
+    algorithm = value.get("algorithm", {"class": "PASS", "version": 1, "params": {}})
+    if type(algorithm) is not dict or set(algorithm) != {"class", "version", "params"}:
+        return None
+    algorithm_class = _ref(algorithm["class"])
+    algorithm_version = _version(algorithm["version"])
+    algorithm_params = _params(algorithm["params"])
+    is_pass_v2 = algorithm_class == "PASS" and algorithm_version == "2"
+
     order_type = None
+    allowed_order_types = None
     if "order_types" in match:
         order_types = match["order_types"]
         if type(order_types) is not list or not order_types:
             return None
-        if any(type(item) is not str or item != "limit" for item in order_types):
-            _fail("EXECUTION_ORDER_TYPE_UNSUPPORTED")
         if len(set(order_types)) != len(order_types):
             return None
-        order_type = "limit"
+        if is_pass_v2:
+            if any(type(item) is not str or item not in _PASS_V2_ORDER_TYPES for item in order_types):
+                _fail("EXECUTION_ORDER_TYPE_UNSUPPORTED")
+            allowed_order_types = frozenset(order_types)
+        else:
+            if any(type(item) is not str or item != "limit" for item in order_types):
+                _fail("EXECUTION_ORDER_TYPE_UNSUPPORTED")
+            order_type = "limit"
+    elif is_pass_v2:
+        allowed_order_types = _PASS_V2_ORDER_TYPES
     minimum = None
     quantity_unit = None
     if "minimum_quantity" in match:
@@ -446,12 +470,6 @@ def _policy(
         return None
     scheme_name = _ref(scheme["name"])
     scheme_version = _version(scheme["version"])
-    algorithm = value.get("algorithm", {"class": "PASS", "version": 1, "params": {}})
-    if type(algorithm) is not dict or set(algorithm) != {"class", "version", "params"}:
-        return None
-    algorithm_class = _ref(algorithm["class"])
-    algorithm_version = _version(algorithm["version"])
-    algorithm_params = _params(algorithm["params"])
     schedule_binding = None
     if schema_version == 2:
         schedule_binding = value["schedule_binding"]
@@ -521,6 +539,7 @@ def _policy(
             order_type=order_type,
             minimum_quantity=minimum,
             quantity_unit=quantity_unit,
+            allowed_order_types=allowed_order_types,
         )
     except ValueError:
         return None
@@ -1246,6 +1265,7 @@ class ExecutionOrderRouter:
         execution_port: object,
         risk_selected: object,
         clock=time.time_ns,
+        forbid_direct_path: bool = False,
     ) -> None:
         connection = _require_connection(db)
         if connection.isolation_level is not None:
@@ -1253,6 +1273,8 @@ class ExecutionOrderRouter:
         if type(config) is not ExecutionRoutingConfig:
             _fail("INVALID_EXECUTION_CONFIG")
         if type(risk_selected) is not bool:
+            _fail("INVALID_EXECUTION_CONFIG")
+        if type(forbid_direct_path) is not bool:
             _fail("INVALID_EXECUTION_CONFIG")
         if not callable(clock):
             _fail("INVALID_EXECUTION_CONFIG")
@@ -1267,6 +1289,7 @@ class ExecutionOrderRouter:
         self._config = frozen_config
         self._port = execution_port
         self._risk_selected = risk_selected
+        self._forbid_direct_path = forbid_direct_path
         self._clock = clock
         self._source_db = connection
         self._source_config = frozen_config
@@ -1693,6 +1716,11 @@ class ExecutionOrderRouter:
                     raise ExecutionRoutingError("EXECUTION_LOCAL_RECORD_FAILED") from None
             if candidate.outcome is _Outcome.NO_MATCH:
                 _commit(db)
+                if self._forbid_direct_path:
+                    return self._result(
+                        ExecutionRoutingOutcome.EXECUTION_REJECTED,
+                        code="GATEWAY_DIRECT_PATH_BYPASS_FORBIDDEN",
+                    )
                 token = _issue_direct_decision(self, intent, candidate) if candidate_created else None
                 return ExecutionRoutingResult(ExecutionRoutingOutcome.DIRECT_PATH, direct_decision=token)
             if candidate.outcome is _Outcome.INDETERMINATE:

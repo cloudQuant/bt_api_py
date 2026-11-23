@@ -426,9 +426,72 @@ def _execution(value, client, route, risk, instruments):
                                      profile["endpoints"]["rpc_connect"])
 
 
-def _decode(raw):
+_SUPPORTED_STRICT_EXCHANGE_PREFIXES = ("CTP___",)
+_STRICT_STRATEGY_FORBIDDEN_OPS = frozenset({"direct.reserve", "direct.dispatch"})
+COMPAT_PROFILE = "compat"
+STRICT_FIVE_COMPONENT_PROFILE = "strict_five_component"
+_VALID_PROFILES = frozenset({COMPAT_PROFILE, STRICT_FIVE_COMPONENT_PROFILE})
+
+
+def _validate_strict_five_component(raw, decoded):
+    """Enforce Iteration 62 Split strict five-component Gateway invariants (T-R2-01)."""
+    exchange = decoded["exchange_name"]
+    if not any(exchange.startswith(prefix) for prefix in _SUPPORTED_STRICT_EXCHANGE_PREFIXES):
+        raise _RiskSelectionError("GATEWAY_VENUE_UNSUPPORTED")
+    if decoded["risk"] is None:
+        raise _RiskSelectionError("GATEWAY_RISK_REQUIRED")
+    if decoded["execution"] is None:
+        raise _RiskSelectionError("GATEWAY_EXECUTION_REQUIRED")
+    if set(decoded["requested_operations"]) & _STRICT_STRATEGY_FORBIDDEN_OPS:
+        raise _RiskSelectionError("GATEWAY_PRINCIPAL_BYPASS_UNSAFE")
+    raw_exec = raw.get("execution")
+    if isinstance(raw_exec, dict):
+        if raw_exec.get("allow_direct_path") is True:
+            raise _RiskSelectionError("GATEWAY_DIRECT_PATH_BYPASS_FORBIDDEN")
+        raw_routing = raw_exec.get("routing")
+        if isinstance(raw_routing, dict) and raw_routing.get("allow_direct_path") is True:
+            raise _RiskSelectionError("GATEWAY_DIRECT_PATH_BYPASS_FORBIDDEN")
+    expectations = raw.get("readiness_expectations")
+    if expectations is not None:
+        if type(expectations) is not dict:
+            raise _RiskSelectionError("INVALID_GATEWAY_STRATEGY_CONFIG")
+        if expectations.get("monitor_required") is False:
+            raise _RiskSelectionError("GATEWAY_READINESS_COMPONENT_NOT_READY")
+        if expectations.get("runtime_supervision_expected") is False:
+            raise _RiskSelectionError("GATEWAY_READINESS_COMPONENT_NOT_READY")
+        if expectations.get("execution_direct_path_disabled") is False:
+            raise _RiskSelectionError("GATEWAY_DIRECT_PATH_BYPASS_FORBIDDEN")
+
+
+def _decode(raw, *, profile: str = COMPAT_PROFILE):
+    if type(profile) is not str or profile not in _VALID_PROFILES:
+        raise _RiskSelectionError("INVALID_GATEWAY_STRATEGY_CONFIG")
     if type(raw) is dict and "risk" not in raw:
+        if profile == STRICT_FIVE_COMPONENT_PROFILE:
+            raise _RiskSelectionError("GATEWAY_RISK_REQUIRED")
         raise _RiskSelectionError("risk_selection_missing")
+    if profile == STRICT_FIVE_COMPONENT_PROFILE and type(raw) is dict:
+        if raw.get("risk") == "none":
+            raise _RiskSelectionError("GATEWAY_RISK_REQUIRED")
+        if "execution" not in raw or raw.get("execution") == "none":
+            raise _RiskSelectionError("GATEWAY_EXECUTION_REQUIRED")
+        raw_exec_pre = raw.get("execution")
+        if isinstance(raw_exec_pre, dict):
+            if raw_exec_pre.get("allow_direct_path") is True:
+                raise _RiskSelectionError("GATEWAY_DIRECT_PATH_BYPASS_FORBIDDEN")
+            raw_routing_pre = raw_exec_pre.get("routing")
+            if isinstance(raw_routing_pre, dict) and raw_routing_pre.get("allow_direct_path") is True:
+                raise _RiskSelectionError("GATEWAY_DIRECT_PATH_BYPASS_FORBIDDEN")
+        raw_exchange_pre = raw.get("exchange_name")
+        if type(raw_exchange_pre) is str and raw_exchange_pre and not any(
+            raw_exchange_pre.startswith(prefix) for prefix in _SUPPORTED_STRICT_EXCHANGE_PREFIXES
+        ):
+            raise _RiskSelectionError("GATEWAY_VENUE_UNSUPPORTED")
+        raw_ops_pre = raw.get("requested_operations")
+        if isinstance(raw_ops_pre, (list, tuple, set, frozenset)) and (
+            set(raw_ops_pre) & _STRICT_STRATEGY_FORBIDDEN_OPS
+        ):
+            raise _RiskSelectionError("GATEWAY_PRINCIPAL_BYPASS_UNSAFE")
     raw = _mapping(
         raw,
         {
@@ -443,7 +506,15 @@ def _decode(raw):
             "instruments_by_ref",
             "risk",
         },
-        {"account_settings", "market_settings", "instrument_settings", "calendar_settings", "strategy_finance_currency", "execution"},
+        {
+            "account_settings",
+            "market_settings",
+            "instrument_settings",
+            "calendar_settings",
+            "strategy_finance_currency",
+            "execution",
+            "readiness_expectations",
+        },
     )
     if type(raw["schema_version"]) is not int or raw["schema_version"] != 1:
         raise ValueError
@@ -493,7 +564,7 @@ def _decode(raw):
         raise ValueError
     risk = _risk(raw["risk"], client, route, operations)
     execution = _execution(raw.get("execution", "none"), client, route, risk, instruments)
-    return {
+    decoded = {
         "exchange_name": exchange,
         "client_config": client,
         "binding": binding,
@@ -510,6 +581,9 @@ def _decode(raw):
         "risk": risk,
         "execution": execution,
     }
+    if profile == STRICT_FIVE_COMPONENT_PROFILE:
+        _validate_strict_five_component(raw, decoded)
+    return decoded
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -517,9 +591,15 @@ class GatewayStrategyConfig:
     """Detached public configuration; properties return independently copied values."""
 
     _json: str = field(repr=False)
+    _profile: str = field(default=COMPAT_PROFILE, repr=False)
 
     def _values(self):
-        return _decode(json.loads(self._json))
+        return _decode(json.loads(self._json), profile=getattr(self, "_profile", COMPAT_PROFILE))
+
+    @property
+    def profile(self) -> str:
+        """Selected validation profile (``compat`` or ``strict_five_component``)."""
+        return getattr(self, "_profile", COMPAT_PROFILE)
 
     def to_public_dict(self):
         return json.loads(self._json)
@@ -696,7 +776,10 @@ class GatewayStrategyConfig:
                 execution_session, router = compose_execution(
                     values["execution"], execution_profiles, execution_db,
                     risk_selected=risk_client is not None,
-                    on_session=lambda obj: cleanup_owner.add("execution", obj))
+                    on_session=lambda obj: cleanup_owner.add("execution", obj),
+                    forbid_direct_path=(
+                        getattr(self, "_profile", COMPAT_PROFILE) == STRICT_FIVE_COMPONENT_PROFILE
+                    ))
             return GatewayBtApi(
                 session, exchange_name=values["exchange_name"], owns_session=owns_session,
                 risk_client=risk_client, execution_session=execution_session,
@@ -723,21 +806,31 @@ class GatewayStrategyConfig:
             raise
 
 
-def parse_gateway_strategy_config(raw):
+def parse_gateway_strategy_config(raw, *, profile: str = COMPAT_PROFILE):
     """Parse a complete public tree; secret values are supplied separately.
 
     ``risk`` is required (D64-01): ``"none"`` or the Risk client. A missing key
     is ``risk_selection_missing`` and any other value ``risk_selection_invalid``;
     every other defect stays ``INVALID_GATEWAY_STRATEGY_CONFIG``.
+
+    When ``profile="strict_five_component"`` (Iteration 62 Split T-R2-01),
+    additionally enforces D62S-03/04/05/08c: CTP-only route, mandatory Risk and
+    Execution services, forbidden ``direct.reserve``/``direct.dispatch`` on the
+    strategy principal, and forbidden ``DIRECT_PATH`` bypass configuration.
     """
     try:
+        if type(profile) is not str or profile not in _VALID_PROFILES:
+            raise GatewayStrategyConfigError("INVALID_GATEWAY_STRATEGY_CONFIG")
         _plain(raw)
         encoded = json.dumps(raw, ensure_ascii=True, allow_nan=False, separators=(",", ":"))
         detached = json.loads(encoded)
-        _decode(detached)
+        _decode(detached, profile=profile)
         config = object.__new__(GatewayStrategyConfig)
         object.__setattr__(config, "_json", encoded)
+        object.__setattr__(config, "_profile", profile)
         return config
+    except GatewayStrategyConfigError:
+        raise
     except _RiskSelectionError as error:
         raise GatewayStrategyConfigError(error.code) from None
     except Exception:

@@ -830,6 +830,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         write_admission: Mapping[str, bool] | None = None,
         market_clock_verification: bool | Mapping[str, Any] = False,
         execution_order_routing: ExecutionRoutingSelection | None = None,
+        strict_direct: bool = False,
     ) -> None:
         """初始化 BtApi 实例。
 
@@ -866,7 +867,19 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                 the ``pre_dispatch_commit`` direct-write entry points; ``None``
                 keeps the existing paths and imports no routing module.
         """
+        if type(strict_direct) is not bool:
+            raise TypeError("strict_direct must be a bool")
         requested_transport_mode = TransportMode(transport_mode)
+        if strict_direct:
+            if (
+                requested_transport_mode is not TransportMode.DIRECT
+                or forwarding_config is not None
+                or gateway_wire_config is not None
+                or market_runtime_factory is not None
+            ):
+                raise ValueError("DIRECT_SERVICE_KEY_FORBIDDEN")
+            if execution_order_routing is not None:
+                raise ValueError("LEGACY_HYBRID_ROUTING_RETIRED")
         if requested_transport_mode is TransportMode.ZMQ:
             # Keep the established ZMQ retirement diagnostic while rejecting
             # before logger, event-bus, plugin, feed, socket, or thread setup.

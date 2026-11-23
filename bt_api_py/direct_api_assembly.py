@@ -21,11 +21,29 @@ from .facade_protocol import (
 
 __all__ = [
     "DIRECT_EXECUTION_CONFIG_KEYS",
+    "STRICT_DIRECT_FORBIDDEN_HYBRID_KEYS",
+    "STRICT_DIRECT_FORBIDDEN_SERVICE_KEYS",
     "DirectApiAssembly",
     "DirectApiAssemblyError",
     "direct_execution_config_snapshot",
     "prepare_direct_execution_authorization",
 ]
+
+STRICT_DIRECT_FORBIDDEN_SERVICE_KEYS = frozenset(
+    {
+        "market_runtime_factory",
+        "forwarding_config",
+        "transport_mode",
+    }
+)
+STRICT_DIRECT_FORBIDDEN_HYBRID_KEYS = frozenset(
+    {
+        "execution_order_routing",
+        "service_client_config",
+        "gateway_client_config",
+        "execution_parent_port",
+    }
+)
 
 
 DIRECT_EXECUTION_CONFIG_KEYS = (
@@ -111,6 +129,8 @@ class DirectApiAssembly:
             "market_clock_verification",
             # Iteration 62 (62.08): trusted Gateway MarketHub tick runtime.
             "market_runtime_factory",
+            # Iteration 62 Split (T-R2-07): strict Direct construction guard.
+            "strict_direct",
         )
     )
 
@@ -118,12 +138,19 @@ class DirectApiAssembly:
     def from_options(
         cls, *, options, exchange_kwargs, execution_config, api_factory, api,
         expected_exchange_names, execution_option_keys, market_data_only,
+        strict_direct: bool = False,
     ):
         """Compose one direct client from the caller's explicit options.
 
         The market-data-only constraint is supplied by the lifecycle owner;
         inspecting configuration here does not grant execution authority.
+        When ``strict_direct=True`` (Iteration 62 Split T-R2-07 / D62S-07),
+        rejects ``market_runtime_factory``, ``forwarding_config``,
+        ``transport_mode``, and retired hybrid routing keys before creating
+        any client.
         """
+        if type(strict_direct) is not bool:
+            raise DirectApiAssemblyError("DIRECT_API_OPTIONS_INVALID")
         try:
             has_risk = "risk" in options
             if not has_risk:
@@ -144,12 +171,21 @@ class DirectApiAssembly:
             raise DirectApiAssemblyError("DIRECT_API_OPTIONS_INVALID") from None
         if has_risk:
             raise DirectApiAssemblyError("risk_requires_gateway")
+        if strict_direct:
+            for forbidden_service in STRICT_DIRECT_FORBIDDEN_SERVICE_KEYS:
+                if forbidden_service in options_snapshot and options_snapshot[forbidden_service] is not None:
+                    raise DirectApiAssemblyError("DIRECT_SERVICE_KEY_FORBIDDEN")
+            for forbidden_hybrid in STRICT_DIRECT_FORBIDDEN_HYBRID_KEYS:
+                if forbidden_hybrid in options_snapshot and options_snapshot[forbidden_hybrid] is not None:
+                    raise DirectApiAssemblyError("LEGACY_HYBRID_ROUTING_RETIRED")
         try:
             factory_options = {
                 key: options_snapshot[key]
                 for key in cls._OPTIONAL_FACTORY_OPTIONS
                 if key in options_snapshot
             }
+            if strict_direct:
+                factory_options["strict_direct"] = True
             configure_execution = not market_data_only and (
                 "execution_config" in options_snapshot
                 or any(key in options_snapshot for key in execution_option_keys)
@@ -166,6 +202,7 @@ class DirectApiAssembly:
             api=api,
             configure_execution=configure_execution,
             expected_exchange_names=expected_exchange_names,
+            strict_direct=strict_direct,
         )
 
     def __init__(
@@ -179,13 +216,24 @@ class DirectApiAssembly:
         api: Any = None,
         configure_execution: bool = False,
         expected_exchange_names: tuple[str, ...] | None = None,
+        strict_direct: bool = False,
     ) -> None:
+        if type(strict_direct) is not bool:
+            raise DirectApiAssemblyError("DIRECT_API_OPTIONS_INVALID")
         if exchange_kwargs is not None and not isinstance(exchange_kwargs, Mapping):
             raise DirectApiAssemblyError("DIRECT_API_EXCHANGE_CONFIG_INVALID")
         if execution_config is not None and not isinstance(execution_config, Mapping):
             raise DirectApiAssemblyError("DIRECT_API_EXECUTION_CONFIG_INVALID")
         if factory_options is not None and not isinstance(factory_options, Mapping):
             raise DirectApiAssemblyError("DIRECT_API_FACTORY_OPTIONS_INVALID")
+        if strict_direct and factory_options is not None:
+            for key in STRICT_DIRECT_FORBIDDEN_SERVICE_KEYS:
+                if key in factory_options and factory_options[key] is not None:
+                    raise DirectApiAssemblyError("DIRECT_SERVICE_KEY_FORBIDDEN")
+            for key in STRICT_DIRECT_FORBIDDEN_HYBRID_KEYS:
+                if key in factory_options and factory_options[key] is not None:
+                    raise DirectApiAssemblyError("LEGACY_HYBRID_ROUTING_RETIRED")
+        self.__strict_direct = strict_direct
         if api_factory is not None and not callable(api_factory):
             raise DirectApiAssemblyError("DIRECT_API_FACTORY_INVALID")
         if type(configure_execution) is not bool:

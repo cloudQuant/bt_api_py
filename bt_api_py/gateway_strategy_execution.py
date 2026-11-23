@@ -22,7 +22,9 @@ def validate_database(db):
         raise ValueError("INVALID_EXECUTION_DATABASE") from None
 
 
-def compose_execution(selection, profiles, db, *, risk_selected, on_session):
+def compose_execution(
+    selection, profiles, db, *, risk_selected, on_session, forbid_direct_path: bool = False
+):
     route = selection.route
     try:
         keys = profiles[selection.security_profile_ref]
@@ -39,7 +41,11 @@ def compose_execution(selection, profiles, db, *, risk_selected, on_session):
         on_session(session)
     except Exception:
         raise ValueError("INVALID_EXECUTION_CONFIGURATION") from None
-    router = routing.ExecutionOrderRouter(db=db, config=selection.routing,
-                                          execution_port=session.client,
-                                          risk_selected=risk_selected)
+    router = routing.ExecutionOrderRouter(
+        db=db,
+        config=selection.routing,
+        execution_port=session.client,
+        risk_selected=risk_selected,
+        forbid_direct_path=forbid_direct_path,
+    )
     return session, router
