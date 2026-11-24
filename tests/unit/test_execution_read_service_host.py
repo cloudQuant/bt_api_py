@@ -1,20 +1,54 @@
 import copy
 import json
+import os
 from pathlib import Path
 
 import pytest
 
+from bt_api_py import _win32_security as win32_security
 from bt_api_py.execution_read_service_host import load_config, parse_config, ReadServiceHost, ReadServiceError
 
 EXAMPLE = Path(__file__).resolve().parents[2] / 'examples/services/execution-read-service.example.json'
 
 
-def example():
-    return json.loads(EXAMPLE.read_text())
+def _normalized_path(path):
+    return os.path.normpath(os.fspath(path.resolve()))
+
+
+def example(tmp_path):
+    raw = json.loads(EXAMPLE.read_text(encoding='utf-8'))
+    if win32_security.WINDOWS:
+        # The checked-in operator example uses POSIX paths. Keep this test
+        # fixture canonical for the host platform without changing production
+        # path validation.
+        base = tmp_path.resolve()
+        raw['storage'].update(
+            journal_root=_normalized_path(base / 'journal'),
+            audit_root=_normalized_path(base / 'audit'),
+        )
+        raw['listener'].update(
+            server_public_key_file=_normalized_path(base / 'server.public'),
+            server_secret_key_file=_normalized_path(base / 'server.secret'),
+            client_public_key_file=_normalized_path(base / 'client.public'),
+        )
+    return raw
+
+
+def _set_owner_only(path, posix_mode):
+    if win32_security.WINDOWS:
+        win32_security._set_owner_only_acl(path)
+    else:
+        path.chmod(posix_mode)
+    return path
+
+
+def _make_private_dir(path):
+    path.mkdir(mode=0o700)
+    return _set_owner_only(path, 0o700)
 
 
 def test_offline_validation_and_strict_fields(tmp_path):
-    raw = example()
+    raw = example(tmp_path)
     config = tmp_path / 'config.json'
     config.write_text(json.dumps(raw))
     assert load_config(config).storage_id == raw['storage']['storage_id']
@@ -41,9 +75,9 @@ def test_offline_validation_and_strict_fields(tmp_path):
 
 
 def test_partial_start_cleanup_closes_owned_journal(tmp_path, monkeypatch):
-    raw = example()
-    root = tmp_path.resolve() / 'journal'; root.mkdir(mode=0o700)
-    audit = tmp_path.resolve() / 'audit'; audit.mkdir(mode=0o700)
+    raw = example(tmp_path)
+    root = _make_private_dir(tmp_path.resolve() / 'journal')
+    audit = _make_private_dir(tmp_path.resolve() / 'audit')
     raw['storage'].update(journal_root=str(root), audit_root=str(audit))
     from bt_api_py import execution_read_service_host as module
     import zmq
@@ -67,9 +101,9 @@ def test_partial_start_cleanup_closes_owned_journal(tmp_path, monkeypatch):
 def test_old_schema_rejected_without_upgrade(tmp_path):
     import sqlite3
     from bt_api_execution.account_journal_host import AccountJournalHost
-    raw = example()
-    root = tmp_path.resolve() / 'journal'; root.mkdir(mode=0o700)
-    audit = tmp_path.resolve() / 'audit'; audit.mkdir(mode=0o700)
+    raw = example(tmp_path)
+    root = _make_private_dir(tmp_path.resolve() / 'journal')
+    audit = _make_private_dir(tmp_path.resolve() / 'audit')
     raw['storage'].update(journal_root=str(root), audit_root=str(audit))
     config = parse_config(raw)
     host = AccountJournalHost(root=str(root), scope=config.local_scope, storage_id=config.storage_id)
@@ -90,9 +124,9 @@ def test_host_single_use_and_retry_close(tmp_path, monkeypatch):
     import zmq
     from types import SimpleNamespace
     from bt_api_py import execution_read_service_host as module
-    raw = example()
-    root = tmp_path.resolve() / 'journal'; root.mkdir(mode=0o700)
-    audit = tmp_path.resolve() / 'audit'; audit.mkdir(mode=0o700)
+    raw = example(tmp_path)
+    root = _make_private_dir(tmp_path.resolve() / 'journal')
+    audit = _make_private_dir(tmp_path.resolve() / 'audit')
     raw['storage'].update(journal_root=str(root), audit_root=str(audit))
     public, secret = zmq.curve_keypair()
     client, _ = zmq.curve_keypair()
@@ -130,9 +164,9 @@ def test_partial_start_uncertain_retains_owner_until_retry(tmp_path, monkeypatch
     import zmq
     from types import SimpleNamespace
     from bt_api_py import execution_read_service_host as module
-    raw = example()
-    root = tmp_path.resolve() / 'journal'; root.mkdir(mode=0o700)
-    audit = tmp_path.resolve() / 'audit'; audit.mkdir(mode=0o700)
+    raw = example(tmp_path)
+    root = _make_private_dir(tmp_path.resolve() / 'journal')
+    audit = _make_private_dir(tmp_path.resolve() / 'audit')
     raw['storage'].update(journal_root=str(root), audit_root=str(audit))
     public, secret = zmq.curve_keypair()
     client, _ = zmq.curve_keypair()
@@ -155,6 +189,7 @@ def test_partial_start_uncertain_retains_owner_until_retry(tmp_path, monkeypatch
     assert host.state == 'closed' and host.listener is None and host.journal is None
 
 
+@pytest.mark.skipif(os.name == 'nt', reason='Darwin device/inode behavior is POSIX-specific')
 def test_darwin_reboot_shifted_device_opens_readonly_journal(tmp_path, monkeypatch):
     import hashlib
     import sys
@@ -163,11 +198,9 @@ def test_darwin_reboot_shifted_device_opens_readonly_journal(tmp_path, monkeypat
     from bt_api_py.execution_read_service_host import _check_existing
 
     monkeypatch.setattr(sys, 'platform', 'darwin')
-    raw = example()
-    root = tmp_path.resolve() / 'journal'
-    root.mkdir(mode=0o700)
-    audit = tmp_path.resolve() / 'audit'
-    audit.mkdir(mode=0o700)
+    raw = example(tmp_path)
+    root = _make_private_dir(tmp_path.resolve() / 'journal')
+    audit = _make_private_dir(tmp_path.resolve() / 'audit')
     raw['storage'].update(journal_root=str(root), audit_root=str(audit))
     cfg = parse_config(raw)
     with AccountJournalHost(root=str(root), scope=cfg.local_scope, storage_id=raw['storage']['storage_id']):
@@ -176,7 +209,7 @@ def test_darwin_reboot_shifted_device_opens_readonly_journal(tmp_path, monkeypat
     owner_path = root / f'.execution-intake-{account_hash}.owner'
     manifest = json.loads(owner_path.read_text())
     manifest['device'] = manifest['device'] + 1
-    owner_path.chmod(0o600)
+    _set_owner_only(owner_path, 0o600)
     owner_path.write_text(json.dumps(manifest))
-    owner_path.chmod(0o400)
+    _set_owner_only(owner_path, 0o400)
     _check_existing(cfg)

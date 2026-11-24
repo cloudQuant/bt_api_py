@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import subprocess
 from types import MappingProxyType
 
 import pytest
@@ -19,6 +20,7 @@ from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_risk.web.app import RiskAdminCallError
 from fastapi.testclient import TestClient
 
+from bt_api_py import _win32_security as win32_security
 import bt_api_py.risk_web_local_host as host_module
 from bt_api_py.risk_web_local_host import (
     RISK_ADMIN_MOUNT,
@@ -112,6 +114,14 @@ def outcome(call, *args):
     with pytest.raises(RiskAdminCallError) as caught:
         call(*args)
     return caught.value.kind, caught.value.code, str(caught.value)
+
+
+def _set_owner_only(path, posix_mode=0o600):
+    if win32_security.WINDOWS:
+        win32_security._set_owner_only_acl(path)
+    else:
+        path.chmod(posix_mode)
+    return path
 
 
 def test_caller_sends_one_admin_operation_on_the_admin_mount_only():
@@ -239,8 +249,7 @@ def write_config(tmp_path, **changes):
     config = {"schema_version": 1, "origin": ORIGIN, "operator": operator, **changes}
     path = (tmp_path / "risk-web.json").resolve()
     path.write_text(json.dumps(config), encoding="utf-8")
-    path.chmod(0o600)
-    return path
+    return _set_owner_only(path)
 
 
 @pytest.fixture
@@ -275,14 +284,41 @@ def test_invalid_host_configuration_is_refused(tmp_path, fake_sdk, change):
 
 def test_unprotected_or_linked_configuration_is_refused(tmp_path, fake_sdk):
     path = write_config(tmp_path)
-    path.chmod(0o644)
+    if win32_security.WINDOWS:
+        # chmod does not narrow a Windows DACL. Create a separate file with the
+        # inherited default DACL so the production protection check is exercised.
+        unprotected = tmp_path / "unprotected-risk-web.json"
+        unprotected.write_bytes(path.read_bytes())
+    else:
+        path.chmod(0o644)
+        unprotected = path
     with pytest.raises(ValueError, match="PROTECTED_FILE_UNAVAILABLE"):
-        LocalRiskWebHost(path)
-    path.chmod(0o600)
-    link = tmp_path / "link.json"
-    link.symlink_to(path)
-    with pytest.raises(ValueError, match="PROTECTED_FILE_UNAVAILABLE"):
-        LocalRiskWebHost(link)
+        LocalRiskWebHost(unprotected)
+
+    if win32_security.WINDOWS:
+        # A directory junction covers the no-follow path check without relying
+        # on the Developer Mode/privilege required for a Windows file symlink.
+        target_dir = tmp_path / "junction-target"
+        target_dir.mkdir()
+        target = write_config(target_dir)
+        link = tmp_path / "junction"
+        result = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", os.fspath(link), os.fspath(target_dir)],
+            capture_output=True,
+        )
+        if result.returncode != 0 or not os.path.exists(link):
+            pytest.skip("junction creation unavailable on this host")
+        try:
+            with pytest.raises(ValueError, match="PROTECTED_FILE_UNAVAILABLE"):
+                LocalRiskWebHost(link / target.name)
+        finally:
+            os.rmdir(link)
+    else:
+        _set_owner_only(path, 0o600)
+        link = tmp_path / "link.json"
+        link.symlink_to(path)
+        with pytest.raises(ValueError, match="PROTECTED_FILE_UNAVAILABLE"):
+            LocalRiskWebHost(link)
 
 
 def test_host_registers_the_operator_on_the_admin_mount_and_serves_the_api(tmp_path, fake_sdk):
@@ -318,7 +354,8 @@ def test_host_registers_the_operator_on_the_admin_mount_and_serves_the_api(tmp_p
     release = browser.post("/api/v1/risk/latches/" + "0f" * 16 + "/release",
                            json={"expected_version": 1, "reason": "checked"}, headers=write)
     assert release.json() == {"error": "OPERATION_NOT_GRANTED"}
-    assert [(c[0], c[1], c[3]["account_ref"], c[3]["scope_ref"]) for c in runtime.calls] == [
+    assert [(c[0], c[1], c[3]["route"].scope.account_ref, c[3]["route"].scope_ref)
+            for c in runtime.calls] == [
         (RISK_ADMIN_MOUNT, "risk.admin.status", "account-a", "scope-a"),
         (RISK_ADMIN_MOUNT, "risk.cancel.request", "account-a", "scope-a")]
 
@@ -345,9 +382,15 @@ def test_a_changed_configuration_ends_every_session(tmp_path, fake_sdk):
     token = browser.post("/login", data={"token": LOGIN_TOKEN}, headers={"Origin": ORIGIN}).json()["session"]
     assert browser.get("/api/v1/risk/status", headers={"X-Risk-Session": token}).status_code == 200
     original, before = path.read_bytes(), path.stat()
-    path.write_bytes(b"changed")
-    path.write_bytes(original)
-    os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))
+    if win32_security.WINDOWS:
+        # Windows stat exposes creation time as ctime on older supported
+        # interpreters, so keep the active configuration changed instead of
+        # restoring it with its original timestamp.
+        path.write_bytes(b"changed")
+    else:
+        path.write_bytes(b"changed")
+        path.write_bytes(original)
+        os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))
     assert browser.get("/api/v1/risk/status", headers={"X-Risk-Session": token}).status_code == 401
     assert browser.post("/login", data={"token": LOGIN_TOKEN}, headers={"Origin": ORIGIN}).status_code == 401
     host.close()

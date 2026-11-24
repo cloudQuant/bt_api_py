@@ -1,6 +1,5 @@
 """Read-only local MOCK preparation against actual temporary version stores."""
 
-import fcntl
 import hashlib
 import json
 import os
@@ -260,7 +259,10 @@ def test_missing_receipt_or_lock_does_not_create_any_files(environment):
     assert files(root) == before
 
 
+@pytest.mark.skipif(os.name != "posix", reason="requires a POSIX file lock")
 def test_store_lock_busy_is_unknown_without_write(environment):
+    import fcntl
+
     root = environment[0]
     fd = os.open(root / ".lock", os.O_RDONLY | os.O_NOFOLLOW)
     try:
