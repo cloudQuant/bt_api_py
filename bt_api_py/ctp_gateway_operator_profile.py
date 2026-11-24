@@ -19,6 +19,7 @@ from bt_api_py.ctp_gateway_trading import (
     CtpGatewayTradingSettings,
     build_ctp_gateway_trading_profile,
     reconcile_ctp_gateway_account_session,
+    reconcile_ctp_gateway_order_source_gaps,
 )
 from bt_api_py.gateway_direct_service import GatewayControlGrant, GatewayDirectGrant
 from bt_api_py.gateway_operator import GatewayOperatorDeployment
@@ -239,7 +240,20 @@ def create_ctp_gateway_profile_factory(
             reason=reason,
         )
 
+    def reconcile_gaps(config: ServiceConfig, operator_ref: str, reason: str) -> Mapping[str, object]:
+        resources = resource_loader(config)
+        if type(resources) is not CtpGatewayTrustedResources:
+            raise ValueError("CTP_TRUSTED_RESOURCES_INVALID")
+        return reconcile_ctp_gateway_order_source_gaps(
+            resources.settings,
+            resources.registry_path,
+            resources.account_read_settings,
+            operator_ref=operator_ref,
+            reason=reason,
+        )
+
     return GatewayOperatorProfileFactory(
         profile_ref, "trading_owner", create, reconcile_session=reconcile,
+        reconcile_order_source_gaps=reconcile_gaps,
         create_cancel_only_deployment=create_cancel_only,
     )

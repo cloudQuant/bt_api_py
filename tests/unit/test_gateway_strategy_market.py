@@ -435,3 +435,77 @@ def test_finished_cursor_or_control_call_keeps_its_slot(method):
     with pytest.raises(ThreadedRuntimeError, match="OWNER_OPERATION_PENDING"):
         client.status()
     assert len(runtime.calls) == 1
+
+
+def test_owner_operation_error_preserves_finite_cause_code_and_rejects_freeform(
+    tmp_path, monkeypatch
+):
+    from bt_api_py.gateway_strategy_market import GatewayStrategyMarketClient
+    from bt_api_py.service_market import ServiceMarketClient
+    from bt_api_py.service_runtime_thread import ThreadedServiceClientRuntime
+
+    # Direct validation on OwnerOperationError.
+    err = OwnerOperationError("CONTROL_CALL_FAILED", cause_code="TIMEOUT")
+    assert err.code == "CONTROL_CALL_FAILED"
+    assert err.cause_code == "TIMEOUT"
+    with pytest.raises(ValueError, match="INVALID_OWNER_ERROR_CODE"):
+        OwnerOperationError("CONTROL_CALL_FAILED", cause_code="bad freeform text")
+
+    # End-to-end across ThreadedServiceClientRuntime + GatewayMarketOwner.
+    holder = {}
+    subscribers = FakeSubscriberFactory()
+    settings = GatewayMarketClientSettings(
+        {"main": GatewayMarketSubscriptionSettings(_KEY)},
+        _OPERATIONS | frozenset({"market.clock_observation"}),
+    )
+
+    def runtime_factory():
+        unused, raw, registry, market, _, _ = _make_client(tmp_path)
+        holder.update(raw=raw, registry=registry, market=market)
+        raw.start = lambda: None
+        return raw
+
+    monkeypatch.setattr(module, "ZmqMarketTransportFactory", lambda profiles: subscribers)
+    monkeypatch.setattr(
+        ServiceMarketClient,
+        "clock_observation",
+        lambda self, **_kw: (_ for _ in ()).throw(
+            ServiceMarketError("CONTROL_CALL_FAILED", cause_code="DEADLINE_EXCEEDED")
+        ),
+    )
+
+    class Composite:
+        def __init__(self):
+            self.market = GatewayMarketOwner(
+                settings,
+                stream_scope=WireScope("paper:market-unit"),
+                security_profiles={"profile": ClientCurveKeys(b"a" * 40, b"b" * 40, b"c" * 40)},
+            )
+
+        def start(self, raw):
+            self.market.start(raw)
+
+        def invoke(self, operation, arguments):
+            return self.market.invoke(operation[len("market.") :], arguments)
+
+        def close(self):
+            self.market.close()
+
+        @property
+        def cleanup_uncertainties(self):
+            return self.market.cleanup_uncertainties
+
+    runtime = ThreadedServiceClientRuntime(
+        runtime_factory, owner_extension_factory=Composite, monotonic_clock=lambda: 0.0
+    )
+    try:
+        runtime.start()
+        client = GatewayStrategyMarketClient(runtime, settings).subscription("main")
+        with pytest.raises(OwnerOperationError) as raised:
+            client.clock_observation()
+        assert raised.value.code == "CONTROL_CALL_FAILED"
+        assert raised.value.cause_code == "DEADLINE_EXCEEDED"
+    finally:
+        runtime.close()
+        if "registry" in holder:
+            holder["registry"].close()

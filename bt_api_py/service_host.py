@@ -3658,14 +3658,22 @@ class ServiceHost:
                     else:
                         maintain(active_ids)
                 if maintain_registrations is not None:
-                    contexts = tuple(
-                        context
-                        for capability in component.capabilities
-                        for context in registry.active_registration_contexts(
+                    if component.capabilities and hasattr(
+                        registry, "active_registration_contexts_for_ports"
+                    ):
+                        contexts = registry.active_registration_contexts_for_ports(
                             instance_id=component.instance_id,
-                            port=capability.port,
+                            ports=tuple(capability.port for capability in component.capabilities),
                         )
-                    )
+                    else:
+                        contexts = tuple(
+                            context
+                            for capability in component.capabilities
+                            for context in registry.active_registration_contexts(
+                                instance_id=component.instance_id,
+                                port=capability.port,
+                            )
+                        )
                     if type(contexts) is not tuple or any(
                         type(context) is not ActiveRegistrationContext for context in contexts
                     ):

@@ -667,7 +667,11 @@ class GatewayMarketOwner:
                 else client.source_descriptor.to_dict(),
             }
         except ServiceMarketError as exc:
-            raise OwnerOperationError(exc.code) from None
+            cause = exc.cause_code if type(exc.cause_code) is str else None
+            try:
+                raise OwnerOperationError(exc.code, cause_code=cause) from None
+            except ValueError:
+                raise OwnerOperationError(exc.code) from None
         except OwnerOperationError:
             raise
         except Exception:
@@ -748,7 +752,11 @@ class GatewayMarketOwner:
                     return OwnerOperationContinuation(resume)
                 return _bootstrap_to_wire(result[0])
             except ServiceMarketError as exc:
-                raise OwnerOperationError(exc.code) from None
+                cause = exc.cause_code if type(exc.cause_code) is str else None
+                try:
+                    raise OwnerOperationError(exc.code, cause_code=cause) from None
+                except ValueError:
+                    raise OwnerOperationError(exc.code) from None
 
         return resume()
 

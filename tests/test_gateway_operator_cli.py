@@ -201,3 +201,71 @@ def test_cli_reports_readiness_observation_changes(monkeypatch, tmp_path, capsys
         {"state": "failed", "reason": "component_false", "last_failure": "component_false"},
         {"state": "valid", "reason": None, "last_failure": "component_false"},
     ]
+
+
+def test_cli_reconcile_order_source_gaps_success_and_refused(monkeypatch, tmp_path, capsys):
+    import json
+
+    cfg_path = tmp_path / "profile.yaml"
+    monkeypatch.setattr(operator_cli, "load_gateway_operator_launch_config", lambda _p: object())
+
+    # Flag validation: requires --operator/--reason and rejects conflicting modes.
+    for bad_argv in (
+        ["--config", str(cfg_path), "--reconcile-order-source-gaps"],
+        ["--config", str(cfg_path), "--reconcile-order-source-gaps", "--dry-run", "--operator", "op", "--reason", "why"],
+        ["--config", str(cfg_path), "--reconcile-order-source-gaps", "--reconcile-session", "--operator", "op", "--reason", "why"],
+        ["--config", str(cfg_path), "--reconcile-order-source-gaps", "--cancel-only", "--operator", "op", "--reason", "why"],
+    ):
+        with pytest.raises(SystemExit):
+            operator_cli.main(bad_argv)
+
+    # Success path (exit 0).
+    monkeypatch.setattr(
+        operator_cli,
+        "reconcile_gateway_operator_order_source_gaps",
+        lambda _cfg, *, operator_ref, reason: {
+            "status": "RECONCILED",
+            "resolved_count": 1,
+            "account_digest": "abcdef1234567890",
+            "evidence": {"commands_unknown": 0, "facts_unattributed": 0},
+        },
+    )
+    rc = operator_cli.main([
+        "--config", str(cfg_path),
+        "--reconcile-order-source-gaps",
+        "--operator", "alice",
+        "--reason", "verified-offline",
+    ])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out.strip())
+    assert out == {
+        "account_digest_prefix": "abcdef123456",
+        "evidence": {"commands_unknown": 0, "facts_unattributed": 0},
+        "mode": "order_source_gap_reconciliation",
+        "resolved_count": 1,
+        "status": "RECONCILED",
+    }
+
+    # Refused path with blocking evidence (exit 3).
+    class _Blocked(RuntimeError):
+        code = "ORDER_SOURCE_GAP_RECONCILIATION_BLOCKED"
+        evidence = {"commands_dispatching": 1, "facts_unattributed": 0}
+
+    def _raise_blocked(_cfg, *, operator_ref, reason):
+        raise _Blocked("blocked")
+
+    monkeypatch.setattr(operator_cli, "reconcile_gateway_operator_order_source_gaps", _raise_blocked)
+    rc_blocked = operator_cli.main([
+        "--config", str(cfg_path),
+        "--reconcile-order-source-gaps",
+        "--operator", "alice",
+        "--reason", "verified-offline",
+    ])
+    assert rc_blocked == 3
+    out_blocked = json.loads(capsys.readouterr().out.strip())
+    assert out_blocked == {
+        "error_code": "ORDER_SOURCE_GAP_RECONCILIATION_BLOCKED",
+        "evidence": {"commands_dispatching": 1, "facts_unattributed": 0},
+        "mode": "order_source_gap_reconciliation",
+        "status": "REFUSED",
+    }

@@ -182,3 +182,34 @@ def test_querying_timeout_aborts_cleanly_without_gap_and_retries_next_cut(real_o
     assert source.current() is not None
     assert len(sent) == 2
     assert source.close()
+
+
+def test_late_query_completion_refreshes_local_deadline_without_false_gap(real_owner, monkeypatch):
+    """If QryOrder finishes near initial query_timeout_seconds, local projection/verification
+    must get a refreshed deadline (still capped by trusted_expires_monotonic) instead of
+    falsely poisoning observed_order_sources with status='GAP'."""
+    import time
+    from tests.integration.test_iter63_ctp_gateway_return_ingestion import _order
+
+    source, maintenance, session, native, _ = source_for(real_owner)
+    today = maintenance._observed_order_source._binding.trading_day
+    native.rows["orders"] = [
+        _order(TradingDay=today, OrderRef=str(idx + 1), OrderSysID=f"sys-late-{idx + 1}")
+        for idx in range(5)
+    ]
+    assert source.begin()
+    # Pretend QryOrder almost exhausted the initial 2s query budget right before returning.
+    coordinator = source._coordinator
+    initial_deadline = time.monotonic() + 0.05
+    coordinator._deadline = initial_deadline
+    assert source.advance() is True
+    assert coordinator.status().state == "PROJECTING"
+    # Deadline refreshed past initial_deadline and still bounded by trusted_expires_monotonic.
+    assert coordinator._deadline > initial_deadline
+    assert coordinator._deadline <= coordinator._result.query_source.trusted_expires_monotonic
+
+    _finish(coordinator)
+    assert coordinator.status().state == "CANDIDATE"
+    assert source.current() is not None
+    assert maintenance.observed_order_source_status().status != "GAP"
+    assert source.close()

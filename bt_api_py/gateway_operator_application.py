@@ -94,6 +94,11 @@ class GatewayOperatorProfileFactory:
     reconcile_session: Callable[[ServiceConfig, str, str], Mapping[str, object]] | None = field(
         default=None, repr=False, compare=False
     )
+    # Optional offline operator reconciliation of prior observed-order-source GAP
+    # rows: ``(service_config, operator_ref, reason) -> result mapping``.
+    reconcile_order_source_gaps: Callable[[ServiceConfig, str, str], Mapping[str, object]] | None = field(
+        default=None, repr=False, compare=False
+    )
     # Optional cancel-only start (D63-58): ``(service_config, operator_ref, reason)``
     # composes the same deployment in the mode that admits no order and cancels
     # the journal's working orders.
@@ -106,6 +111,8 @@ class GatewayOperatorProfileFactory:
                 or type(self.role) is not str or self.role not in _PROFILE_ROLES
                 or not callable(self.create_deployment)
                 or (self.reconcile_session is not None and not callable(self.reconcile_session))
+                or (self.reconcile_order_source_gaps is not None
+                    and not callable(self.reconcile_order_source_gaps))
                 or (self.create_cancel_only_deployment is not None
                     and not callable(self.create_cancel_only_deployment))):
             raise GatewayOperatorApplicationError("INVALID_PROFILE")
@@ -241,6 +248,26 @@ def reconcile_gateway_operator_account_session(
     if factory.reconcile_session is None:
         raise GatewayOperatorApplicationError("RECONCILIATION_UNSUPPORTED")
     return factory.reconcile_session(config.service_config, operator_ref, reason)
+
+
+def reconcile_gateway_operator_order_source_gaps(
+    config: GatewayOperatorLaunchConfig,
+    *,
+    operator_ref: str,
+    reason: str,
+) -> Mapping[str, object]:
+    """Run the installed profile's offline observed-order-source GAP reconciliation.
+
+    Only a version-2 launch config naming an installed factory that declares
+    ``reconcile_order_source_gaps`` can do this. Never starts a Gateway or
+    connects to a venue.
+    """
+    if type(config) is not GatewayOperatorLaunchConfig or type(config.service_config) is not ServiceConfig:
+        raise GatewayOperatorApplicationError("INVALID_LAUNCH_CONFIG")
+    factory = _configured_factory(config)
+    if factory.reconcile_order_source_gaps is None:
+        raise GatewayOperatorApplicationError("RECONCILIATION_UNSUPPORTED")
+    return factory.reconcile_order_source_gaps(config.service_config, operator_ref, reason)
 
 
 @dataclass(frozen=True, slots=True)

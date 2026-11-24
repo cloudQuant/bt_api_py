@@ -18,6 +18,7 @@ from bt_api_py.gateway_operator_application import (
     GatewayOperatorProfileRegistry,
     load_gateway_operator_launch_config,
     reconcile_gateway_operator_account_session,
+    reconcile_gateway_operator_order_source_gaps,
 )
 
 
@@ -71,6 +72,47 @@ def _reconcile_session(config_path: Path, operator: str, reason: str) -> int:
     return 0
 
 
+def _reconcile_order_source_gaps(config_path: Path, operator: str, reason: str) -> int:
+    """Run the installed profile's audited offline order-source GAP reconciliation."""
+    mode = "order_source_gap_reconciliation"
+    try:
+        config = load_gateway_operator_launch_config(config_path)
+        result = reconcile_gateway_operator_order_source_gaps(
+            config, operator_ref=operator, reason=reason
+        )
+    except GatewayOperatorApplicationError as exc:
+        print(json.dumps({"status": "FAIL", "mode": mode, "error_code": exc.code}, sort_keys=True))
+        return 2
+    except ValueError:
+        print(json.dumps({"status": "FAIL", "mode": mode,
+                          "error_code": "INVALID_RECONCILIATION_INPUT"}, sort_keys=True))
+        return 2
+    except Exception as exc:  # typed provider/storage errors carry only a code
+        code = getattr(exc, "code", None)
+        report: dict[str, object] = {
+            "status": "REFUSED",
+            "mode": mode,
+            "error_code": code if type(code) is str and _CODE.fullmatch(code) else "RECONCILIATION_FAILED",
+        }
+        evidence = getattr(exc, "evidence", None)
+        if isinstance(evidence, Mapping):
+            report["evidence"] = {str(k): int(v) for k, v in evidence.items()}
+        print(json.dumps(report, sort_keys=True))
+        return 3
+    report = {
+        "status": result.get("status"),
+        "mode": mode,
+        "resolved_count": int(result.get("resolved_count", 0)),
+    }
+    if "evidence" in result:
+        report["evidence"] = dict(result["evidence"])
+    digest = result.get("account_digest")
+    if type(digest) is str:
+        report["account_digest_prefix"] = digest[:12]
+    print(json.dumps(report, sort_keys=True))
+    return 0
+
+
 _LOGGED_PACKAGES = ("bt_api_py", "bt_api_gateway", "bt_api_ctp", "bt_api_base")
 
 
@@ -111,6 +153,13 @@ def main(argv: list[str] | None = None) -> int:
              "audited, never starts the Gateway or connects to the venue",
     )
     parser.add_argument(
+        "--reconcile-order-source-gaps", action="store_true",
+        help="record audited offline resolutions for prior observed-order-source GAP "
+             "rows after proving no owner is alive, no active session remains, and "
+             "no unresolved dispatch or unattributed/conflicting execution fact exists; "
+             "immutable source history is preserved; never starts the Gateway",
+    )
+    parser.add_argument(
         "--cancel-only", action="store_true",
         help="emergency start that admits no new order: takes the same account lock, "
              "identity and journal, stores an account DRAIN cause, cancels the journal's "
@@ -129,21 +178,35 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.log_level is not None:
         _configure_logging(args.log_level)
-    if args.cancel_only and (args.dry_run or args.reconcile_session):
-        parser.error("--cancel-only cannot be combined with --dry-run or --reconcile-session")
+    if args.cancel_only and (args.dry_run or args.reconcile_session or args.reconcile_order_source_gaps):
+        parser.error(
+            "--cancel-only cannot be combined with --dry-run, --reconcile-session, "
+            "or --reconcile-order-source-gaps"
+        )
+    if args.reconcile_session and args.reconcile_order_source_gaps:
+        parser.error("--reconcile-session cannot be combined with --reconcile-order-source-gaps")
     if args.reconcile_session:
         if args.dry_run:
             parser.error("--reconcile-session cannot be combined with --dry-run")
         if not args.operator or not args.reason:
             parser.error("--reconcile-session requires --operator and --reason")
         return _reconcile_session(args.config, args.operator, args.reason)
+    if args.reconcile_order_source_gaps:
+        if args.dry_run:
+            parser.error("--reconcile-order-source-gaps cannot be combined with --dry-run")
+        if not args.operator or not args.reason:
+            parser.error("--reconcile-order-source-gaps requires --operator and --reason")
+        return _reconcile_order_source_gaps(args.config, args.operator, args.reason)
     cancel_only = None
     if args.cancel_only:
         if not args.operator or not args.reason:
             parser.error("--cancel-only requires --operator and --reason")
         cancel_only = (args.operator, args.reason)
     elif args.operator is not None or args.reason is not None:
-        parser.error("--operator and --reason are only valid with --reconcile-session or --cancel-only")
+        parser.error(
+            "--operator and --reason are only valid with --reconcile-session, "
+            "--reconcile-order-source-gaps, or --cancel-only"
+        )
     if args.dry_run:
         try:
             config = load_gateway_operator_launch_config(args.config)

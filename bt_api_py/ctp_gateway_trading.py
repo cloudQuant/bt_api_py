@@ -913,6 +913,54 @@ def reconcile_ctp_gateway_account_session(
     )
 
 
+def reconcile_ctp_gateway_order_source_gaps(
+    settings: CtpGatewayTradingSettings,
+    registry_path: str | Path,
+    account_read_settings=None,
+    *,
+    operator_ref: str,
+    reason: str,
+) -> dict:
+    """Audited offline operator reconciliation of prior observed-order-source GAP rows.
+
+    Runs the same storage-isolation check as owner start, holds the account
+    session OS lock offline (refusing if an owner is alive or an abandoned
+    active session still requires ``--reconcile-session``), proves zero
+    unresolved dispatches and zero unattributed/conflicting execution facts,
+    and appends immutable ``observed_order_source_gap_resolutions`` records
+    without mutating or deleting ``observed_order_sources``. Never connects to
+    the venue.
+    """
+    from bt_api_gateway.direct_command_journal import (
+        inspect_order_source_gap_blocking_evidence,
+        reconcile_observed_order_source_gaps_offline,
+    )
+    from bt_api_gateway.session_guard import reconcile_account_order_source_gaps
+
+    if type(settings) is not CtpGatewayTradingSettings:
+        raise CtpGatewayTradingError("INVALID_TRADING_CONFIGURATION")
+    _isolated_storage(settings, registry_path, account_read_settings)
+    return reconcile_account_order_source_gaps(
+        Path(settings.guard_root),
+        settings.account_scope,
+        operator_ref=operator_ref,
+        reason=reason,
+        blocking_evidence=lambda: inspect_order_source_gap_blocking_evidence(
+            settings.journal_path, settings.account_scope
+        ),
+        apply_reconciliation=lambda *, evidence, resolved_at_ns: (
+            reconcile_observed_order_source_gaps_offline(
+                settings.journal_path,
+                settings.account_scope,
+                operator_ref=operator_ref,
+                reason=reason,
+                evidence=evidence,
+                resolved_at_ns=resolved_at_ns,
+            )
+        ),
+    )
+
+
 def build_ctp_gateway_trading_profile(
     config: ServiceConfig,
     authority: TrustedServiceAuthority,

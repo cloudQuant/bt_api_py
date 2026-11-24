@@ -336,6 +336,19 @@ class CtpGatewayOrderCutCoordinator:
                         return self._try_finish_abort()
                     raise ValueError("unverified native cut")
                 self._cut = cut
+                source = getattr(result, "query_source", None)
+                completed = getattr(source, "completed_monotonic", None)
+                trusted_expires = getattr(source, "trusted_expires_monotonic", None)
+                if (
+                    type(completed) in (int, float)
+                    and math.isfinite(completed)
+                    and type(trusted_expires) in (int, float)
+                    and math.isfinite(trusted_expires)
+                    and completed <= trusted_expires
+                ):
+                    refreshed = min(float(trusted_expires), float(completed) + self._timeout)
+                    if math.isfinite(refreshed) and refreshed > self._deadline:
+                        self._deadline = refreshed
                 self._state = "PROJECTING" if result.records else "WAITING_RECEIPTS"
                 return True
             cut = self._current_cut()

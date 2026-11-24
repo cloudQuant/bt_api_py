@@ -3060,6 +3060,7 @@ class ServiceRegistry:
         self._registration_identity_scope_cache: OrderedDict[
             str, tuple[str, str, WireIdentity, WireScope]
         ] = OrderedDict()
+        self._ops_json_cache: OrderedDict[str, frozenset[str]] = OrderedDict()
         self._clock = clock
         self._reply_size_checker = reply_size_checker
         self._reply_result_budget_checker = reply_result_budget_checker
@@ -4036,19 +4037,50 @@ class ServiceRegistry:
             capability.instance_id == instance_id for capability in self._capabilities.values()
         ):
             raise ValueError("instance_id is not a declared capability")
-        with self._transaction():
-            self._expire_sessions(self._now())
-            rows = self._db.execute(
-                "SELECT * FROM sessions "
-                "WHERE instance_id=? AND service_epoch=? "
-                "AND policy_version=? AND requirements_version=?",
-                (instance_id, self._epoch, self.policy_version, self.requirements_version),
-            ).fetchall()
-            return frozenset(
-                row["registration_id"]
-                for row in rows
-                if self._registration_policy_matches(row)
-            )
+        with self._lock:
+            now = self._now()
+            with self._read_snapshot():
+                needs_expire = (
+                    self._db.execute(
+                        "SELECT 1 FROM sessions WHERE service_epoch <> ? OR expires_at <= ? LIMIT 1",
+                        (self._epoch, now),
+                    ).fetchone()
+                    is not None
+                )
+                if not needs_expire and self._gateway_lease_watch:
+                    needs_expire = (
+                        self._db.execute(
+                            "SELECT 1 FROM gateway_lease_expirations "
+                            "WHERE state='WAITING' AND apply_at <= ? LIMIT 1",
+                            (now,),
+                        ).fetchone()
+                        is not None
+                    )
+                if not needs_expire:
+                    rows = self._db.execute(
+                        "SELECT * FROM sessions "
+                        "WHERE instance_id=? AND service_epoch=? "
+                        "AND policy_version=? AND requirements_version=?",
+                        (instance_id, self._epoch, self.policy_version, self.requirements_version),
+                    ).fetchall()
+                    return frozenset(
+                        row["registration_id"]
+                        for row in rows
+                        if self._registration_policy_matches(row)
+                    )
+            with self._transaction():
+                self._expire_sessions(now)
+                rows = self._db.execute(
+                    "SELECT * FROM sessions "
+                    "WHERE instance_id=? AND service_epoch=? "
+                    "AND policy_version=? AND requirements_version=?",
+                    (instance_id, self._epoch, self.policy_version, self.requirements_version),
+                ).fetchall()
+                return frozenset(
+                    row["registration_id"]
+                    for row in rows
+                    if self._registration_policy_matches(row)
+                )
 
     def active_registration_contexts(
         self, *, instance_id: str, port: str
@@ -4066,27 +4098,63 @@ class ServiceRegistry:
             raise ValueError("registration capability is invalid")
         if (instance_id, port) not in self._capabilities:
             raise ValueError("instance_id and port are not a declared capability")
+        return self.active_registration_contexts_for_ports(
+            instance_id=instance_id, ports=(port,)
+        )
+
+    def active_registration_contexts_for_ports(
+        self, *, instance_id: str, ports: tuple[str, ...]
+    ) -> tuple[ActiveRegistrationContext, ...]:
+        """Project eligible registrations for multiple ports of one instance in one snapshot."""
+
+        if not _text(instance_id) or not ports:
+            raise ValueError("registration capability is invalid")
+        for port in ports:
+            if not _text(port):
+                raise ValueError("registration capability is invalid")
+            if (instance_id, port) not in self._capabilities:
+                raise ValueError("instance_id and port are not a declared capability")
+        port_set = frozenset(ports)
         now = self._now()
-        result: list[ActiveRegistrationContext] = []
+        by_port: dict[str, list[ActiveRegistrationContext]] = {port: [] for port in port_set}
         with self._read_snapshot():
-            rows = self._db.execute(
-                "SELECT * FROM sessions WHERE instance_id=? AND port=? "
-                "AND service_epoch=? AND policy_version=? AND requirements_version=? "
-                "AND expires_at>? ORDER BY registration_id",
-                (
-                    instance_id,
-                    port,
-                    self._epoch,
-                    self.policy_version,
-                    self.requirements_version,
-                    now,
-                ),
-            ).fetchall()
+            if len(port_set) == 1:
+                only_port = next(iter(port_set))
+                rows = self._db.execute(
+                    "SELECT * FROM sessions WHERE instance_id=? AND port=? "
+                    "AND service_epoch=? AND policy_version=? AND requirements_version=? "
+                    "AND expires_at>? ORDER BY registration_id",
+                    (
+                        instance_id,
+                        only_port,
+                        self._epoch,
+                        self.policy_version,
+                        self.requirements_version,
+                        now,
+                    ),
+                ).fetchall()
+            else:
+                rows = self._db.execute(
+                    "SELECT * FROM sessions WHERE instance_id=? "
+                    "AND service_epoch=? AND policy_version=? AND requirements_version=? "
+                    "AND expires_at>? ORDER BY registration_id",
+                    (
+                        instance_id,
+                        self._epoch,
+                        self.policy_version,
+                        self.requirements_version,
+                        now,
+                    ),
+                ).fetchall()
+            claims_by_key: dict[tuple[str, str, str], str] | None = None
             for row in rows:
+                port = row["port"]
+                if port not in port_set:
+                    continue
                 identity, scope = self._cached_identity_scope(row)
                 principal = row["principal"]
-                operations = frozenset(json.loads(row["operations_json"]))
-                write_operations = frozenset(json.loads(row["write_operations_json"]))
+                operations = self._cached_ops_set(row["operations_json"])
+                write_operations = self._cached_ops_set(row["write_operations_json"])
                 if not self._identity_is_trusted(principal, identity):
                     continue
                 if not self._registration_policy_matches(row):
@@ -4103,8 +4171,22 @@ class ServiceRegistry:
                     operations=operations,
                 ):
                     continue
-                run_id = self._scope_strategy_write_run_id_in_snapshot(scope)
-                result.append(
+                if scope.strategy_ref is not None and claims_by_key is None:
+                    claims_by_key = {
+                        (
+                            claim_row["execution_domain_ref"],
+                            claim_row["strategy_ref"],
+                            claim_row["account_ref"],
+                        ): claim_row["run_id"]
+                        for claim_row in self._db.execute(
+                            "SELECT execution_domain_ref, strategy_ref, account_ref, run_id "
+                            "FROM strategy_write_claims"
+                        )
+                    }
+                run_id = self._scope_strategy_write_run_id_in_snapshot(
+                    scope, claims_by_key=claims_by_key
+                )
+                by_port[port].append(
                     ActiveRegistrationContext(
                         context=ServiceCallContext(
                             identity=identity,
@@ -4124,9 +4206,17 @@ class ServiceRegistry:
                         strategy_write_run_id=run_id,
                     )
                 )
+        result: list[ActiveRegistrationContext] = []
+        for port in ports:
+            result.extend(by_port[port])
         return tuple(result)
 
-    def _scope_strategy_write_run_id_in_snapshot(self, scope: WireScope) -> str | None:
+    def _scope_strategy_write_run_id_in_snapshot(
+        self,
+        scope: WireScope,
+        *,
+        claims_by_key: Mapping[tuple[str, str, str], str] | None = None,
+    ) -> str | None:
         """Return one exact durable run shared by every account in the scope.
 
         Group coordinators can be registered for a fixed account vector. Their
@@ -4137,23 +4227,30 @@ class ServiceRegistry:
 
         if scope.strategy_ref is None:
             return None
-        if scope.account_ref is not None and not scope.account_refs:
+
+        def _lookup(account_ref: str | None) -> str | None:
+            if (
+                scope.execution_domain_ref is None
+                or scope.strategy_ref is None
+                or account_ref is None
+            ):
+                return None
+            if claims_by_key is not None:
+                return claims_by_key.get(
+                    (scope.execution_domain_ref, scope.strategy_ref, account_ref)
+                )
             return self._strategy_write_run_id_in_snapshot(
-                scope.execution_domain_ref,
-                scope.strategy_ref,
-                scope.account_ref,
-            )
-        if scope.account_ref is not None or not scope.account_refs or scope.run_id is None:
-            return None
-        account_refs = scope.account_refs
-        run_ids = tuple(
-            self._strategy_write_run_id_in_snapshot(
                 scope.execution_domain_ref,
                 scope.strategy_ref,
                 account_ref,
             )
-            for account_ref in account_refs
-        )
+
+        if scope.account_ref is not None and not scope.account_refs:
+            return _lookup(scope.account_ref)
+        if scope.account_ref is not None or not scope.account_refs or scope.run_id is None:
+            return None
+        account_refs = scope.account_refs
+        run_ids = tuple(_lookup(account_ref) for account_ref in account_refs)
         if any(run_id is None for run_id in run_ids):
             return None
         first = run_ids[0]
@@ -4467,6 +4564,18 @@ class ServiceRegistry:
         while len(self._registration_identity_scope_cache) > self.max_sessions:
             self._registration_identity_scope_cache.popitem(last=False)
         return identity, scope
+
+    def _cached_ops_set(self, raw_json: str) -> frozenset[str]:
+        cached = self._ops_json_cache.get(raw_json)
+        if cached is not None:
+            self._ops_json_cache.move_to_end(raw_json)
+            return cached
+        parsed = frozenset(json.loads(raw_json))
+        self._ops_json_cache[raw_json] = parsed
+        self._ops_json_cache.move_to_end(raw_json)
+        while len(self._ops_json_cache) > 2048:
+            self._ops_json_cache.popitem(last=False)
+        return parsed
 
     def _registration_policy_matches(self, row: sqlite3.Row | Mapping[str, Any]) -> bool:
         if (

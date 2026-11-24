@@ -1964,3 +1964,130 @@ def test_registry_close_retains_owner_lock_until_file_close_retry_succeeds(
     assert registry._owner_key is None
     assert owner_key not in ServiceRegistry._owned_paths
     assert retry_file.close_attempts == 2
+
+
+def test_active_registration_ids_uses_readonly_fast_path_until_expiry_due(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    now = [100.0]
+    registry = _make_registry(tmp_path / "fast-path.sqlite", clock=lambda: now[0])
+    try:
+        reg = _register(registry, key="k1")["result"]
+        reg_id = reg["registration_id"]
+        write_tx_calls = 0
+        original_tx = registry._transaction
+
+        def counting_tx(*args: Any, **kwargs: Any):
+            nonlocal write_tx_calls
+            write_tx_calls += 1
+            return original_tx(*args, **kwargs)
+
+        monkeypatch.setattr(registry, "_transaction", counting_tx)
+
+        # Before expiry: read-only snapshot serves active_registration_ids with 0 write txns.
+        now[0] = 105.0
+        assert registry.active_registration_ids(instance_id="account-instance") == frozenset({reg_id})
+        assert write_tx_calls == 0
+
+        # Once expiry is reached: immediately enters write transaction and expires the lease!
+        now[0] = 110.0
+        assert registry.active_registration_ids(instance_id="account-instance") == frozenset()
+        assert write_tx_calls == 1
+
+        # Subsequent call with 0 expired sessions returns to 0 write txns.
+        now[0] = 111.0
+        assert registry.active_registration_ids(instance_id="account-instance") == frozenset()
+        assert write_tx_calls == 1
+    finally:
+        registry.close()
+
+
+def test_active_registration_contexts_for_ports_matches_per_port_projection(
+    tmp_path: Path,
+) -> None:
+    now = [100.0]
+    identity = _identity()
+    scope_template = _strategy_scope(run_id=None)
+    caps = (
+        ServiceCapability(
+            "gw-1",
+            "service.direct_write",
+            frozenset({"direct.reserve"}),
+            frozenset({"direct.reserve"}),
+        ),
+        ServiceCapability(
+            "gw-1",
+            "service.market_source",
+            frozenset({"market.subscribe"}),
+            frozenset(),
+        ),
+    )
+    grants = {
+        "curve-a": (
+            PrincipalGrant(
+                identity,
+                (
+                    ResourceGrant(
+                        "gw-1",
+                        "service.direct_write",
+                        "dw-grant",
+                        scope_template,
+                        frozenset({"direct.reserve"}),
+                    ),
+                    ResourceGrant(
+                        "gw-1",
+                        "service.market_source",
+                        "mk-grant",
+                        scope_template,
+                        frozenset({"market.subscribe"}),
+                    ),
+                ),
+            ),
+        )
+    }
+    registry = ServiceRegistry(
+        tmp_path / "multi-port.sqlite",
+        service_id="gw-service-1",
+        capabilities=caps,
+        grants=grants,
+        policy_version="policy-v1",
+        requirements_version="requirements-v1",
+        lease_seconds=10,
+        clock=lambda: now[0],
+        ready=True,
+    )
+    try:
+        r1 = _register(
+            registry,
+            key="dw-1",
+            instance_id="gw-1",
+            port="service.direct_write",
+            scope_ref="dw-grant",
+            operations=("direct.reserve",),
+            scope=_strategy_scope(run_id="run-1"),
+        )
+        assert r1["ok"] is True
+        r2 = _register(
+            registry,
+            key="mk-1",
+            instance_id="gw-1",
+            port="service.market_source",
+            scope_ref="mk-grant",
+            operations=("market.subscribe",),
+            scope=_strategy_scope(run_id="run-1"),
+        )
+        assert r2["ok"] is True
+
+        expected = (
+            registry.active_registration_contexts(instance_id="gw-1", port="service.direct_write")
+            + registry.active_registration_contexts(instance_id="gw-1", port="service.market_source")
+        )
+        batched = registry.active_registration_contexts_for_ports(
+            instance_id="gw-1",
+            ports=("service.direct_write", "service.market_source"),
+        )
+        assert batched == expected
+        assert len(batched) == 2
+        assert batched[0].strategy_write_run_id == "run-1"
+    finally:
+        registry.close()

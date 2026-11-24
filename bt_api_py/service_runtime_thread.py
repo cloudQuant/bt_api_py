@@ -78,10 +78,16 @@ class ThreadedRuntimeError(RuntimeError):
 class OwnerOperationError(RuntimeError):
     """Finite diagnostic deliberately emitted by a trusted owner extension."""
 
-    def __init__(self, code: str):
+    def __init__(self, code: str, *, cause_code: str | None = None):
         if type(code) is not str or re.fullmatch(r"[A-Z][A-Z0-9_]{0,63}", code) is None:
             raise ValueError("INVALID_OWNER_ERROR_CODE")
+        if cause_code is not None and (
+            type(cause_code) is not str
+            or re.fullmatch(r"[A-Z][A-Z0-9_]{0,63}", cause_code) is None
+        ):
+            raise ValueError("INVALID_OWNER_ERROR_CODE")
         self.code = code
+        self.cause_code = cause_code
         super().__init__(code)
 
 
@@ -653,7 +659,9 @@ class OwnerCallHandle:
                 runtime._condition.wait(min(remaining, threading.TIMEOUT_MAX))
             if call.error is not None:
                 if type(call.error) is OwnerOperationError:
-                    raise OwnerOperationError(call.error.code)
+                    raise OwnerOperationError(
+                        call.error.code, cause_code=call.error.cause_code
+                    )
                 raise ThreadedRuntimeError(call.error.code)
             value = call.result
         return _copy_owner_json(value, error_code="INVALID_OWNER_RESULT")
@@ -2171,7 +2179,9 @@ class ThreadedServiceClientRuntime:
                     if type(call) is _OwnerCall:
                         if type(error) is OwnerOperationError:
                             try:
-                                failure = OwnerOperationError(error.code)
+                                failure = OwnerOperationError(
+                                    error.code, cause_code=error.cause_code
+                                )
                             except Exception:
                                 failure = ThreadedRuntimeError("OWNER_OUTCOME_UNKNOWN")
                         elif type(error) is ThreadedRuntimeError and error.code == "INVALID_OWNER_RESULT":
