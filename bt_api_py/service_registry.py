@@ -4083,8 +4083,7 @@ class ServiceRegistry:
                 ),
             ).fetchall()
             for row in rows:
-                identity = self._stored_identity(row["identity_json"])
-                scope = self._stored_scope(row["scope_json"])
+                identity, scope = self._cached_identity_scope(row)
                 principal = row["principal"]
                 operations = frozenset(json.loads(row["operations_json"]))
                 write_operations = frozenset(json.loads(row["write_operations_json"]))
@@ -4094,17 +4093,14 @@ class ServiceRegistry:
                     continue
                 if not operations or not write_operations.issubset(operations):
                     continue
-                if any(
-                    not self._current_resource_allows(
-                        principal,
-                        identity,
-                        instance_id=instance_id,
-                        port=port,
-                        scope_ref=row["scope_ref"],
-                        scope=scope,
-                        operation=operation,
-                    )
-                    for operation in operations
+                if not self._current_resource_allows_all(
+                    principal,
+                    identity,
+                    instance_id=instance_id,
+                    port=port,
+                    scope_ref=row["scope_ref"],
+                    scope=scope,
+                    operations=operations,
                 ):
                     continue
                 run_id = self._scope_strategy_write_run_id_in_snapshot(scope)
@@ -4442,14 +4438,9 @@ class ServiceRegistry:
         binding = bindings[0]
         return "APPLIED", binding.policy_ref, binding.policy_version
 
-    def _registration_policy_matches(self, row: sqlite3.Row | Mapping[str, Any]) -> bool:
-        if (
-            row["policy_version"] != self.policy_version
-            or row["requirements_version"] != self.requirements_version
-            or row["access_policy_ref"] != self.access_policy_ref
-            or row["requirements_ref"] != self.requirements_ref
-        ):
-            return False
+    def _cached_identity_scope(
+        self, row: sqlite3.Row | Mapping[str, Any]
+    ) -> tuple[WireIdentity, WireScope]:
         registration_id = row["registration_id"]
         identity_json = row["identity_json"]
         scope_json = row["scope_json"]
@@ -4460,22 +4451,32 @@ class ServiceRegistry:
             and cached[1] == scope_json
         ):
             self._registration_identity_scope_cache.move_to_end(registration_id)
-            identity, scope = cached[2], cached[3]
-        else:
-            # Never trust cached policy or authorization state. This bounded
-            # memo avoids re-decoding only byte-identical persisted JSON; any
-            # changed or malformed row takes the original strict parser path.
-            identity = self._stored_identity(identity_json)
-            scope = self._stored_scope(scope_json)
-            self._registration_identity_scope_cache[registration_id] = (
-                identity_json,
-                scope_json,
-                identity,
-                scope,
-            )
-            self._registration_identity_scope_cache.move_to_end(registration_id)
-            while len(self._registration_identity_scope_cache) > self.max_sessions:
-                self._registration_identity_scope_cache.popitem(last=False)
+            return cached[2], cached[3]
+        # Never trust cached policy or authorization state. This bounded
+        # memo avoids re-decoding only byte-identical persisted JSON; any
+        # changed or malformed row takes the original strict parser path.
+        identity = self._stored_identity(identity_json)
+        scope = self._stored_scope(scope_json)
+        self._registration_identity_scope_cache[registration_id] = (
+            identity_json,
+            scope_json,
+            identity,
+            scope,
+        )
+        self._registration_identity_scope_cache.move_to_end(registration_id)
+        while len(self._registration_identity_scope_cache) > self.max_sessions:
+            self._registration_identity_scope_cache.popitem(last=False)
+        return identity, scope
+
+    def _registration_policy_matches(self, row: sqlite3.Row | Mapping[str, Any]) -> bool:
+        if (
+            row["policy_version"] != self.policy_version
+            or row["requirements_version"] != self.requirements_version
+            or row["access_policy_ref"] != self.access_policy_ref
+            or row["requirements_ref"] != self.requirements_ref
+        ):
+            return False
+        identity, scope = self._cached_identity_scope(row)
         expected = self._account_risk_receipt_for(
             row["instance_id"], row["port"], scope, identity
         )
@@ -7890,20 +7891,18 @@ class ServiceRegistry:
             return [cls._normalize_result(item, depth=depth + 1) for item in value]
         raise TypeError("handler result contains a non-JSON value")
 
-    def _current_resource_allows(
+    def _current_resource_allows_guards(
         self,
         principal: str,
         identity: WireIdentity,
         *,
+        capability: ServiceCapability,
         instance_id: str,
         port: str,
         scope_ref: str,
         scope: WireScope,
         operation: str,
     ) -> bool:
-        capability = self._capabilities.get((instance_id, port))
-        if capability is None or operation not in capability.operations:
-            return False
         if port == _EXECUTION_RELEASE_PORT:
             if (operation not in _EXECUTION_RELEASE_OPERATIONS
                     or not _is_execution_release_scope(identity, port, scope)
@@ -8024,6 +8023,33 @@ class ServiceRegistry:
                 scope.manual_book_ref is None and scope.portfolio_ref is None
             ):
                 return False
+        return True
+
+    def _current_resource_allows(
+        self,
+        principal: str,
+        identity: WireIdentity,
+        *,
+        instance_id: str,
+        port: str,
+        scope_ref: str,
+        scope: WireScope,
+        operation: str,
+    ) -> bool:
+        capability = self._capabilities.get((instance_id, port))
+        if capability is None or operation not in capability.operations:
+            return False
+        if not self._current_resource_allows_guards(
+            principal,
+            identity,
+            capability=capability,
+            instance_id=instance_id,
+            port=port,
+            scope_ref=scope_ref,
+            scope=scope,
+            operation=operation,
+        ):
+            return False
         return any(
             principal_grant.identity == identity
             and resource.instance_id == instance_id
@@ -8034,6 +8060,58 @@ class ServiceRegistry:
             for principal_grant in self._grants.get(principal, ())
             for resource in principal_grant.resources
         )
+
+    def _current_resource_allows_all(
+        self,
+        principal: str,
+        identity: WireIdentity,
+        *,
+        instance_id: str,
+        port: str,
+        scope_ref: str,
+        scope: WireScope,
+        operations: frozenset[str],
+    ) -> bool:
+        """Exact batch equivalent of checking ``_current_resource_allows`` for every op."""
+        capability = self._capabilities.get((instance_id, port))
+        if capability is None or not operations.issubset(capability.operations):
+            return False
+        allowed_ops: set[str] = set()
+        for principal_grant in self._grants.get(principal, ()):
+            if principal_grant.identity != identity:
+                continue
+            for resource in principal_grant.resources:
+                if (
+                    resource.instance_id == instance_id
+                    and resource.port == port
+                    and resource.scope_ref == scope_ref
+                    and self._resource_scope_matches(resource, scope, identity)
+                ):
+                    allowed_ops.update(resource.operations)
+        if not operations.issubset(allowed_ops):
+            return False
+        if port in (
+            _EXECUTION_RELEASE_PORT,
+            "service.group_reservations",
+            "service.order_entry",
+            "service.risk_admin",
+        ):
+            ops_to_guard = operations
+        else:
+            ops_to_guard = operations.intersection(capability.write_operations)
+        for operation in ops_to_guard:
+            if not self._current_resource_allows_guards(
+                principal,
+                identity,
+                capability=capability,
+                instance_id=instance_id,
+                port=port,
+                scope_ref=scope_ref,
+                scope=scope,
+                operation=operation,
+            ):
+                return False
+        return True
 
     def _strategy_claim_exists(self, scope: WireScope, registration_id: str) -> bool:
         if scope.strategy_ref is None or scope.run_id is None:

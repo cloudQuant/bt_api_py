@@ -7,12 +7,15 @@ profile schedules this object and the same return maintenance on one owner threa
 
 from __future__ import annotations
 
+import logging
 import math
 import os
 import re
 import threading
 import time
 from dataclasses import dataclass, replace
+
+_LOG = logging.getLogger(__name__)
 
 from bt_api_ctp.gateway_session import CtpGatewaySession, CtpGatewaySessionError
 from bt_api_ctp.registered_sim_session import CtpQuerySessionBinding
@@ -177,7 +180,13 @@ class CtpGatewayOrderCutCoordinator:
             self._fail("BEGIN_FAILED")
             return False
 
-    def _fail(self, reason):
+    def _fail(self, reason, *, detail: str | None = None):
+        _LOG.warning(
+            "CTP order cut coordinator failed: state=%s reason=%s detail=%s",
+            self._state,
+            reason,
+            detail or "-",
+        )
         self._reason = reason
         try:
             # Invalidate the original source, even if maintenance has already
@@ -408,8 +417,8 @@ class CtpGatewayOrderCutCoordinator:
             raise ValueError("invalid state")
         except _CutBusyError:
             return True
-        except Exception:
-            self._fail("SOURCE_OR_QUERY_FAILED")
+        except Exception as error:
+            self._fail("SOURCE_OR_QUERY_FAILED", detail=f"{type(error).__name__}:{error}")
             return False
 
     def _finish_close(self) -> bool:

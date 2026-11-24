@@ -191,13 +191,15 @@ class _ByHandleFileInformation(ctypes.Structure):
 
 def is_reparse_point(path: str | os.PathLike[str]) -> bool:
     """True if the final path component is a symlink / junction / mount point."""
-    if not WINDOWS:
+    if not WINDOWS or _kernel32 is None:
         raise Win32SecurityUnavailable("NOFOLLOW_UNAVAILABLE")
     try:
-        st = os.stat(path, follow_symlinks=False)
-    except OSError as exc:
+        attrs = _kernel32.GetFileAttributesW(os.fspath(path))
+    except (OSError, TypeError, ValueError) as exc:
         raise Win32SecurityUnavailable("NOFOLLOW_UNAVAILABLE") from exc
-    return bool(getattr(st, "st_file_attributes", 0) & _FILE_ATTRIBUTE_REPARSE_POINT)
+    if attrs == 0xFFFFFFFF:
+        raise Win32SecurityUnavailable("NOFOLLOW_UNAVAILABLE")
+    return bool(attrs & _FILE_ATTRIBUTE_REPARSE_POINT)
 
 
 def _create_file(path: str, *, directory: bool = False, create_new: bool = False,

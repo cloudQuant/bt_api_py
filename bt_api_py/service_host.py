@@ -1731,9 +1731,10 @@ class ServiceHost:
                         bounded_timeout = min(timeout_ms, max(0, floor(delay_ms)))
             else:
                 self._host_delay_faulted = False
-            self._maintain_components()
+            maintained = self._maintain_components()
             self._maintain_atomic_monitors()
-            self._refresh_registry_readiness()
+            if maintained or self._trusted_atomic_monitors:
+                self._refresh_registry_readiness()
             if self._trusted_atomic_monitors:
                 bounded_timeout = min(bounded_timeout, 1000)
             handled = self._server.serve_once(bounded_timeout)
@@ -3546,12 +3547,13 @@ class ServiceHost:
             self._record_readiness('failed', 'registry_update_exception')
             raise ServiceHostError("READINESS_UPDATE_FAILED") from None
 
-    def _maintain_components(self, *, registrations_only: bool = False) -> None:
+    def _maintain_components(self, *, registrations_only: bool = False) -> bool:
         """Prune per-registration component state using current registry leases."""
 
         registry = self._registry
         if registry is None:
-            return
+            return False
+        had_work = bool(self._gateway_lease_drains or self._gateway_cancel_only_runs)
         for lease_drain in self._gateway_lease_drains:
             try:
                 lease_drain.maintain(registry)
@@ -3619,6 +3621,7 @@ class ServiceHost:
                 and maintain_registrations is None
             ):
                 continue
+            had_work = True
             active_ids: frozenset[str] | None = None
             active_market_ids: frozenset[str] | None = None
             try:
@@ -3674,6 +3677,7 @@ class ServiceHost:
                             item.context.registration_id for item in contexts
                             if item.port == "service.market_source"
                         )
+                    bound_group_run = False
                     for context in contexts if migration_writes_enabled else ():
                         operation = None
                         if (
@@ -3721,21 +3725,22 @@ class ServiceHost:
                             scope.account_ref,
                             registration_id=context.context.registration_id,
                         )
-                    # Seeding is a one-time local registry mapping. Adapters
-                    # receive the resulting persistent run projection, never
-                    # an unbound eligibility snapshot.
-                    contexts = tuple(
-                        context
-                        for capability in component.capabilities
-                        for context in registry.active_registration_contexts(
-                            instance_id=component.instance_id,
-                            port=capability.port,
+                        bound_group_run = True
+                    # Seeding is a one-time local registry mapping. Re-project
+                    # only when a group run binding was written above.
+                    if bound_group_run:
+                        contexts = tuple(
+                            context
+                            for capability in component.capabilities
+                            for context in registry.active_registration_contexts(
+                                instance_id=component.instance_id,
+                                port=capability.port,
+                            )
                         )
-                    )
-                    if type(contexts) is not tuple or any(
-                        type(context) is not ActiveRegistrationContext for context in contexts
-                    ):
-                        raise TypeError("invalid registry registration context projection")
+                        if type(contexts) is not tuple or any(
+                            type(context) is not ActiveRegistrationContext for context in contexts
+                        ):
+                            raise TypeError("invalid registry registration context projection")
                     if group_registration_writer and not migration_writes_enabled:
                         # The coordinator has an explicit read-only refresh
                         # mode. Keep registrations visible for query routes,
@@ -3778,7 +3783,10 @@ class ServiceHost:
                 )
         self._market_active_registration_count = active_market_registrations
         if not registrations_only:
+            if self._paper_monitor_relays:
+                had_work = True
             self._poll_paper_monitor_relays()
+        return had_work
 
     def _dispatch_request(self, authenticated_principal: str, request: Any) -> Mapping[str, Any]:
         """Recheck component readiness at the exact listener dispatch point."""

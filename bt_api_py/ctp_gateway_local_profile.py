@@ -1141,6 +1141,11 @@ def _load_resources(config, *, trading):
                 # Schema 17 lies behind 12 to 16; their own features stay off
                 # unless enabled elsewhere, only the journal walks through.
                 upgrade_extensions = upgrade_extensions or drain_upgrade
+                gw_opts = (
+                    config.components["gateway"]["settings"]["options"]
+                    if hasattr(config, "components") and "gateway" in config.components
+                    else {}
+                )
                 drain_options = dict(
                     upgrade_parent_authority_from_v12=drain_upgrade,
                     upgrade_account_facts_financial_from_v13=drain_upgrade,
@@ -1148,6 +1153,9 @@ def _load_resources(config, *, trading):
                     upgrade_strategy_origin_from_v15=drain_upgrade,
                     upgrade_control_cancel_from_v16=drain_upgrade,
                     upgrade_account_fact_recovery_from_v17=drain_upgrade,
+                    upgrade_account_event_recovery_from_v18=bool(
+                        drain_upgrade and gw_opts.get("account_event_recovery_enabled") is True
+                    ),
                     strategy_origin_source_factory=_strategy_origin_source_factory(
                         return_settings.instruments))
             if upgrade_parents:
