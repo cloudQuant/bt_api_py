@@ -4,6 +4,7 @@ import http.client
 import json
 import os
 import queue
+import re
 import socket
 import subprocess
 import sys
@@ -283,6 +284,7 @@ def test_sop_cli_windows_owner_runs_one_synthetic_unit_and_preserves_unknown(tmp
             "--config",
             str(operator_path),
             "--enable-stop-file",
+            "--enable-owner-stop-file",
         ],
         cwd=str(Path(__file__).resolve().parents[2]),
         stdin=subprocess.DEVNULL,
@@ -291,11 +293,20 @@ def test_sop_cli_windows_owner_runs_one_synthetic_unit_and_preserves_unknown(tmp
         text=True,
     )
     child_pid = None
+    owner_stop_path = None
+    output = error = None
     started_id = str(uuid.uuid4())
     stopped_id = str(uuid.uuid4())
     try:
         line = _wait_startup_line(owner)
         assert line == "runtime_control_listening 127.0.0.1 {}".format(port), line
+        stop_line = _wait_startup_line(owner)
+        prefix = "runtime_control_stop_file "
+        assert stop_line.startswith(prefix), stop_line
+        stop_name = stop_line[len(prefix):]
+        assert re.fullmatch(r"runtime-[0-9a-f]{32}\.stop", stop_name), stop_line
+        owner_stop_path = home / stop_name
+        assert owner_stop_path.parent == home
 
         status, unknown = _control(
             port,
@@ -362,6 +373,30 @@ def test_sop_cli_windows_owner_runs_one_synthetic_unit_and_preserves_unknown(tmp
             command_id=stopped_id,
         )
         assert status == 200 and stop_record["command"]["state"] == "APPLIED"
+
+        # An invalid, nonempty owner marker is retained and must not close the
+        # Runtime listener.  Remove only this test-created marker before
+        # issuing the valid zero-byte owner stop request at the same name.
+        with owner_stop_path.open("xb") as marker:
+            marker.write(b"not-empty")
+        _set_owner_only_acl(owner_stop_path)
+        time.sleep(0.45)
+        assert owner.poll() is None
+        status, still_stopped = _control(
+            port, "runtime.unit.status", token=_TOKEN, unit=_UNIT
+        )
+        assert status == 200 and still_stopped["unit"]["state"] == "STOPPED"
+        assert owner_stop_path.is_file() and not owner_stop_path.is_symlink()
+        assert owner_stop_path.read_bytes() == b"not-empty"
+
+        owner_stop_path.unlink()
+        with owner_stop_path.open("xb"):
+            pass
+        _set_owner_only_acl(owner_stop_path)
+        output, error = owner.communicate(timeout=10)
+        assert owner.returncode == 0, (output, error)
+        assert "runtime_control_closed" in output.splitlines(), output
+        assert error == "", error
     finally:
         # Normal stop is the primary cleanup path.  Only if an assertion aborts
         # while the synthetic child is still present do we terminate that exact
@@ -399,18 +434,28 @@ def test_sop_cli_windows_owner_runs_one_synthetic_unit_and_preserves_unknown(tmp
                         process.wait(timeout=5)
                 except (psutil.Error, OSError):
                     pass
-        # The synthetic strategy is already stopped with a matching clean
-        # summary.  Stop only the idle owner process created by this test; this
-        # does not claim graceful Runtime-owner shutdown on Windows.
-        if owner.poll() is None:
-            owner.terminate()
-        try:
-            output, error = owner.communicate(timeout=10)
-        except subprocess.TimeoutExpired:
-            # Never leave the test-owned CLI process behind on a failed close.
-            # This fallback applies only to this exact isolated temp owner;
-            # the passing path above has already proved the child stopped.
-            if owner.poll() is None:
-                owner.terminate()
-            output, error = owner.communicate(timeout=5)
+        # Prefer the owner stop marker for bounded cleanup when it was issued.
+        # This fallback is limited to this test's temp Runtime home and marker.
+        if owner.poll() is None and owner_stop_path is not None:
+            try:
+                if not owner_stop_path.is_symlink():
+                    if owner_stop_path.exists():
+                        owner_stop_path.unlink()
+                    with owner_stop_path.open("xb"):
+                        pass
+                    _set_owner_only_acl(owner_stop_path)
+            except OSError:
+                pass
+        if output is None or error is None:
+            try:
+                output, error = owner.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                if owner.poll() is None:
+                    owner.terminate()
+                try:
+                    output, error = owner.communicate(timeout=5)
+                except subprocess.TimeoutExpired:
+                    if owner.poll() is None:
+                        owner.kill()
+                    output, error = owner.communicate(timeout=5)
         assert _TOKEN not in output + error

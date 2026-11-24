@@ -1,4 +1,6 @@
 import json
+import os
+import queue
 import socket
 import threading
 from pathlib import Path
@@ -174,6 +176,56 @@ def test_uncertain_close_waits_for_another_signal(capsys):
     event.set()
     thread.join(2)
     assert not thread.is_alive() and host.state == 'closed' and host.calls == 2
+
+
+def test_uncertain_close_waits_for_a_new_owner_stop_file(tmp_path, monkeypatch):
+    announced = queue.Queue()
+    requested = threading.Event()
+    closed = threading.Event()
+
+    class Host:
+        state = 'running'
+        calls = 0
+
+        def close(self):
+            self.calls += 1
+            if self.calls == 1:
+                self.state = 'close_uncertain'
+                raise RuntimeError('cleanup uncertain')
+            self.state = 'closed'
+            closed.set()
+
+    def capture(message, *, error=False):
+        if not error:
+            announced.put(message.removeprefix('runtime_control_stop_file '))
+
+    def publish(name):
+        marker = tmp_path / name
+        marker.touch(mode=0o600, exist_ok=False)
+        if os.name == 'nt':
+            from bt_api_py._win32_security import _set_owner_only_acl
+
+            _set_owner_only_acl(marker)
+        return marker
+
+    monkeypatch.setattr(cli, '_emit', capture)
+    host = Host()
+    thread = threading.Thread(target=cli._wait_close, args=(host, requested, tmp_path), daemon=True)
+    thread.start()
+    try:
+        first = publish(announced.get(timeout=2))
+        next_name = announced.get(timeout=2)
+        assert next_name != first.name and first.is_file()
+        assert not closed.wait(0.4) and host.calls == 1
+        publish(next_name)
+        assert closed.wait(2) and host.calls == 2
+    finally:
+        requested.set()
+        thread.join(2)
+        if thread.is_alive():
+            requested.set()
+            thread.join(2)
+    assert not thread.is_alive() and host.state == 'closed'
 
 
 def test_cleanup_diagnostic_filters_untrusted_values(capsys):

@@ -36,5 +36,15 @@ Run in the selected Python environment:
 keys or tokens, open services, or create state. `run` opens a loopback Runtime
 control listener and does not start strategies. The listening message does not
 assert Gateway, account, trading, or whole-system readiness. SIGTERM or SIGINT
-requests close; if cleanup is uncertain, the process keeps its resources and
-waits for another signal to retry. Monitor events are observational only.
+requests close. For a deployment that needs cooperative shutdown without a
+console, run with `--enable-owner-stop-file`. The `runtime_control_stop_file`
+line announces the current marker's basename. Create an empty regular file
+with that name under the configured Runtime `home`, with permissions restricted
+to the Runtime OS user (mode `0600` on POSIX, owner-only DACL on Windows).
+Wait for `runtime_control_closed` and exit status `0` to confirm cleanup.
+
+If cleanup is uncertain, the process retains its resources and waits for
+another explicit request. With file requests enabled, use the new basename
+printed for that retry. Each marker applies to one request of that process.
+`--enable-stop-file` separately enables the supervised strategy stop-file
+channel. Monitor events are observational only.

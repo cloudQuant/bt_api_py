@@ -7,13 +7,17 @@ from __future__ import annotations
 
 import argparse
 import signal
+import stat
 import sys
 import threading
+from pathlib import Path
+from uuid import uuid4
 
 from bt_api_runtime.control_http import ControlTransportError
 from bt_api_runtime.events import EventStore
 from bt_api_runtime.supervision import SystemClock
 
+from bt_api_py.monitor_service_config import read_bounded
 from bt_api_py.runtime_operator_config import build_bridges, load_authenticator, load_config
 from bt_api_py.runtime_service_host import RuntimeServiceHost
 
@@ -52,10 +56,25 @@ def _emit_cleanup_uncertain(host=None, *, event_store=False):
           error=True)
 
 
-def _wait_close(host, requested):
-    while True:
+def _wait_for_stop_request(requested, stop_directory):
+    if stop_directory is None:
         requested.wait()
-        requested.clear()
+    else:
+        marker = stop_directory / f'runtime-{uuid4().hex}.stop'
+        _emit(f'runtime_control_stop_file {marker.name}')
+        while not requested.wait(0.2):
+            try:
+                if (stat.S_ISREG(marker.lstat().st_mode)
+                        and read_bounded(marker, 0, protected=True) == b''):
+                    break
+            except (OSError, ValueError):
+                continue
+    requested.clear()
+
+
+def _wait_close(host, requested, stop_directory=None):
+    while True:
+        _wait_for_stop_request(requested, stop_directory)
         try:
             host.close()
         except Exception:
@@ -66,8 +85,8 @@ def _wait_close(host, requested):
         _emit_cleanup_uncertain(host)
 
 
-def _close_store(store, requested):
-    """Close our borrowed store; retain it for signal-driven retry on failure."""
+def _close_store(store, requested, stop_directory):
+    """Retain our borrowed store until an explicit cleanup retry succeeds."""
     while True:
         try:
             store.close()
@@ -77,12 +96,12 @@ def _close_store(store, requested):
             _emit_cleanup_uncertain(event_store=True)
         else:
             _emit_cleanup_uncertain(event_store=True)
-        requested.wait()
-        requested.clear()
+        _wait_for_stop_request(requested, stop_directory)
 
 
-def _run(config, *, enable_stop_file=False):
+def _run(config, *, enable_stop_file=False, enable_owner_stop_file=False):
     requested = threading.Event()
+    stop_directory = Path(config.runtime.home) if enable_owner_stop_file else None
     previous = {}
     for sig in (signal.SIGTERM, signal.SIGINT):
         previous[sig] = signal.getsignal(sig)
@@ -110,7 +129,7 @@ def _run(config, *, enable_stop_file=False):
                     host.close()
                 except Exception:
                     _emit_cleanup_uncertain(host)
-                    _wait_close(host, requested)
+                    _wait_close(host, requested, stop_directory)
                     return 1
                 else:
                     if host.state == 'closed':
@@ -119,7 +138,7 @@ def _run(config, *, enable_stop_file=False):
         if not startup_failed:
             address, port = host.bound_address
             _emit(f'runtime_control_listening {address} {port}')
-        _wait_close(host, requested)
+        _wait_close(host, requested, stop_directory)
         return 1 if startup_failed else 0
     except Exception:
         _emit('runtime_start_failed', error=True)
@@ -128,17 +147,17 @@ def _run(config, *, enable_stop_file=False):
                 host.close()
             except Exception:
                 _emit_cleanup_uncertain(host)
-                _wait_close(host, requested)
+                _wait_close(host, requested, stop_directory)
             else:
                 if host.state != 'closed':
                     _emit_cleanup_uncertain(host)
-                    _wait_close(host, requested)
+                    _wait_close(host, requested, stop_directory)
         return 1
     finally:
         # An uncertain host must remain alive with its borrowed EventStore;
         # the loop above exits only after a confirmed close.
         if store is not None and (host is None or host.state == 'closed'):
-            _close_store(store, requested)
+            _close_store(store, requested, stop_directory)
         if host is not None and host.state == 'closed' and not startup_failed:
             _emit('runtime_control_closed')
         for sig, handler in previous.items():
@@ -150,7 +169,9 @@ def main(argv=None):
     parser.add_argument('action', choices=('validate', 'run'))
     parser.add_argument('--config', required=True, help='absolute path to public deployment JSON')
     parser.add_argument('--enable-stop-file', action='store_true',
-                        help='opt in to the local stop-request file channel (D66-05)')
+                        help='opt in to the stop-request file channel for supervised strategy units')
+    parser.add_argument('--enable-owner-stop-file', action='store_true',
+                        help='allow local cooperative shutdown of this CLI with a protected empty marker')
     args = parser.parse_args(argv)
     try:
         config = load_config(args.config)
@@ -160,7 +181,8 @@ def main(argv=None):
     if args.action == 'validate':
         _emit('runtime_configuration_valid')
         return 0
-    return _run(config, enable_stop_file=args.enable_stop_file)
+    return _run(config, enable_stop_file=args.enable_stop_file,
+                enable_owner_stop_file=args.enable_owner_stop_file)
 
 
 if __name__ == '__main__':
