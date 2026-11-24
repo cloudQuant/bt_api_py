@@ -56,39 +56,117 @@ def _places(controls, messages):
 
 
 class _Loopback:
-    def __init__(self, tmp_path):
+    def __init__(self, tmp_path, *, parent_contract_enabled=False,
+                 execution_parent_enabled=False, order_cut_enabled=False,
+                 strategy_strict_cleanup=False):
         from tests.integration.test_service_account_instrument_metadata import _free_endpoint
 
-        self.keys = support.keypairs(1)
-        self.gateway_root = tmp_path / "gateway"
-        self.gateway_root.mkdir()
-        self.risk_root = tmp_path / "risk"
-        self.risk_root.mkdir()
-        self.gateway_endpoint, self.risk_endpoint = _free_endpoint(), _free_endpoint()
-        context = multiprocessing.get_context("spawn")
-        self.messages, self.controls = context.Queue(), context.Queue()
-        self.gateway = context.Process(
-            target=support.gateway_main,
-            args=(str(self.gateway_root), self.gateway_endpoint, self.keys["gateway_server"],
-                  support.gateway_publics(self.keys, 1), 1, self.messages, self.controls),
-        )
-        self.gateway_stop = support.SyntheticGatewayStop(
-            self.gateway, self.controls, self.messages)
-        self.gateway.start()
-        ready = support.next_message(self.messages, "ready", 40)
-        self.journal_id = ready[2]
-        self.gateway_stop.bind_ready(ready)
-        self.config = support.risk_files(
-            self.risk_root, self.keys, 1, self.gateway_endpoint, self.risk_endpoint,
-            ttl_seconds=TTL_SECONDS, dispatch_recheck_seconds=1,
-        )
-        self.ready_file = self.risk_root / "ready.json"
+        if (type(execution_parent_enabled) is not bool or type(order_cut_enabled) is not bool
+                or type(strategy_strict_cleanup) is not bool):
+            raise ValueError("SYNTHETIC_EXECUTION_PARENT_FLAG_INVALID")
+        self.gateway = self.gateway_stop = None
+        self.messages = self.controls = None
         self.risk = self.client = self.operator = None
-        self.strategy = support.strategy_session(self.gateway_endpoint, self.keys, self.journal_id)
-        assert self.strategy.start(timeout_seconds=15).healthy
+        self.strategy = None
+        self.order_cut_enabled = order_cut_enabled
+        try:
+            self.keys = support.keypairs(1, execution_enabled=execution_parent_enabled)
+            self.gateway_root = tmp_path / "gateway"
+            self.gateway_root.mkdir()
+            self.risk_root = tmp_path / "risk"
+            self.risk_root.mkdir()
+            self.gateway_endpoint, self.risk_endpoint = _free_endpoint(), _free_endpoint()
+            context = multiprocessing.get_context("spawn")
+            self.messages, self.controls = context.Queue(), context.Queue()
+            self.gateway = context.Process(
+                target=support.gateway_main,
+                args=(str(self.gateway_root), self.gateway_endpoint, self.keys["gateway_server"],
+                      support.gateway_publics(self.keys, 1), 1, self.messages, self.controls,
+                      order_cut_enabled),
+            )
+            self.gateway_stop = support.SyntheticGatewayStop(
+                self.gateway, self.controls, self.messages)
+            self.gateway.start()
+            ready = support.next_message(self.messages, "ready", 40)
+            self.journal_id = ready[2]
+            self.gateway_stop.bind_ready(ready)
+            self.config = support.risk_files(
+                self.risk_root, self.keys, 1, self.gateway_endpoint, self.risk_endpoint,
+                ttl_seconds=TTL_SECONDS, dispatch_recheck_seconds=1,
+                parent_contract_enabled=parent_contract_enabled,
+                execution_enabled=execution_parent_enabled,
+                order_cut_enabled=order_cut_enabled,
+            )
+            self.ready_file = self.risk_root / "ready.json"
+            self.strategy = support.strategy_session(
+                self.gateway_endpoint, self.keys, self.journal_id,
+                strict_cleanup=strategy_strict_cleanup,
+            )
+            assert self.strategy.start(timeout_seconds=15).healthy
+        except BaseException as error:
+            cleanup_categories = self._cleanup_failed_construction()
+            if cleanup_categories:
+                error.add_note("Synthetic constructor cleanup categories: " + repr(cleanup_categories))
+            raise
 
-    def start_risk(self, fault_point=None):
-        self.risk = support.start_risk(self.config, self.ready_file, fault_point=fault_point)
+    def _cleanup_failed_construction(self):
+        """Stop only this partially constructed loopback and close its queues."""
+        categories = []
+        for client in (self.client, self.operator):
+            if client is not None:
+                try:
+                    client.close(timeout_seconds=5)
+                except BaseException as error:
+                    categories.append(type(error).__name__)
+        self.client = self.operator = None
+        if self.risk is not None:
+            try:
+                support.stop_risk(self.risk)
+            except BaseException as error:
+                categories.append(type(error).__name__)
+        self.risk = None
+        if self.strategy is not None:
+            try:
+                self.strategy.close(timeout_seconds=5)
+            except BaseException as error:
+                categories.append(type(error).__name__)
+            self.strategy = None
+        if self.gateway_stop is not None:
+            try:
+                if self.gateway_stop._bound:
+                    self.gateway_stop.close()
+                else:
+                    result = self.gateway_stop.terminate_after_constructor_failure()
+                    if result is not None:
+                        categories.append("SYNTHETIC_GATEWAY_REAPED_AFTER_CONSTRUCTOR_FAILURE")
+            except BaseException as error:
+                categories.append(type(error).__name__)
+                try:
+                    result = self.gateway_stop.terminate_after_constructor_failure()
+                    if result is not None:
+                        categories.append("SYNTHETIC_GATEWAY_REAPED_AFTER_CONSTRUCTOR_FAILURE")
+                except BaseException as forced_error:
+                    categories.append(type(forced_error).__name__)
+            if self.gateway_stop._closed and self.gateway is not None:
+                try:
+                    if self.gateway.pid is not None:
+                        self.gateway.close()
+                except BaseException as error:
+                    categories.append(type(error).__name__)
+        for q in (self.messages, self.controls):
+            if q is not None:
+                try:
+                    q.close()
+                    q.join_thread()
+                except BaseException as error:
+                    categories.append(type(error).__name__)
+        return tuple(categories)
+
+    def start_risk(self, fault_point=None, *, owner_stop_file=False):
+        self.risk = support.start_risk(
+            self.config, self.ready_file, fault_point=fault_point,
+            owner_stop_file=owner_stop_file,
+        )
         self.client = support.risk_client(self.risk_endpoint, self.keys)
         assert self.client.start(timeout_seconds=15).healthy
         self.operator = support.operator_runtime(self.risk_endpoint, self.keys)
@@ -126,6 +204,8 @@ class _Loopback:
                              lambda r: r.record is not None and r.record.state == "SENT")
         assert sent.record.state == "SENT", sent
         self.ingest("client-direct-1", "accepted", "1", "0")
+        if self.order_cut_enabled:
+            self.ingest("client-direct-1", "filled", "1", "1")
         summary = support.until(lambda: self.admin("risk.admin.status"),
                                 lambda r: r["summary"]["bypass_orders"] >= 1)
         assert summary["summary"]["observation"]["continuity"] == "VERIFIED", summary
