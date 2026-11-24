@@ -290,6 +290,70 @@ _SIMNOW_RESTRICTED_PROFILES = _SIMNOW_BOUND_PROFILES | frozenset(
 _CTP_CREDENTIAL_BINDING_FIELDS = frozenset(
     {"credential_binding_key_id", "credential_binding_hmac_sha256"}
 )
+# Reconciliation work admitted before queue retirement remains process-owned
+# through its final publication, including an uncertain thread-start outcome.
+_EVENT_RECONCILE_CUSTODY_LOCK = threading.Lock()
+_EVENT_RECONCILE_CUSTODY: set[Any] = set()
+
+
+class _EventReconcileReservation:
+    """Hold an existing queue producer reservation without waiting for a worker."""
+
+    def __init__(self, api: Any, exchange_name: str, source: EventIngressQueue) -> None:
+        self.api = api
+        self.exchange_name = exchange_name
+        self.source = source
+        self._manager = EventIngressQueue._producer_reservation(source)
+        self._lock = threading.Lock()
+        self._finished = False
+        self.failure = None
+        self.failed_events: list[tuple[Any, BaseException]] = []
+        self.failed_rows: list[tuple[str, list[Any], int, BaseException]] = []
+        self.failed_results: list[tuple[str, Any, BaseException]] = []
+        self._manager.__enter__()
+        with _EVENT_RECONCILE_CUSTODY_LOCK:
+            _EVENT_RECONCILE_CUSTODY.add(self)
+
+    def fail(self, error: BaseException) -> None:
+        with self._lock:
+            if not self._finished:
+                self.failure = error
+
+    def retain_failed_event(self, event: Any, error: BaseException) -> None:
+        with self._lock:
+            if not self._finished:
+                self.failed_events.append((event, error))
+                self.failure = error
+
+    def retain_failed_rows(self, scope: str, rows: list[Any], index: int, error: BaseException) -> None:
+        with self._lock:
+            if not self._finished:
+                self.failed_rows.append((scope, rows, index, error))
+                self.failure = error
+
+    def retain_failed_result(self, scope: str, value: Any, error: BaseException) -> None:
+        with self._lock:
+            if not self._finished:
+                self.failed_results.append((scope, value, error))
+                self.failure = error
+
+    def assert_source_current(self) -> None:
+        if self.api.data_queues.get(self.exchange_name) is not self.source:
+            raise EventBatchHandoffError("event_reconcile_source_changed")
+
+    def complete(self) -> None:
+        with self._lock:
+            if self._finished or self.failed_events or self.failed_rows or self.failed_results:
+                return
+            if self.api.data_queues.get(self.exchange_name) is not self.source:
+                self.failure = EventBatchHandoffError("event_reconcile_source_changed")
+                raise self.failure
+            self._manager.__exit__(None, None, None)
+            self._finished = True
+            with _EVENT_RECONCILE_CUSTODY_LOCK:
+                _EVENT_RECONCILE_CUSTODY.discard(self)
+
+
 _CTP_TRANSITION_LOCK_INIT = threading.Lock()
 _CTP_INTERNAL_AUTHORIZATION_SEAL = object()
 _CTP_CONTROLLED_TEST_AUTHORITY_SEAL = object()
@@ -3597,6 +3661,17 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         """Return process-local ingress/coalescing counters without resetting them."""
         return dict(self._event_metrics)
 
+    def _begin_event_reconcile_producer(self, exchange_name: str) -> _EventReconcileReservation | None:
+        """Reserve the exact SDK queue before reconciliation may produce."""
+        with self._event_batch_lock:
+            source = self.data_queues.get(exchange_name)
+            handoff = self._event_batch_handoffs.get(exchange_name)
+            if handoff is not None and source is not handoff.ingress:
+                raise EventBatchHandoffError("event_reconcile_source_changed")
+            if not isinstance(source, EventIngressQueue):
+                return None
+            return _EventReconcileReservation(self, exchange_name, source)
+
     def _on_websocket_connected(self, payload: Any) -> None:
         """Schedule one private-state backfill for each reconnect generation."""
         if not isinstance(payload, dict) or payload.get("stream_role") != "account":
@@ -3614,28 +3689,56 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         if exchange_name not in self.list_exchanges():
             return
         key = (exchange_name, generation)
-        if key in self._private_reconcile_generations:
-            return
-        self._private_reconcile_generations.add(key)
-        self._event_metrics["private_reconcile_triggers"] += 1
-        self._publish_private_event(
-            exchange_name,
-            {
+        with self._event_batch_lock:
+            if key in self._private_reconcile_generations:
+                return
+            reservation = self._begin_event_reconcile_producer(exchange_name)
+            self._private_reconcile_generations.add(key)
+        try:
+            self._event_metrics["private_reconcile_triggers"] += 1
+            required_event = {
                 "kind": "reconcile",
                 "exchange_name": exchange_name,
                 "status": "required",
                 "connection_generation": generation,
                 "scopes": ("orders", "account", "positions", "trades"),
                 "event_id": f"reconcile:{exchange_name}:{generation}:required",
-            },
-        )
-        threading.Thread(
-            target=self.reconcile_private_state,
-            args=(exchange_name,),
-            kwargs={"connection_generation": generation},
-            daemon=True,
-            name=f"btapi-reconcile-{exchange_name}-{generation}",
-        ).start()
+            }
+            try:
+                if reservation is not None:
+                    reservation.assert_source_current()
+                self._publish_private_event(exchange_name, required_event)
+                if reservation is not None:
+                    reservation.assert_source_current()
+            except BaseException as exc:
+                if reservation is not None:
+                    reservation.retain_failed_event(required_event, exc)
+                raise
+
+            def run_reconciliation(*args: Any, **kwargs: Any) -> None:
+                try:
+                    self.reconcile_private_state(*args, **kwargs)
+                except BaseException as exc:
+                    if reservation is not None:
+                        reservation.fail(exc)
+                    raise
+                else:
+                    if reservation is not None:
+                        reservation.complete()
+
+            threading.Thread(
+                target=run_reconciliation,
+                args=(exchange_name,),
+                kwargs={"connection_generation": generation},
+                daemon=True,
+                name=f"btapi-reconcile-{exchange_name}-{generation}",
+            ).start()
+        except BaseException as exc:
+            # Thread.start may have taken effect before raising. The exact
+            # reservation remains held unless that worker later finishes.
+            if reservation is not None:
+                reservation.fail(exc)
+            raise
 
     @staticmethod
     def _reconcile_rows(value: Any) -> list[dict[str, Any]]:
@@ -3652,6 +3755,38 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         connection_generation: int | None = None,
     ) -> dict[str, Any]:
         """Backfill private state after reconnect and publish one audit status."""
+        reservation = self._begin_event_reconcile_producer(exchange_name)
+        try:
+            result = self._reconcile_private_state_reserved(
+                exchange_name, connection_generation=connection_generation, reservation=reservation
+            )
+        except BaseException as exc:
+            if reservation is not None:
+                reservation.fail(exc)
+            raise
+        if reservation is not None:
+            reservation.complete()
+        return result
+
+    def _reconcile_private_state_reserved(
+        self, exchange_name: str, *, connection_generation: int | None = None,
+        reservation: _EventReconcileReservation | None = None,
+    ) -> dict[str, Any]:
+        def publish(event: Any, *, normalized: bool = False) -> None:
+            try:
+                if reservation is not None:
+                    reservation.assert_source_current()
+                if normalized:
+                    self._publish_private_event(exchange_name, event, normalized=True)
+                else:
+                    self._publish_private_event(exchange_name, event)
+                if reservation is not None:
+                    reservation.assert_source_current()
+            except BaseException as exc:
+                if reservation is not None:
+                    reservation.retain_failed_event(event, exc)
+                raise
+
         operations = (
             ("orders", lambda: self.get_open_orders(exchange_name, normalized=True)),
             ("account", lambda: self.get_account(exchange_name, normalized=True)),
@@ -3661,7 +3796,13 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
         scopes: dict[str, dict[str, Any]] = {}
         for scope, call in operations:
             try:
-                rows = self._reconcile_rows(call())
+                value = call()
+                try:
+                    rows = self._reconcile_rows(value)
+                except BaseException as exc:
+                    if reservation is not None:
+                        reservation.retain_failed_result(scope, value, exc)
+                    raise
                 scopes[scope] = {"status": "complete", "records": len(rows)}
                 kind = {
                     "orders": "order",
@@ -3669,17 +3810,20 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
                     "positions": "position",
                     "trades": "trade",
                 }[scope]
-                for row in rows:
-                    event = {"kind": kind, **row}
-                    if scope == "orders" and self._execution_session is not None:
-                        # get_open_orders(normalized=True) already merged these
-                        # rows into the execution session.
-                        continue
-                    self._publish_private_event(
-                        exchange_name,
-                        event,
-                        normalized=True,
-                    )
+                for index, row in enumerate(rows):
+                    try:
+                        event = {"kind": kind, **row}
+                        if scope == "orders" and self._execution_session is not None:
+                            # get_open_orders(normalized=True) already merged these
+                            # rows into the execution session.
+                            continue
+                        publish(event, normalized=True)
+                    except BaseException as exc:
+                        if reservation is not None:
+                            # The query already returned the complete list. A
+                            # failed item also strands every unvisited row.
+                            reservation.retain_failed_rows(scope, rows, index, exc)
+                        raise
             except Exception as exc:
                 scopes[scope] = {
                     "status": "failed",
@@ -3696,7 +3840,7 @@ class BtApi(CtpRecoveryQueryMixin, DataDownloaderMixin, BalanceManagerMixin):
             "failed_scopes": tuple(failed),
             "event_id": f"reconcile:{exchange_name}:{generation}:result",
         }
-        self._publish_private_event(exchange_name, result)
+        publish(result)
         return result
 
     async def async_reconcile_private_state(
