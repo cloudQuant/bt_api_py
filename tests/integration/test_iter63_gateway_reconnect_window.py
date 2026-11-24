@@ -8,6 +8,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from bt_api_py import _win32_security as win32_security
 from bt_api_base.account_protocol import AccountKey, AccountResourceKey
 from bt_api_base.service_protocol import WireScope
 from bt_api_ctp.ctp.client import CtpNativeStopReceipt, TraderClient
@@ -24,8 +25,16 @@ from tests.integration.test_iter63_gateway_direct_service import CLIENT_A, DOMAI
 from tests.test_iter63_ctp_gateway_trading import _read_profile, _resources, _wait
 
 
+def _secure_tmp_path(path):
+    """Keep synthetic Gateway storage private on Windows, where chmod is inert."""
+    if win32_security.WINDOWS:
+        win32_security._set_owner_only_acl(path)
+    return path
+
+
 @pytest.fixture
 def harness(tmp_path, monkeypatch, request):
+    _secure_tmp_path(tmp_path)
     monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[2] / "bt_api/bt_api_ctp/tests"))
     native_helper = importlib.import_module("test_iter62_settlement_readback_on_write")
     instrument_helper = importlib.import_module("test_iter63_gateway_instrument_query")

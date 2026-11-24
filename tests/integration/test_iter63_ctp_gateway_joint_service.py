@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 import zmq
+from bt_api_py import _win32_security as win32_security
 from bt_api_base.account_protocol import AccountKey, AccountResourceKey
 from bt_api_base.gateway_direct_protocol import GatewayCommandBinding
 from bt_api_base.market_protocol import MarketInstrumentKey, MarketSubscriptionKey
@@ -335,7 +336,15 @@ def _until(fn, timeout=10):
         time.sleep(0.05)
 
 
+def _secure_tmp_path(path):
+    """Keep synthetic Gateway storage private on Windows, where chmod is inert."""
+    if win32_security.WINDOWS:
+        win32_security._set_owner_only_acl(path)
+    return path
+
+
 def test_spawned_real_ctp_session_shares_one_td_and_lazy_md(tmp_path):
+    _secure_tmp_path(tmp_path)
     (tmp_path / "guard").mkdir()
     (tmp_path / "flow").mkdir(mode=0o700)
     journal = GatewayDirectCommandJournal.create(tmp_path / "orders.sqlite", SCOPE, generation="provisioned")
@@ -498,6 +507,7 @@ def test_spawned_real_ctp_session_shares_one_td_and_lazy_md(tmp_path):
 def test_blocked_native_md_start_retains_one_acquisition(tmp_path):
     from bt_api_py.service_runtime_thread import ThreadedRuntimeError
 
+    _secure_tmp_path(tmp_path)
     (tmp_path / "guard").mkdir()
     (tmp_path / "flow").mkdir(mode=0o700)
     journal = GatewayDirectCommandJournal.create(tmp_path / "orders.sqlite", SCOPE, generation="provisioned")
