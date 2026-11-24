@@ -2787,9 +2787,12 @@ class ServiceRegistry:
         enable_gateway_risk_first_reserve_admission: bool = False,
         enable_risk_admin_cancel_admission: bool = False,
         enable_risk_parent_execution_writes: bool = False,
+        enable_gateway_retired_session_ack: bool = False,
     ) -> None:
         if not _text(service_id):
             raise ValueError("service_id is invalid")
+        if type(enable_gateway_retired_session_ack) is not bool:
+            raise TypeError("enable_gateway_retired_session_ack must be a bool")
         if not _text(policy_version) or not _text(requirements_version):
             raise ValueError("version references are invalid")
         if type(enable_risk_v2_dispatch_admission) is not bool:
@@ -3035,6 +3038,7 @@ class ServiceRegistry:
                 raise ValueError("trusted paper legacy import policy does not match one exact grant")
 
         self.service_id = service_id
+        self._gateway_retired_session_ack_enabled = enable_gateway_retired_session_ack
         # Despite its historical name, this opt-in covers both Risk v2
         # reserve and dispatch. Both remain disabled by default; a production
         # handler must consume and recheck its own operation-bound admission.
@@ -3191,6 +3195,8 @@ class ServiceRegistry:
                 )
                 # A new process epoch invalidates every prior lease. Strategy
                 # write claims intentionally live in a separate durable table.
+                if self._gateway_retired_session_ack_enabled:
+                    self._retain_retired_gateway_sessions()
                 self._db.execute("DELETE FROM sessions")
                 self._db.execute("UPDATE strategy_write_claims SET active_registration_id=NULL")
                 self._db.execute(
@@ -3383,6 +3389,33 @@ class ServiceRegistry:
             self._db.execute("COMMIT")
         except sqlite3.Error:
             raise failed from None
+
+    def _retain_retired_gateway_sessions(self) -> None:
+        """Capture the preceding Gateway epoch within the fenced restart transaction."""
+        self._db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS gateway_retired_sessions (
+                registration_id TEXT PRIMARY KEY,
+                service_epoch TEXT NOT NULL,
+                successor_epoch TEXT NOT NULL,
+                principal TEXT NOT NULL,
+                identity_json TEXT NOT NULL,
+                scope_json TEXT NOT NULL
+            )
+            """
+        )
+        self._db.execute("DELETE FROM gateway_retired_sessions")
+        self._db.execute(
+            """
+            INSERT INTO gateway_retired_sessions
+                (registration_id, service_epoch, successor_epoch, principal, identity_json, scope_json)
+            SELECT registration_id, service_epoch, ?, principal, identity_json, scope_json
+            FROM sessions
+            WHERE service_epoch = (SELECT value FROM registry_meta WHERE key='service_epoch')
+              AND port IN ('service.account_read', 'service.direct_write', 'service.market_source')
+            """,
+            (self._epoch,),
+        )
 
     def _create_schema(self) -> None:
         self._migrate_freeze_schema()
@@ -6819,6 +6852,29 @@ class ServiceRegistry:
             "requirements_version": row["requirements_version"],
         }
 
+    def _acknowledge_retired_gateway_session(
+        self, principal: str, request: WireEnvelope, registration_id: str, service_epoch: str
+    ) -> Mapping[str, Any]:
+        """Acknowledge only an exact session retired by this Registry's restart."""
+        with self._read_snapshot():
+            row = self._db.execute(
+                """
+                SELECT identity_json, scope_json FROM gateway_retired_sessions
+                WHERE registration_id=? AND service_epoch=? AND successor_epoch=? AND principal=?
+                """,
+                (registration_id, service_epoch, self._epoch, principal),
+            ).fetchone()
+            if row is None:
+                return self._failure("STALE_EPOCH")
+            identity = request.header.identity
+            if identity != self._stored_identity(row["identity_json"]) or not self._identity_is_trusted(
+                principal, identity
+            ):
+                return self._failure("DENIED")
+            if request.header.scope != self._stored_scope(row["scope_json"]):
+                return self._failure("SCOPE_DENIED")
+            return self._success({"unregistered": True, "registration_id": registration_id})
+
     def _renew_or_unregister(
         self,
         principal: str,
@@ -6834,6 +6890,10 @@ class ServiceRegistry:
         ):
             return self._failure("INVALID_REQUEST")
         if payload["service_epoch"] != self._epoch:
+            if not renew and self._gateway_retired_session_ack_enabled:
+                return self._acknowledge_retired_gateway_session(
+                    principal, request, payload["registration_id"], payload["service_epoch"]
+                )
             return self._failure("STALE_EPOCH")
         now = self._now()
         with self._transaction():

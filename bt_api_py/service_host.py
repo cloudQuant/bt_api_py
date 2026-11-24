@@ -1426,6 +1426,11 @@ class ServiceHost:
                     enable_gateway_risk_first_reserve_admission=any(
                         item.settings.risk_first_enabled for item in self._gateway_delegations
                     ),
+                    enable_gateway_retired_session_ack=any(
+                        grant.actor_kind == "risk"
+                        for item in self._gateway_delegations
+                        for grant in item.settings.grants
+                    ),
                 )
             except ServiceRegistryStartupCleanupError as exc:
                 self._registry = exc.registry
