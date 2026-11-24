@@ -57,6 +57,15 @@ def _free_endpoint() -> str:
         return f"tcp://127.0.0.1:{probe.getsockname()[1]}"
 
 
+def _wait_until(predicate, timeout: float = 5.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return
+        time.sleep(0.005)
+    assert predicate()
+
+
 def _json_ready(value):
     if isinstance(value, Mapping):
         return {key: _json_ready(item) for key, item in value.items()}
@@ -151,7 +160,12 @@ def _client_config(endpoint: str):
     )
 
 
-def test_monitor_observation_query_requires_exact_bound_target_and_deadline(tmp_path):
+@pytest.mark.parametrize("recovery_enabled", [False, True], ids=["baseline", "curve-rollover"])
+def test_monitor_observation_query_requires_exact_bound_target_and_deadline(
+    tmp_path, monkeypatch, recovery_enabled
+):
+    from bt_api_transport_zmq import service_v2
+
     endpoint = _free_endpoint()
     server_public, server_secret = zmq.curve_keypair()
     client_public, client_secret = zmq.curve_keypair()
@@ -223,10 +237,24 @@ def test_monitor_observation_query_requires_exact_bound_target_and_deadline(tmp_
     try:
         host_started = started.get(timeout=15)
         assert host_started[0] == "ready", host_started
-        runtime_run_id = "synthetic-monitor-runtime"
+        runtime_run_id = "synthetic-monitor-runtime-0"
+        raw_runtimes = []
+        raw_close_calls = []
+        raw_rpc_calls = []
+        forced_low_budget_sockets = set()
+        original_remaining = service_v2.ZmqServiceClient.remaining_socket_message_ids.fget
+
+        if recovery_enabled:
+            monkeypatch.setattr(
+                service_v2.ZmqServiceClient,
+                "remaining_socket_message_ids",
+                property(lambda client: (
+                    32 if id(client) in forced_low_budget_sockets else original_remaining(client)
+                )),
+            )
 
         def runtime_factory():
-            return ServiceClientRuntime(
+            runtime = ServiceClientRuntime(
                 client_config,
                 identity=app_identity,
                 scope_resolver=lambda _scope_ref: _SCOPE,
@@ -236,9 +264,35 @@ def test_monitor_observation_query_requires_exact_bound_target_and_deadline(tmp_
                         _SECURITY_REF: ClientCurveKeys(server_public, client_public, client_secret)
                     }
                 ),
-                run_id=runtime_run_id,
+                run_id=f"synthetic-monitor-runtime-{len(raw_runtimes)}",
                 requested_operations={"application.monitor": frozenset({"observation.query"})},
+                require_unregister_ack=recovery_enabled,
             )
+            raw_runtimes.append(runtime)
+            first_runtime = len(raw_runtimes) == 1
+            original_call_bound = runtime.call_bound
+            original_close = runtime.close
+            call_count = [0]
+
+            def tracked_call_bound(target, operation, arguments, *, deadline_monotonic):
+                result = original_call_bound(
+                    target, operation, arguments, deadline_monotonic=deadline_monotonic
+                )
+                raw_rpc_calls.append((runtime.run_id, arguments.get("request_id")))
+                call_count[0] += 1
+                if recovery_enabled and first_runtime and call_count[0] == 1:
+                    forced_low_budget_sockets.update(
+                        id(adapter._transport) for adapter in runtime._transports.values()
+                    )
+                return result
+
+            def tracked_close():
+                raw_close_calls.append(runtime.run_id)
+                return original_close()
+
+            runtime.call_bound = tracked_call_bound
+            runtime.close = tracked_close
+            return runtime
 
         direct_runtime = runtime_factory()
         unsigned = sign_observation_query_request(
@@ -254,8 +308,19 @@ def test_monitor_observation_query_requires_exact_bound_target_and_deadline(tmp_
         with pytest.raises(ServiceRuntimeRequestNotSentError):
             direct_runtime.call("application.monitor", "observation.query", unsigned)
 
-        wrapper = ThreadedServiceClientRuntime(runtime_factory)
+        # The direct-call control above constructed an unstarted object. Track
+        # only the two owner-thread instances used by the wrapper.
+        raw_runtimes.clear()
+        wrapper = ThreadedServiceClientRuntime(
+            runtime_factory,
+            require_unregister_ack=recovery_enabled,
+            recover_on_socket_retirement=recovery_enabled,
+        )
         snapshot = wrapper.start(timeout_seconds=10)
+        assert len(raw_runtimes) == 1
+        assert snapshot.run_id == runtime_run_id
+        # The authenticated registration exchange uses two unique request ids.
+        assert snapshot.min_socket_message_ids_remaining == service_v2._MAX_MESSAGE_IDS_PER_SOCKET - 2
         (binding,) = snapshot.bindings
         target = BoundMonitorQueryTarget(
             "application.monitor",
@@ -325,8 +390,9 @@ def test_monitor_observation_query_requires_exact_bound_target_and_deadline(tmp_
                                             strategy_ref="synthetic-strategy")),
             replace(target, expected_peer=WireIdentity(WireRole.SERVICE, "other-service-principal", "other-service")),
             replace(target, server_key_fingerprint=hashlib.sha256(b"different-server-key").hexdigest()),
-            replace(target, registration_id="stale-monitor-query-registration"),
-            replace(target, service_epoch="stale-monitor-query-epoch"),
+            replace(target, runtime_run_id="forged-monitor-runtime"),
+            replace(target, registration_id="forged-monitor-registration"),
+            replace(target, service_epoch="forged-monitor-epoch"),
         )
         for invalid_target in invalid_targets:
             with pytest.raises(ServiceRuntimeRequestNotSentError):
@@ -362,6 +428,48 @@ def test_monitor_observation_query_requires_exact_bound_target_and_deadline(tmp_
             event_types=(_EVENT_TYPE,),
             epoch=1,
         )
+        if recovery_enabled:
+            _wait_until(lambda: len(raw_runtimes) == 2 and wrapper.status().healthy)
+            old_runtime = raw_runtimes[0]
+            successor_snapshot = wrapper.status()
+            assert old_runtime is not raw_runtimes[1]
+            assert successor_snapshot.run_id != snapshot.run_id
+            assert successor_snapshot.bindings[0].registration_id != binding.registration_id
+            assert successor_snapshot.bindings[0].authenticated_peer == service_identity
+            assert successor_snapshot.bindings[0].server_key_fingerprint == target.server_key_fingerprint
+            assert old_runtime.state == "closed"
+            assert old_runtime.bindings == ()
+            assert old_runtime.cleanup_failures == 0
+            assert old_runtime.unregister_uncertainties == 0
+            assert old_runtime.unknown_registration_count == 0
+            assert old_runtime.open_transport_count == 0
+            assert raw_close_calls == [runtime_run_id]
+            unsigned_second = sign_observation_query_request(
+                key=_HMAC_KEY,
+                principal_ref=_APP_PRINCIPAL,
+                scope=_SCOPE,
+                event_types=(_EVENT_TYPE,),
+                epoch=1,
+                page_size=10,
+                request_id="monitor-query-request-0002",
+                issued_at=time.time(),
+            )
+            second_page = _json_ready(
+                wrapper.call_bound(
+                    target,
+                    "observation.query",
+                    unsigned_second,
+                    deadline_monotonic=time.monotonic() + 5.0,
+                )
+            )
+            assert second_page["state"] == "not_collected"
+            assert not second_page["events"]
+            assert raw_rpc_calls == [
+                (runtime_run_id, "monitor-query-request-0001"),
+                (successor_snapshot.run_id, "monitor-query-request-0002"),
+            ]
+        else:
+            assert raw_rpc_calls == [(runtime_run_id, "monitor-query-request-0001")]
     finally:
         if wrapper is not None:
             wrapper.close(timeout_seconds=10)

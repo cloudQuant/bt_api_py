@@ -18,7 +18,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
-from bt_api_base.service_protocol import WireIdentity, WireScope
+from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 
 from bt_api_py.service_runtime import (
     BoundAccountServiceTarget,
@@ -52,6 +52,29 @@ _NATIVE_MONOTONIC = time.monotonic
 _DEADLINE_CLOCK = _NATIVE_MONOTONIC
 _BOUND_MONOTONIC = time.monotonic
 _BOUND_MONOTONIC_NS = time.monotonic_ns
+_CLIENT_SOCKET_RECOVERY_HEADROOM = 32
+
+
+def _socket_binding_snapshot_usable(bindings: Any, remaining: Any) -> bool:
+    """Require a live authenticated binding and more than the rotation headroom."""
+    if type(bindings) is not tuple or type(remaining) is not int or remaining <= _CLIENT_SOCKET_RECOVERY_HEADROOM:
+        return False
+    active = []
+    for binding in bindings:
+        if type(binding) is not BindingSnapshot or type(binding.active) is not bool:
+            return False
+        if binding.active:
+            if type(binding.required) is not bool:
+                return False
+            active.append(binding)
+    return bool(active) and all(
+        type(binding.authenticated_peer) is WireIdentity
+        and binding.authenticated_peer.role is WireRole.SERVICE
+        and binding.authenticated_peer.delegate_ref is None
+        and type(binding.server_key_fingerprint) is str
+        and re.fullmatch(r"[0-9a-f]{64}", binding.server_key_fingerprint) is not None
+        for binding in active
+    )
 
 
 def _bound_clock_current() -> bool:
@@ -767,6 +790,17 @@ class ThreadedServiceClientRuntime:
     process-local root; callbacks run outside the condition. The raw runtime
     must explicitly report ``sticky_cleanup_enabled is True``. These checks
     cannot make a subsequent cleanup operation atomic with the observation.
+
+    ``recover_on_socket_retirement`` is an explicit read-client opt-in. It
+    requires ``require_unregister_ack=True``, the native bound-call clock, and
+    no owner extension. It accepts only target-bound Execution management and
+    Monitor queries. At 32 or fewer remaining socket message ids, or when an
+    active registration loses its authenticated peer/key evidence, the owner
+    closes and proves the old runtime clean before creating one successor.
+    The in-flight request is never resent; its result or unknown outcome is
+    returned unchanged. Trusted targets retain their service, endpoint,
+    identity, scope, peer, and key while the wrapper refreshes only the new
+    runtime id and registration id/epoch.
     """
 
     def __init__(
@@ -777,6 +811,7 @@ class ThreadedServiceClientRuntime:
         monotonic_clock: Callable[[], float] = time.monotonic,
         owner_extension_factory: Callable[[], OwnerRuntimeExtension] | None = None,
         require_unregister_ack: bool = False,
+        recover_on_socket_retirement: bool = False,
         cleanup_unknown: Callable[[], bool] | None = None,
         on_cleanup_sticky: Callable[[ThreadedServiceClientRuntime], None] | None = None,
     ):
@@ -790,6 +825,12 @@ class ThreadedServiceClientRuntime:
             raise TypeError("owner_extension_factory must be callable")
         if type(require_unregister_ack) is not bool:
             raise ValueError("invalid cleanup policy")
+        if (type(recover_on_socket_retirement) is not bool
+                or (recover_on_socket_retirement and (
+                    not require_unregister_ack or owner_extension_factory is not None
+                    or monotonic_clock is not _BOUND_MONOTONIC
+                ))):
+            raise ValueError("invalid socket recovery policy")
         if (cleanup_unknown is None) != (on_cleanup_sticky is None) or (
             cleanup_unknown is not None
             and (not callable(cleanup_unknown) or not callable(on_cleanup_sticky))
@@ -802,6 +843,7 @@ class ThreadedServiceClientRuntime:
         self._sticky_resources: tuple[Any, Any] | None = None
         self._sticky_errors: list[BaseException] = []
         self._require_unregister_ack = require_unregister_ack
+        self._recover_on_socket_retirement = recover_on_socket_retirement
         self._owner_extension_factory = owner_extension_factory
         # Trusted clock must share the runtime's monotonic clock domain.
         self._monotonic_clock = monotonic_clock
@@ -825,6 +867,8 @@ class ThreadedServiceClientRuntime:
         self._bindings: tuple[BindingSnapshot, ...] = ()
         self._identity: WireIdentity | None = None
         self._run_id: str | None = None
+        self._runtime_generation = 0
+        self._recovery_target_anchors: dict[tuple[Any, ...], dict[tuple[str, str, str], int]] = {}
         self._cleanup_failures = 0
         self._unregister_uncertainties = 0
         self._unknown_registration_count: int | None = 0
@@ -880,6 +924,11 @@ class ThreadedServiceClientRuntime:
     @property
     def strict_cleanup_required(self) -> bool:
         return self._require_unregister_ack
+
+    @property
+    def recover_on_socket_retirement(self) -> bool:
+        """Whether target-bound reads rotate a retired or near-limit CURVE client."""
+        return self._recover_on_socket_retirement
 
     def _sample_lease_clock(self) -> float | None:
         try:
@@ -960,6 +1009,8 @@ class ThreadedServiceClientRuntime:
         _validate_order_cut_only: bool = False,
     ) -> Any:
         self._check_reentry()
+        if self._recover_on_socket_retirement:
+            raise ServiceRuntimeRequestNotSentError()
         if operation in (_ACCOUNT_BOUND_OPERATION, _MANAGEMENT_BOUND_OPERATION,
                          _MANAGEMENT_PLAN_BOUND_OPERATION, _MANAGEMENT_BY_REQUEST_BOUND_OPERATION,
                          _MONITOR_QUERY_BOUND_OPERATION):
@@ -1052,6 +1103,10 @@ class ThreadedServiceClientRuntime:
                    expected_server_key_fingerprint: str | None = None,
                    deadline_monotonic: float | None = None, _validate_order_cut_only: bool = False) -> Any:
         """Dispatch either the legacy route-bound or target-bound owner call."""
+        if self._recover_on_socket_retirement and type(mount) not in (
+            BoundExecutionManagementReadTarget, BoundMonitorQueryTarget
+        ):
+            raise ServiceRuntimeRequestNotSentError()
         if (route is not None or expected_binding is not None or _expected_token is not None
                 or type(mount) is str):
             if type(route) is not BoundCallRoute or deadline_monotonic is not None:
@@ -1067,10 +1122,101 @@ class ThreadedServiceClientRuntime:
             return result
         if expected_server_key_fingerprint is not None or _validate_order_cut_only:
             raise ThreadedRuntimeError("INVALID_ARGUMENTS")
+        if self._recover_on_socket_retirement:
+            mount = self._rebind_recoverable_target(mount, operation)
         return self._call_bound_target(
             mount, operation, arguments, timeout_seconds=timeout_seconds,
             deadline_monotonic=deadline_monotonic,
         )
+
+    def _rebind_recoverable_target(self, target: Any, operation: str) -> Any:
+        """Refresh only registration-owned fields after an opted-in rotation.
+
+        Service, endpoint, identity, scope, peer, and server key remain the
+        caller's trusted inputs. Registration id, epoch, and local runtime id
+        come from the currently running replacement instance only when this
+        exact target was previously observed on an earlier wrapper generation.
+        """
+        if type(target) not in (BoundExecutionManagementReadTarget, BoundMonitorQueryTarget):
+            raise ServiceRuntimeRequestNotSentError()
+        try:
+            _validate_bound_target_operation(target, operation)
+            with self._condition:
+                if (self._state != "running" or self._stop or not self._healthy
+                        or self._identity != target.identity or type(self._run_id) is not str):
+                    raise ValueError
+                matches = [
+                    binding for binding in self._bindings
+                    if type(binding) is BindingSnapshot
+                    and binding.active is True and binding.required is True
+                    and binding.mount == target.mount
+                    and binding.service_id == target.service_id
+                    and binding.instance_id == target.instance_id
+                    and binding.scope_ref == target.scope_ref
+                    and binding.scope == target.scope
+                    and type(binding.operations) is frozenset
+                    and operation in binding.operations
+                    and binding.authenticated_peer == target.expected_peer
+                    and binding.server_key_fingerprint == target.server_key_fingerprint
+                    and type(binding.registration_id) is str and binding.registration_id
+                    and type(binding.service_epoch) is str and binding.service_epoch
+                ]
+                if len(matches) != 1:
+                    raise ValueError
+                binding = matches[0]
+                current = (
+                    self._run_id,
+                    binding.registration_id,
+                    binding.service_epoch,
+                )
+                supplied = (
+                    target.runtime_run_id,
+                    target.registration_id,
+                    target.service_epoch,
+                )
+                route_key = self._recovery_target_route_key(target, operation)
+                if supplied == current:
+                    self._remember_recovery_target_locked(route_key, supplied)
+                    return target
+                anchors = self._recovery_target_anchors.get(route_key, {})
+                anchor_generation = anchors.get(supplied)
+                if (type(anchor_generation) is not int
+                        or anchor_generation >= self._runtime_generation):
+                    raise ValueError
+                return replace(
+                    target,
+                    runtime_run_id=current[0],
+                    registration_id=current[1],
+                    service_epoch=current[2],
+                )
+        except Exception:
+            raise ServiceRuntimeRequestNotSentError() from None
+
+    @staticmethod
+    def _recovery_target_route_key(target: Any, operation: str) -> tuple[Any, ...]:
+        """Key the bounded predecessor record by every trusted target field."""
+        return (
+            type(target), operation, target.mount, target.port, target.service_id,
+            target.instance_id, target.scope_ref, target.scope, target.identity,
+            target.transport_ref, target.security_profile_ref, target.endpoint,
+            target.expected_peer, target.server_key_fingerprint,
+        )
+
+    def _remember_recovery_target_locked(
+        self, route_key: tuple[Any, ...], registration: tuple[str, str, str]
+    ) -> None:
+        """Remember observed current bindings, retaining the original and recent ids."""
+        anchors = self._recovery_target_anchors.get(route_key)
+        if anchors is None:
+            if len(self._recovery_target_anchors) >= 128:
+                return
+            anchors = {}
+            self._recovery_target_anchors[route_key] = anchors
+        anchors[registration] = self._runtime_generation
+        if len(anchors) > 16:
+            observed = tuple(anchors.items())
+            keep = (observed[0], *observed[-15:])
+            self._recovery_target_anchors[route_key] = dict(keep)
 
     def _call_bound_target(
         self, target: BoundServiceTarget | BoundAccountServiceTarget | BoundExecutionParentTarget | BoundExecutionManagementReadTarget | BoundMonitorQueryTarget, operation: str, arguments: Mapping[str, Any],
@@ -1173,6 +1319,8 @@ class ThreadedServiceClientRuntime:
 
     def _parent_capability_call(self, action, target, spec, capability, timeout_seconds, absolute_deadline):
         self._check_reentry()
+        if self._recover_on_socket_retirement:
+            raise ServiceRuntimeRequestNotSentError()
         try:
             if action not in ('source', 'recorded_source', 'register'):
                 raise ValueError
@@ -1636,7 +1784,10 @@ class ThreadedServiceClientRuntime:
             self._lease_deadline = lease_deadline
             self._lease_clock_native_proven = native_domain
             self._lease_evidence_invalid = lease_evidence_invalid
-            self._healthy = healthy and not self._stop
+            self._healthy = healthy and not self._stop and (
+                not self._recover_on_socket_retirement
+                or _socket_binding_snapshot_usable(tuple(snapshots), min_remaining)
+            )
             (self._cleanup_failures, self._unregister_uncertainties,
              self._unknown_registration_count) = cleanup_counts
             self._strict_unregister_ack = strict_ack
@@ -1692,6 +1843,7 @@ class ThreadedServiceClientRuntime:
                              and runtime._monotonic_clock is _NATIVE_MONOTONIC)
         except Exception:
             native_domain = False
+        min_remaining = self._read_replacement_count(runtime, "min_socket_message_ids_remaining")
         if self._cleanup_unknown is not None:
             cleanup_counts = self._capture_raw_uncertainties(runtime)
             healthy = bool(runtime.healthy)
@@ -1705,13 +1857,20 @@ class ThreadedServiceClientRuntime:
             self._run_id = run_id
             self._lease_deadline = min(deadlines) if deadlines else None
             self._lease_clock_native_proven = native_domain
+            self._min_socket_message_ids_remaining = min_remaining
             if self._cleanup_unknown is not None:
-                self._healthy = healthy and not self._stop
+                self._healthy = healthy and not self._stop and (
+                    not self._recover_on_socket_retirement
+                    or _socket_binding_snapshot_usable(bindings, min_remaining)
+                )
                 (self._cleanup_failures, self._unregister_uncertainties,
                  self._unknown_registration_count) = cleanup_counts
                 self._strict_unregister_ack = strict_ack
             else:
-                self._healthy = bool(runtime.healthy) and not self._stop
+                self._healthy = bool(runtime.healthy) and not self._stop and (
+                    not self._recover_on_socket_retirement
+                    or _socket_binding_snapshot_usable(bindings, min_remaining)
+                )
                 self._cleanup_failures = runtime.cleanup_failures
                 self._unregister_uncertainties = runtime.unregister_uncertainties
                 # Missing source evidence must not be projected as a clean zero.
@@ -1730,9 +1889,6 @@ class ThreadedServiceClientRuntime:
                 self._open_transport_count = self._read_replacement_count(
                     runtime, "open_transport_count"
                 )
-                self._min_socket_message_ids_remaining = self._read_replacement_count(
-                    runtime, "min_socket_message_ids_remaining"
-                )
 
     def _capture_raw_uncertainties(self, runtime: Any) -> tuple[int, int, int]:
         try:
@@ -1750,6 +1906,140 @@ class ThreadedServiceClientRuntime:
             raise
         except BaseException as error:
             raise _StickyCleanupSignal(error) from error
+
+    def _replacement_cleanup_proven(self, runtime: Any) -> bool:
+        """Require exact strict unregister and local-resource release evidence."""
+        from bt_api_py.service_runtime import ServiceClientRuntime
+        if type(runtime) is not ServiceClientRuntime:
+            return False
+        try:
+            bindings = runtime.bindings
+            return (
+                runtime._require_unregister_ack is True
+                and type(runtime._require_unregister_ack) is bool
+                and type(runtime.state) is str and runtime.state == "closed"
+                and type(bindings) is tuple and not bindings
+                and type(runtime.cleanup_failures) is int and runtime.cleanup_failures == 0
+                and type(runtime.unregister_uncertainties) is int and runtime.unregister_uncertainties == 0
+                and type(runtime.unknown_registration_count) is int and runtime.unknown_registration_count == 0
+                and type(runtime.open_transport_count) is int and runtime.open_transport_count == 0
+            )
+        except BaseException:
+            return False
+
+    def _replacement_close_is_retryable(self, runtime: Any) -> bool:
+        """A failed startup may be closed once only while no uncertainty is recorded."""
+        from bt_api_py.service_runtime import ServiceClientRuntime
+        if type(runtime) is not ServiceClientRuntime:
+            return False
+        try:
+            return (
+                runtime._require_unregister_ack is True
+                and type(runtime._require_unregister_ack) is bool
+                and type(runtime.cleanup_failures) is int and runtime.cleanup_failures == 0
+                and type(runtime.unregister_uncertainties) is int and runtime.unregister_uncertainties == 0
+                and type(runtime.unknown_registration_count) is int and runtime.unknown_registration_count == 0
+                and runtime.state != "closed"
+            )
+        except BaseException:
+            return False
+
+    def _capture_recovery_state(self, runtime: Any, extension: Any) -> None:
+        try:
+            self._checked_action(runtime, extension, lambda: self._capture(runtime))
+        except BaseException as error:
+            self._enter_sticky(runtime, extension, error)
+
+    def _close_recovery_runtime_once(self, runtime: Any, extension: Any) -> None:
+        """Close one opted-in runtime once, retaining it on any uncertain result."""
+        try:
+            self._checked_action(runtime, extension, runtime.close)
+            self._capture_recovery_state(runtime, extension)
+            if not self._checked_action(
+                runtime, extension, lambda: self._replacement_cleanup_proven(runtime)
+            ):
+                raise ThreadedRuntimeError("RUNTIME_CLEANUP_UNCERTAIN")
+        except BaseException as error:
+            self._enter_sticky(runtime, extension, error)
+
+    def _close_failed_replacement_once(self, runtime: Any, error: BaseException) -> None:
+        """Clean a failed successor once; never retry a release with uncertainty."""
+        if self._checked_action(
+            runtime, None, lambda: self._replacement_cleanup_proven(runtime)
+        ):
+            return
+        if not self._checked_action(
+            runtime, None, lambda: self._replacement_close_is_retryable(runtime)
+        ):
+            self._enter_sticky(runtime, None, error)
+        try:
+            self._checked_action(runtime, None, runtime.close)
+            self._capture_recovery_state(runtime, None)
+            if not self._checked_action(
+                runtime, None, lambda: self._replacement_cleanup_proven(runtime)
+            ):
+                raise ThreadedRuntimeError("RUNTIME_CLEANUP_UNCERTAIN")
+        except BaseException as cleanup_error:
+            self._enter_sticky(runtime, None, cleanup_error)
+
+    def _replace_retired_socket_runtime(self, runtime: Any, extension: Any) -> Any:
+        """Close the retired registration before creating one fresh CURVE runtime."""
+        from bt_api_py.service_runtime import ServiceClientRuntime
+        with self._condition:
+            self._healthy = False
+            self._condition.notify_all()
+        if type(runtime) is not ServiceClientRuntime or extension is not None:
+            self._enter_sticky(
+                runtime, extension, ThreadedRuntimeError("CLEANUP_POLICY_UNPROVEN")
+            )
+        if not self._checked_action(
+            runtime, extension,
+            lambda: type(runtime._require_unregister_ack) is bool
+            and runtime._require_unregister_ack is True,
+        ):
+            self._enter_sticky(
+                runtime, extension, ThreadedRuntimeError("CLEANUP_POLICY_UNPROVEN")
+            )
+        self._close_recovery_runtime_once(runtime, extension)
+
+        try:
+            replacement = self._checked_action(None, None, self._factory)
+        except Exception:
+            raise ThreadedRuntimeError("RUNTIME_RECOVERY_FAILED") from None
+        if type(replacement) is not ServiceClientRuntime:
+            self._enter_sticky(
+                replacement, None, ThreadedRuntimeError("CLEANUP_POLICY_UNPROVEN")
+            )
+        if not self._checked_action(
+            replacement, None,
+            lambda: type(replacement._require_unregister_ack) is bool
+            and replacement._require_unregister_ack is True,
+        ):
+            self._enter_sticky(
+                replacement, None, ThreadedRuntimeError("CLEANUP_POLICY_UNPROVEN")
+            )
+        try:
+            self._checked_action(replacement, None, replacement.start)
+            self._capture_recovery_state(replacement, None)
+            if (not self._checked_action(replacement, None, lambda: bool(replacement.healthy))
+                    or self._socket_recovery_required()):
+                raise ThreadedRuntimeError("RUNTIME_RECOVERY_FAILED")
+        except BaseException as error:
+            self._close_failed_replacement_once(replacement, error)
+            if isinstance(error, ThreadedRuntimeError):
+                raise error
+            raise ThreadedRuntimeError("RUNTIME_RECOVERY_FAILED") from None
+        with self._condition:
+            self._runtime_generation += 1
+        return replacement
+
+    def _socket_recovery_required(self) -> bool:
+        if not self._recover_on_socket_retirement:
+            return False
+        with self._condition:
+            return not _socket_binding_snapshot_usable(
+                self._bindings, self._min_socket_message_ids_remaining
+            )
 
     def _read_replacement_text(self, runtime: Any, name: str) -> str | None:
         """Read one optional finite code; a missing or malformed value is unknown."""
@@ -1915,12 +2205,13 @@ class ThreadedServiceClientRuntime:
             self._state, self._error, self._healthy = "close_failed", "CLEANUP_FAILED", False
             self._reject_pending("NOT_READY")
             self._condition.notify_all()
-        try:
-            self._on_cleanup_sticky(self)
-        except BaseException as callback_error:
-            with self._condition:
-                self._sticky_errors.append(callback_error)
-                self._condition.notify_all()
+        if self._on_cleanup_sticky is not None:
+            try:
+                self._on_cleanup_sticky(self)
+            except BaseException as callback_error:
+                with self._condition:
+                    self._sticky_errors.append(callback_error)
+                    self._condition.notify_all()
         # Do not retry or release resources automatically; the independent
         # process-local root remains even if this wait is interrupted.
         with self._condition:
@@ -1962,7 +2253,14 @@ class ThreadedServiceClientRuntime:
             if extension is not None:
                 self._checked_action(runtime, extension, lambda: extension.start(runtime))
                 self._capture_owner_uncertainties(extension)
-            self._checked_action(runtime, extension, lambda: self._capture(runtime))
+            if self._recover_on_socket_retirement:
+                self._capture_recovery_state(runtime, extension)
+                if self._socket_recovery_required():
+                    retired = runtime
+                    runtime = None
+                    runtime = self._replace_retired_socket_runtime(retired, extension)
+            else:
+                self._checked_action(runtime, extension, lambda: self._capture(runtime))
             with self._condition:
                 if self._cleanup_unknown is not None and not self._stop and not self._healthy:
                     raise ThreadedRuntimeError("NOT_READY")
@@ -1981,8 +2279,31 @@ class ThreadedServiceClientRuntime:
                 with self._condition:
                     if self._stop:
                         break
-                self._checked_action(runtime, extension, runtime.maintain)
-                self._checked_action(runtime, extension, lambda: self._capture(runtime))
+                if self._recover_on_socket_retirement and self._socket_recovery_required():
+                    retired = runtime
+                    runtime = None
+                    runtime = self._replace_retired_socket_runtime(retired, extension)
+                    continue
+                try:
+                    self._checked_action(runtime, extension, runtime.maintain)
+                except Exception:
+                    if self._recover_on_socket_retirement:
+                        self._capture_recovery_state(runtime, extension)
+                        if self._socket_recovery_required():
+                            retired = runtime
+                            runtime = None
+                            runtime = self._replace_retired_socket_runtime(retired, extension)
+                            continue
+                    raise
+                if self._recover_on_socket_retirement:
+                    self._capture_recovery_state(runtime, extension)
+                    if self._socket_recovery_required():
+                        retired = runtime
+                        runtime = None
+                        runtime = self._replace_retired_socket_runtime(retired, extension)
+                        continue
+                else:
+                    self._checked_action(runtime, extension, lambda: self._capture(runtime))
                 with self._condition:
                     if self._cleanup_unknown is not None and not self._stop and not self._healthy:
                         raise ThreadedRuntimeError("NOT_READY")
@@ -2171,9 +2492,23 @@ class ThreadedServiceClientRuntime:
                                 raise ValueError
                         except Exception:
                             raise ServiceRuntimeRequestNotSentError() from None
-                        result = runtime.call_bound(
-                            snapshot_target, snapshot_operation, snapshot_arguments, deadline_monotonic=snapshot_deadline
-                        )
+                        try:
+                            if self._recover_on_socket_retirement:
+                                result = self._checked_action(
+                                    runtime, extension,
+                                    lambda: runtime.call_bound(
+                                        snapshot_target, snapshot_operation, snapshot_arguments,
+                                        deadline_monotonic=snapshot_deadline,
+                                    ),
+                                )
+                            else:
+                                result = runtime.call_bound(
+                                    snapshot_target, snapshot_operation, snapshot_arguments,
+                                    deadline_monotonic=snapshot_deadline,
+                                )
+                        finally:
+                            if self._recover_on_socket_retirement:
+                                self._capture_recovery_state(runtime, extension)
                     else:
                         try:
                             result = self._checked_action(
@@ -2300,6 +2635,8 @@ class ThreadedServiceClientRuntime:
                     return
             if self._cleanup_unknown is not None:
                 self._run_sticky_cleanup(runtime, extension)
+            elif self._recover_on_socket_retirement and runtime is not None:
+                self._close_recovery_runtime_once(runtime, extension)
             elif runtime is not None or extension is not None:
                 extension_closed = extension is None
                 runtime_closed = runtime is None

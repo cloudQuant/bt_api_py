@@ -194,10 +194,19 @@ class ExecutionManagementReadClient:
                    and binding.server_key_fingerprint == target.server_key_fingerprint]
         if (os.getpid() != self._pid or snapshot.state != 'running' or not snapshot.thread_alive
                 or not snapshot.healthy or snapshot.identity != target.identity
-                or snapshot.run_id != target.runtime_run_id or len(matches) != 1
+                or (snapshot.run_id != target.runtime_run_id
+                    and self._runtime.recover_on_socket_retirement is not True)
+                or type(snapshot.run_id) is not str or len(matches) != 1
                 or not _reference(matches[0].registration_id) or not _reference(matches[0].service_epoch)):
             raise ValueError('EXECUTION_MANAGEMENT_ROUTE_UNAVAILABLE')
-        return matches[0].registration_id, matches[0].service_epoch
+        return snapshot.run_id, matches[0].registration_id, matches[0].service_epoch
+
+    def _target_for_registration(self, registration):
+        """Keep the original target for wrapper-owned recovery anchor checks."""
+        if self._runtime.recover_on_socket_retirement is True:
+            return self._target
+        return replace(self._target, runtime_run_id=registration[0],
+                       registration_id=registration[1], service_epoch=registration[2])
 
     def query(self, parent_ref, *, query_id):
         """Read one parent; reusing query_id performs a fresh audited query."""
@@ -205,7 +214,7 @@ class ExecutionManagementReadClient:
                                        self._revision, PARENT_READ_V1, parent_ref, query_id)
         try:
             registration = self._registration()
-            target = replace(self._target, registration_id=registration[0], service_epoch=registration[1])
+            target = self._target_for_registration(registration)
             raw = _detach_wire(self._runtime.call_bound(target, PARENT_READ_V1,
                 {'schema_version': 1, 'parent_ref': parent_ref, 'query_id': query_id,
                  'grant_revision': self._revision}, timeout_seconds=self._timeout))
@@ -223,7 +232,7 @@ class ExecutionManagementReadClient:
             self._target.scope, self._revision, PARENT_BY_REQUEST_READ_V1, original_run_id, request_id, query_id)
         try:
             registration = self._registration(PARENT_BY_REQUEST_READ_V1)
-            target = replace(self._target, registration_id=registration[0], service_epoch=registration[1])
+            target = self._target_for_registration(registration)
             raw = _detach_wire(self._runtime.call_bound(target, PARENT_BY_REQUEST_READ_V1,
                 {'schema_version': 1, 'original_run_id': original_run_id, 'request_id': request_id,
                  'query_id': query_id, 'grant_revision': self._revision}, timeout_seconds=self._timeout))
@@ -248,7 +257,7 @@ class ExecutionManagementReadClient:
                                        self._revision, PARENT_PLAN_READ_V1, parent_ref, query_id)
         try:
             registration = self._registration(PARENT_PLAN_READ_V1)
-            target = replace(self._target, registration_id=registration[0], service_epoch=registration[1])
+            target = self._target_for_registration(registration)
             raw = _detach_wire(self._runtime.call_bound(target, PARENT_PLAN_READ_V1,
                 {'schema_version': 1, 'parent_ref': parent_ref, 'query_id': query_id,
                  'grant_revision': self._revision}, timeout_seconds=self._timeout))
