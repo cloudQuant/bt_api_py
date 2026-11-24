@@ -870,6 +870,11 @@ class _RequestNotSentAdapter:
         self._transport = transport
         self._error_type = error_type
 
+    @property
+    def remaining_socket_message_ids(self) -> int | None:
+        value = getattr(self._transport, "remaining_socket_message_ids", None)
+        return value if type(value) is int and value >= 0 else None
+
     def request(self, request: WireEnvelope, *, timeout: float,
                 deadline_monotonic: float | None = None) -> WireEnvelope:
         try:
@@ -1251,6 +1256,17 @@ class ServiceClientRuntime:
         """Transports still held; a nonzero value may hide an old writer path."""
 
         return len(self._transports)
+
+    @property
+    def min_socket_message_ids_remaining(self) -> int | None:
+        """Smallest remaining socket message-id budget across open transports, if exposed."""
+
+        remaining: list[int] = []
+        for transport in self._transports.values():
+            value = getattr(transport, "remaining_socket_message_ids", None)
+            if type(value) is int and value >= 0:
+                remaining.append(value)
+        return min(remaining) if remaining else None
 
     @property
     def last_unresolved_registration_id(self) -> str | None:
@@ -4020,8 +4036,15 @@ class ServiceClientRuntime:
         deadline_monotonic=None,
         _require_issued_receipt=False,
         _risk_first_context=None,
+        _override_transport=None,
     ):
         self._assert_owner_thread()
+        if _override_transport is not None and (
+            operation != "service.unregister"
+            or _bound_send_fence is not None
+            or bound_transport is not None
+        ):
+            raise ServiceRuntimeError("INVALID_OVERRIDE_TRANSPORT")
         if operation in ('service.register', 'service.renew'):
             self._execution_upstream_observation = None
         if _bound_send_fence is not None and bound_transport is not None:
@@ -4184,7 +4207,12 @@ class ServiceClientRuntime:
             elif _bound_send_fence is not None:
                 reply = transport.request(request, timeout=effective_timeout)
             elif bound_transport is None:
-                reply = self._transports[(service_id, transport_ref)].request(
+                active_transport = (
+                    _override_transport
+                    if _override_transport is not None
+                    else self._transports[(service_id, transport_ref)]
+                )
+                reply = active_transport.request(
                     request, timeout=effective_timeout
                 )
             elif _require_issued_receipt:
@@ -4701,6 +4729,42 @@ class ServiceClientRuntime:
         for binding in tuple(self._bindings[first:]):
             self._strict_unregister_binding(binding)
 
+    def _ephemeral_unregister_transport_for_retired_strict(
+        self, service_id: str, transport_ref: str
+    ) -> Any | None:
+        """Create a one-shot unregister-only transport when a strict socket already retired.
+
+        ``strict_single_connection=True`` intentionally refuses opening a second
+        socket on the original client after retirement (for example after a
+        transient RPC timeout). Business RPCs and renewals must still fail on
+        that retired client, but ``service.unregister`` is an idempotent
+        revocation that requires an authenticated server acknowledgment so a
+        transient timeout cannot permanently trap ``require_unregister_ack=True``
+        cleanup. The caller must always close the returned transport immediately
+        without mutating ``self._transports``.
+        """
+        existing = self._transports.get((service_id, transport_ref))
+        if type(existing) is not _RequestNotSentAdapter:
+            return None
+        client = existing._transport
+        if (
+            getattr(client, "_strict_single_connection", False) is not True
+            or getattr(client, "_strict_socket_opened", False) is not True
+            or (
+                getattr(client, "_socket", None) is not None
+                and getattr(client, "remaining_socket_message_ids", 1) != 0
+            )
+            or getattr(client, "_closed", True) is True
+        ):
+            return None
+        if type(self._factory) is not ZmqTransportFactory:
+            return None
+        if self._factory._require_factory_mode() is not True:
+            return None
+        profile = self._config["communication"]["profiles"][transport_ref]
+        peer = self._peers[service_id]
+        return self._factory(profile, peer)
+
     def _unregister(
         self,
         service_id,
@@ -4711,15 +4775,21 @@ class ServiceClientRuntime:
         timeout,
     ):
         timing: dict[str, Any] = {}
+        ephemeral_transport = None
         try:
+            ephemeral_transport = self._ephemeral_unregister_transport_for_retired_strict(
+                service_id, transport_ref
+            )
+            rpc_kwargs: dict[str, Any] = {"timeout": timeout, "timing": timing}
+            if ephemeral_transport is not None:
+                rpc_kwargs["_override_transport"] = ephemeral_transport
             receipt = self._rpc(
                 service_id,
                 transport_ref,
                 scope,
                 "service.unregister",
                 {"registration_id": registration_id, "service_epoch": epoch},
-                timeout=timeout,
-                timing=timing,
+                **rpc_kwargs,
             )
             if (
                 receipt.get("unregistered") is not True
@@ -4746,6 +4816,9 @@ class ServiceClientRuntime:
             self._cleanup_failures += 1
             self._unregister_uncertainties[registration_id] = None
             return False
+        finally:
+            if ephemeral_transport is not None:
+                ephemeral_transport.close()
 
     def _release_bindings(self, first=0, *, capture_base_exceptions=False) -> None:
         if self.sticky_cleanup_enabled:

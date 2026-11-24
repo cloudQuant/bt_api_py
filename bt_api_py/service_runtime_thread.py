@@ -163,6 +163,7 @@ class RuntimeSnapshot:
     unresolved_registration_ids: tuple[str, ...] | None = None
     remote_inactive_registrations: tuple[tuple[str, str], ...] | None = None
     open_transport_count: int | None = None
+    min_socket_message_ids_remaining: int | None = None
 
 
 class _Call:
@@ -832,6 +833,7 @@ class ThreadedServiceClientRuntime:
         self._unresolved_registration_ids: tuple[str, ...] | None = None
         self._remote_inactive_registrations: tuple[tuple[str, str], ...] | None = None
         self._open_transport_count: int | None = None
+        self._min_socket_message_ids_remaining: int | None = None
 
     def status(self) -> RuntimeSnapshot:
         if os.getpid() != self._creator_pid:
@@ -847,6 +849,7 @@ class ThreadedServiceClientRuntime:
                     self._strict_unregister_ack, self._maintenance_code,
                     self._unresolved_registration_ids, self._remote_inactive_registrations,
                     self._open_transport_count,
+                    self._min_socket_message_ids_remaining,
                 )
         with self._condition:
             healthy = self._healthy
@@ -869,6 +872,7 @@ class ThreadedServiceClientRuntime:
                 self._unresolved_registration_ids,
                 self._remote_inactive_registrations,
                 self._open_transport_count,
+                self._min_socket_message_ids_remaining,
             )
 
     @property
@@ -1618,6 +1622,8 @@ class ThreadedServiceClientRuntime:
             and self._monotonic_clock is _NATIVE_MONOTONIC
             and read(lambda: runtime._monotonic_clock) is _NATIVE_MONOTONIC
         )
+        min_remaining = read(lambda: getattr(runtime, "min_socket_message_ids_remaining", None))
+        min_remaining = min_remaining if type(min_remaining) is int and min_remaining >= 0 else None
         with self._condition:
             self._bindings = tuple(snapshots)
             self._identity = identity if type(identity) is WireIdentity else None
@@ -1636,6 +1642,7 @@ class ThreadedServiceClientRuntime:
             self._unresolved_registration_ids = ()
             self._remote_inactive_registrations = ()
             self._open_transport_count = None
+            self._min_socket_message_ids_remaining = min_remaining
         return True
 
     def _capture_impl(self, runtime: Any) -> None:
@@ -1717,6 +1724,9 @@ class ThreadedServiceClientRuntime:
                 )
                 self._open_transport_count = self._read_replacement_count(
                     runtime, "open_transport_count"
+                )
+                self._min_socket_message_ids_remaining = self._read_replacement_count(
+                    runtime, "min_socket_message_ids_remaining"
                 )
 
     def _capture_raw_uncertainties(self, runtime: Any) -> tuple[int, int, int]:

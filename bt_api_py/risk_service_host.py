@@ -669,6 +669,14 @@ def service_config_document(config: RiskServiceConfig) -> dict:
     }
 
 
+def _gateway_request_timeout_ms(config: RiskServiceConfig) -> int:
+    """Propagate call_timeout_seconds to ZMQ profiles without shrinking the 2s floor."""
+    timeout_s = getattr(config, "call_timeout_seconds", 2.0)
+    if type(timeout_s) not in (int, float) or not math.isfinite(timeout_s) or timeout_s <= 0:
+        return 2000
+    return max(2000, min(120_000, int(math.ceil(timeout_s * 1000))))
+
+
 def _gateway_client_config(config: RiskServiceConfig, mount: str, *, market: bool = False):
     """A SERVICE-role client manifest for one Gateway mount of the Risk principal."""
     _require_supported_r04(config)
@@ -694,6 +702,7 @@ def _gateway_client_config(config: RiskServiceConfig, mount: str, *, market: boo
         "config_schema_version": 1,
         "endpoints": endpoints,
         "security_profile_ref": _GATEWAY_SECURITY,
+        "options": {"request_timeout_ms": _gateway_request_timeout_ms(config)},
     }
     return parse_service_config(raw)
 
@@ -728,6 +737,7 @@ def _control_client_config(config: RiskServiceConfig, mounts: Sequence[str]):
                         "config_schema_version": 1,
                         "endpoints": {"rpc_connect": gateway.rpc_endpoint},
                         "security_profile_ref": _GATEWAY_SECURITY,
+                        "options": {"request_timeout_ms": _gateway_request_timeout_ms(config)},
                     }
                 },
             },
@@ -1212,6 +1222,7 @@ class RiskServiceHost:
         self._observer_retry_at = 0.0
         self._account_facts_runtime: Any = None
         self._account_facts_coordinator: Any = None
+        self._account_facts_retry_at = 0.0
         self.account_facts_status = 'DISABLED'
         self.order_cut_status = 'DISABLED'
         self._delegate_cleanup_unresolved: list[Any] = []
@@ -1871,6 +1882,94 @@ class RiskServiceHost:
         self.account_facts_status = 'RECOVERY_REQUIRED' if state is not None and state['pending'] is not None else 'READY'
         if cut_enabled:
             self.order_cut_status = 'RECOVERY_REQUIRED' if self.account_facts_status == 'RECOVERY_REQUIRED' else 'READY'
+
+    _ACCOUNT_FACTS_ROTATION_HEADROOM = 64
+
+    def _maintain_account_facts_runtime(self, now: float) -> None:
+        """Proactively rotate or safely reconnect the strict account-facts runtime.
+
+        Rotation happens before the strict single-connection socket approaches
+        its message-id cap so ``service.unregister`` can still be acknowledged on
+        the open socket, and never while an unacknowledged fact page is pending.
+        Replacement after failure only proceeds after ``_close_runtime_once``
+        confirms authoritative unregister cleanup.
+        """
+        settings = getattr(self.config, 'account_facts_observation', None)
+        if settings is None or self._observer_route is None:
+            return
+        runtime = self._account_facts_runtime
+        if runtime is None and self._account_facts_coordinator is not None:
+            return
+        self._check_global_cleanup_ready(runtime if runtime is not None else self)
+        needs_replace = False
+        proactive_rotate = False
+        if runtime is None:
+            if now < self._account_facts_retry_at:
+                return
+            needs_replace = True
+        else:
+            try:
+                snap = self._call_lifecycle(runtime.status)
+                self._check_global_cleanup_ready(runtime)
+            except Exception:
+                self._retain_if_global_unknown(runtime)
+                return
+            state = getattr(snap, 'state', None)
+            if state in ('failed', 'closed', 'close_failed', 'stopping'):
+                if now < self._account_facts_retry_at:
+                    return
+                needs_replace = True
+            elif (
+                state == 'running'
+                and getattr(snap, 'healthy', False) is True
+                and self.account_facts_status in {'READY', 'APPLIED', 'EMPTY'}
+                and self._account_facts_coordinator is not None
+            ):
+                remaining = getattr(snap, 'min_socket_message_ids_remaining', None)
+                if type(remaining) is int and remaining <= self._ACCOUNT_FACTS_ROTATION_HEADROOM:
+                    try:
+                        progress = self._call_lifecycle(self._account_facts_coordinator._progress)
+                        self._check_global_cleanup_ready(runtime)
+                    except Exception:
+                        return
+                    if progress is None or progress.get('pending') is None:
+                        needs_replace = True
+                        proactive_rotate = True
+        if not needs_replace:
+            return
+        self._account_facts_retry_at = now + max(1.0, self.config.maintain_seconds)
+        if runtime is not None:
+            if not self._close_runtime_once(runtime, self.config.call_timeout_seconds):
+                return
+            if runtime in self._runtimes:
+                self._runtimes.remove(runtime)
+            self._account_facts_runtime = None
+            self._account_facts_coordinator = None
+        try:
+            self._start_account_facts(self._observer_route)
+            self._check_global_cleanup_ready(self._account_facts_runtime or self)
+        except RiskServiceStartError as error:
+            failed_rt = self._account_facts_runtime
+            if failed_rt is not None:
+                if self._cleanup_uncertain:
+                    self._cleanup_uncertain_resources.append(failed_rt)
+                elif self._close_runtime_once(failed_rt, self.config.call_timeout_seconds):
+                    if failed_rt in self._runtimes:
+                        self._runtimes.remove(failed_rt)
+                    self._account_facts_runtime = None
+                    self._account_facts_coordinator = None
+            _LOG.warning(
+                "Risk account_facts strict runtime %s deferred: %s",
+                "rotation" if proactive_rotate else "reconnect",
+                error.code,
+            )
+            return
+        self._account_facts_retry_at = 0.0
+        _LOG.info(
+            "Risk account_facts strict runtime %s succeeded (status=%s)",
+            "proactive rotation" if proactive_rotate else "reconnect",
+            self.account_facts_status,
+        )
 
     def _poll_account_facts(self) -> None:
         if self.account_facts_status not in {'READY', 'APPLIED', 'EMPTY'}:
@@ -2613,6 +2712,8 @@ class RiskServiceHost:
         if "observation" in deadlines:
             self._reconnect_observer()
             self._check_cleanup_ready()
+            self._maintain_account_facts_runtime(now)
+            self._check_cleanup_ready()
             self._call_lifecycle(self.pump.poll)
             self._check_cleanup_ready()
             self._next["observation"] = deadlines["observation"]
@@ -2629,8 +2730,11 @@ class RiskServiceHost:
             self._check_cleanup_ready()
             self._next["financial"] = deadlines["financial"]
         if 'account_facts' in deadlines:
-            self._call_lifecycle(self._poll_account_facts)
+            self._maintain_account_facts_runtime(now)
             self._check_cleanup_ready()
+            if self._account_facts_coordinator is not None:
+                self._call_lifecycle(self._poll_account_facts)
+                self._check_cleanup_ready()
             self._next['account_facts'] = deadlines['account_facts']
         if "maintain" in deadlines:
             self._call_lifecycle(self.engine.maintain)
@@ -2906,7 +3010,11 @@ def _cleanup_wait_diagnostic(host: RiskServiceHost) -> tuple[tuple[str, ...], tu
     return tuple(reasons) or ("UNKNOWN",), tuple(resources) or ("UNKNOWN",)
 
 
-def _wait_for_cleanup(host: RiskServiceHost, *, _wait: Callable[[], Any] | None = None) -> None:
+def _wait_for_cleanup(
+    host: RiskServiceHost,
+    *,
+    _wait: Callable[[], Any] | None = None,
+) -> None:
     state = getattr(host, "_cleanup_state", None)
     if state == "complete":
         return
@@ -2921,6 +3029,23 @@ def _wait_for_cleanup(host: RiskServiceHost, *, _wait: Callable[[], Any] | None 
     reasons, resources = _cleanup_wait_diagnostic(host)
     _LOG.error("Risk cleanup diagnostic state=cleanup_uncertain reasons=%s resources=%s",
                ",".join(reasons), ",".join(resources))
+    ready_file = getattr(host, "_ready_file", None)
+    if isinstance(ready_file, Path):
+        try:
+            ready_file.write_text(
+                json.dumps(
+                    {
+                        "pid": os.getpid(),
+                        "state": "cleanup_uncertain",
+                        "reasons": list(reasons),
+                        "resources": list(resources),
+                    }
+                ),
+                encoding="utf-8",
+            )
+            restrict_file(ready_file)
+        except Exception:
+            pass
     wait = _wait if _wait is not None else threading.Event().wait
     while True:
         wait()
@@ -2958,6 +3083,7 @@ def _command_run(args: argparse.Namespace) -> int:
             return 2
         if args.ready_file:
             ready = Path(args.ready_file)
+            host._ready_file = ready
             ready.write_text(json.dumps({"pid": os.getpid(), "state": "serving"}), encoding="utf-8")
             restrict_file(ready)
         try:
