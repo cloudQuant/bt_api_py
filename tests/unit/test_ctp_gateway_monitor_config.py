@@ -24,6 +24,7 @@ from tests.unit.test_iter63_ctp_gateway_local_profile import (
     _composing_config,
     _composing_doc,
     _fixture,
+    _protect_bundle,
 )
 
 
@@ -33,6 +34,7 @@ def _setup(tmp_path, monkeypatch):
     _, config = _composing_config(config)
     monitor_dir = tmp_path / "monitor"
     monitor_dir.mkdir(mode=0o700)
+    _protect_bundle(monitor_dir)
     monitor_file, monitor, keys = deployment(monitor_dir)
     gateway = bundle["authority"]["identity"]
     monitor["scope"] = {

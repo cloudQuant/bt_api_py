@@ -8,8 +8,11 @@ from pathlib import Path
 
 import pytest
 
+from bt_api_py import _win32_security
 from bt_api_py.ctp_gateway_local_profile import (
-    CtpLocalProfileError, load_local_ctp_resources, profile_factory,
+    CtpLocalProfileError,
+    load_local_ctp_resources,
+    profile_factory,
 )
 from bt_api_py.gateway_operator import GatewayOperatorDeployment
 from tests.test_iter63_ctp_gateway_trading import make
@@ -27,8 +30,19 @@ def _identity(value):
             "actor_ref": value.actor_ref, "delegate_ref": value.delegate_ref}
 
 
+def _protect_bundle(path):
+    if _win32_security.WINDOWS:
+        _win32_security._set_owner_only_acl(path)
+    else:
+        path.chmod(0o700 if path.is_dir() else 0o600)
+
+
 def _fixture(tmp_path, monkeypatch):
+    _protect_bundle(tmp_path)
     _, settings, config, authority, direct, _ = make(tmp_path, monkeypatch)
+    _protect_bundle(settings.guard_root)
+    _protect_bundle(settings.trusted_flow_root)
+    _protect_bundle(settings.journal_path)
     settings_raw = {item.name: getattr(settings, item.name) for item in fields(settings)}
     settings_raw["account_key"] = settings.account_key.to_dict()
     settings_raw = {key: str(value) if isinstance(value, Path) else value for key, value in settings_raw.items()}
@@ -52,9 +66,10 @@ def _fixture(tmp_path, monkeypatch):
                         "md_front": "tcp://md.invalid:2"}}
     parent = tmp_path / "private"
     parent.mkdir(mode=0o700)
+    _protect_bundle(parent)
     file = parent / "resource.json"
     file.write_text(json.dumps(doc), encoding="utf-8")
-    file.chmod(0o600)
+    _protect_bundle(file)
     monkeypatch.setenv("BT_API_CTP_GATEWAY_RESOURCES_FILE", str(file))
     return doc, file, config
 
@@ -72,23 +87,37 @@ def test_protected_bundle_composes_real_inert_disabled_write_profile(tmp_path, m
     assert deployment.state == "new" and deployment.gateway_role == "trading_owner"
 
 
-def test_permissions_symlinks_and_enabled_writes_are_rejected_without_values(tmp_path, monkeypatch):
+def test_permissions_and_enabled_writes_are_rejected_without_values(tmp_path, monkeypatch):
     doc, file, config = _fixture(tmp_path, monkeypatch)
-    file.chmod(0o644)
+    if _win32_security.WINDOWS:
+        from tests.unit.test_runtime_operator_config_windows import _owner_only_dacl
+
+        _owner_only_dacl(file, extra_sid="S-1-1-0")
+    else:
+        file.chmod(0o644)
     with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
         load_local_ctp_resources(config)
     monkeypatch.delenv("BT_API_CTP_GATEWAY_RESOURCES_FILE")
     with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
         load_local_ctp_resources(config)
-    file.chmod(0o600)
-    link = file.parent / "resource-link.json"
-    link.symlink_to(file)
-    monkeypatch.setenv("BT_API_CTP_GATEWAY_RESOURCES_FILE", str(link))
-    with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
-        load_local_ctp_resources(config)
+    _protect_bundle(file)
     monkeypatch.setenv("BT_API_CTP_GATEWAY_RESOURCES_FILE", str(file))
     doc["settings"]["write_enabled"] = True
     file.write_text(json.dumps(doc), encoding="utf-8")
+    with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
+        load_local_ctp_resources(config)
+
+
+def test_symlink_bundle_is_rejected_without_values(tmp_path, monkeypatch):
+    _, file, config = _fixture(tmp_path, monkeypatch)
+    link = file.parent / "resource-link.json"
+    try:
+        link.symlink_to(file)
+    except OSError as error:
+        if _win32_security.WINDOWS and error.winerror == 1314:
+            pytest.skip("symlink creation requires privilege on this host")
+        raise
+    monkeypatch.setenv("BT_API_CTP_GATEWAY_RESOURCES_FILE", str(link))
     with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
         load_local_ctp_resources(config)
 
@@ -579,7 +608,7 @@ def test_simnow_strategy_financial_section_is_optional_and_strict(tmp_path, monk
     assert load_simnow_trading_resources(config).strategy_financial_settings is None   # off unless present
     strategy = doc["clients"][0]["identity"]["actor_ref"]
     rates = tmp_path / "rates.yaml"
-    rates.write_text(_RATES_FILE, encoding="utf-8")
+    rates.write_bytes(_RATES_FILE.encode("utf-8"))
     good = {"rates_file": str(rates), "currency": "CNY", "budgets": {strategy: "600000.00"},
             "adjustments": [{"id": "2026-11-12-a", "strategy": strategy, "amount": "-100000.00"}],
             "refresh_seconds": 20, "price_max_age_seconds": 40}
@@ -1151,6 +1180,7 @@ def test_risk_first_bundle_option_requires_matching_risk_reserve_grant(tmp_path,
 def test_risk_first_bundle_profile_validation_is_inert_without_native_ctp(tmp_path, monkeypatch):
     import os
     import subprocess
+    import sys
 
     doc, file, config = _fixture(tmp_path, monkeypatch)
     _, config = _composing_config(config, delegation_enabled=True)
@@ -1164,6 +1194,7 @@ def test_risk_first_bundle_profile_validation_is_inert_without_native_ctp(tmp_pa
     file.write_text(json.dumps(doc), encoding='utf-8')
     config_path = tmp_path / 'config-public.json'
     config_path.write_text(json.dumps(config.to_public_dict()), encoding='utf-8')
+    _protect_bundle(config_path)
     script = '''
 import builtins, json, sys
 blocked = ('ctpbee_api', 'thosttraderapi', 'thostmduserapi', 'bt_api_ctp.ctp.client')
@@ -1183,8 +1214,8 @@ assert not any(name.startswith(blocked) for name in sys.modules)
 print('VALIDATION_INERT')
 '''
     result = subprocess.run(
-        ['/Users/yunjinqi/opt/anaconda3/bin/conda', 'run', '--no-capture-output', '-n', 'base',
-         'python', '-c', script, str(config_path)], env=os.environ.copy(), capture_output=True, text=True,
+        [sys.executable, '-c', script, str(config_path)],
+        env=os.environ.copy(), capture_output=True, text=True,
         timeout=30, check=False,
     )
     assert result.returncode == 0, result.stderr
