@@ -16,7 +16,6 @@ from bt_api_py._win32_security import _set_owner_only_acl, inspect_owner
 from tests.unit.test_execution_combined_service_host import seed, setup_combined
 from tests.unit.test_iter65_execution_parent_service_host import setup_config as setup_parent
 
-
 pytestmark = pytest.mark.skipif(os.name != "nt", reason="Windows owner-stop CLI proof")
 _EOF = object()
 
@@ -166,18 +165,17 @@ def test_cli_exits_after_protected_owner_stop_marker(
     finally:
         # Failure cleanup is limited to the exact synthetic child and its
         # validated marker inside this test's temporary configuration folder.
-        if process.poll() is None:
-            if stop_path is not None and stop_path.parent == config_path.parent:
-                if not stop_path.is_symlink():
-                    try:
-                        if not stop_path.exists():
-                            _create_owner_stop_marker(stop_path)
-                        process.wait(timeout=5)
-                    except (OSError, subprocess.TimeoutExpired):
-                        pass
-            if process.poll() is None:
-                process.terminate()
+        if (process.poll() is None and stop_path is not None
+                and stop_path.parent == config_path.parent and not stop_path.is_symlink()):
+            try:
+                if not stop_path.exists():
+                    _create_owner_stop_marker(stop_path)
                 process.wait(timeout=5)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+        if process.poll() is None:
+            process.terminate()
+            process.wait(timeout=5)
         for reader in readers:
             reader.join(timeout=5)
         if process.stdout is not None:

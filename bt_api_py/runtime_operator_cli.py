@@ -19,7 +19,6 @@ from bt_api_py._owner_stop_file import marker_requested, new_marker
 from bt_api_py.runtime_operator_config import build_bridges, load_authenticator, load_config
 from bt_api_py.runtime_service_host import RuntimeServiceHost
 
-
 _CLEANUP_COMPONENTS = frozenset({
     'http_dispatch', 'http_listener', 'telemetry_owner', 'service', 'database',
     'supervisor', 'relay', 'monitor', 'gateway',
@@ -49,7 +48,7 @@ def _emit_cleanup_uncertain(host=None, *, event_store=False):
                 components = tuple(item for item in cached
                                    if type(item) is str and item in _CLEANUP_COMPONENTS)
         except Exception:
-            pass
+            components = ()
     _emit('runtime_cleanup_components=' + (','.join(components) if components else 'unknown'),
           error=True)
 
