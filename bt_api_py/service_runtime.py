@@ -286,7 +286,7 @@ PORT_OPERATIONS = MappingProxyType(
         ),
         "service.telemetry_ingress": frozenset({"telemetry.append", "events.append", "monitor.heartbeat"}),
         "service.monitor_query": frozenset(
-            {"monitor.query", "monitor.read_after", "telemetry.snapshot"}
+            {"monitor.query", "monitor.read_after", "telemetry.snapshot", "observation.query"}
         ),
         "service.monitor_control": frozenset(
             {"monitor.control", "monitor.control_status"}
@@ -516,6 +516,7 @@ _ACCOUNT_BOUND_OPERATION = 'direct.parent.acceptance_order'
 _MANAGEMENT_BOUND_OPERATION = 'execution.management.parent.read.v1'
 _MANAGEMENT_PLAN_BOUND_OPERATION = 'execution.management.parent.plan.read.v1'
 _MANAGEMENT_BY_REQUEST_BOUND_OPERATION = 'execution.management.parent.by_request.read.v1'
+_MONITOR_QUERY_BOUND_OPERATION = 'observation.query'
 
 
 @dataclass(frozen=True)
@@ -601,10 +602,62 @@ class BoundExecutionManagementReadTarget:
             raise ValueError('INVALID_BOUND_EXECUTION_MANAGEMENT_READ_TARGET')
 
 
+@dataclass(frozen=True)
+class BoundMonitorQueryTarget:
+    """Trusted, application-only binding for authenticated monitor pages.
+
+    This fixes one monitor registration, peer, CURVE key, WireScope and
+    application identity. The request HMAC remains a separate service-level
+    check; this target grants no authority by itself.
+    """
+
+    mount: str
+    port: str
+    service_id: str
+    instance_id: str
+    scope_ref: str
+    scope: WireScope
+    identity: WireIdentity
+    runtime_run_id: str
+    transport_ref: str
+    security_profile_ref: str
+    endpoint: str
+    expected_peer: WireIdentity
+    server_key_fingerprint: str = field(repr=False)
+    registration_id: str
+    service_epoch: str
+
+    def __post_init__(self) -> None:
+        texts = (self.mount, self.port, self.service_id, self.instance_id, self.scope_ref, self.runtime_run_id,
+                 self.transport_ref, self.security_profile_ref, self.endpoint,
+                 self.registration_id, self.service_epoch)
+        if (any(type(value) is not str or not value or value != value.strip() or len(value) > 1024
+                for value in texts)
+                or self.mount != 'application.monitor'
+                or self.port != 'service.monitor_query'
+                or type(self.scope) is not WireScope
+                or self.scope.account_refs != () or self.scope.group_id is not None
+                or self.scope.leg_id is not None
+                or type(self.identity) is not WireIdentity
+                or self.identity.role is not WireRole.APPLICATION_CLIENT
+                or self.identity.delegate_ref is not None
+                or type(self.expected_peer) is not WireIdentity
+                or self.expected_peer.role is not WireRole.SERVICE
+                or self.expected_peer.delegate_ref is not None
+                or type(self.server_key_fingerprint) is not str or len(self.server_key_fingerprint) != 64
+                or any(character not in '0123456789abcdef' for character in self.server_key_fingerprint)
+                or not self.endpoint.startswith('tcp://')):
+            raise ValueError('INVALID_BOUND_MONITOR_QUERY_TARGET')
+
+
 def _validate_bound_target_operation(target: Any, operation: Any) -> None:
     if type(operation) is not str:
         raise ValueError('INVALID_BOUND_OPERATION')
-    if type(target) is BoundExecutionManagementReadTarget:
+    if type(target) is BoundMonitorQueryTarget:
+        BoundMonitorQueryTarget.__post_init__(target)
+        if operation != _MONITOR_QUERY_BOUND_OPERATION:
+            raise ValueError('INVALID_BOUND_OPERATION')
+    elif type(target) is BoundExecutionManagementReadTarget:
         BoundExecutionManagementReadTarget.__post_init__(target)
         if operation not in (_MANAGEMENT_BOUND_OPERATION, _MANAGEMENT_PLAN_BOUND_OPERATION, _MANAGEMENT_BY_REQUEST_BOUND_OPERATION):
             raise ValueError('INVALID_BOUND_OPERATION')
@@ -618,7 +671,9 @@ def _validate_bound_target_operation(target: Any, operation: Any) -> None:
             raise ValueError('INVALID_BOUND_OPERATION')
     elif type(target) is BoundServiceTarget:
         BoundServiceTarget.__post_init__(target)
-        if operation in (_ACCOUNT_BOUND_OPERATION, _MANAGEMENT_BOUND_OPERATION, _MANAGEMENT_PLAN_BOUND_OPERATION, _MANAGEMENT_BY_REQUEST_BOUND_OPERATION):
+        if operation in (_ACCOUNT_BOUND_OPERATION, _MANAGEMENT_BOUND_OPERATION,
+                         _MANAGEMENT_PLAN_BOUND_OPERATION, _MANAGEMENT_BY_REQUEST_BOUND_OPERATION,
+                         _MONITOR_QUERY_BOUND_OPERATION):
             raise ValueError('INVALID_BOUND_OPERATION')
     else:
         raise ValueError('INVALID_BOUND_TARGET')
@@ -1774,7 +1829,9 @@ class ServiceClientRuntime:
     ) -> Mapping[str, Any] | tuple[Mapping[str, Any], object | None]:
         self._assert_owner_thread()
         self._strict_business_entry()
-        if operation in (_ACCOUNT_BOUND_OPERATION, _MANAGEMENT_BOUND_OPERATION, _MANAGEMENT_PLAN_BOUND_OPERATION, _MANAGEMENT_BY_REQUEST_BOUND_OPERATION):
+        if operation in (_ACCOUNT_BOUND_OPERATION, _MANAGEMENT_BOUND_OPERATION,
+                         _MANAGEMENT_PLAN_BOUND_OPERATION, _MANAGEMENT_BY_REQUEST_BOUND_OPERATION,
+                         _MONITOR_QUERY_BOUND_OPERATION):
             raise ServiceRuntimeRequestNotSentError()
         if type(include_receive_receipt) is not bool:
             raise ServiceRuntimeError("INVALID_RECEIPT_REQUEST")
@@ -1877,7 +1934,7 @@ class ServiceClientRuntime:
 
     def call_bound(
         self,
-        target: BoundServiceTarget | BoundAccountServiceTarget | BoundExecutionParentTarget | BoundExecutionManagementReadTarget,
+        target: BoundServiceTarget | BoundAccountServiceTarget | BoundExecutionParentTarget | BoundExecutionManagementReadTarget | BoundMonitorQueryTarget,
         operation: str,
         arguments: Mapping[str, Any],
         *,
@@ -1887,7 +1944,7 @@ class ServiceClientRuntime:
 
     def _call_bound(
         self,
-        target: BoundServiceTarget | BoundAccountServiceTarget | BoundExecutionParentTarget | BoundExecutionManagementReadTarget,
+        target: BoundServiceTarget | BoundAccountServiceTarget | BoundExecutionParentTarget | BoundExecutionManagementReadTarget | BoundMonitorQueryTarget,
         operation: str,
         arguments: Mapping[str, Any],
         *,
@@ -1912,7 +1969,8 @@ class ServiceClientRuntime:
             valid_deadline = (type(deadline_monotonic) in (int, float) and math.isfinite(deadline_monotonic))
         except OverflowError:
             valid_deadline = False
-        if (type(target) not in (BoundServiceTarget, BoundAccountServiceTarget, BoundExecutionParentTarget, BoundExecutionManagementReadTarget) or type(operation) is not str
+        if (type(target) not in (BoundServiceTarget, BoundAccountServiceTarget, BoundExecutionParentTarget,
+                                 BoundExecutionManagementReadTarget, BoundMonitorQueryTarget) or type(operation) is not str
                 or not isinstance(arguments, Mapping) or not valid_deadline):
             raise ServiceRuntimeRequestNotSentError()
         try:
@@ -1927,7 +1985,8 @@ class ServiceClientRuntime:
                 raise ValueError
             _validate_bound_target_operation(target, operation)
             runtime_run_id = (target.runtime_run_id if type(target) in
-                              (BoundAccountServiceTarget, BoundExecutionManagementReadTarget) else target.run_id)
+                              (BoundAccountServiceTarget, BoundExecutionManagementReadTarget,
+                               BoundMonitorQueryTarget) else target.run_id)
             if (self._monotonic_clock is not _BOUND_MONOTONIC or not _bound_clock_current()
                     or self._state != 'registered'
                     or not self.healthy or self.identity != target.identity or self.run_id != runtime_run_id
