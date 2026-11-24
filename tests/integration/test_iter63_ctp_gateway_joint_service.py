@@ -9,6 +9,7 @@ import multiprocessing
 import os
 import queue
 import sys
+import threading
 import time
 import traceback
 from pathlib import Path
@@ -69,18 +70,442 @@ def _gateway(root, rpc, market, server_keys, client_keys, journal_id, issuer_id,
         from bt_api_ctp.feeds.live_ctp_feed import CtpMarketStream, CtpRequestDataFuture
         from bt_api_ctp.trusted_flow import flow_binding, trusted_flow
         from bt_api_ctp.market_provider import CtpQuoteV2MarketProvider
+        from bt_api_gateway.market_hub import GatewayMarketHub
+        from bt_api_py.gateway_direct_owner import GatewayDirectOwner, GatewayDirectOwnerResources
+        from bt_api_py.gateway_owner_market import GatewayOwnerMarketProvider
+        from dataclasses import replace
+
+        owner_thread_id = threading.get_ident()
+        owner_phase_lock = threading.Lock()
+        owner_phase_capture = [False]
+        owner_service_context = threading.local()
+        owner_instances = {}
+        owner_service_sequence = [0]
+        owner_service_latest = {}
+        owner_service_live = {}
+        owner_service_counts = {}
+        owner_service_events = []
+        owner_maintenance = {"started": 0, "completed": 0, "active": 0,
+                             "thread_is_gateway": None, "last_error": None}
+
+        def owner_error_code(error):
+            try:
+                code = error.code
+            except Exception:
+                code = None
+            if type(code) is str and 1 <= len(code) <= 64 and code.isascii():
+                return code
+            return type(error).__name__
+
+        def record_owner_event(event, meta, *, same_thread=None, error=None):
+            key = (meta["kind"], meta["symbol"])
+            with owner_phase_lock:
+                counts = owner_service_counts.setdefault(key, [0, 0, 0, 0])
+                index = {"submitted": 0, "started": 1, "returned": 2, "error": 3}.get(event)
+                if index is not None:
+                    counts[index] += 1
+                if len(owner_service_events) < 32:
+                    owner_service_events.append((meta["point"], meta["kind"], meta["symbol"],
+                                                 event, same_thread, error))
+
+        original_owner_init = GatewayDirectOwner.__init__
+        original_owner_submit = GatewayDirectOwner.submit_service_call
+
+        def observe_owner_init(self, factory, *args, **kwargs):
+            with owner_phase_lock:
+                owner_instances[id(self)] = self
+
+            def observed_factory():
+                resources = factory()
+                if (type(resources) is GatewayDirectOwnerResources
+                        and callable(resources.maintain)):
+                    original_maintain = resources.maintain
+
+                    def observed_maintain():
+                        with owner_phase_lock:
+                            owner_maintenance["started"] += 1
+                            owner_maintenance["active"] += 1
+                            owner_maintenance["thread_is_gateway"] = (
+                                threading.get_ident() == owner_thread_id
+                            )
+                        try:
+                            return original_maintain()
+                        except BaseException as error:
+                            with owner_phase_lock:
+                                owner_maintenance["last_error"] = owner_error_code(error)
+                            raise
+                        finally:
+                            with owner_phase_lock:
+                                owner_maintenance["completed"] += 1
+                                owner_maintenance["active"] -= 1
+
+                    resources = replace(resources, maintain=observed_maintain)
+                return resources
+
+            return original_owner_init(self, observed_factory, *args, **kwargs)
+
+        def observe_owner_submit(self, callback):
+            with owner_phase_lock:
+                owner_instances[id(self)] = self
+            if not owner_phase_capture[0]:
+                return original_owner_submit(self, callback)
+            tag = getattr(owner_service_context, "tag", None)
+            kind, symbol = tag if type(tag) is tuple and len(tag) == 2 else ("other", None)
+            with owner_phase_lock:
+                owner_service_sequence[0] += 1
+                token = owner_service_sequence[0]
+                meta = {"token": token, "point": "recovery_window", "kind": kind, "symbol": symbol,
+                        "pre_fault": not recovery_fault_started[0], "handle": None,
+                        "started": False, "returned": False, "same_thread": None, "error": None}
+                owner_service_latest[(kind, symbol)] = meta
+                owner_service_live[token] = meta
+            record_owner_event("submitted", meta)
+
+            def observed_callback():
+                with owner_phase_lock:
+                    meta["started"] = True
+                    meta["same_thread"] = threading.get_ident() == owner_thread_id
+                record_owner_event("started", meta, same_thread=meta["same_thread"])
+                try:
+                    return callback()
+                except BaseException as error:
+                    meta["error"] = owner_error_code(error)
+                    record_owner_event("error", meta, same_thread=meta["same_thread"],
+                                       error=meta["error"])
+                    raise
+                finally:
+                    with owner_phase_lock:
+                        meta["returned"] = True
+                        owner_service_live.pop(token, None)
+                    record_owner_event("returned", meta, same_thread=meta["same_thread"],
+                                       error=meta["error"])
+
+            try:
+                handle = original_owner_submit(self, observed_callback)
+            except BaseException as error:
+                with owner_phase_lock:
+                    meta["error"] = owner_error_code(error)
+                    meta["returned"] = True
+                    owner_service_live.pop(token, None)
+                record_owner_event("error", meta, error=meta["error"])
+                raise
+            with owner_phase_lock:
+                meta["handle"] = handle
+            return handle
+
+        GatewayDirectOwner.__init__ = observe_owner_init
+        GatewayDirectOwner.submit_service_call = observe_owner_submit
+
+        def with_owner_service_tag(kind, symbol, callback):
+            previous = getattr(owner_service_context, "tag", None)
+            owner_service_context.tag = (kind, symbol)
+            try:
+                return callback()
+            finally:
+                owner_service_context.tag = previous
+
+        def owner_phase_snapshot(point):
+            with owner_phase_lock:
+                owners = tuple(owner_instances.values())
+                latest = tuple(owner_service_latest.values())
+                live = tuple(owner_service_live.values())
+                counts = tuple((key, tuple(value)) for key, value in owner_service_counts.items())
+                events_snapshot = tuple(owner_service_events)
+                maintenance = tuple(owner_maintenance[key] for key in
+                                    ("started", "completed", "active", "thread_is_gateway", "last_error"))
+            statuses = []
+            for index, owner in enumerate(owners, 1):
+                try:
+                    status = owner.status()
+                    statuses.append(("owner_" + str(index), status.thread_alive, status.running,
+                                     status.accepting, status.failure_category, status.queue_depth,
+                                     status.service_queue_depth))
+                except BaseException as error:
+                    statuses.append(("owner_" + str(index), "status_error", owner_error_code(error)))
+
+            def task_row(meta):
+                handle = meta["handle"]
+                try:
+                    done = bool(handle is not None and handle.done)
+                except BaseException:
+                    done = False
+                state = ("done" if done else "returned" if meta["returned"] else
+                         "running" if meta["started"] else "queued")
+                return (meta["kind"], meta["symbol"], "pre_fault" if meta["pre_fault"] else "post_fault",
+                        state, meta["same_thread"], meta["error"])
+
+            live_rows = tuple(task_row(meta) for meta in live)
+            latest_rows = tuple(task_row(meta) for meta in latest)
+            return (point, tuple(statuses), maintenance, tuple(sorted(counts, key=repr)),
+                    live_rows, latest_rows, events_snapshot)
+
+        recovery_phase_enabled = [False]
+        recovery_fault_started = [False]
+        recovery_phase_lock = threading.Lock()
+        recovery_phase_counts = {}
+        recovery_phase_hub_totals = {}
+        recovery_phase_first_events = []
+        recovery_phase_post_fault_first = {}
+        recovery_phase_first_failures = {}
+        recovery_phase_events = []
+        gateway_handle_labels = {}
+        gateway_handle_sequences = [0]
+        observed_market_hub = [None]
+        observed_market_proxy = [None]
+        pending_call_ordinals = {}
+        pending_call_history = []
+        pending_call_sequence = [0]
+        owner_proxy_pre_fault = [None]
+
+        def market_hub_stream_snapshot(point):
+            hub = observed_market_hub[0]
+            if hub is None:
+                return (point, "unavailable")
+            rows = []
+            for stream in hub._streams.values():
+                symbol = stream.key.instrument.native_symbol
+                has_registration = bool(stream.registrations or stream.pending_refs)
+                eligible = (
+                    stream.handle is not None
+                    and has_registration
+                    and not stream.starting
+                    and not stream.releasing
+                    and not stream.pending_release
+                    and stream.generation is not None
+                    and not stream.source_reset_failed
+                )
+                rows.append((symbol, len(stream.registrations), len(stream.pending_refs),
+                             len(stream.ref_owners), stream.handle is not None,
+                             stream.generation is not None, stream.starting, stream.releasing,
+                             stream.pending_release, stream.source_reset_failed,
+                             stream.pending_source_reset_epoch is not None, eligible))
+            return (point, tuple(hub.readiness.items()), tuple(sorted(rows)))
+
+        def owner_proxy_pending_snapshot(point):
+            hub = observed_market_hub[0]
+            proxy = observed_market_proxy[0]
+            if hub is None or proxy is None:
+                return (point, "unavailable")
+            rows = []
+            for stream in hub._streams.values():
+                symbol = stream.key.instrument.native_symbol
+                try:
+                    state = proxy._state(stream.handle)
+                except BaseException as error:
+                    rows.append((symbol, "state_unavailable", recovery_error_code(error)))
+                    continue
+                pending = state.pending
+                if pending is None:
+                    rows.append((symbol, state.pending_kind, None, None, None))
+                    continue
+                key = id(pending)
+                ordinal = pending_call_ordinals.get(key)
+                if ordinal is None or ordinal[0] is not pending:
+                    pending_call_sequence[0] += 1
+                    ordinal = (pending, pending_call_sequence[0])
+                    pending_call_ordinals[key] = ordinal
+                    pending_call_history.append((symbol, state.pending_kind, ordinal[1], pending))
+                try:
+                    with pending._owner._condition:
+                        pending_done = pending.done
+                        task_state = pending._task.state
+                    if task_state not in {"queued", "running", "done"}:
+                        task_state = "other"
+                except BaseException as error:
+                    rows.append((symbol, state.pending_kind, ordinal[1],
+                                 "observation_error", recovery_error_code(error)))
+                    continue
+                rows.append((symbol, state.pending_kind, ordinal[1], pending_done, task_state))
+            return (point, tuple(sorted(rows)))
+
+        def owner_proxy_future_history_snapshot(point):
+            rows = []
+            for symbol, kind, ordinal, pending in pending_call_history:
+                try:
+                    with pending._owner._condition:
+                        pending_done = pending.done
+                        task_state = pending._task.state
+                    if task_state not in {"queued", "running", "done"}:
+                        task_state = "other"
+                except BaseException as error:
+                    rows.append((symbol, kind, ordinal, "observation_error",
+                                 recovery_error_code(error)))
+                    continue
+                rows.append((symbol, kind, ordinal, pending_done, task_state))
+            return (point, tuple(sorted(rows)))
+
+        def gateway_handle_label(handle):
+            key = id(handle)
+            with recovery_phase_lock:
+                label = gateway_handle_labels.get(key)
+                if label is None:
+                    gateway_handle_sequences[0] += 1
+                    label = "gateway_handle_" + str(gateway_handle_sequences[0])
+                    gateway_handle_labels[key] = label
+                return label
+
+        def recovery_error_code(error):
+            try:
+                code = error.code
+            except Exception:
+                code = None
+            return code if type(code) is str else type(error).__name__
+
+        def public_recovery_state(provider, handle):
+            try:
+                return provider.source_recovery_state(handle)
+            except Exception as error:
+                return ("unavailable", recovery_error_code(error))
+
+        def record_recovery_phase(name, handle=None, outcome=None, before=None, after=None, subject=None):
+            if not recovery_phase_enabled[0]:
+                return
+            symbol = None
+            if handle is not None:
+                try:
+                    symbol = handle.key.instrument.native_symbol
+                except Exception:
+                    pass
+            if symbol is None:
+                symbol = subject
+            row = (name, symbol, threading.get_ident() == owner_thread_id,
+                   outcome, before, after)
+            with recovery_phase_lock:
+                count = recovery_phase_counts.get(name, 0) + 1
+                recovery_phase_counts[name] = count
+                if count <= 3:
+                    recovery_phase_first_events.append(row)
+                if recovery_fault_started[0]:
+                    recovery_phase_post_fault_first.setdefault((name, symbol), row)
+                    failed = (type(outcome) is tuple and bool(outcome) and
+                              (outcome[0] == "error" or
+                               ("acknowledge_source_epoch_reset" in name and
+                                outcome == ("returned", False))))
+                    if failed:
+                        recovery_phase_first_failures.setdefault((name, symbol), row)
+                recovery_phase_events.append(row)
+                if len(recovery_phase_events) > 96:
+                    del recovery_phase_events[:len(recovery_phase_events) - 96]
+
+        def recovery_phase_snapshot():
+            with recovery_phase_lock:
+                return (tuple(sorted(recovery_phase_counts.items())),
+                        tuple(sorted(recovery_phase_hub_totals.items())),
+                        tuple(recovery_phase_first_events),
+                        tuple(recovery_phase_post_fault_first.values()),
+                        tuple(recovery_phase_events),
+                        tuple(recovery_phase_first_failures.values()))
+
+        original_gateway_begin_subscribe = GatewayOwnerMarketProvider.begin_subscribe
+        original_gateway_reset_required = GatewayOwnerMarketProvider.source_epoch_reset_required
+        original_gateway_poll = GatewayOwnerMarketProvider.poll
+        original_gateway_ack = GatewayOwnerMarketProvider.acknowledge_source_epoch_reset
+        original_hub_maintain = GatewayMarketHub.maintain
+        original_provider_poll = CtpQuoteV2MarketProvider.poll
+
+        def observe_gateway_begin_subscribe(self, key, *, generation):
+            observed_market_proxy[0] = self
+            handle = original_gateway_begin_subscribe(self, key, generation=generation)
+            with recovery_phase_lock:
+                gateway_handle_labels[id(handle)] = key.instrument.native_symbol
+            return handle
+
+        GatewayOwnerMarketProvider.begin_subscribe = observe_gateway_begin_subscribe
+
+        def observe_hub_maintain(self, active_registration_ids):
+            observed_market_hub[0] = self
+            if not recovery_phase_enabled[0]:
+                return original_hub_maintain(self, active_registration_ids)
+            before = dict(self.source_diagnostics)
+            try:
+                result = original_hub_maintain(self, active_registration_ids)
+            except Exception as error:
+                record_recovery_phase(
+                    "hub.maintain", outcome=("error", recovery_error_code(error)))
+                raise
+            after = dict(self.source_diagnostics)
+            keys = ("provider_epoch_resets", "provider_epoch_reset_failures",
+                    "provider_poll_calls", "provider_poll_failures",
+                    "provider_events_polled", "provider_events_published")
+            delta = tuple((key, after.get(key, 0) - before.get(key, 0)) for key in keys)
+            with recovery_phase_lock:
+                for key, value in delta:
+                    recovery_phase_hub_totals[key] = recovery_phase_hub_totals.get(key, 0) + value
+            record_recovery_phase("hub.maintain", outcome=("returned", delta))
+            return result
+
+        GatewayMarketHub.maintain = observe_hub_maintain
+
+        if blocked_poll is None:
+            def observe_gateway_reset_required(self, handle):
+                if not recovery_phase_enabled[0]:
+                    return original_gateway_reset_required(self, handle)
+                subject = gateway_handle_label(handle)
+                try:
+                    result = with_owner_service_tag(
+                        "reset", subject,
+                        lambda: original_gateway_reset_required(self, handle),
+                    )
+                except Exception as error:
+                    record_recovery_phase(
+                        "gateway.source_epoch_reset_required",
+                        outcome=("error", recovery_error_code(error)), subject=subject)
+                    raise
+                record_recovery_phase("gateway.source_epoch_reset_required",
+                                      outcome=("returned", result), subject=subject)
+                return result
+
+            GatewayOwnerMarketProvider.source_epoch_reset_required = observe_gateway_reset_required
+
+        def observe_gateway_poll(self, handle, *, limit):
+            if not recovery_phase_enabled[0]:
+                return original_gateway_poll(self, handle, limit=limit)
+            subject = gateway_handle_label(handle)
+            try:
+                result = with_owner_service_tag(
+                    "poll", subject, lambda: original_gateway_poll(self, handle, limit=limit)
+                )
+            except Exception as error:
+                record_recovery_phase("gateway.poll", outcome=("error", recovery_error_code(error)),
+                                      subject=subject)
+                raise
+            result_shape = len(result) if type(result) is tuple else type(result).__name__
+            record_recovery_phase("gateway.poll", outcome=("returned", result_shape), subject=subject)
+            return result
+
+        def observe_gateway_ack(self, handle, *, epoch):
+            if not recovery_phase_enabled[0]:
+                return original_gateway_ack(self, handle, epoch=epoch)
+            subject = gateway_handle_label(handle)
+            try:
+                result = with_owner_service_tag(
+                    "ack", subject,
+                    lambda: original_gateway_ack(self, handle, epoch=epoch),
+                )
+            except Exception as error:
+                record_recovery_phase("gateway.acknowledge_source_epoch_reset",
+                                      outcome=("error", recovery_error_code(error)), subject=subject)
+                raise
+            record_recovery_phase("gateway.acknowledge_source_epoch_reset",
+                                  outcome=("returned", result), subject=subject)
+            return result
+
+        GatewayOwnerMarketProvider.poll = observe_gateway_poll
+        GatewayOwnerMarketProvider.acknowledge_source_epoch_reset = observe_gateway_ack
+
         if blocked_poll is not None:
             armed, poll_entered, poll_release, dequeued, maintenance_entered = blocked_poll
-            from bt_api_py.gateway_owner_market import GatewayOwnerMarketProvider
-            original_reset_check = GatewayOwnerMarketProvider.source_epoch_reset_required
             def signal_maintenance(self, handle):
                 if poll_entered.is_set() and not poll_release.is_set():
                     maintenance_entered.set()
-                return original_reset_check(self, handle)
+                subject = gateway_handle_label(handle)
+                return with_owner_service_tag(
+                    "reset", subject,
+                    lambda: original_gateway_reset_required(self, handle),
+                )
             GatewayOwnerMarketProvider.source_epoch_reset_required = signal_maintenance
-            original_poll = CtpQuoteV2MarketProvider.poll
             def hold_dequeued(self, handle, *, limit):
-                result = original_poll(self, handle, limit=limit)
+                result = original_provider_poll(self, handle, limit=limit)
                 if result and armed.is_set():
                     armed.clear()
                     with dequeued.get_lock():
@@ -90,6 +515,104 @@ def _gateway(root, rpc, market, server_keys, client_keys, journal_id, issuer_id,
                         raise TimeoutError("synthetic MD poll was not released")
                 return result
             CtpQuoteV2MarketProvider.poll = hold_dequeued
+        provider_poll_before_trace = CtpQuoteV2MarketProvider.poll
+        source_epoch_reset_checks = {"IF2612": (0, None, None, None), "IH2612": (0, None, None, None)}
+        source_epoch_reset_seen = {"IF2612": False, "IH2612": False}
+        source_epoch_ack_results = {"IF2612": (0, None, None, None), "IH2612": (0, None, None, None)}
+        original_source_epoch_reset_required = CtpQuoteV2MarketProvider.source_epoch_reset_required
+        original_source_epoch_ack = CtpQuoteV2MarketProvider.acknowledge_source_epoch_reset
+        original_retained_events_ready = CtpQuoteV2MarketProvider.retained_events_ready
+        original_market_provider_maintain = CtpQuoteV2MarketProvider.maintain
+        market_provider_maintain_calls = [0]
+
+        def synthetic_symbol(handle):
+            return handle.key.instrument.native_symbol
+
+        def observe_source_epoch_reset(provider, handle):
+            before = public_recovery_state(provider, handle) if recovery_phase_enabled[0] else None
+            try:
+                result = original_source_epoch_reset_required(provider, handle)
+            except Exception as error:
+                record_recovery_phase(
+                    "ctp.source_epoch_reset_required", handle,
+                    ("error", recovery_error_code(error)), before,
+                    public_recovery_state(provider, handle))
+                raise
+            after = public_recovery_state(provider, handle) if recovery_phase_enabled[0] else None
+            record_recovery_phase("ctp.source_epoch_reset_required", handle,
+                                  ("returned", result), before, after)
+            symbol = synthetic_symbol(handle)
+            count = source_epoch_reset_checks.get(symbol, (0, None, None, None))[0] + 1
+            if result is True:
+                source_epoch_reset_seen[symbol] = True
+            source_epoch_reset_checks[symbol] = (
+                count, result, provider.diagnostics["active_handles"], provider.source_recovery_state(handle))
+            return result
+
+        def observe_source_epoch_ack(provider, handle, *, epoch):
+            before = public_recovery_state(provider, handle) if recovery_phase_enabled[0] else None
+            symbol = synthetic_symbol(handle)
+            active_handles = provider.diagnostics["active_handles"]
+            recovery_state = provider.source_recovery_state(handle)
+            try:
+                result = original_source_epoch_ack(provider, handle, epoch=epoch)
+            except Exception as error:
+                record_recovery_phase(
+                    "ctp.acknowledge_source_epoch_reset", handle,
+                    ("error", recovery_error_code(error)), before,
+                    public_recovery_state(provider, handle))
+                raise
+            record_recovery_phase(
+                "ctp.acknowledge_source_epoch_reset", handle, ("returned", result),
+                before, public_recovery_state(provider, handle) if recovery_phase_enabled[0] else None)
+            count = source_epoch_ack_results.get(symbol, (0, None, None, None))[0] + 1
+            source_epoch_ack_results[symbol] = (count, result, active_handles, recovery_state)
+            return result
+
+        def observe_retained_events_ready(provider, handle):
+            if not recovery_phase_enabled[0]:
+                return original_retained_events_ready(provider, handle)
+            before = public_recovery_state(provider, handle)
+            try:
+                result = original_retained_events_ready(provider, handle)
+            except Exception as error:
+                record_recovery_phase(
+                    "ctp.retained_events_ready", handle,
+                    ("error", recovery_error_code(error)), before,
+                    public_recovery_state(provider, handle))
+                raise
+            record_recovery_phase("ctp.retained_events_ready", handle,
+                                  ("returned", result), before,
+                                  public_recovery_state(provider, handle))
+            return result
+
+        def observe_provider_poll(provider, handle, *, limit):
+            if not recovery_phase_enabled[0]:
+                return provider_poll_before_trace(provider, handle, limit=limit)
+            before = public_recovery_state(provider, handle)
+            try:
+                result = provider_poll_before_trace(provider, handle, limit=limit)
+            except Exception as error:
+                record_recovery_phase(
+                    "ctp.poll", handle, ("error", recovery_error_code(error)), before,
+                    public_recovery_state(provider, handle))
+                raise
+            event_count = len(result) if type(result) is tuple else None
+            record_recovery_phase("ctp.poll", handle, ("returned", event_count), before,
+                                  public_recovery_state(provider, handle))
+            return result
+
+        def observe_market_provider_maintain(provider):
+            market_provider_maintain_calls[0] += 1
+            if recovery_phase_enabled[0]:
+                record_recovery_phase("ctp.maintain", outcome=("called", None))
+            return original_market_provider_maintain(provider)
+
+        CtpQuoteV2MarketProvider.source_epoch_reset_required = observe_source_epoch_reset
+        CtpQuoteV2MarketProvider.acknowledge_source_epoch_reset = observe_source_epoch_ack
+        CtpQuoteV2MarketProvider.retained_events_ready = observe_retained_events_ready
+        CtpQuoteV2MarketProvider.poll = observe_provider_poll
+        CtpQuoteV2MarketProvider.maintain = observe_market_provider_maintain
         from bt_api_py.ctp_gateway_trading import (CtpGatewayTradingSettings,
             CtpGatewayAccountReadSettings, CtpGatewayMarketSettings, CtpGatewayReturnSettings,
             build_ctp_gateway_trading_profile)
@@ -200,6 +723,10 @@ def _gateway(root, rpc, market, server_keys, client_keys, journal_id, issuer_id,
                 self.last_stop_receipt = super().stop_and_wait(timeout=timeout)
                 return self.last_stop_receipt
 
+            def emit_disconnect(self, reason=0):
+                record_recovery_phase("fake_md.disconnect_callback", outcome=("called", None))
+                return super().emit_disconnect(reason)
+
         TraderClient.start, TraderClient.stop_and_wait = start, stop
         live_ctp_feed.ctp_client.MdClient = FakeMd
         params = dict(broker_id="9999", user_id="account", password="synthetic",
@@ -258,7 +785,7 @@ def _gateway(root, rpc, market, server_keys, client_keys, journal_id, issuer_id,
             return_settings=CtpGatewayReturnSettings(tuple(key.instrument for key in keys), query_interval_seconds=1),
             account_read_settings=read, account_read_principals=frozenset(i.principal_ref for i in (CLIENT_A, CLIENT_B)),
             market_settings=CtpGatewayMarketSettings(frozenset(keys), {
-                CLIENT_A.principal_ref: frozenset({keys[0]}), CLIENT_B.principal_ref: frozenset({keys[1]})}))
+                CLIENT_A.principal_ref: frozenset(keys), CLIENT_B.principal_ref: frozenset({keys[1]})}))
         assert not feeds and not natives and not streams
         deployment = profile.deployment_factory()
         deployment.start()
@@ -271,7 +798,7 @@ def _gateway(root, rpc, market, server_keys, client_keys, journal_id, issuer_id,
             if action == "stop":
                 break
             if action == "stats":
-                md = FakeMd.instances[0] if FakeMd.instances else None
+                md = FakeMd.instances[-1] if FakeMd.instances else None
                 events.put(("stats", len(natives), len(feeds), len(streams), len(FakeMd.instances),
                     () if md is None else tuple(md.subscribed), 0 if md is None else md.stop_wait_calls,
                     0 if not natives else natives[0].calls.count("insert"),
@@ -280,11 +807,102 @@ def _gateway(root, rpc, market, server_keys, client_keys, journal_id, issuer_id,
                     {} if not return_owners else return_owners[0].status(),
                     bool(md is not None and md.last_stop_receipt is not None
                         and md.last_stop_receipt.complete and md.last_stop_receipt.native_released)))
+            if action == "md_disconnect":
+                old_md = FakeMd.instances[-1]
+                recovery_phase_enabled[0] = True
+                recovery_fault_started[0] = True
+                callback_owner_thread = []
+                callback_errors = []
+
+                def emit_from_native_callback_thread():
+                    callback_owner_thread.append(threading.get_ident() == owner_thread_id)
+                    try:
+                        old_md.emit_disconnect(0x1001)
+                    except Exception as error:
+                        callback_errors.append(recovery_error_code(error))
+
+                callback_thread = threading.Thread(
+                    target=emit_from_native_callback_thread,
+                    name="synthetic-ctp-md-callback",
+                    daemon=True,
+                )
+                callback_thread.start()
+                callback_thread.join(timeout=5)
+                if callback_thread.is_alive():
+                    raise TimeoutError("synthetic MD callback did not join")
+                if callback_errors:
+                    raise RuntimeError("synthetic MD callback failed: " + callback_errors[0])
+                callback_same_owner = callback_owner_thread[0]
+                record_recovery_phase("md.callback_join", outcome=("complete", callback_same_owner))
+                stream = streams[0]
+                events.put(("md_disconnected", len(FakeMd.instances), old_md.connection_generation,
+                    stream.quote_v2_service_recovery_required, stream.quote_v2_service_fail_closed,
+                    stream.get_quote_clock_source_scope() is None, market_provider_maintain_calls[0],
+                    time.monotonic_ns(), callback_same_owner))
+            if action == "arm_recovery_trace":
+                recovery_phase_enabled[0] = True
+                owner_phase_capture[0] = True
+                for _ in range(3):
+                    deployment.serve_once(10)
+                owner_proxy_pre_fault[0] = owner_proxy_pending_snapshot("pre_fault")
+                events.put(("recovery_trace_armed", recovery_phase_snapshot(),
+                            owner_phase_snapshot("after_three_arm_sweeps"),
+                            market_hub_stream_snapshot("pre_fault"),
+                            owner_proxy_pre_fault[0]))
+            if isinstance(action, tuple) and action[0] == "drive_md_recovery":
+                previous_count, previous_generation = action[1:]
+                deadline = time.monotonic() + 10
+                recovered = None
+                during_owner_proxy = None
+                while time.monotonic() < deadline:
+                    deployment.serve_once(10)
+                    if during_owner_proxy is None:
+                        during_owner_proxy = owner_proxy_pending_snapshot("during_recovery")
+                    scope = streams[0].get_quote_clock_source_scope() if streams else None
+                    if (len(FakeMd.instances) > previous_count and scope is not None
+                            and scope.connection_generation > previous_generation
+                            and all(source_epoch_reset_seen[symbol]
+                                    for symbol in ("IF2612", "IH2612"))
+                            and all(source_epoch_ack_results[symbol][1] is True
+                                    for symbol in ("IF2612", "IH2612"))):
+                        current_md = FakeMd.instances[-1]
+                        recovered = ("md_reconnected", len(FakeMd.instances),
+                            tuple(sorted(current_md.subscribed)), scope.connection_generation,
+                            tuple((symbol, source_epoch_reset_checks[symbol], source_epoch_reset_seen[symbol])
+                                  for symbol in ("IF2612", "IH2612")),
+                            tuple((symbol, source_epoch_ack_results[symbol]) for symbol in ("IF2612", "IH2612")),
+                            market_provider_maintain_calls[0],
+                            time.monotonic_ns(), recovery_phase_snapshot(),
+                            owner_phase_snapshot("after_md_recovery"),
+                            (owner_proxy_pre_fault[0], during_owner_proxy,
+                             owner_proxy_pending_snapshot("recovered")))
+                        break
+                if recovered is None:
+                    scope = streams[0].get_quote_clock_source_scope() if streams else None
+                    recovered = ("md_recovery_timeout", len(FakeMd.instances),
+                        None if scope is None else scope.connection_generation,
+                        tuple((symbol, source_epoch_reset_checks[symbol], source_epoch_reset_seen[symbol])
+                              for symbol in ("IF2612", "IH2612")),
+                        tuple((symbol, source_epoch_ack_results[symbol]) for symbol in ("IF2612", "IH2612")),
+                        market_provider_maintain_calls[0],
+                        time.monotonic_ns(), recovery_phase_snapshot(),
+                        owner_phase_snapshot("after_md_recovery_timeout"),
+                        market_hub_stream_snapshot("deadline"),
+                        (owner_proxy_pre_fault[0], during_owner_proxy,
+                         owner_proxy_pending_snapshot("deadline")))
+                events.put(recovered)
+            if action == "recovery_trace":
+                events.put(("recovery_trace", recovery_phase_snapshot(),
+                            market_hub_stream_snapshot("recovery_trace"),
+                            owner_proxy_pending_snapshot("recovery_trace"),
+                            owner_phase_snapshot("recovery_trace"),
+                            owner_proxy_future_history_snapshot("recovery_trace")))
             if isinstance(action, tuple) and action[0] == "tick":
                 symbol = action[1]
-                FakeMd.instances[0].emit_tick(InstrumentID=symbol, ExchangeID="CFFEX", LastPrice=4005.0,
+                price = 4005.0 if len(action) == 2 else action[2]
+                FakeMd.instances[-1].emit_tick(InstrumentID=symbol, ExchangeID="CFFEX", LastPrice=price,
                     Volume=2, TradingDay="20261020", ActionDay="20261020", UpdateTime="09:30:02", UpdateMillisec=0)
-                events.put(("tick", symbol))
+                events.put(("tick", symbol) if len(action) == 2 else ("tick", symbol, price))
             deployment.serve_once(10)
     except BaseException:
         events.put(("error", traceback.format_exc()))
@@ -295,6 +913,17 @@ def _gateway(root, rpc, market, server_keys, client_keys, journal_id, issuer_id,
             events.put(("closed", len(locals().get("stops", []))))
         except BaseException:
             events.put(("cleanup_error", traceback.format_exc()))
+        finally:
+            GatewayMarketHub.maintain = original_hub_maintain
+            GatewayOwnerMarketProvider.begin_subscribe = original_gateway_begin_subscribe
+            GatewayOwnerMarketProvider.source_epoch_reset_required = original_gateway_reset_required
+            GatewayOwnerMarketProvider.poll = original_gateway_poll
+            GatewayOwnerMarketProvider.acknowledge_source_epoch_reset = original_gateway_ack
+            CtpQuoteV2MarketProvider.source_epoch_reset_required = original_source_epoch_reset_required
+            CtpQuoteV2MarketProvider.acknowledge_source_epoch_reset = original_source_epoch_ack
+            CtpQuoteV2MarketProvider.retained_events_ready = original_retained_events_ready
+            CtpQuoteV2MarketProvider.poll = original_provider_poll
+            CtpQuoteV2MarketProvider.maintain = original_market_provider_maintain
 
 
 def _session(identity, keys, server_public, rpc, market, journal_id, symbol, root, run_suffix="", heartbeat_interval_seconds=None):
@@ -312,7 +941,9 @@ def _session(identity, keys, server_public, rpc, market, journal_id, symbol, roo
     scope = WireScope(DOMAIN, account_ref=SCOPE, strategy_ref=identity.actor_ref, run_id="run-" + identity.actor_ref + run_suffix)
     subscriptions = {"ticks": GatewayMarketSubscriptionSettings(_key(symbol), require_source_descriptor=True)}
     if identity == CLIENT_A:
-        subscriptions["forbidden"] = GatewayMarketSubscriptionSettings(_key("IH2612"))
+        subscriptions["second_ticks"] = GatewayMarketSubscriptionSettings(
+            _key("IH2612"), require_source_descriptor=True)
+        subscriptions["forbidden"] = GatewayMarketSubscriptionSettings(_key("ZZ2612"))
     return GatewayStrategyClientSession(parse_client_config(raw),
         binding=GatewayCommandBinding(journal_id, SCOPE, identity.actor_ref, identity.principal_ref),
         route=GatewayClientRoute("broker.direct_write", SERVICE.actor_ref, "gateway-a", "scope-a", scope, identity),
@@ -480,6 +1111,197 @@ def test_spawned_real_ctp_session_shares_one_td_and_lazy_md(tmp_path):
         raw_sub.close()
         monitor.close()
         context.term()
+        close_results = []
+        for session in sessions:
+            try:
+                closed = session.close(timeout_seconds=10)
+                close_results.append((closed.state, closed.thread_alive))
+            except Exception as exc:
+                close_results.append((type(exc).__name__, True))
+        controls.put("stop")
+        child.join(15)
+        if child.is_alive():
+            child.terminate()
+            child.join(5)
+            pytest.fail("synthetic Gateway process failed bounded shutdown")
+        remaining = []
+        while True:
+            try:
+                remaining.append(events.get_nowait())
+            except queue.Empty:
+                break
+        assert child.exitcode == 0 and not any(item[0] in {"error", "cleanup_error"} for item in remaining), remaining
+        assert ("closed", 1) in remaining, remaining
+        assert all(state == "closed" and alive is False for state, alive in close_results), close_results
+
+
+def test_spawned_ctp_joint_md_fault_settles_pre_fault_owner_futures(tmp_path):
+    _secure_tmp_path(tmp_path)
+    (tmp_path / "guard").mkdir()
+    (tmp_path / "flow").mkdir(mode=0o700)
+    journal = GatewayDirectCommandJournal.create(tmp_path / "orders.sqlite", SCOPE, generation="provisioned")
+    issuer = DurableOrderCorrelationIssuer(tmp_path / "identity.sqlite")
+    issuer_id = issuer.issuer_id
+    issuer.close()
+    rpc, market = _free_endpoint(), _free_endpoint()
+    server_keys = zmq.curve_keypair()
+    client_keys = (zmq.curve_keypair(), zmq.curve_keypair(), zmq.curve_keypair())
+    ctx = multiprocessing.get_context("spawn")
+    poll_armed, poll_entered, poll_release = ctx.Event(), ctx.Event(), ctx.Event()
+    dequeued = ctx.Value("i", 0)
+    maintenance_entered = ctx.Event()
+    events, controls = ctx.Queue(), ctx.Queue()
+    blocked_poll = (poll_armed, poll_entered, poll_release, dequeued, maintenance_entered)
+    child = ctx.Process(target=_gateway, args=(str(tmp_path), rpc, market, server_keys, client_keys,
+        journal.journal_id, issuer_id, events, controls, None, blocked_poll))
+    child.start()
+    sessions = []
+    poll_gate_released = [False]
+
+    def release_poll_gate():
+        if not poll_gate_released[0]:
+            poll_release.set()
+            poll_gate_released[0] = True
+
+    try:
+        ready = events.get(timeout=20)
+        assert ready == ("ready", child.pid) and child.pid != os.getpid(), ready
+        for identity, keys, symbol in zip((CLIENT_A, CLIENT_B), client_keys, ("IF2612", "IH2612")):
+            session = _session(identity, keys, server_keys[0], rpc, market,
+                journal.journal_id, symbol, tmp_path)
+            sessions.append(session)
+            session.start(timeout_seconds=10)
+        controls.put("stats")
+        assert events.get(timeout=5)[:7] == ("stats", 1, 1, 0, 0, (), 0)
+        for session in sessions:
+            view = _until(lambda: session.account_client.refresh(timeout_seconds=5))
+            assert view.observation.account_key == ACCOUNT
+
+        first_market = sessions[0].market_client.subscription("ticks")
+        second_market = sessions[0].market_client.subscription("second_ticks")
+        client_b_market = sessions[1].market_client.subscription("ticks")
+        old_descriptors = {}
+        for symbol, subscription in (("IF2612", first_market), ("IH2612", second_market)):
+            bootstrap = subscription.start(timeout_seconds=10)
+            descriptor = bootstrap.source_descriptor
+            assert descriptor.key == _key(symbol) and descriptor.provider == "ctp"
+            assert descriptor.connection_generation == 1
+            old_descriptors[symbol] = descriptor
+        controls.put("stats")
+        stats = events.get(timeout=5)
+        assert stats[:5] == ("stats", 1, 1, 1, 1), stats
+        assert set(stats[5]) == {"IF2612", "IH2612"}, stats
+
+        controls.put("arm_recovery_trace")
+        armed = events.get(timeout=5)
+        assert armed[0] == "recovery_trace_armed", armed
+        poll_armed.set()
+        controls.put(("tick", "IF2612", 4123.0))
+        assert events.get(timeout=5) == ("tick", "IF2612", 4123.0)
+        assert poll_entered.wait(5) and maintenance_entered.wait(5)
+        assert dequeued.value == 1
+
+        def read_recovery_trace():
+            controls.put("recovery_trace")
+            trace = events.get(timeout=5)
+            assert trace[0] == "recovery_trace", trace[0]
+            return trace
+
+        expected_owner_states = {
+            "IF2612": ("poll", "running"),
+            "IH2612": ("reset", "queued"),
+        }
+
+        def has_both_old_futures(trace):
+            rows = {row[0]: row for row in trace[3][1]}
+            return (set(rows) == set(expected_owner_states)
+                    and all(rows[symbol][1] == expected_owner_states[symbol][0]
+                            and rows[symbol][2] is not None
+                            and rows[symbol][3] is False
+                            and rows[symbol][4] == expected_owner_states[symbol][1]
+                            for symbol in expected_owner_states))
+
+        pre_fault = _until(lambda: (trace if has_both_old_futures(
+            trace := read_recovery_trace()) else None), timeout=3)
+        pre_rows = {row[0]: row for row in pre_fault[3][1]}
+        old_future_keys = {symbol: (row[1], row[2]) for symbol, row in pre_rows.items()}
+        assert old_future_keys["IF2612"][1] != old_future_keys["IH2612"][1]
+        pre_owner = pre_fault[4]
+        pre_live = {(row[0], row[1], row[3], row[4]) for row in pre_owner[4]}
+        assert ("poll", "IF2612", "running", False) in pre_live, pre_owner
+        assert ("reset", "IH2612", "queued", None) in pre_live, pre_owner
+        owner_status = pre_owner[1][0]
+        assert owner_status[1:4] == (True, True, True) and owner_status[6] >= 1, pre_owner
+
+        controls.put("md_disconnect")
+        md_fault = events.get(timeout=5)
+        assert md_fault[:3] == ("md_disconnected", 1, 1), md_fault
+        assert md_fault[3:6] == (True, False, True), md_fault
+        during_fault = _until(lambda: (trace if has_both_old_futures(
+            trace := read_recovery_trace()) else None), timeout=3)
+        during_rows = {row[0]: row for row in during_fault[3][1]}
+        for symbol, (kind, ordinal) in old_future_keys.items():
+            row = during_rows[symbol]
+            assert (row[1], row[2], row[3], row[4]) == (
+                kind, ordinal, False, expected_owner_states[symbol][1]), during_fault
+        during_live = {(row[0], row[1], row[3], row[4]) for row in during_fault[4][4]}
+        assert ("poll", "IF2612", "running", False) in during_live, during_fault[4]
+        assert ("reset", "IH2612", "queued", None) in during_live, during_fault[4]
+
+        release_poll_gate()
+        controls.put(("drive_md_recovery", 1, old_descriptors["IF2612"].connection_generation))
+        recovered = events.get(timeout=12)
+        assert recovered[0] == "md_reconnected", recovered
+        assert recovered[1] == 2 and set(recovered[2]) == {"IF2612", "IH2612"}, recovered
+        assert recovered[3] > old_descriptors["IF2612"].connection_generation, recovered
+        assert all(row[1][1] is True and row[2] is True for row in recovered[4]), recovered
+        assert all(row[1][1] is True for row in recovered[5]), recovered
+
+        settled_trace = read_recovery_trace()
+        settled_futures = {row[:3]: row[3:] for row in settled_trace[5][1]}
+        for symbol, (kind, ordinal) in old_future_keys.items():
+            assert settled_futures[(symbol, kind, ordinal)] == (True, "done"), settled_trace[5]
+        print(("held_md_owner_futures", pre_fault[3], during_fault[3], settled_trace[5]))
+        print(("held_md_owner_phase", pre_fault[4], during_fault[4]))
+
+        new_descriptors = {}
+        for symbol, subscription in (("IF2612", first_market), ("IH2612", second_market)):
+            bootstrap = subscription.recover(timeout_seconds=10)
+            assert bootstrap.resync_required is True
+            assert bootstrap.snapshot_epoch != old_descriptors[symbol].epoch
+            accepted = subscription.accept_resync(acknowledge_data_loss=True, timeout_seconds=10)
+            descriptor = accepted.source_descriptor
+            assert descriptor is not None
+            assert descriptor.connection_generation == recovered[3]
+            assert descriptor.epoch == accepted.snapshot_epoch
+            new_descriptors[symbol] = descriptor
+        joined = client_b_market.start(timeout_seconds=10)
+        assert joined.source_descriptor == new_descriptors["IH2612"]
+
+        for symbol, price, subscriptions in (
+            ("IF2612", 4124.0, (first_market,)),
+            ("IH2612", 4125.0, (second_market, client_b_market)),
+        ):
+            controls.put(("tick", symbol, price))
+            assert events.get(timeout=5) == ("tick", symbol, price)
+            for subscription in subscriptions:
+                event = _until(lambda: (event if (event := subscription.poll(timeout_seconds=5))
+                    and event.payload["data"]["last_price"] == price else None))
+                assert event.header.stream_epoch == new_descriptors[symbol].epoch
+                assert event.payload["data"]["provider_connection_generation"] == recovered[3]
+
+        closed_a = sessions[0].close(timeout_seconds=10)
+        assert closed_a.state == "closed" and not closed_a.thread_alive
+        controls.put(("tick", "IH2612", 4126.0))
+        assert events.get(timeout=5) == ("tick", "IH2612", 4126.0)
+        joined_event = _until(lambda: (event if (event := client_b_market.poll(timeout_seconds=5))
+            and event.payload["data"]["last_price"] == 4126.0 else None))
+        assert joined_event.header.stream_epoch == new_descriptors["IH2612"].epoch
+        closed_b = sessions[1].close(timeout_seconds=10)
+        assert closed_b.state == "closed" and not closed_b.thread_alive
+        print(("synthetic_owner_pending_md_recovery_complete", 1, 2))
+    finally:
+        release_poll_gate()
         close_results = []
         for session in sessions:
             try:
