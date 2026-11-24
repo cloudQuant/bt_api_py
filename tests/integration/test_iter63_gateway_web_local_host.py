@@ -9,6 +9,8 @@ import socket
 import subprocess
 import sys
 import threading
+import time
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -18,6 +20,8 @@ from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_gateway.direct_command_journal import GatewayDirectCommandJournal
 from bt_api_gateway.direct_dispatch import GatewayDirectDispatcher
 from bt_api_gateway.session_guard import LocalAccountSessionGuard
+from bt_api_py import _win32_security as win32_security
+import bt_api_py.gateway_web_local_host as host_module
 from bt_api_py.gateway_direct_owner import GatewayDirectOwner, GatewayDirectOwnerResources
 from bt_api_py.gateway_direct_service import GatewayControlGrant, GatewayDirectGrant, GatewayDirectServiceBinding
 from bt_api_py.gateway_web_local_host import LocalGatewayWebHost
@@ -37,8 +41,16 @@ def _run(app, callback):
     asyncio.run(run())
 
 
+def _set_owner_only(path):
+    if win32_security.WINDOWS:
+        win32_security._set_owner_only_acl(path)
+    else:
+        path.chmod(0o600)
+    return path
+
+
 @pytest.mark.parametrize('change', ['rewrite_restore', 'rename_restore'])
-def test_local_host_protected_login_and_real_curve(tmp_path, change):
+def test_local_host_protected_login_and_real_curve(tmp_path, change, monkeypatch):
     with socket.socket() as probe:
         probe.bind(('127.0.0.1', 0))
         endpoint = f'tcp://127.0.0.1:{probe.getsockname()[1]}'
@@ -112,15 +124,22 @@ def test_local_host_protected_login_and_real_curve(tmp_path, change):
                 'operations': sorted(OPS)}]}
         config_path = (tmp_path / 'host.json').resolve()
         config_path.write_text(json.dumps(config), encoding='utf-8')
-        config_path.chmod(0o600)
+        _set_owner_only(config_path)
         denied_config = json.loads(json.dumps(config))
         denied_config['operators'][0]['operations'].append('direct.control.resume')
         denied_path = (tmp_path / 'denied.json').resolve()
         denied_path.write_text(json.dumps(denied_config), encoding='utf-8')
-        denied_path.chmod(0o600)
+        _set_owner_only(denied_path)
         with pytest.raises(RuntimeError, match='GATEWAY_UNAVAILABLE'):
             LocalGatewayWebHost(denied_path).start()
         host = LocalGatewayWebHost(config_path).start()
+        clock = [time.monotonic()]
+        monkeypatch.setattr(
+            host_module,
+            'time',
+            SimpleNamespace(monotonic=lambda: clock[0]),
+        )
+
         async def check(browser):
             assert (await browser.get('/api/v1/session')).status_code == 401
             assert (await browser.post('/login', data={'token': token})).status_code == 403
@@ -152,17 +171,56 @@ def test_local_host_protected_login_and_real_curve(tmp_path, change):
             assert (await browser.get('/api/v1/session', headers=second_headers)).status_code == 401
             assert (await browser.get('/api/v1/session', headers=headers)).status_code == 200
 
-            # Test changes that happen entirely between requests and restore the old bytes/mtime.
+            # The production host uses a 1800-second monotonic session TTL. Move
+            # only this module's clock so the real owner/app boundary can check
+            # the exact expiry edge without waiting or changing stdlib time.
+            clock[0] += 1799
+            assert (await browser.get('/api/v1/session', headers=headers)).status_code == 200
+            clock[0] += 1
+            assert (await browser.get('/api/v1/session', headers=headers)).status_code == 401
+            renewed = await browser.post(
+                '/login', data={'token': token}, headers={'Origin': 'http://127.0.0.1:8000'}
+            )
+            assert renewed.status_code == 200
+            renewed_token = renewed.json()['session']
+            assert len(renewed_token) == 64 and renewed_token != session_token
+            renewed_headers = {
+                'Origin': 'http://127.0.0.1:8000',
+                'X-Gateway-Session': renewed_token,
+            }
+            renewed_session = await browser.get('/api/v1/session', headers=renewed_headers)
+            assert renewed_session.status_code == 200
+            assert (await browser.get('/api/v1/session', headers=headers)).status_code == 401
+            headers.update({
+                'X-Gateway-Session': renewed_token,
+                'X-CSRF-Token': renewed_session.json()['csrf_token'],
+                'X-Gateway-Route': renewed_session.json()['scopes'][0]['route_fingerprint'],
+            })
+
+            # Test changes that happen entirely between requests while preserving
+            # the old bytes. Windows reports st_ctime as creation time, so use a
+            # new file identity there instead of relying on a transient rewrite.
             original = config_path.read_bytes()
             before = config_path.stat()
             if change == 'rewrite_restore':
                 config_path.write_bytes(b'changed')
-                config_path.write_bytes(original)
-                os.utime(config_path, ns=(before.st_atime_ns, before.st_mtime_ns))
+                if win32_security.WINDOWS:
+                    replacement = config_path.with_name('restored.json')
+                    replacement.write_bytes(original)
+                    _set_owner_only(replacement)
+                    os.replace(replacement, config_path)
+                else:
+                    config_path.write_bytes(original)
+                    os.utime(config_path, ns=(before.st_atime_ns, before.st_mtime_ns))
             else:
                 moved = config_path.with_name('moved.json')
                 config_path.rename(moved)
-                moved.rename(config_path)
+                if win32_security.WINDOWS:
+                    config_path.write_bytes(original)
+                    _set_owner_only(config_path)
+                    moved.unlink()
+                else:
+                    moved.rename(config_path)
             assert config_path.read_bytes() == original
             assert (await browser.get('/api/v1/session', headers=headers)).status_code == 401
             assert (await browser.post('/login', data={'token': token}, headers={'Origin': 'http://127.0.0.1:8000'})).status_code == 401
