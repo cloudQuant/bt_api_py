@@ -28,6 +28,7 @@ from bt_api_execution.atomic_submission_intake import AtomicSubmissionIntake
 from bt_api_execution.contracts import ExecutionScope
 from bt_api_execution.service_atomic_intake import AtomicIntakeService
 
+from ._owner_stop_file import marker_requested, new_marker
 from .execution_action_grant import ExecutionActionGrant
 from .execution_parent_grant import ExecutionParentGrant, OPERATIONS, PORT
 from .execution_read_service_host import _check_existing, _directory, _endpoint, _identity, _path, _text
@@ -499,10 +500,18 @@ class ParentServiceHost:
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', required=True)
+    parser.add_argument('--enable-owner-stop-file', action='store_true',
+                        help='allow local cooperative shutdown with a protected empty marker')
     args = parser.parse_args(argv)
     try:
         host = ParentServiceHost(load_config(args.config))
         signals, failed = 0, False
+        def announce_stop_file():
+            if not args.enable_owner_stop_file:
+                return None
+            marker = new_marker(Path(args.config).parent, 'execution-parent')
+            print('EXECUTION_PARENT_STOP_FILE ' + marker.name, flush=True)
+            return marker
         def stop(_signum, _frame):
             nonlocal signals
             signals += 1
@@ -512,7 +521,8 @@ def main(argv=None):
                 host.start()
                 print('EXECUTION_PARENT_LISTENER_UNREADY' if not host.host.healthy else
                       'EXECUTION_PARENT_LISTENER_READY', flush=True)
-                while not signals:
+                stop_file = announce_stop_file()
+                while not signals and not marker_requested(stop_file):
                     host.poll()
             except Exception:
                 failed = True
@@ -525,7 +535,8 @@ def main(argv=None):
                     except Exception:
                         failed = True
                         print('EXECUTION_PARENT_CLEANUP_PENDING', flush=True)
-                        while signals == before:
+                        retry_file = announce_stop_file()
+                        while signals == before and not marker_requested(retry_file):
                             time.sleep(0.1)
         finally:
             for sig, handler in previous.items():

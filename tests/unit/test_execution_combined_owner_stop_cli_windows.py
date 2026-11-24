@@ -14,6 +14,7 @@ import pytest
 
 from bt_api_py._win32_security import _set_owner_only_acl, inspect_owner
 from tests.unit.test_execution_combined_service_host import seed, setup_combined
+from tests.unit.test_iter65_execution_parent_service_host import setup_config as setup_parent
 
 
 pytestmark = pytest.mark.skipif(os.name != "nt", reason="Windows owner-stop CLI proof")
@@ -53,19 +54,54 @@ def _create_owner_stop_marker(path):
     _set_owner_only_acl(path)
 
 
-def test_combined_cli_exits_after_protected_owner_stop_marker(tmp_path):
-    raw, _, _, _ = setup_combined(tmp_path)
-    seed(raw)
-    config_path = tmp_path / "combined.json"
-    config_path.write_text(json.dumps(raw), encoding="utf-8")
+@pytest.mark.parametrize(
+    ("service_kind", "ready_lines", "stop_prefix", "stop_pattern", "stopped_line"),
+    [
+        pytest.param(
+            "combined",
+            ("EXECUTION_COMBINED_PARENT_READY", "EXECUTION_COMBINED_MANAGEMENT_READY"),
+            "EXECUTION_COMBINED_STOP_FILE ",
+            r"execution-[0-9a-f]{32}\.stop",
+            "EXECUTION_COMBINED_STOPPED",
+            id="combined",
+        ),
+        pytest.param(
+            "standalone_parent",
+            ("EXECUTION_PARENT_LISTENER_READY",),
+            "EXECUTION_PARENT_STOP_FILE ",
+            r"execution-parent-[0-9a-f]{32}\.stop",
+            "EXECUTION_PARENT_STOPPED",
+            id="standalone_parent",
+        ),
+    ],
+)
+def test_cli_exits_after_protected_owner_stop_marker(
+    tmp_path, service_kind, ready_lines, stop_prefix, stop_pattern, stopped_line
+):
+    if service_kind == "combined":
+        raw, _, _, _ = setup_combined(tmp_path)
+        seed(raw)
+        payload = raw
+        module = "bt_api_py.execution_combined_service_host"
+        command_args = ["run"]
+    else:
+        parent_dir = tmp_path / "parent"
+        parent_dir.mkdir()
+        payload, _, _ = setup_parent(parent_dir)
+        seed({"parent": payload})
+        module = "bt_api_py.execution_parent_service_host"
+        command_args = []
+
+    config_path = tmp_path / f"{service_kind}.json"
+    config_path.write_text(json.dumps(payload), encoding="utf-8")
     _set_owner_only_acl(config_path)
 
     command = [
         sys.executable,
         "-u",
         "-m",
-        "bt_api_py.execution_combined_service_host",
-        "run",
+        module,
+        *command_args,
         "--config",
         str(config_path),
         "--enable-owner-stop-file",
@@ -91,17 +127,16 @@ def test_combined_cli_exits_after_protected_owner_stop_marker(tmp_path):
     stop_path = None
     observed = []
     try:
-        parent_ready = _next_line(stdout_lines, process)
-        management_ready = _next_line(stdout_lines, process)
+        for expected in ready_lines:
+            line = _next_line(stdout_lines, process)
+            observed.append(line)
+            assert line == expected
         stop_announcement = _next_line(stdout_lines, process)
-        observed.extend((parent_ready, management_ready, stop_announcement))
-        assert parent_ready == "EXECUTION_COMBINED_PARENT_READY"
-        assert management_ready == "EXECUTION_COMBINED_MANAGEMENT_READY"
+        observed.append(stop_announcement)
 
-        prefix = "EXECUTION_COMBINED_STOP_FILE "
-        assert stop_announcement.startswith(prefix), stop_announcement
-        stop_name = stop_announcement[len(prefix):]
-        assert re.fullmatch(r"execution-[0-9a-f]{32}\.stop", stop_name), stop_name
+        assert stop_announcement.startswith(stop_prefix), stop_announcement
+        stop_name = stop_announcement[len(stop_prefix):]
+        assert re.fullmatch(stop_pattern, stop_name), stop_name
         stop_path = config_path.parent / stop_name
         assert stop_path.parent == config_path.resolve().parent
         assert not stop_path.exists()
@@ -121,12 +156,7 @@ def test_combined_cli_exits_after_protected_owner_stop_marker(tmp_path):
         tail = _remaining_lines(stdout_lines)
         stderr = _remaining_lines(stderr_lines)
         observed.extend(tail)
-        assert observed == [
-            "EXECUTION_COMBINED_PARENT_READY",
-            "EXECUTION_COMBINED_MANAGEMENT_READY",
-            stop_announcement,
-            "EXECUTION_COMBINED_STOPPED",
-        ]
+        assert observed == [*ready_lines, stop_announcement, stopped_line]
         if stderr:
             warning, source = stderr
             assert "zmq/_future.py:" in warning.replace("\\", "/")

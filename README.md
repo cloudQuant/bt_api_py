@@ -528,6 +528,11 @@ file beside the deployment config, with the basename announced by
 confirm that the listener and journal owner closed. A cleanup failure retains
 the original owner and announces a fresh marker for an explicit retry.
 
+For standalone parent listeners, use `python -m bt_api_py.execution_parent_service_host
+--config <parent-config> --enable-owner-stop-file`. Use the basename announced
+by `EXECUTION_PARENT_STOP_FILE` beside the parent config, and verify
+`EXECUTION_PARENT_STOPPED` and exit code `0`.
+
 `bt_api_py.execution_read_service_host` provides an independent authenticated
 management listener for three local parent-journal reads. See
 [`execution-read-service.example.json`](examples/services/execution-read-service.example.json).
