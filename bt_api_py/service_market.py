@@ -449,6 +449,7 @@ class ServiceMarketClient:
             and not self._recovery_required
             and not self._resync_required
             and self._authorization_interrupted is None
+            and (not self._require_source_descriptor or self._source_descriptor is not None)
             and self._runtime.healthy
         )
 
@@ -844,6 +845,12 @@ class ServiceMarketClient:
             if not self._head_and_replay():
                 if self._pending_resync is not None:
                     return self._pending_resync
+                if (
+                    self._recovery_required
+                    and self._require_source_descriptor
+                    and self._source_descriptor is None
+                ):
+                    raise ServiceMarketError("RECOVERY_REQUIRED")
                 self._last_bootstrap = self._bootstrap(
                     snapshot.snapshot,
                     snapshot.snapshot_epoch,
@@ -1224,6 +1231,12 @@ class ServiceMarketClient:
                     )
                 if self._pending_resync is not None:
                     return self._pending_resync
+                if (
+                    self._recovery_required
+                    and self._require_source_descriptor
+                    and self._source_descriptor is None
+                ):
+                    raise ServiceMarketError("RECOVERY_REQUIRED")
                 self._last_bootstrap = self._bootstrap(
                     snapshot.snapshot,
                     snapshot.snapshot_epoch,
@@ -1284,8 +1297,20 @@ class ServiceMarketClient:
         self._recovery_required = False
         self._pending_resync = None
         self._next_head_check = self._now() + self._head_interval
-        if not self._head_and_replay() and self._pending_resync is not None:
-            return self._pending_resync
+        if not self._head_and_replay():
+            if self._authorization_interrupted is not None:
+                raise ServiceMarketError(
+                    "MARKET_AUTHORIZATION_INTERRUPTED",
+                    cause_code=self._authorization_interrupted,
+                )
+            if self._pending_resync is not None:
+                return self._pending_resync
+            if (
+                self._recovery_required
+                and self._require_source_descriptor
+                and self._source_descriptor is None
+            ):
+                raise ServiceMarketError("RECOVERY_REQUIRED")
         self._last_bootstrap = self._bootstrap(
             snapshot.snapshot,
             snapshot.snapshot_epoch,
@@ -1769,7 +1794,15 @@ class ServiceMarketClient:
             self._recovery_required = True
             raise
         if event.header.stream_epoch != self._queued_epoch:
-            snapshot = self._get_snapshot()
+            try:
+                snapshot = self._get_snapshot()
+            except ServiceMarketError as error:
+                if self._is_authorization_denial(error):
+                    self._interrupt_authorization("MARKET_KEY_DENIED")
+                    return
+                if error.code not in {"RESYNC_REQUIRED", "QUEUE_CAPACITY_EXCEEDED"}:
+                    self._recovery_required = True
+                return
             if (
                 snapshot.snapshot_epoch == self._queued_epoch
                 and snapshot.snapshot_epoch == self._cursor_epoch
@@ -1846,12 +1879,20 @@ class ServiceMarketClient:
     def _snapshot_from_reply(self, reply: Mapping[str, Any]) -> MarketBootstrap:
         self._validate_snapshot_reply(reply)
         descriptor = self._source_descriptor
+        if self._require_source_descriptor and (
+            descriptor is None
+            or descriptor.stream_id != reply["stream_id"]
+            or descriptor.epoch != reply["epoch"]
+        ):
+            self._source_descriptor = None
+            self._recovery_required = True
+            self._resync_required = False
+            self._pending_resync = None
+            raise ServiceMarketError("SOURCE_DESCRIPTOR_EPOCH_MISMATCH")
         if descriptor is not None and (
             descriptor.stream_id != reply["stream_id"] or descriptor.epoch != reply["epoch"]
         ):
             self._source_descriptor = None
-            if self._require_source_descriptor:
-                raise ServiceMarketError("SOURCE_DESCRIPTOR_EPOCH_MISMATCH")
             descriptor = None
         event = None if reply["event"] is None else _decode_envelope_mapping(reply["event"])
         if event is not None:
