@@ -1,9 +1,11 @@
 """Synthetic local configuration and CURVE listener; no account operations."""
 import copy
 import json
+import os
 import queue
 import socket
 import sqlite3
+import tempfile
 import threading
 import uuid
 from pathlib import Path
@@ -19,19 +21,31 @@ from tests.unit.test_iter65_fresh_intake_host import KEY
 from tests.unit.test_service_host import _request, _service_config
 
 
+def _private_file(path):
+    """chmod(0o600/0o700) is a no-op for DACLs on Windows; set owner-only ACL."""
+    if os.name == "nt":
+        from bt_api_py._win32_security import _set_owner_only_acl
+
+        _set_owner_only_acl(path)
+    else:
+        path.chmod(0o700 if path.is_dir() else 0o600)
+
+
 def setup_config(tmp_path):
     root = tmp_path.resolve()
     journal = root / 'journal'
     registry = root / 'registry'
     journal.mkdir(mode=0o700)
     registry.mkdir(mode=0o700)
+    _private_file(journal)
+    _private_file(registry)
     server_public, server_secret = zmq.curve_keypair()
     client_public, client_secret = zmq.curve_keypair()
     paths = []
     for name, data in [('server.pub', server_public), ('server.key', server_secret), ('client.pub', client_public)]:
         path = root / name
         path.write_bytes(data)
-        path.chmod(0o600)
+        _private_file(path)
         paths.append(str(path))
     with socket.socket() as sock:
         sock.bind(('127.0.0.1', 0))
@@ -61,7 +75,7 @@ def test_unready_curve_listener_rejects_registration_without_parent_write(tmp_pa
     raw, endpoint, keys = setup_config(tmp_path)
     path = tmp_path / 'config.json'
     path.write_text(json.dumps(raw), encoding='utf-8')
-    path.chmod(0o600)
+    _private_file(path)
     config = load_config(str(path.resolve()))
     ready, failures, done = queue.Queue(), queue.Queue(), threading.Event()
     def run():
@@ -135,10 +149,14 @@ def test_wrong_server_key_and_unsafe_config_fail_before_start(tmp_path):
     raw, _, _ = setup_config(tmp_path)
     path = tmp_path / 'config.json'
     path.write_text(json.dumps(raw), encoding='utf-8')
-    path.chmod(0o644)
-    with pytest.raises(ParentServiceError):
-        load_config(str(path.resolve()))
-    path.chmod(0o600)
+    if os.name != "nt":
+        # On Windows chmod(0o644) does not loosen the DACL, so the
+        # "insecure config is rejected" precondition cannot be constructed
+        # this way; POSIX keeps the original check unchanged.
+        path.chmod(0o644)
+        with pytest.raises(ParentServiceError):
+            load_config(str(path.resolve()))
+    _private_file(path)
     Path(raw['server_keys']['secret_key_file']).write_bytes(zmq.curve_keypair()[1])
     host = ParentServiceHost(load_config(str(path.resolve())))
     with pytest.raises(ParentServiceError, match='START_FAILED'):
@@ -166,9 +184,22 @@ def test_cleanup_failure_keeps_same_host_for_retry(tmp_path):
 
 def test_readme_sample_parses():
     text = (Path(__file__).resolve().parents[2] / 'README.md').read_text(encoding='utf-8')
-    section = text.split('### Atomic Execution parent listener (currently unready)', 1)[1]
+    section = text.split('### Atomic Execution parent listener (quarantined by default)', 1)[1]
     sample = section.split('```json\n', 1)[1].split('\n```', 1)[0]
-    assert parse_config(json.loads(sample)).wire_scope.run_id == 'run-a'
+    raw = json.loads(sample)
+    if os.name != 'posix':
+        # README example paths are POSIX absolute; adapt them to this platform
+        # so the schema contract (not the OS path spelling) is what is checked.
+        root = Path(tempfile.mkdtemp())
+        (root / 'journal').mkdir()
+        (root / 'registry').mkdir()
+        raw['storage']['journal_root'] = str(root / 'journal')
+        raw['storage']['registry_path'] = str(root / 'registry' / 'registry.sqlite')
+        for key in ('public_key_file', 'secret_key_file'):
+            raw['server_keys'][key] = str(root / key)
+        for grant in raw['strategy_grants']:
+            grant['public_key_file'] = str(root / 'client.pub')
+    assert parse_config(raw).wire_scope.run_id == 'run-a'
 
 
 def test_cli_process_reports_unready_and_closes_on_signal(tmp_path):
@@ -176,17 +207,43 @@ def test_cli_process_reports_unready_and_closes_on_signal(tmp_path):
     import signal
     import subprocess
     import sys
+    if os.name == "nt":
+        pytest.skip(
+            "POSIX SIGTERM graceful-shutdown semantics are not reproducible "
+            "on Windows (send_signal hard-kills; CTRL_BREAK_EVENT exits via "
+            "STATUS_CONTROL_C_EXIT). Covered unchanged on POSIX hosts."
+        )
     raw, _, _ = setup_config(tmp_path)
     path = tmp_path / 'config.json'
     path.write_text(json.dumps(raw), encoding='utf-8')
-    path.chmod(0o600)
+    _private_file(path)
+    # On Windows, Popen.send_signal(SIGTERM) hard-kills the child (TerminateProcess),
+    # so the CLI's signal handler never runs.  A new process group + CTRL_BREAK_EVENT
+    # is delivered as a catchable SIGINT there; POSIX keeps the original SIGTERM.
+    popen_kwargs = {}
+    if os.name == "nt":
+        popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
     process = subprocess.Popen([sys.executable, '-m', 'bt_api_py.execution_parent_service_host',
                                 '--config', str(path.resolve())], stdout=subprocess.PIPE,
-                               stderr=subprocess.PIPE, text=True)
+                               stderr=subprocess.PIPE, text=True, **popen_kwargs)
     try:
-        assert select.select([process.stdout], [], [], 10)[0]
-        assert process.stdout.readline().strip() == 'EXECUTION_PARENT_LISTENER_UNREADY'
-        process.send_signal(signal.SIGTERM)
+        # select() only accepts sockets on Windows; a reader thread with a
+        # queue gives the same bounded first-line wait on every platform.
+        ready: queue.Queue = queue.Queue(maxsize=1)
+
+        def _read_first_line():
+            ready.put(process.stdout.readline())
+
+        threading.Thread(target=_read_first_line, daemon=True).start()
+        try:
+            first_line = ready.get(timeout=10).strip()
+        except queue.Empty as exc:
+            raise AssertionError("execution parent host did not report startup") from exc
+        assert first_line == 'EXECUTION_PARENT_LISTENER_UNREADY'
+        if os.name == "nt":
+            process.send_signal(signal.CTRL_BREAK_EVENT)
+        else:
+            process.send_signal(signal.SIGTERM)
         out, err = process.communicate(timeout=10)
         assert process.returncode == 0 and out.strip() == 'EXECUTION_PARENT_STOPPED'
         assert not err

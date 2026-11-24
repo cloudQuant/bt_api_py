@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import select
+import queue
 import signal
 import socket
 import subprocess
 import sys
+import threading
 
 import pytest
 import yaml
@@ -156,8 +157,20 @@ def start(path):
         stderr=subprocess.PIPE,
         text=True,
     )
-    assert select.select([process.stdout], [], [], 20)[0], "Monitor process did not report startup"
-    line = process.stdout.readline().strip()
+    # select() only supports sockets on Windows; a reader thread with a queue
+    # gives the same bounded first-line wait on every platform.
+    ready: queue.Queue = queue.Queue(maxsize=1)
+
+    def _read_first_line():
+        ready.put(process.stdout.readline())
+
+    reader = threading.Thread(target=_read_first_line, daemon=True)
+    reader.start()
+    try:
+        line = ready.get(timeout=20).strip()
+    except queue.Empty as exc:
+        process.terminate()
+        raise AssertionError("Monitor process did not report startup") from exc
     if line != "MONITOR_LISTENERS_READY":
         process.wait(timeout=5)
         raise AssertionError((line, process.stderr.read()))

@@ -160,6 +160,26 @@ def load_config(path):
 
 
 def _directory(path):
+    if os.name == "nt":
+        # Windows parity of the POSIX canonical-path + nofollow + private-owner
+        # checks: refuse reparse points, require current-user ownership and no
+        # other-writable ACE.  read_bounded uses the same owner/ACL semantics.
+        from bt_api_py._win32_security import (
+            Win32SecurityUnavailable,
+            inspect_owner,
+            is_reparse_point,
+        )
+
+        try:
+            if path.resolve(strict=True) != path or is_reparse_point(path):
+                raise ValueError
+            owner = inspect_owner(path)
+            if (not owner.is_current_user or owner.others_writable
+                    or not stat.S_ISDIR(path.stat(follow_symlinks=False).st_mode)):
+                raise ValueError
+        except (OSError, ValueError, Win32SecurityUnavailable):
+            raise ReadServiceError('INVALID_STORAGE') from None
+        return
     if os.name != 'posix' or path.resolve(strict=True) != path:
         raise ReadServiceError('INVALID_STORAGE')
     info = path.stat(follow_symlinks=False)
@@ -180,15 +200,37 @@ def _check_existing(config):
     if (type(data) is not dict or data.get('storage_id') != config.storage_id
             or data.get('account') != account_hash or data.get('database') != database.name):
         raise ReadServiceError('INVALID_STORAGE')
-    info = database.stat(follow_symlinks=False)
-    root_info = root.stat(follow_symlinks=False)
-    same_file = (
-        (info.st_dev, info.st_ino) == (data.get('device'), data.get('inode'))
-        or (sys.platform == 'darwin' and info.st_ino == data.get('inode') and info.st_dev == root_info.st_dev)
-    )
-    if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077
-            or info.st_nlink != 1 or not same_file):
-        raise ReadServiceError('INVALID_STORAGE')
+    if os.name == "nt":
+        # Windows parity: read_bounded(protected=True) already enforced the
+        # marker's nofollow/owner/ACL invariants.  Check the database with the
+        # same owner/ACL and reparse rules instead of uid/mode bits (Windows
+        # st_uid is always 0); device/inode identity is still enforced.
+        from bt_api_py._win32_security import (
+            Win32SecurityUnavailable,
+            inspect_owner,
+            is_reparse_point,
+        )
+
+        try:
+            info = database.stat(follow_symlinks=False)
+            same_file = (info.st_dev, info.st_ino) == (data.get('device'), data.get('inode'))
+            owner = inspect_owner(database)
+            if (is_reparse_point(database) or not stat.S_ISREG(info.st_mode)
+                    or not owner.is_current_user or owner.others_writable
+                    or info.st_nlink != 1 or not same_file):
+                raise ValueError
+        except (OSError, ValueError, Win32SecurityUnavailable):
+            raise ReadServiceError('INVALID_STORAGE') from None
+    else:
+        info = database.stat(follow_symlinks=False)
+        root_info = root.stat(follow_symlinks=False)
+        same_file = (
+            (info.st_dev, info.st_ino) == (data.get('device'), data.get('inode'))
+            or (sys.platform == 'darwin' and info.st_ino == data.get('inode') and info.st_dev == root_info.st_dev)
+        )
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077
+                or info.st_nlink != 1 or not same_file):
+            raise ReadServiceError('INVALID_STORAGE')
     with sqlite3.connect(database.as_uri() + '?mode=ro', uri=True) as db:
         row = db.execute("SELECT value FROM execution_meta WHERE key='schema_version'").fetchone()
         if row != (str(SqliteExecutionStore._SCHEMA_VERSION),):

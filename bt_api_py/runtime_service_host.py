@@ -121,7 +121,7 @@ class RuntimeServiceHost:
     """
     def __init__(self, config, *, authenticator, gateway_bridge, event_store,
                  monitor_bridge, unit_strategies: Mapping[str, str],
-                 poll_interval=0.05, close_timeout=5.0):
+                 poll_interval=0.05, close_timeout=5.0, enable_stop_file=False):
         if (type(config) is not ValidatedRuntimeConfig or config.api.transport != 'http_json'
                 or not authenticator or not callable(getattr(authenticator, 'authenticate', None))
                 or type(event_store) is not EventStore or not event_store.available
@@ -140,10 +140,12 @@ class RuntimeServiceHost:
                 or (gateway_bridge is not None and set(gateway_bridge._entries) != set(bindings.values()))
                 or (not gateway_units and gateway_bridge is not None)
                 or (config.monitor_events.enabled and not isinstance(monitor_bridge, RuntimeMonitorBridge))
-                or (monitor_bridge is not None and (not isinstance(monitor_bridge, RuntimeMonitorBridge)
+                 or (monitor_bridge is not None and (not isinstance(monitor_bridge, RuntimeMonitorBridge)
                                                   or monitor_bridge._store is not event_store
-                                                  or monitor_bridge.state != 'new'))):
+                                                  or monitor_bridge.state != 'new'))
+                or type(enable_stop_file) is not bool):
             raise ValueError('INVALID_RUNTIME_HOST_BINDINGS')
+        self._enable_stop_file = enable_stop_file
         self.config, self.authenticator, self.event_store = config, authenticator, event_store
         self.gateway_bridge, self.monitor_bridge = gateway_bridge, monitor_bridge
         self._mux = _ControlMux(config, MappingProxyType(bindings), gateway_bridge)
@@ -215,7 +217,8 @@ class RuntimeServiceHost:
                 self._relay = TelemetryRelay(self.monitor_bridge, enabled=self.config.monitor_events.enabled)
                 process = WindowsProcessAdapter() if os.name == 'nt' else PosixProcessAdapter()
                 self._supervisor = RuntimeSupervisor(self.config, process=process, clock=clock,
-                                                     drain_port=self._mux)
+                                                     drain_port=self._mux,
+                                                     enable_stop_file=self._enable_stop_file)
                 self._mux.supervisor = self._supervisor
                 self._database = ControlDatabase(self.config.home, clock)
                 self._service = build_control_service(self.config, supervisor=self._supervisor,

@@ -210,9 +210,60 @@ def load_config(path):
         raise RuntimeOperatorError('INVALID_CONFIGURATION') from None
 
 
+def _windows_owner_only(path):
+    """Windows parity of POSIX mode 0600 (owner read/write, nobody else).
+
+    The shared ``inspect_owner`` gives the owner SID check; the exact-0600
+    portion is enforced here directly on the DACL: every allow ACE must target
+    the owner or a root-equivalent SID (SYSTEM/Administrators). A NULL DACL or
+    an ACE for any other SID (read or write) is refused, like a group/other
+    mode bit in POSIX. Fails closed on any inspection error.
+    """
+    import win32security
+    from bt_api_py._win32_security import inspect_owner
+
+    owner = inspect_owner(path)
+    if not owner.is_current_user or owner.others_writable:
+        return False
+    sd = win32security.GetFileSecurity(
+        str(path),
+        win32security.OWNER_SECURITY_INFORMATION | win32security.DACL_SECURITY_INFORMATION,
+    )
+    dacl = sd.GetSecurityDescriptorDacl()
+    if dacl is None:
+        return False
+    allowed = {owner.owner_sid, 'S-1-5-18', 'S-1-5-32-544'}  # owner, SYSTEM, Administrators
+    for i in range(dacl.GetAceCount()):
+        ace = dacl.GetAce(i)
+        if ace[0][0] == win32security.ACCESS_DENIED_ACE_TYPE:  # grants nothing
+            continue
+        if win32security.ConvertSidToStringSid(ace[2]) not in allowed:
+            return False
+    return True
+
+
 def _protected(path, limit):
     # The shared reader validates a stable no-symlink path, owner, link count,
     # and absence of group/other permissions. Require exactly 0600 as well.
+    if os.name == "nt":
+        # Windows has no mode bits: parity of 0600 is owner-only access on the
+        # DACL (_windows_owner_only). read_bounded(protected=True) delegates to
+        # the Windows reader, which re-checks owner/link/reparse and enforces
+        # handle-identity TOCTOU on the same handle used for the read.
+        try:
+            before = os.stat(path, follow_symlinks=False)
+            if not _windows_owner_only(path):
+                raise ValueError()
+            data = read_bounded(path, limit, protected=True)
+            after = os.stat(path, follow_symlinks=False)
+            if (before.st_dev, before.st_ino, before.st_mode, before.st_size,
+                    before.st_mtime_ns, before.st_ctime_ns) != (
+                    after.st_dev, after.st_ino, after.st_mode, after.st_size,
+                    after.st_mtime_ns, after.st_ctime_ns):
+                raise ValueError()
+            return data
+        except Exception:
+            raise RuntimeOperatorError('PROTECTED_INPUT_UNAVAILABLE') from None
     try:
         before = os.stat(path, follow_symlinks=False)
         if stat.S_IMODE(before.st_mode) != 0o600:

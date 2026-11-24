@@ -24,6 +24,14 @@ from bt_api_py.risk_service_config import (
 
 KEYS = ("risk_server", "strategy", "operator", "gateway_server", "risk_delegate", "risk_control")
 
+# Synthetic config location used with monkeypatched key readers. It must be an
+# absolute path on the host platform: the SDK's Windows path guard rejects
+# root-relative paths such as ``/synthetic`` before field validation runs.
+SYNTHETIC_CONFIG_PATH = (
+    Path("C:/synthetic/risk_service.yaml") if os.name == "nt"
+    else Path("/synthetic/risk_service.yaml")
+)
+
 
 def write_keys(root):
     key_dir = root / "keys"
@@ -132,7 +140,7 @@ def synthetic_refresh_document(monkeypatch):
 )
 def test_seconds_fields_reject_float_underflow_and_preserve_bounds(monkeypatch, section, field, maximum):
     doc = synthetic_refresh_document(monkeypatch)
-    config_path = Path("/synthetic/risk_service.yaml")
+    config_path = SYNTHETIC_CONFIG_PATH
     for value in ("1e-999", "1e-999999999999999999999"):
         doc[section][field] = value
         with pytest.raises(RiskServiceConfigError) as raised:
@@ -152,7 +160,7 @@ def test_seconds_fields_reject_float_underflow_and_preserve_bounds(monkeypatch, 
 ])
 def test_freshness_fields_require_one_quantized_nanosecond(monkeypatch, field):
     doc = synthetic_refresh_document(monkeypatch)
-    config_path = Path("/synthetic/risk_service.yaml")
+    config_path = SYNTHETIC_CONFIG_PATH
     for value in ("1e-999", "5e-324", "1e-10", "9.999999999999999e-10",
                   "0.00000000099999999999999999", "1.99999999999999999999e-9"):
         doc["refresh"][field] = value
@@ -177,7 +185,7 @@ def test_freshness_fields_require_one_quantized_nanosecond(monkeypatch, field):
 ])
 def test_freshness_comparison_ignores_decimal_context(monkeypatch, field):
     doc = synthetic_refresh_document(monkeypatch)
-    config_path = Path("/synthetic/risk_service.yaml")
+    config_path = SYNTHETIC_CONFIG_PATH
     with localcontext() as context:
         context.prec = 2
         context.traps[Inexact] = True
@@ -196,7 +204,7 @@ def test_freshness_comparison_ignores_decimal_context(monkeypatch, field):
 ])
 def test_deadline_nanosecond_conversion_does_not_expand_input(monkeypatch, field, maximum):
     doc = synthetic_refresh_document(monkeypatch)
-    config_path = Path("/synthetic/risk_service.yaml")
+    config_path = SYNTHETIC_CONFIG_PATH
     for value in ("1e-999", "5e-324", "1e-10", "0.00000000099999999999999999",
                   "1.99999999999999999999e-9"):
         doc["deadlines"][field] = value
@@ -218,7 +226,7 @@ def test_deadline_nanosecond_conversion_does_not_expand_input(monkeypatch, field
 @pytest.mark.parametrize("field", ["reservation_ttl_seconds", "dispatch_recheck_seconds"])
 def test_deadline_nanosecond_comparison_ignores_decimal_context(monkeypatch, field):
     doc = synthetic_refresh_document(monkeypatch)
-    config_path = Path("/synthetic/risk_service.yaml")
+    config_path = SYNTHETIC_CONFIG_PATH
     with localcontext() as context:
         context.prec = 2
         context.traps[Inexact] = True
@@ -234,7 +242,7 @@ def test_deadline_nanosecond_comparison_ignores_decimal_context(monkeypatch, fie
 
 def test_disabled_optional_freshness_remains_none_with_fake_keys(monkeypatch):
     synthetic_refresh_document(monkeypatch)  # installs fake key reader and path resolution
-    config = parse_risk_service_config(document(), path=Path("/synthetic/risk_service.yaml"))
+    config = parse_risk_service_config(document(), path=SYNTHETIC_CONFIG_PATH)
     assert config.account_snapshot_max_age_seconds is None
     assert config.strategy_financial_max_age_seconds is None
 
@@ -244,7 +252,7 @@ def test_same_native_alias_config_keeps_full_keys_and_refuses_ambiguous_lookup(m
     doc["account"]["instruments"]["rb-option"] = {
         "venue": "SHFE", "native_symbol": "rb2701", "product_type": "option"
     }
-    config = parse_risk_service_config(doc, path=Path("/synthetic/risk_service.yaml"))
+    config = parse_risk_service_config(doc, path=SYNTHETIC_CONFIG_PATH)
     future, option = config.instruments["rb2701"], config.instruments["rb-option"]
     assert future.key != option.key
     assert config.instrument_for("SHFE", "rb2701") is None
@@ -300,6 +308,9 @@ def test_yaml_file_with_home_and_environment_expansion(tmp_path, monkeypatch):
     config = load_risk_service_config(path)
     assert config.storage_directory == tmp_path / "elsewhere" / "state"
     monkeypatch.setenv("HOME", str(tmp_path))
+    # Windows ntpath.expanduser resolves ~ from USERPROFILE/HOMEPATH, not HOME.
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.setenv("HOMEPATH", str(tmp_path))
     doc["storage"]["directory"] = "~/home-state"
     path.write_text(yaml.safe_dump(doc), encoding="utf-8")
     assert load_risk_service_config(path).storage_directory == tmp_path / "home-state"

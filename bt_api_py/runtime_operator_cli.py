@@ -81,7 +81,7 @@ def _close_store(store, requested):
         requested.clear()
 
 
-def _run(config):
+def _run(config, *, enable_stop_file=False):
     requested = threading.Event()
     previous = {}
     for sig in (signal.SIGTERM, signal.SIGINT):
@@ -96,7 +96,8 @@ def _run(config):
             raise RuntimeError('EVENT_STORE_UNAVAILABLE')
         gateway, monitor = build_bridges(config, store)
         host = RuntimeServiceHost(config.runtime, authenticator=auth, gateway_bridge=gateway,
-            event_store=store, monitor_bridge=monitor, unit_strategies=config.unit_strategies)
+            event_store=store, monitor_bridge=monitor, unit_strategies=config.unit_strategies,
+            enable_stop_file=enable_stop_file)
         try:
             host.start()
         except Exception as error:
@@ -148,6 +149,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description='Run an explicitly configured Runtime control service')
     parser.add_argument('action', choices=('validate', 'run'))
     parser.add_argument('--config', required=True, help='absolute path to public deployment JSON')
+    parser.add_argument('--enable-stop-file', action='store_true',
+                        help='opt in to the local stop-request file channel (D66-05)')
     args = parser.parse_args(argv)
     try:
         config = load_config(args.config)
@@ -157,7 +160,7 @@ def main(argv=None):
     if args.action == 'validate':
         _emit('runtime_configuration_valid')
         return 0
-    return _run(config)
+    return _run(config, enable_stop_file=args.enable_stop_file)
 
 
 if __name__ == '__main__':

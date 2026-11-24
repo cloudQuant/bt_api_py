@@ -28,20 +28,10 @@ MAX_CONFIG_DEPTH = 32
 MAX_CONFIG_NODES = 16_384
 
 
-def _read_yaml(path: str | Path) -> dict:
-    """Read one plain mapping, without aliases, merge keys or duplicate keys."""
+def _parse_yaml_bytes(raw: bytes) -> dict:
+    """Parse one plain mapping from already-read bytes (no path re-open)."""
     import yaml
 
-    try:
-        with Path(path).open("rb") as source:
-            # Check the opened file, so a replaced path cannot change this check.
-            import os
-
-            if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
-                raise ServiceConfigError("CONFIG_NOT_REGULAR_FILE", "$")
-            raw = source.read(MAX_CONFIG_BYTES + 1)
-    except OSError:
-        raise ServiceConfigError("CONFIG_READ_FAILED", "$") from None
     if len(raw) > MAX_CONFIG_BYTES:
         raise ServiceConfigError("CONFIG_TOO_LARGE", "$")
     try:
@@ -88,6 +78,21 @@ def _read_yaml(path: str | Path) -> dict:
     if not isinstance(value, dict):
         raise ServiceConfigError("CONFIG_ROOT_INVALID", "$")
     return value
+
+
+def _read_yaml(path: str | Path) -> dict:
+    """Read one plain mapping, without aliases, merge keys or duplicate keys."""
+    try:
+        with Path(path).open("rb") as source:
+            # Check the opened file, so a replaced path cannot change this check.
+            import os
+
+            if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
+                raise ServiceConfigError("CONFIG_NOT_REGULAR_FILE", "$")
+            raw = source.read(MAX_CONFIG_BYTES + 1)
+    except OSError:
+        raise ServiceConfigError("CONFIG_READ_FAILED", "$") from None
+    return _parse_yaml_bytes(raw)
 
 
 def load_client_config(path: str | Path) -> ClientConfig:

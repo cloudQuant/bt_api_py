@@ -45,6 +45,24 @@ from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority
 from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
 
 
+def _wait_startup_line(process, timeout=20):
+    """Bounded first-line read that works on Windows too.
+
+    select() only accepts sockets there; a reader thread + queue gives the
+    same bounded wait without changing what is asserted about the CLI.
+    """
+    ready: queue.Queue = queue.Queue(maxsize=1)
+
+    def _read():
+        ready.put(process.stdout.readline())
+
+    threading.Thread(target=_read, daemon=True).start()
+    try:
+        return ready.get(timeout=timeout).strip()
+    except queue.Empty as exc:
+        raise AssertionError("runtime CLI did not report startup") from exc
+
+
 def free_port():
     with socket.socket() as sock:
         sock.bind(('127.0.0.1', 0))
@@ -213,8 +231,7 @@ def test_cli_gateway_control_requires_identity_and_shuts_down(tmp_path):
         process = subprocess.Popen([sys.executable, '-u', '-m', 'bt_api_py.runtime_operator_cli', 'run',
                                     '--config', str(config_path)], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    text=True)
-        assert select.select([process.stdout], [], [], 20)[0]
-        line = process.stdout.readline().strip()
+        line = _wait_startup_line(process, 20)
         assert line == f'runtime_control_listening 127.0.0.1 {port}', (line, process.poll())
         payload = control_payload('runtime.units.list')
         status, result = request(port, payload, token='wrong-token')
@@ -284,8 +301,7 @@ def test_cli_monitor_events_with_real_monitor_host(tmp_path):
         process = subprocess.Popen([sys.executable, '-u', '-m', 'bt_api_py.runtime_operator_cli', 'run',
                                     '--config', str(config_path)], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    text=True)
-        assert select.select([process.stdout], [], [], 20)[0]
-        line = process.stdout.readline().strip()
+        line = _wait_startup_line(process, 20)
         assert line == f'runtime_control_listening 127.0.0.1 {port}', (line, process.poll())
         _, result = request(port, control_payload('runtime.unit.pause', unit='alpha',
             command_id=str(uuid.uuid4()), reason='test'), token=token)
@@ -329,8 +345,7 @@ def test_cli_management_only_empty_units(tmp_path):
                                 '--config', str(path)], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                text=True)
     try:
-        assert select.select([process.stdout], [], [], 20)[0]
-        line = process.stdout.readline().strip()
+        line = _wait_startup_line(process, 20)
         assert line == f'runtime_control_listening 127.0.0.1 {port}', (line, process.poll())
         _, response = request(port, control_payload('runtime.units.list'), token=token)
         assert response['status'] == 'OK' and response['units'] == []

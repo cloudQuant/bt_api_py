@@ -34,15 +34,29 @@ class NoReadLedger:
 
 
 class FakeEngine:
+    """Emulates the real engine's default parent-contract quarantine.
+
+    The SDK handler now delegates parent reserve/release to the engine.  Under
+    the default (no parent contract, no R05 v2 coverage) the engine returns an
+    unattributed UNKNOWN without touching the ledger; this fake preserves that
+    contract so the ledger-must-not-be-read assertions stay meaningful.
+    """
+
     def __init__(self):
         self.status_calls = []
+        self.parent_calls = []
 
     def parent_status(self, caller, parent_ref):
         self.status_calls.append((caller.principal_ref, caller.run_id, parent_ref))
         return RiskParentResult(parent_ref, "NOT_FOUND")
 
-    def __getattr__(self, name):
-        raise AssertionError(f"unexpected engine/Gateway access: {name}")
+    def parent_reserve(self, caller, parent):
+        self.parent_calls.append(("reserve", caller.principal_ref, parent.parent_ref))
+        return RiskParentResult(parent.parent_ref, "UNKNOWN", code="risk_parent_unavailable")
+
+    def parent_release(self, caller, parent_ref):
+        self.parent_calls.append(("release", caller.principal_ref, parent_ref))
+        return RiskParentResult(parent_ref, "UNKNOWN", code="risk_parent_unavailable")
 
 
 def principal(ref="exec-a", role="execution", actor="actor-a", operations=OPS):
@@ -89,6 +103,7 @@ def test_parent_reserve_never_reads_legacy_ledger(scenario, ctx, parent):
     svc, ledger, engine = service(scenario)
     assert_unknown(svc.handle("risk.parent.reserve", context=ctx, arguments={"parent": parent.to_mapping()}))
     assert ledger.calls == 0 and engine.status_calls == []
+    assert len(engine.parent_calls) == 1 and engine.parent_calls[0][0] == "reserve"
 
 
 @pytest.mark.parametrize("scenario", ["matching historical row", "missing row", "different principal/run"])
@@ -96,6 +111,7 @@ def test_parent_release_never_reads_legacy_ledger(scenario):
     svc, ledger, engine = service(scenario)
     assert_unknown(svc.handle("risk.parent.release", context=context(), arguments={"parent_ref": "parent-a"}))
     assert ledger.calls == 0 and engine.status_calls == []
+    assert len(engine.parent_calls) == 1 and engine.parent_calls[0][0] == "release"
 
 
 @pytest.mark.parametrize("operation,ctx,arguments,code", [

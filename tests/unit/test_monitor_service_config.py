@@ -34,6 +34,7 @@ def test_validate_rejects_oversized_config(tmp_path):
         load_monitor_service_config(path)
 
 
+@pytest.mark.skipif(__import__("sys").platform == "win32", reason="POSIX rename-over-open-file TOCTOU test; Windows forbids replacing an open file")
 def test_bounded_reader_rejects_entry_replacement(tmp_path, monkeypatch):
     import os
 

@@ -418,3 +418,23 @@ def test_http_opaque_stop_errors_are_retained_without_retry(tmp_path, monkeypatc
             host._http_stop_error = ControlTransportError('listener_stop_failed')
             host.close()
             store.close()
+
+
+def _host_with_stop_file(tmp_path, monkeypatch, *, enable_stop_file):
+    unit = make_unit(tmp_path, name='alpha', access=AccessMode.DIRECT)
+    config = make_config(tmp_path, unit)
+    store = EventStore(config.home, SystemClock())
+    auth = SingleOperatorAuthenticator(OperatorIdentity('alice', OperatorRole.OPERATOR, ('*',)))
+    return module.RuntimeServiceHost(
+        config, authenticator=auth, gateway_bridge=None, monitor_bridge=None,
+        event_store=store, unit_strategies={}, enable_stop_file=enable_stop_file,
+    )
+
+
+def test_enable_stop_file_opt_in_is_validated_and_stored(tmp_path, monkeypatch):
+    """D66-05 stop-file channel is opt-in: default off, explicit True stored."""
+    default_host = setup_host(tmp_path, monkeypatch)[0]
+    assert default_host._enable_stop_file is False
+    assert _host_with_stop_file(tmp_path, monkeypatch, enable_stop_file=True)._enable_stop_file is True
+    with pytest.raises(ValueError, match='INVALID_RUNTIME_HOST_BINDINGS'):
+        _host_with_stop_file(tmp_path, monkeypatch, enable_stop_file=1)

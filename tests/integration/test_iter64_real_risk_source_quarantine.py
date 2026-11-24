@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sqlite3
 import subprocess
 import sys
@@ -517,6 +518,11 @@ def _exercise_source_quarantine(root: Path):
 
 
 def test_real_risk_process_keeps_source_quarantined_permit():
+    # The private POSIX root (getuid + 0700 owner checks) has no Windows
+    # equivalent here; skip cleanly instead of reporting a false product
+    # failure.  The same scenario is covered on POSIX hosts.
+    if os.name != "posix" or not hasattr(os, "getuid"):
+        pytest.skip("private POSIX fixture root unavailable on this platform")
     try:
         root = _fixture_root()
         print("SYNTHETIC_FIXTURE_ROOT " + str(root), flush=True)

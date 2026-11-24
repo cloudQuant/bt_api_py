@@ -42,6 +42,18 @@ def _stamp(info: os.stat_result) -> tuple:
 
 def read_bounded(path: Path, limit: int, *, protected: bool) -> bytes:
     """Bounded FD read; key reads refuse symlinks throughout the path."""
+    if os.name == "nt":
+        # Windows parity: reparse-point refusal, owner/ACL checks, handle
+        # canonical-path and stamp stability mirror the POSIX invariants below.
+        from bt_api_py._win32_security import (
+            Win32SecurityUnavailable,
+            read_bounded_windows,
+        )
+
+        try:
+            return read_bounded_windows(path, limit, protected=protected)
+        except Win32SecurityUnavailable:
+            raise ValueError("FILE_UNAVAILABLE") from None
     if os.name != "posix" or not hasattr(os, "O_NOFOLLOW"):
         raise ValueError("FILE_UNAVAILABLE")
     path = Path(os.path.abspath(path))

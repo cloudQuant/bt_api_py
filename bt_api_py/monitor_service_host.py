@@ -58,7 +58,37 @@ def _close_owned_host(host: ServiceHost) -> None:
         logger.removeFilter(private_warning)
 
 
+def _storage_windows(path: Path) -> None:
+    """Windows parity of _storage: owner-only, reparse-free storage root."""
+    from bt_api_py._win32_security import (
+        Win32SecurityUnavailable,
+        ensure_directory_chain,
+        inspect_owner,
+        is_reparse_point,
+    )
+
+    try:
+        abs_path = Path(os.path.abspath(path))
+        if not abs_path.is_absolute():
+            raise ValueError()
+        # ensure_directory_chain validates each level for reparse points and
+        # owner/ACL as it walks; assert_gateway_storage_isolated then re-checks
+        # the final directory and every SQLite side file.  Both operate on the
+        # same path tree here, so a separate stamp re-walk would only report
+        # legitimate mtime changes from creating the directory itself.
+        ensure_directory_chain(abs_path, create=True)
+        assert_gateway_storage_isolated((abs_path,), (
+            abs_path / "events.sqlite",
+            abs_path / "ingress-registry.sqlite",
+            abs_path / "heartbeat-registry.sqlite",
+        ))
+    except (Win32SecurityUnavailable, OSError, ValueError):
+        raise ValueError("MONITOR_STORAGE_INVALID") from None
+
+
 def _storage(path: Path) -> None:
+    if os.name == "nt":
+        return _storage_windows(path)
     fds = []
     chain = []
     try:
