@@ -1,0 +1,66 @@
+{
+  "schema": "bt_api_py.monitor_query_service.v1",
+  "service_config": {
+    "service_config_schema_version": 1,
+    "process_role": "service",
+    "service_id": "monitor-query-service",
+    "scope_ref": "monitor-query-scope-v1",
+    "transport_ref": "monitor-query-listener",
+    "registration_policy_ref": "monitor-query-registration-v1",
+    "service_requirements_ref": "monitor-query-requirements-v1",
+    "components": {
+      "monitor": {
+        "config_schema_version": 2,
+        "settings": {
+          "instance_id": "monitor-query-service",
+          "bind_ports": ["service.monitor_query"],
+          "options": {
+            "role": "observation_query",
+            "epoch": 1,
+            "retention_floor_sequence": 0,
+            "cursor_ttl_seconds": 300
+          }
+        }
+      }
+    },
+    "communication": {
+      "config_schema_version": 1,
+      "profiles": {
+        "monitor-query-listener": {
+          "backend": "zmq",
+          "config_schema_version": 1,
+          "endpoints": {"rpc_bind": "tcp://127.0.0.1:7605"},
+          "security_profile_ref": "monitor-query-server"
+        }
+      }
+    }
+  },
+  "scope": {
+    "execution_domain_ref": "paper:example",
+    "account_ref": "synthetic-account"
+  },
+  "service_identity": {
+    "principal_ref": "monitor-query-service-principal",
+    "actor_ref": "monitor-query-service"
+  },
+  "client_identity": {
+    "principal_ref": "bt-api-web-monitor",
+    "actor_ref": "bt-api-web"
+  },
+  "keys": {
+    "server_public_key_file": "./keys/monitor-query-server.public",
+    "server_secret_key_file": "./keys/monitor-query-server.secret",
+    "client_public_key_file": "./keys/bt-api-web-monitor.public",
+    "hmac_key_hex_file": "./keys/monitor-observation.hmac.hex"
+  },
+  "storage": {
+    "events_db": "../data/events.sqlite",
+    "registry_path": "./data/monitor-query-registry.sqlite",
+    "outbox_scope": "events",
+    "event_types": [
+      "runtime.status",
+      "runtime.unit.status",
+      "gateway.heartbeat"
+    ]
+  }
+}

@@ -461,6 +461,25 @@ rules, or trading are ready. Protected file handling currently requires POSIX.
 Local acceptance covers authenticated loopback processes and persistence, not
 an actual CTP account or the complete five-component deployment.
 
+For a separate observation-only query listener, use
+[`examples/services/monitor-query-service.example.json`](examples/services/monitor-query-service.example.json).
+The listener reads one configured Monitor outbox in read-only mode and exposes
+only the authenticated `observation.query` operation. `validate` and
+`run --dry-run` inspect the configuration without opening key, SQLite, or
+registry files; a normal `run` reads the protected Curve/HMAC keys and starts
+the listener:
+
+```bash
+bt-monitor-query-service validate --config /path/to/monitor-query-service.json
+bt-monitor-query-service run --config /path/to/monitor-query-service.json --dry-run
+bt-monitor-query-service run --config /path/to/monitor-query-service.json
+```
+
+The module form is also available with
+`python -m bt_api_py.monitor_query_service_host`. Readiness confirms the local
+query listener started; it does not establish producer health, account
+readiness, or trading authorization.
+
 For per-producer event authorization, explicitly select
 `schema: bt_api_monitor.service.v2` and add 1–1024 `producer_bindings`. Each entry
 has exactly `binding_ref`, `source_ref`, `identity`, `scope`, `outbox_scope` and
