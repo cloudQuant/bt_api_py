@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import stat
 from types import SimpleNamespace
 
@@ -373,6 +374,130 @@ def test_run_entry_waits_without_retrying_incomplete_cleanup(monkeypatch):
     with pytest.raises(StopWait):
         module.main(["run", "--config", "synthetic"])
     assert events == ["start", "run", "close", "wait"]
+
+
+def test_run_owner_stop_file_is_opt_in_and_cleanup_precedes_stopped_output(
+    tmp_path, monkeypatch
+):
+    from bt_api_py import risk_service_host as module
+    from bt_api_py._owner_stop_file import marker_requested
+    from bt_api_py.risk_service_config import restrict_file
+
+    def protect_marker(path):
+        restrict_file(path)
+        if os.name == "nt":
+            from bt_api_py._win32_security import _set_owner_only_acl
+
+            _set_owner_only_acl(path)
+
+    config_path = setup(tmp_path)
+    config = load_risk_service_config(config_path)
+    real_host_type = RiskServiceHost
+    events = []
+    printed = []
+    owners = []
+
+    class CliOwner:
+        def __init__(self, _config):
+            self.stop_path = None
+            owners.append(self)
+
+        def start(self):
+            events.append("start")
+
+        def run(self, **kwargs):
+            real_host = real_host_type(config)
+            if not kwargs:
+                events.append("run_default_without_marker")
+
+                def one_tick():
+                    events.append("default_tick")
+                    real_host.stop_event.set()
+
+                real_host.run_once = one_tick
+                real_host.run()
+                return
+
+            assert set(kwargs) == {"stop_file"}
+            stop_file = kwargs["stop_file"]
+            assert stop_file.parent == config_path.parent
+            assert re.fullmatch(r"risk-[0-9a-f]{32}\.stop", stop_file.name)
+            assert printed[-1][0] == "RISK_SERVICE_STOP_FILE " + stop_file.name
+            self.stop_path = stop_file
+            events.append("run_with_marker")
+            ticks = 0
+
+            def one_tick():
+                nonlocal ticks
+                ticks += 1
+                if ticks == 1:
+                    with stop_file.open("xb") as marker:
+                        marker.write(b"not-empty")
+                    protect_marker(stop_file)
+                    events.append("nonempty_created")
+                elif ticks == 2:
+                    assert stop_file.is_file() and not stop_file.is_symlink()
+                    assert stop_file.read_bytes() == b"not-empty"
+                    assert marker_requested(stop_file) is False
+                    events.append("nonempty_ignored_and_retained")
+                    stop_file.unlink()
+                    with stop_file.open("xb"):
+                        pass
+                    protect_marker(stop_file)
+                    events.append("empty_created")
+                else:
+                    pytest.fail("empty owner marker did not stop RiskServiceHost.run")
+
+            real_host.run_once = one_tick
+            real_host.run(stop_file=stop_file)
+            assert ticks == 2
+
+        def close(self):
+            events.append("cleanup")
+            return True
+
+    def record_print(*args, **kwargs):
+        line = " ".join(str(value) for value in args)
+        printed.append((line, kwargs))
+        if line.startswith("RISK_SERVICE_STOP_FILE "):
+            events.append("announce")
+        elif line == "RISK_SERVICE_STOPPED":
+            events.append("stopped_output")
+
+    monkeypatch.setattr(module, "load_risk_service_config", lambda _path: config)
+    monkeypatch.setattr(module, "RiskServiceHost", CliOwner)
+    monkeypatch.setattr(module.signal, "signal", lambda *_args: None)
+    monkeypatch.setattr(module, "print", record_print, raising=False)
+
+    assert module.main(["run", "--config", str(config_path)]) == 0
+    assert events == ["start", "run_default_without_marker", "default_tick", "cleanup"]
+    assert printed == []
+    assert owners[-1].stop_path is None
+
+    events.clear()
+    assert module.main(
+        ["run", "--config", str(config_path), "--enable-owner-stop-file"]
+    ) == 0
+    marker_line = printed[0][0]
+    marker_name = marker_line.removeprefix("RISK_SERVICE_STOP_FILE ")
+    assert marker_line.startswith("RISK_SERVICE_STOP_FILE ")
+    assert re.fullmatch(r"risk-[0-9a-f]{32}\.stop", marker_name)
+    assert printed == [
+        ("RISK_SERVICE_STOP_FILE " + marker_name, {"flush": True}),
+        ("RISK_SERVICE_STOPPED", {"flush": True}),
+    ]
+    assert events == [
+        "start",
+        "announce",
+        "run_with_marker",
+        "nonempty_created",
+        "nonempty_ignored_and_retained",
+        "empty_created",
+        "cleanup",
+        "stopped_output",
+    ]
+    assert owners[-1].stop_path == config_path.parent / marker_name
+    assert owners[-1].stop_path.is_file() and owners[-1].stop_path.read_bytes() == b""
 
 
 def test_cli_run_refuses_with_a_finite_code(tmp_path, capsys):

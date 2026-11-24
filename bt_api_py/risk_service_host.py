@@ -16,7 +16,7 @@ a finite ``RISK_SERVICE_*`` code:
    only be checked once that run exists, on first use;
 5. ``engine.recover()``, replay the observation stream, start the ServiceHost;
 6. loop: ``serve_once``, observation poll, market/account refresh,
-   ``engine.maintain()``; SIGTERM/SIGINT stop the loop and close everything.
+   ``engine.maintain()``; SIGTERM/SIGINT or an enabled protected stop marker stop the loop.
 
 Commands: ``run --config <file>``, ``validate-policy <file>`` (offline, no
 account) and ``status --config <file>`` (local ledger summary, no Gateway).
@@ -52,6 +52,7 @@ from bt_api_base.risk_service_protocol import (
 )
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 
+from bt_api_py._owner_stop_file import marker_requested, new_marker
 from bt_api_py.risk_service_config import (
     RiskAccountFactsObservation,
     RiskPretradeUpgrade,
@@ -2741,10 +2742,13 @@ class RiskServiceHost:
             self._check_cleanup_ready()
             self._next["maintain"] = deadlines["maintain"]
 
-    def run(self) -> None:
+    def run(self, *, stop_file: Path | None = None) -> None:
         _require_supported_r04(self.config)
         self._check_owner()
         while not self.stop_event.is_set():
+            if marker_requested(stop_file):
+                self.stop_event.set()
+                break
             self.run_once()
 
     def close(self) -> bool:
@@ -3087,7 +3091,12 @@ def _command_run(args: argparse.Namespace) -> int:
             ready.write_text(json.dumps({"pid": os.getpid(), "state": "serving"}), encoding="utf-8")
             restrict_file(ready)
         try:
-            host.run()
+            if args.enable_owner_stop_file:
+                stop_file = new_marker(Path(args.config).parent, "risk")
+                print("RISK_SERVICE_STOP_FILE " + stop_file.name, flush=True)
+                host.run(stop_file=stop_file)
+            else:
+                host.run()
         except RiskServiceStartError as error:
             sys.stderr.write("RISK_SERVICE_STOPPED " + error.code + "\n")
             sys.stderr.flush()
@@ -3095,11 +3104,13 @@ def _command_run(args: argparse.Namespace) -> int:
         except Exception:
             _LOG.exception("Risk service main loop raised unexpected exception")
             raise
-        return 0
     finally:
         _wait_for_cleanup(host)
         for sig, handler in previous.items():
             signal.signal(sig, handler)
+    if args.enable_owner_stop_file:
+        print("RISK_SERVICE_STOPPED", flush=True)
+    return 0
 
 
 def _command_validate_policy(args: argparse.Namespace) -> int:
@@ -3214,6 +3225,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     run = commands.add_parser("run", help="run the Risk service for one account")
     run.add_argument("--config", required=True)
     run.add_argument("--ready-file", default=None)
+    run.add_argument(
+        "--enable-owner-stop-file",
+        action="store_true",
+        help="allow local cooperative shutdown with a protected empty marker beside the configuration",
+    )
     validate = commands.add_parser("validate-policy", help="validate a policy file offline")
     validate.add_argument("policy")
     validate.add_argument("--config", default=None)
