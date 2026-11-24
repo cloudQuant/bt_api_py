@@ -566,6 +566,48 @@ class CtpGatewayOrderCutCoordinator:
             return False
         return now >= self._deadline or now > expiry
 
+    def abort_for_reconnect(self) -> bool:
+        """Abort a read-only QUERYING cut on TD reconnect without marking an intact source GAP.
+
+        Retains the native pin until ``close_order_query_cut`` confirms release.
+        Falls back to fail-closed ``close()`` whenever journal writes started,
+        custody is unknown, or the source/return buffer already has a gap.
+        """
+        self._check_owner()
+        if self._state == "CLOSED":
+            return True
+        if self._custody_unknown:
+            return False
+        if (
+            self._state in {"QUERYING", "ABORTING"}
+            and not self._digests
+            and self._candidate is None
+            and not self._gap_committed
+        ):
+            source_intact = False
+            try:
+                source_intact = (
+                    not self._session.return_buffer.status().gap
+                    and not self._tracker.blocked
+                    and self._current_progress().status != "GAP"
+                )
+            except Exception:
+                source_intact = False
+            if source_intact:
+                self._reason = self._reason or "RECONNECT_ABORTED"
+                self._state = "ABORTING"
+                if self._handle is not None:
+                    try:
+                        if not self._session.close_order_query_cut(self._handle):
+                            return False
+                    except Exception:
+                        return False
+                    self._handle = None
+                self._result = None
+                self._state = "CLOSED"
+                return True
+        return self.close()
+
     def close(self) -> bool:
         """Fail closed on cancellation; retain original custody on uncertainty."""
         self._check_owner()

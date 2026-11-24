@@ -192,10 +192,12 @@ class CtpGatewayOrderCutSource:
         self._check()
         if self._coordinator is None:
             return True
-        state = self._coordinator.status().state
-        if not self._coordinator.close():
+        if not self._coordinator.abort_for_reconnect():
             return False
-        if state in {"GAP", "UNKNOWN"}:
+        if (
+            self._coordinator._gap_committed
+            or self._coordinator.status().state in {"GAP", "UNKNOWN"}
+        ):
             self._failed = True
         self._coordinator = None
         return True
