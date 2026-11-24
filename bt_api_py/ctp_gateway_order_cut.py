@@ -218,11 +218,63 @@ class CtpGatewayOrderCutCoordinator:
             raise ValueError("source progress changed")
         return progress
 
+    def _can_cleanly_abort_querying(self) -> bool:
+        """True only when a read-only QUERYING attempt failed without any source gap."""
+        if (
+            self._state != "QUERYING"
+            or self._handle is None
+            or self._digests
+            or self._candidate is not None
+            or not self._same_components()
+        ):
+            return False
+        try:
+            if (
+                self._session.connection_status() != "ready"
+                or not self._session._connection_owner_matches(self._session._connection_owner)
+                or self._session.return_buffer.status().gap
+                or self._tracker.blocked
+                or self._current_progress().status == "GAP"
+            ):
+                return False
+        except Exception:
+            return False
+        return True
+
+    def _try_finish_abort(self) -> bool:
+        """Release the timed-out native query cut without invalidating an intact source."""
+        if self._handle is None:
+            self._result = None
+            self._state = "ABORTED"
+            return False
+        try:
+            if (
+                not self._same_components()
+                or self._session.connection_status() != "ready"
+                or not self._session._connection_owner_matches(self._session._connection_owner)
+                or self._session.return_buffer.status().gap
+                or self._tracker.blocked
+                or self._current_progress().status == "GAP"
+            ):
+                self._fail("SOURCE_OR_QUERY_FAILED")
+                return False
+            if self._session.close_order_query_cut(self._handle):
+                self._handle = None
+                self._result = None
+                self._state = "ABORTED"
+                return False
+            return True
+        except Exception:
+            self._fail("SOURCE_OR_QUERY_FAILED")
+            return False
+
     def advance(self) -> bool:
         """Advance one bounded step; True means more owner work remains."""
         self._check_owner()
-        if self._state in {"IDLE", "CANDIDATE", "GAP", "UNKNOWN", "CLOSED"}:
+        if self._state in {"IDLE", "CANDIDATE", "GAP", "UNKNOWN", "ABORTED", "CLOSED"}:
             return False
+        if self._state == "ABORTING":
+            return self._try_finish_abort()
         if self._state == "CLOSE_PENDING":
             try:
                 now = time.monotonic()
@@ -244,12 +296,24 @@ class CtpGatewayOrderCutCoordinator:
                 type(now) is not float
                 or not math.isfinite(now)
                 or self._deadline is None
-                or now >= self._deadline
                 or not self._same_components()
             ):
                 raise ValueError("source or deadline")
+            if now >= self._deadline:
+                if self._can_cleanly_abort_querying():
+                    self._reason = "QUERY_TIMEOUT"
+                    self._state = "ABORTING"
+                    return self._try_finish_abort()
+                raise ValueError("source or deadline")
             if self._state == "QUERYING":
-                result = self._session.poll_order_query_cut(self._handle)
+                try:
+                    result = self._session.poll_order_query_cut(self._handle)
+                except CtpGatewaySessionError as error:
+                    if error.code == "ORDER_CUT_UNAVAILABLE" and self._can_cleanly_abort_querying():
+                        self._reason = "QUERY_TIMEOUT"
+                        self._state = "ABORTING"
+                        return self._try_finish_abort()
+                    raise
                 if result is None:
                     return True
                 self._result = result
@@ -257,6 +321,10 @@ class CtpGatewayOrderCutCoordinator:
                     raise ValueError("row capacity")
                 cut = self._current_cut()
                 if cut is None:
+                    if not result.complete and self._can_cleanly_abort_querying():
+                        self._reason = "QUERY_TIMEOUT"
+                        self._state = "ABORTING"
+                        return self._try_finish_abort()
                     raise ValueError("unverified native cut")
                 self._cut = cut
                 self._state = "PROJECTING" if result.records else "WAITING_RECEIPTS"
@@ -483,7 +551,7 @@ class CtpGatewayOrderCutCoordinator:
             return True
         if self._custody_unknown:
             return False
-        if self._state not in {"IDLE", "CANDIDATE"} and not self._gap_committed:
+        if self._state not in {"IDLE", "CANDIDATE", "ABORTED"} and not self._gap_committed:
             self._fail(self._reason or "CANCELLED")
             if not self._gap_committed:
                 return False

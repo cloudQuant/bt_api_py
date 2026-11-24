@@ -86,6 +86,7 @@ class GatewayServerClockRefresher:
         self._stop = threading.Event()
         self._worker = None
         self._sample = None
+        self._previous_sample = None
         self._claim_coordinator = self._original_claim_coordinator = claim_coordinator
         self._history_capacity = history_capacity
         self._history = None
@@ -184,9 +185,14 @@ class GatewayServerClockRefresher:
             return None
         after_mono, after_wall = time.monotonic_ns(), time.time_ns()
         wall_difference = abs((after_wall - before_wall) - (after_mono - before_mono))
+        max_wall_step_ns = (
+            min(20_000_000, max(10_000_000, self._max_error_bound_ns))
+            if os.name == "nt"
+            else 10_000_000
+        )
         if (not self._configuration_valid() or before_mono <= 0 or after_mono < before_mono
                 or before_wall <= 0 or after_wall <= 0
-                or wall_difference > 10_000_000
+                or wall_difference > max_wall_step_ns
                 or type(evidence) is not ClockEvidence or evidence.method != 'sntp'
                 or type(evidence.server) is not str or evidence.server not in self._allowed_servers
                 or type(evidence.offset_ns) is not int
@@ -223,7 +229,15 @@ class GatewayServerClockRefresher:
                     try:
                         with self._sample_change():
                             with self._lock:
-                                self._sample = None if self._stop.is_set() else sample
+                                if self._stop.is_set() or sample is None:
+                                    self._sample = None
+                                    self._previous_sample = None
+                                else:
+                                    prior = self._sample
+                                    self._previous_sample = (
+                                        prior if self._valid_locked(prior) else None
+                                    )
+                                    self._sample = sample
                                 if not self._stop.is_set():
                                     self._record_history(
                                         'SAMPLE' if self._sample is not None else 'UNAVAILABLE',
@@ -232,7 +246,8 @@ class GatewayServerClockRefresher:
                         if self._original_claim_coordinator is not None:
                             self._original_claim_coordinator.close()
                         return
-                    self._stop.wait(self._interval)
+                    wait_seconds = self._interval if sample is not None else min(self._interval, 1.0)
+                    self._stop.wait(wait_seconds)
 
             worker = threading.Thread(target=run, name='gateway-server-clock', daemon=True)
             self._worker = worker
@@ -243,13 +258,16 @@ class GatewayServerClockRefresher:
                 self._stop.set()
                 raise
 
-    def _valid_locked(self, sample):
-        return (type(sample) is GatewayServerClockSnapshot and sample is self._sample
+    def _snapshot_valid_locked(self, sample):
+        return (type(sample) is GatewayServerClockSnapshot
                 and self._claim_coordinator is self._original_claim_coordinator
                 and self._worker is not None and self._worker.is_alive()
                 and not self._stop.is_set() and self._configuration_valid()
                 and sample.pid == self._pid and sample.evidence.is_valid()
                 and sample.evidence.valid_until_monotonic_ns > time.monotonic_ns())
+
+    def _valid_locked(self, sample):
+        return sample is self._sample and self._snapshot_valid_locked(sample)
 
     def current(self):
         self._assert_owner()
@@ -260,6 +278,21 @@ class GatewayServerClockRefresher:
         self._assert_owner()
         with self._lock:
             return self._valid_locked(sample)
+
+    def previous_for_event(self, current_sample, event_monotonic_ns):
+        """Return the immediately preceding still-valid sample that predates an in-flight tick."""
+        self._assert_owner()
+        if type(event_monotonic_ns) is not int or event_monotonic_ns <= 0:
+            return None
+        with self._lock:
+            if not self._valid_locked(current_sample):
+                return None
+            prior = self._previous_sample
+            if (prior is None or not self._snapshot_valid_locked(prior)
+                    or prior.anchor_monotonic_ns > event_monotonic_ns
+                    or current_sample.anchor_monotonic_ns <= event_monotonic_ns):
+                return None
+            return prior
 
     def read_history(self, *, after_sequence, limit=100):
         """Read local publications; availability is not clock calibration validity."""
@@ -297,6 +330,7 @@ class GatewayServerClockRefresher:
                     first_stop = not self._stop.is_set()
                     self._stop.set()
                     self._sample = None
+                    self._previous_sample = None
                     if worker is not None and first_stop:
                         self._record_history('STOPPED')
         except Exception:
@@ -313,6 +347,7 @@ class GatewayServerClockRefresher:
                 first_stop = not self._stop.is_set()
                 self._stop.set()
                 self._sample = None
+                self._previous_sample = None
                 if worker is not None and first_stop:
                     self._record_history('STOPPED')
         if worker is not None:

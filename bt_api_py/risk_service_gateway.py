@@ -1565,8 +1565,9 @@ class RiskMarketFeed:
             client.clock_observation(receipt=receipt, timeout_seconds=self._timeout)
         except Exception as exc:
             logging.getLogger(__name__).warning(
-                "risk market attestation failed: %s",
+                "risk market attestation failed: %s (cause=%s)",
                 getattr(exc, "code", None) or type(exc).__name__,
+                getattr(exc, "cause_code", None),
             )
             return False
         return True

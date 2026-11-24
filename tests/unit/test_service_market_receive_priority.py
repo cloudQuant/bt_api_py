@@ -212,3 +212,43 @@ def test_changed_binding_rejects_ready_sub_frame_before_receive(tmp_path):
     finally:
         runtime._bindings[0] = original_binding
         _close_all(client, runtime, registry)
+
+
+def test_head_check_drains_arrived_pub_frame_before_replay_and_replays_genuine_gap(tmp_path):
+    """When a live PUB frame arrives while market.head is in flight, _head_and_replay drains it
+    directly instead of pulling it via market.read_after (replay); genuine gaps still replay."""
+    client, runtime, registry, market, transport, subscribers = _started_client(tmp_path)
+    try:
+        subscriber = subscribers.created[0]
+        live_event = market.publish(_KEY, "arrived-during-head")
+        orig_call = runtime.call
+
+        def inject_pub_during_head(mount, operation, arguments, **kwargs):
+            result = orig_call(mount, operation, arguments, **kwargs)
+            if operation == "market.head" and live_event is not None:
+                subscriber.events.append(live_event)
+            return result
+
+        runtime.call = inject_pub_during_head
+        _make_head_due(client)
+        reads_before = transport.operations.count("market.read_after")
+
+        delivered = client.poll(0)
+        assert delivered == live_event
+        assert transport.operations.count("market.read_after") == reads_before
+
+        # Now drop seq=2 on SUB and publish seq=3: head check must still replay seq=2 via RPC.
+        runtime.call = orig_call
+        dropped = market.publish(_KEY, "dropped-seq-2")
+        ahead = market.publish(_KEY, "ahead-seq-3")
+        subscriber.events.append(ahead)
+        _make_head_due(client)
+        reads_before_gap = transport.operations.count("market.read_after")
+
+        first = client.poll(0)
+        second = client.poll(0)
+        assert first == dropped
+        assert second == ahead
+        assert transport.operations.count("market.read_after") > reads_before_gap
+    finally:
+        _close_all(client, runtime, registry)

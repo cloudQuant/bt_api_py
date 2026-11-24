@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import math
 import os
 import threading
@@ -9,6 +10,8 @@ import time
 from dataclasses import dataclass
 
 from bt_api_py.ctp_gateway_order_cut import CtpGatewayOrderCutCoordinator
+
+_LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,6 +149,7 @@ class CtpGatewayOrderCutSource:
             "VERIFYING_RECEIPTS",
             "COMMITTING",
             "CLOSE_PENDING",
+            "ABORTING",
         } or (status.state in {"GAP", "UNKNOWN"} and status.pin_retained is not False)
 
     def due(self, now):
@@ -170,8 +174,18 @@ class CtpGatewayOrderCutSource:
         if self._failed or self._coordinator is None:
             return False
         pending = self._coordinator.advance()
-        if self._coordinator.status().state in {"GAP", "UNKNOWN"}:
+        status = self._coordinator.status()
+        if status.state in {"GAP", "UNKNOWN"}:
             self._failed = True
+        elif status.state == "ABORTED" and status.pin_retained is False:
+            _LOG.warning(
+                "CTP order cut query aborted cleanly (%s); observed order source intact, will retry",
+                status.reason,
+            )
+            if self._coordinator.close():
+                self._coordinator = CtpGatewayOrderCutCoordinator(
+                    self._session, self._maintenance, timeout=self._settings.query_timeout_seconds
+                )
         return pending
 
     def pause_for_reconnect(self):

@@ -1412,6 +1412,64 @@ class ServiceMarketClient:
                 snapshot = self._get_snapshot()
                 self._mark_resync(snapshot)
                 return False
+            if head_reply is None and target > self._queued_sequence and self._subscriber is not None:
+                # A live PUB frame may have arrived in the local SUB socket while
+                # market.head was in flight. Drain contiguous PUB frames first so
+                # they keep their authentic "pub" receipts instead of being pulled
+                # via market.read_after ("replay").
+                for _ in range(_MAX_POLL_SUBSCRIBER_DRAIN):
+                    if (
+                        self._queued_sequence >= target
+                        or self._recovery_required
+                        or self._resync_required
+                    ):
+                        break
+                    try:
+                        subscriber = self._require_subscriber()
+                        event = subscriber.receive(timeout=0.0)
+                    except Exception:
+                        break
+                    if event is None:
+                        break
+                    try:
+                        if not self._validate_event(event, expected_epoch=None, allow_other_key=True):
+                            continue
+                    except ServiceMarketError:
+                        self._recovery_required = True
+                        return False
+                    if event.header.stream_epoch != self._queued_epoch:
+                        snapshot = self._get_snapshot()
+                        if (
+                            snapshot.snapshot_epoch == self._queued_epoch
+                            and snapshot.snapshot_epoch == self._cursor_epoch
+                        ):
+                            continue
+                        self._mark_resync(snapshot)
+                        return False
+                    seq = event.header.sequence
+                    if seq <= self._queued_sequence:
+                        continue
+                    pub_receipt = self._pub_receipt(subscriber, event)
+                    if seq != self._queued_sequence + 1:
+                        complete = self._replay_to(target, page_budget=page_budget)
+                        if (
+                            not complete
+                            and self._queued_sequence < target
+                            and not self._recovery_required
+                            and not self._resync_required
+                            and (
+                                self._bounded_replay_deferred
+                                or (page_budget is not None and page_budget[0] == 0)
+                            )
+                        ):
+                            self._pending_poll_replay = (head["epoch"], target)
+                            self._pending_poll_gap_event = event
+                            self._pending_poll_gap_receipt = pub_receipt
+                        elif complete:
+                            self._enqueue_gap_event_if_next(event, receipt=pub_receipt)
+                        return complete
+                    if not self._enqueue(event, receipt=pub_receipt):
+                        return False
             complete = self._replay_to(target, page_budget=page_budget)
             if (
                 not complete

@@ -140,3 +140,45 @@ def test_expired_candidate_busy_does_not_poison_or_replace_before_validation(
     assert source.current() is None
     assert old.status().state == "CLOSED" and source._coordinator is not old
     assert source.close()
+
+
+def test_querying_timeout_aborts_cleanly_without_gap_and_retries_next_cut(real_owner, monkeypatch):
+    """A late SimNow ReqQryOrder timeout during QUERYING must abort cleanly without permanently
+    marking observed_order_source as GAP, retain its pin until terminal, and allow the next cut."""
+    source, maintenance, session, native, _ = source_for(real_owner)
+    sent = []
+    original_req = native.ReqQryOrder
+
+    def hold_first(field, rid):
+        sent.append(rid)
+        if len(sent) == 1:
+            return 0  # simulate late SimNow query with no response before deadline
+        return original_req(field, rid)
+
+    monkeypatch.setattr(native, "ReqQryOrder", hold_first)
+    assert source.begin() and source.advance()
+    assert len(sent) == 1 and source.pending() is True
+
+    # Expire the query deadline while still in QUERYING -> clean ABORTING (no GAP!).
+    source._coordinator._deadline = 0.0
+    assert source.advance() is True
+    assert source._coordinator.status().state == "ABORTING"
+    assert source.pending() is True
+    assert session._order_query_cut is not None
+    assert maintenance.observed_order_source_status().status != "GAP"
+    assert not maintenance._observed_order_source.blocked
+
+    # Late terminal callback arrives -> advance releases pin, resets coordinator cleanly, no GAP.
+    native.client._spi.OnRspQryOrder(None, None, sent[0], True)
+    assert source.advance() is False
+    assert source.pending() is False
+    assert session._order_query_cut is None
+    assert maintenance.observed_order_source_status().status != "GAP"
+    assert not maintenance._observed_order_source.blocked
+
+    # Next cut starts and completes normally.
+    assert source.due(1000000000.0) and source.begin()
+    _finish(source._coordinator)
+    assert source.current() is not None
+    assert len(sent) == 2
+    assert source.close()

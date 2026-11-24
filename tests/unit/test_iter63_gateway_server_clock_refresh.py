@@ -260,3 +260,63 @@ def test_stop_does_not_hide_join_failure(monkeypatch):
             source.stop(timeout_seconds=2)
     assert source.current() is None
     assert source.stop(timeout_seconds=2)
+
+
+def test_previous_for_event_serves_inflight_tick_across_refresh_and_clears_on_failure(monkeypatch):
+    fail = {"on": False}
+
+    def query(*_):
+        if fail["on"]:
+            raise OSError("transient")
+        return 0, 100
+
+    source, _ = make_refresher(
+        monkeypatch, query, max_sample_validity_seconds=5, refresh_interval_seconds=0.05
+    )
+    source.start()
+    try:
+        first = wait_for(source.current)
+        # Wait until monotonic clock strictly advances past first.anchor_monotonic_ns.
+        wait_for(lambda: time.monotonic_ns() > first.anchor_monotonic_ns)
+        inflight_tick_ns = time.monotonic_ns()
+        second = wait_for(
+            lambda: (
+                item
+                if (item := source.current()) is not None
+                and item is not first
+                and item.anchor_monotonic_ns > inflight_tick_ns
+                else None
+            )
+        )
+        assert source.is_current(second) and not source.is_current(first)
+        # In-flight tick predating second but after first resolves to first (still unexpired).
+        assert source.previous_for_event(second, inflight_tick_ns) is first
+        # Tick predating first is still rejected (no retroactive calibration).
+        assert source.previous_for_event(second, first.anchor_monotonic_ns - 1) is None
+        # A failed refresh clears BOTH current and previous immediately (fail-closed).
+        fail["on"] = True
+        wait_for(lambda: source.current() is None)
+        assert source.previous_for_event(second, inflight_tick_ns) is None
+    finally:
+        assert source.stop(timeout_seconds=2)
+
+
+def test_failed_refresh_retries_short_backoff_instead_of_full_interval(monkeypatch):
+    calls = []
+
+    def query(*_):
+        calls.append(1)
+        if len(calls) == 1:
+            raise OSError("transient")
+        return 0, 100
+
+    # Long refresh interval (60s): first failure must retry quickly (~1s), not sleep 60s.
+    source, _ = make_refresher(
+        monkeypatch, query, max_sample_validity_seconds=30, refresh_interval_seconds=60.0
+    )
+    source.start()
+    try:
+        recovered = wait_for(source.current, timeout=3.0)
+        assert recovered is not None and len(calls) >= 2
+    finally:
+        assert source.stop(timeout_seconds=2)
