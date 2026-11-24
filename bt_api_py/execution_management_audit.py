@@ -431,11 +431,13 @@ class ExecutionManagementReadAudit:
 
         try:
             if (type(identity) is not ManagementReadIdentity or not _text(query_id)
-                    or type(operation_version) is not int or operation_version not in (1, 2, 3)
+                    or type(operation_version) is not int or operation_version not in (1, 2, 3, 4)
                     or (operation_version in (1, 2) and (not _text(parent_ref)
                         or original_run_id is not None or request_id is not None or request_sha256 is not None))
                     or (operation_version == 3 and (parent_ref is not None
-                        or not _text(original_run_id) or not _text(request_id)))):
+                        or not _text(original_run_id) or not _text(request_id)))
+                    or (operation_version == 4 and (parent_ref is not None
+                        or original_run_id is not None or request_id is not None or request_sha256 is not None))):
                 _error('INVALID_AUDIT_INPUT')
             if operation_version in (1, 3):
                 if (type(snapshot) is not LocalParentSnapshot or snapshot.source != 'LOCAL_JOURNAL'
@@ -461,6 +463,23 @@ class ExecutionManagementReadAudit:
                 else:
                     result = _encoded(asdict(snapshot))
                 result_limit = _MAX_RESULT_BYTES
+            elif operation_version == 4:
+                from bt_api_execution.local_parent_snapshot import LocalParentDiscoverySnapshot
+
+                if (type(snapshot) is not LocalParentDiscoverySnapshot
+                        or snapshot.source != 'LOCAL_JOURNAL' or snapshot.status not in {'OBSERVED', 'UNKNOWN'}):
+                    _error('INVALID_AUDIT_INPUT')
+                if snapshot.status == 'UNKNOWN':
+                    if (snapshot.journal_incarnation is not None or snapshot.parent_refs != ()):
+                        _error('INVALID_AUDIT_INPUT')
+                elif (type(snapshot.journal_incarnation) is not str
+                      or _INCARNATION.fullmatch(snapshot.journal_incarnation) is None
+                      or type(snapshot.parent_refs) is not tuple or len(snapshot.parent_refs) > 2
+                      or any(not _text(parent_ref) for parent_ref in snapshot.parent_refs)
+                      or len(set(snapshot.parent_refs)) != len(snapshot.parent_refs)):
+                    _error('INVALID_AUDIT_INPUT')
+                result = _encoded(asdict(snapshot))
+                result_limit = _MAX_RESULT_BYTES
             else:
                 result = _encoded(plan_snapshot_payload(snapshot, parent_ref=parent_ref))
                 result_limit = MAX_PLAN_AUDIT_RESULT_BYTES
@@ -479,6 +498,12 @@ class ExecutionManagementReadAudit:
                 target_digest = _digest({'schema': 'execution.management.read.request_target.v1',
                     'account': identity.account_ref, 'strategy': identity.strategy_ref,
                     'domain': identity.domain_ref, 'original_run_id': original_run_id, 'request_id': request_id})
+            elif operation_version == 4:
+                fingerprint = _digest({'schema': 'execution.management.read.request.v1',
+                    'scope': scope, 'query_id': query_id, 'operation_version': operation_version})
+                target_digest = _digest({'schema': 'execution.management.discovery.target.v1',
+                    'account': identity.account_ref, 'strategy': identity.strategy_ref,
+                    'domain': identity.domain_ref})
             else:
                 fingerprint = _digest({'schema': 'execution.management.read.request.v1',
                                        'scope': scope, 'query_id': query_id,

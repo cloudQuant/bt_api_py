@@ -9,7 +9,7 @@
   "grant": {
     "service_id": "execution-read-service", "instance_id": "execution-read-instance", "scope_ref": "management-scope", "revision": "policy-v1",
     "instruments": [{"provider": "example", "venue": "EXAMPLE", "environment": "paper", "product_type": "future", "instrument_id": "EXAMPLE:TEST", "native_symbol": "TEST"}],
-    "operations": ["execution.management.parent.read.v1", "execution.management.parent.plan.read.v1", "execution.management.parent.by_request.read.v1"]
+    "operations": ["execution.management.parent.read.v1", "execution.management.parent.plan.read.v1", "execution.management.parent.by_request.read.v1", "execution.management.parent.discover_recent.v1"]
   },
   "listener": {"endpoint": "tcp://127.0.0.1:17869", "server_public_key_file": "/private/keys/server.public", "server_secret_key_file": "/private/keys/server.secret", "client_public_key_file": "/private/keys/client.public"}
 }

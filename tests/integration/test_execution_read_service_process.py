@@ -10,9 +10,11 @@ import socket
 import sqlite3
 import subprocess
 import sys
+import threading
 
 import pytest
 import zmq
+from bt_api_base.market_protocol import MarketInstrumentKey
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_py.execution_management_read_client import ExecutionManagementReadClient
 from bt_api_py.execution_read_service_host import OPERATIONS
@@ -24,18 +26,29 @@ EXAMPLE = Path(__file__).resolve().parents[2] / 'examples/services/execution-rea
 pytestmark = pytest.mark.skipif(not zmq.has('curve'), reason='CURVE unavailable')
 
 
+def _set_owner_only(path, mode):
+    if os.name == 'nt':
+        from bt_api_py._win32_security import _set_owner_only_acl
+        _set_owner_only_acl(path)
+    else:
+        path.chmod(mode)
+
+
 def setup(tmp_path):
     tmp_path = tmp_path.resolve()
 
     raw = json.loads(EXAMPLE.read_text())
     for name in ('journal', 'audit', 'keys'):
-        (tmp_path / name).mkdir(mode=0o700)
+        directory = tmp_path / name
+        directory.mkdir(mode=0o700)
+        _set_owner_only(directory, 0o700)
     raw['storage'].update(journal_root=str(tmp_path / 'journal'), audit_root=str(tmp_path / 'audit'))
     server_pub, server_sec = zmq.curve_keypair()
     client_pub, client_sec = zmq.curve_keypair()
     for name, value in (('server.public', server_pub), ('server.secret', server_sec), ('client.public', client_pub)):
         path = tmp_path / 'keys' / name
-        path.write_bytes(value); path.chmod(0o600)
+        path.write_bytes(value)
+        _set_owner_only(path, 0o600)
     with socket.socket() as sock:
         sock.bind(('127.0.0.1', 0))
         port = sock.getsockname()[1]
@@ -51,8 +64,17 @@ def setup(tmp_path):
 def launch(path):
     process = subprocess.Popen([sys.executable, '-m', 'bt_api_py.execution_read_service_host', 'run', '--config', str(path)],
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    assert select.select([process.stdout], [], [], 20)[0], 'listener start timed out'
-    line = process.stdout.readline().strip()
+    ready, received = threading.Event(), []
+    reader = threading.Thread(target=lambda: (received.append(process.stdout.readline().strip()), ready.set()),
+                              daemon=True)
+    reader.start()
+    if not ready.wait(20):
+        process.kill()
+        process.wait(timeout=5)
+        ready.wait(2)
+        process.communicate(timeout=5)
+        raise AssertionError('listener start timed out')
+    line = received[0]
     return process, line
 
 
@@ -215,6 +237,104 @@ def test_existing_synthetic_parent_is_observed_without_mutating_source(tmp_path)
         stdout, stderr = proc.communicate(timeout=15)
         assert proc.returncode == 0, (stdout, stderr)
     assert rows() == before
+
+
+def _client_for_host(raw, keys, *, operations=OPERATIONS):
+    wrapper, scope, app, peer = runtime(raw, keys, operations=operations)
+    binding, = wrapper.start(timeout_seconds=8).bindings
+    target = BoundExecutionManagementReadTarget('application.execution_management',
+        'service.execution_management_read', raw['grant']['service_id'], raw['grant']['instance_id'],
+        raw['grant']['scope_ref'], scope, app, 'synthetic-run', 'management-zmq', 'key',
+        raw['listener']['endpoint'], peer, hashlib.sha256(keys[0]).hexdigest(),
+        binding.registration_id, binding.service_epoch)
+    return wrapper, ExecutionManagementReadClient(
+        wrapper, target=target, grant_revision=raw['grant']['revision'])
+
+
+def test_authorized_discovery_audits_empty_then_inserted_refs_and_readback(tmp_path, monkeypatch):
+    from bt_api_execution.local_parent_snapshot import LocalParentDiscoverySnapshot, LocalParentSnapshot, LocalParentSnapshotReader
+    from bt_api_py.execution_read_service_host import ReadServiceHost, parse_config
+
+    raw, path, keys = setup(tmp_path)
+    wrapper = None
+    host = ReadServiceHost(parse_config(json.loads(path.read_text())))
+    try:
+        host.start()
+        wrapper, client = _client_for_host(raw, keys)
+        empty = client.discover_recent(query_id='discovery-empty')
+        assert empty.status == 'OBSERVED'
+        assert empty.source == 'LOCAL_JOURNAL' and empty.parent_refs == ()
+        assert type(empty.journal_incarnation) is str and len(empty.journal_incarnation) == 32
+        with pytest.raises(TypeError):
+            client.discover_recent(parent_ref='browser-selected', query_id='forbidden-filter')
+
+        incarnation = 'b' * 32
+        authorized_instruments = frozenset({MarketInstrumentKey(
+            'example', 'EXAMPLE', 'paper', 'future', 'EXAMPLE:TEST', 'TEST')})
+        observations = []
+
+        def discover_recent(reader, *, authorized_instruments):
+            observations.append(authorized_instruments)
+            return LocalParentDiscoverySnapshot(
+                'OBSERVED', journal_incarnation=incarnation, parent_refs=('parent-inserted',))
+
+        def query(reader, parent_ref):
+            assert parent_ref == 'parent-inserted'
+            return LocalParentSnapshot(
+                'OBSERVED', source='LOCAL_JOURNAL', journal_incarnation=incarnation,
+                parent_ref=parent_ref, instrument=next(iter(authorized_instruments)),
+                side='buy', offset='open', quantity='1', quantity_unit='contracts', limit_price='100',
+                time_in_force='DAY', expires_at_ns=1000, created_at_ns=10, updated_at_ns=10,
+                intake_local_state='RECEIVED', risk_selected=False, risk_local_state='UNKNOWN',
+                gateway_local_state='UNKNOWN', cancel_local_state='UNKNOWN')
+
+        monkeypatch.setattr(LocalParentSnapshotReader, 'discover_recent', discover_recent)
+        monkeypatch.setattr(LocalParentSnapshotReader, 'query', query)
+        inserted = client.discover_recent(query_id='discovery-inserted')
+        assert inserted.status == 'OBSERVED' and inserted.parent_refs == ('parent-inserted',)
+        assert inserted.journal_incarnation == incarnation
+        readback = client.query('parent-inserted', query_id='readback')
+        assert readback.status == 'OBSERVED' and readback.snapshot.parent_ref == 'parent-inserted'
+        assert readback.snapshot.journal_incarnation == inserted.journal_incarnation
+        assert observations == [authorized_instruments]
+    finally:
+        if wrapper is not None:
+            wrapper.close(timeout_seconds=5)
+        host.close()
+    audit_db, = (tmp_path / 'audit').glob('*.sqlite3')
+    with sqlite3.connect(audit_db) as audit:
+        rows = audit.execute('SELECT operation_version,outcome,journal_incarnation,target_digest,result_digest '
+                             'FROM audit_attempts ORDER BY sequence').fetchall()
+    assert [(row[0], row[1]) for row in rows] == [
+        (4, 'OBSERVED'), (4, 'OBSERVED'), (1, 'OBSERVED')]
+    assert rows[0][2] == empty.journal_incarnation
+    assert rows[1][2] == rows[2][2] == incarnation
+    assert all(len(row[3]) == len(row[4]) == 64 for row in rows)
+
+
+def test_discovery_without_explicit_operation_grant_is_unknown_without_audit_attempt(tmp_path):
+    from bt_api_py.execution_read_service_host import ReadServiceHost, parse_config
+
+    raw, path, keys = setup(tmp_path)
+    raw['grant']['operations'] = [operation for operation in raw['grant']['operations']
+                                  if operation != 'execution.management.parent.discover_recent.v1']
+    path.write_text(json.dumps(raw))
+    wrapper = None
+    host = ReadServiceHost(parse_config(raw))
+    try:
+        host.start()
+        granted = frozenset(raw['grant']['operations'])
+        wrapper, client = _client_for_host(raw, keys, operations=granted)
+        observation = client.discover_recent(query_id='discovery-denied')
+        assert observation.status == 'UNKNOWN'
+        assert observation.parent_refs == () and observation.journal_incarnation is None
+    finally:
+        if wrapper is not None:
+            wrapper.close(timeout_seconds=5)
+        host.close()
+    audit_db, = (tmp_path / 'audit').glob('*.sqlite3')
+    with sqlite3.connect(audit_db) as audit:
+        assert audit.execute('SELECT count(*) FROM audit_attempts').fetchone()[0] == 0
 
 
 @pytest.mark.parametrize('start_fails', [False, True])

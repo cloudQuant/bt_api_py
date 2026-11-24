@@ -35,6 +35,7 @@ from bt_api_py.service_runtime import (
     _LiveParentSourceCapability,
     _MANAGEMENT_BOUND_OPERATION,
     _MANAGEMENT_BY_REQUEST_BOUND_OPERATION,
+    _MANAGEMENT_DISCOVERY_BOUND_OPERATION,
     _MANAGEMENT_PLAN_BOUND_OPERATION,
     _MONITOR_QUERY_BOUND_OPERATION,
     _bound_binding_values,
@@ -1013,6 +1014,7 @@ class ThreadedServiceClientRuntime:
             raise ServiceRuntimeRequestNotSentError()
         if operation in (_ACCOUNT_BOUND_OPERATION, _MANAGEMENT_BOUND_OPERATION,
                          _MANAGEMENT_PLAN_BOUND_OPERATION, _MANAGEMENT_BY_REQUEST_BOUND_OPERATION,
+                         _MANAGEMENT_DISCOVERY_BOUND_OPERATION,
                          _MONITOR_QUERY_BOUND_OPERATION):
             raise ServiceRuntimeRequestNotSentError()
         deadline = _deadline(timeout_seconds)

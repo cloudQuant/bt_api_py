@@ -15,7 +15,9 @@ from bt_api_base.service_protocol import MAX_REFERENCE_BYTES, WireIdentity, Wire
 PARENT_READ_V1 = 'execution.management.parent.read.v1'
 PARENT_PLAN_READ_V1 = 'execution.management.parent.plan.read.v1'
 PARENT_BY_REQUEST_READ_V1 = 'execution.management.parent.by_request.read.v1'
-_OPERATIONS = frozenset({PARENT_READ_V1, PARENT_PLAN_READ_V1, PARENT_BY_REQUEST_READ_V1})
+PARENT_DISCOVER_RECENT_V1 = 'execution.management.parent.discover_recent.v1'
+_OPERATIONS = frozenset({PARENT_READ_V1, PARENT_PLAN_READ_V1, PARENT_BY_REQUEST_READ_V1,
+                         PARENT_DISCOVER_RECENT_V1})
 _MAX_INSTRUMENTS = 1024
 
 
@@ -106,17 +108,39 @@ class ExecutionManagementByRequestReadRequest:
             raise ValueError('INVALID_EXECUTION_MANAGEMENT_READ_REQUEST')
 
 
+@dataclass(frozen=True, slots=True)
+class ExecutionManagementDiscoveryReadRequest:
+    """Bounded discovery request; no parent, instrument or caller filter."""
+
+    instance_id: str
+    identity: WireIdentity
+    scope: WireScope
+    grant_revision: str
+    operation: str
+    query_id: str
+
+    def __post_init__(self):
+        if (not _reference(self.instance_id) or not _identity(self.identity)
+                or not _scope(self.scope) or not _reference(self.grant_revision)
+                or not _reference(self.operation) or self.operation != PARENT_DISCOVER_RECENT_V1
+                or not _reference(self.query_id)):
+            raise ValueError('INVALID_EXECUTION_MANAGEMENT_READ_REQUEST')
+
+
 def allows_request(grant, request):
     """Check local scope policy only; do not disclose whether a parent exists."""
     return (type(grant) is ExecutionManagementReadGrant
-            and type(request) in (ExecutionManagementReadRequest, ExecutionManagementByRequestReadRequest)
+            and type(request) in (ExecutionManagementReadRequest, ExecutionManagementByRequestReadRequest,
+                                  ExecutionManagementDiscoveryReadRequest)
             and grant.instance_id == request.instance_id and grant.identity == request.identity
             and grant.scope == request.scope and grant.revision == request.grant_revision
             and request.operation in grant.operations
             and ((type(request) is ExecutionManagementReadRequest
                   and request.operation in (PARENT_READ_V1, PARENT_PLAN_READ_V1))
                  or (type(request) is ExecutionManagementByRequestReadRequest
-                     and request.operation == PARENT_BY_REQUEST_READ_V1)))
+                     and request.operation == PARENT_BY_REQUEST_READ_V1)
+                 or (type(request) is ExecutionManagementDiscoveryReadRequest
+                     and request.operation == PARENT_DISCOVER_RECENT_V1)))
 
 
 def allows_instrument(grant, request, instrument):
@@ -130,5 +154,6 @@ def allows_instrument(grant, request, instrument):
 
 
 __all__ = ['PARENT_READ_V1', 'PARENT_PLAN_READ_V1', 'PARENT_BY_REQUEST_READ_V1',
-           'ExecutionManagementByRequestReadRequest', 'ExecutionManagementReadGrant',
+           'PARENT_DISCOVER_RECENT_V1', 'ExecutionManagementByRequestReadRequest',
+           'ExecutionManagementDiscoveryReadRequest', 'ExecutionManagementReadGrant',
            'ExecutionManagementReadRequest', 'allows_request', 'allows_instrument']

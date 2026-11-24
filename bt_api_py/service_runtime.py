@@ -156,7 +156,7 @@ PORT_OPERATIONS = MappingProxyType(
         ),
         "service.execution_management_read": frozenset(
             {"execution.management.parent.read.v1", "execution.management.parent.plan.read.v1",
-             "execution.management.parent.by_request.read.v1"}
+             "execution.management.parent.by_request.read.v1", "execution.management.parent.discover_recent.v1"}
         ),
         "service.direct_write": frozenset(
             {"direct.reserve", "direct.risk_first_reserve.v2", "direct.release", "direct.command_status", "direct.dispatch",
@@ -516,6 +516,7 @@ _ACCOUNT_BOUND_OPERATION = 'direct.parent.acceptance_order'
 _MANAGEMENT_BOUND_OPERATION = 'execution.management.parent.read.v1'
 _MANAGEMENT_PLAN_BOUND_OPERATION = 'execution.management.parent.plan.read.v1'
 _MANAGEMENT_BY_REQUEST_BOUND_OPERATION = 'execution.management.parent.by_request.read.v1'
+_MANAGEMENT_DISCOVERY_BOUND_OPERATION = 'execution.management.parent.discover_recent.v1'
 _MONITOR_QUERY_BOUND_OPERATION = 'observation.query'
 
 
@@ -659,7 +660,8 @@ def _validate_bound_target_operation(target: Any, operation: Any) -> None:
             raise ValueError('INVALID_BOUND_OPERATION')
     elif type(target) is BoundExecutionManagementReadTarget:
         BoundExecutionManagementReadTarget.__post_init__(target)
-        if operation not in (_MANAGEMENT_BOUND_OPERATION, _MANAGEMENT_PLAN_BOUND_OPERATION, _MANAGEMENT_BY_REQUEST_BOUND_OPERATION):
+        if operation not in (_MANAGEMENT_BOUND_OPERATION, _MANAGEMENT_PLAN_BOUND_OPERATION,
+                             _MANAGEMENT_BY_REQUEST_BOUND_OPERATION, _MANAGEMENT_DISCOVERY_BOUND_OPERATION):
             raise ValueError('INVALID_BOUND_OPERATION')
     elif type(target) is BoundAccountServiceTarget:
         BoundAccountServiceTarget.__post_init__(target)
@@ -673,6 +675,7 @@ def _validate_bound_target_operation(target: Any, operation: Any) -> None:
         BoundServiceTarget.__post_init__(target)
         if operation in (_ACCOUNT_BOUND_OPERATION, _MANAGEMENT_BOUND_OPERATION,
                          _MANAGEMENT_PLAN_BOUND_OPERATION, _MANAGEMENT_BY_REQUEST_BOUND_OPERATION,
+                         _MANAGEMENT_DISCOVERY_BOUND_OPERATION,
                          _MONITOR_QUERY_BOUND_OPERATION):
             raise ValueError('INVALID_BOUND_OPERATION')
     else:
@@ -1831,6 +1834,7 @@ class ServiceClientRuntime:
         self._strict_business_entry()
         if operation in (_ACCOUNT_BOUND_OPERATION, _MANAGEMENT_BOUND_OPERATION,
                          _MANAGEMENT_PLAN_BOUND_OPERATION, _MANAGEMENT_BY_REQUEST_BOUND_OPERATION,
+                         _MANAGEMENT_DISCOVERY_BOUND_OPERATION,
                          _MONITOR_QUERY_BOUND_OPERATION):
             raise ServiceRuntimeRequestNotSentError()
         if type(include_receive_receipt) is not bool:

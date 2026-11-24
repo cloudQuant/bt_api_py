@@ -270,3 +270,68 @@ class ExecutionManagementReadClient:
             snapshot = None
         return ExecutionManagementPlanObservation('UNKNOWN' if snapshot is None else 'OBSERVED',
                                                    'LOCAL_JOURNAL', time.time_ns(), snapshot)
+
+    def discover_recent(self, *, query_id):
+        """Discover at most two recent refs inside the service's fixed grant.
+
+        No parent reference, instrument, scope or other filter is accepted
+        from this call. UNKNOWN carries neither references nor an existence
+        count; OBSERVED-empty is returned only by the trusted complete source
+        observation and its audited response.
+        """
+        from bt_api_py.execution_management_read_grant import (
+            ExecutionManagementDiscoveryReadRequest, PARENT_DISCOVER_RECENT_V1,
+        )
+
+        ExecutionManagementDiscoveryReadRequest(
+            self._target.instance_id, self._target.identity, self._target.scope,
+            self._revision, PARENT_DISCOVER_RECENT_V1, query_id,
+        )
+        try:
+            registration = self._registration(PARENT_DISCOVER_RECENT_V1)
+            target = self._target_for_registration(registration)
+            raw = _detach_wire(self._runtime.call_bound(target, PARENT_DISCOVER_RECENT_V1,
+                {'schema_version': 1, 'query_id': query_id, 'grant_revision': self._revision},
+                timeout_seconds=self._timeout))
+            if (self._registration(PARENT_DISCOVER_RECENT_V1) != registration
+                    or type(raw) is not dict or set(raw) != {'schema_version', 'snapshot'}
+                    or type(raw['schema_version']) is not int or raw['schema_version'] != 1):
+                raise ValueError
+            parsed = _parse_discovery_snapshot(raw['snapshot'])
+            if parsed is None:
+                return ExecutionManagementDiscoveryObservation('UNKNOWN', 'LOCAL_JOURNAL', time.time_ns())
+            incarnation, parent_refs = parsed
+            return ExecutionManagementDiscoveryObservation(
+                'OBSERVED', 'LOCAL_JOURNAL', time.time_ns(), incarnation, parent_refs)
+        except Exception:
+            return ExecutionManagementDiscoveryObservation('UNKNOWN', 'LOCAL_JOURNAL', time.time_ns())
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionManagementDiscoveryObservation:
+    """A bounded local discovery result; not an execution or venue status."""
+
+    status: str
+    source: str
+    local_result_time_ns: int
+    journal_incarnation: str | None = None
+    parent_refs: tuple[str, ...] = ()
+
+
+def _parse_discovery_snapshot(raw):
+    fields = {'status', 'source', 'journal_incarnation', 'parent_refs'}
+    if (type(raw) is not dict or set(raw) != fields or raw['source'] != 'LOCAL_JOURNAL'
+            or type(raw['parent_refs']) is not list or len(raw['parent_refs']) > 2):
+        raise ValueError
+    if raw['status'] == 'UNKNOWN':
+        if raw['journal_incarnation'] is not None or raw['parent_refs']:
+            raise ValueError
+        return None
+    incarnation = raw['journal_incarnation']
+    parent_refs = raw['parent_refs']
+    if (raw['status'] != 'OBSERVED' or type(incarnation) is not str
+            or re.fullmatch(r'[0-9a-f]{32}', incarnation) is None
+            or any(not _reference(parent_ref) for parent_ref in parent_refs)
+            or len(set(parent_refs)) != len(parent_refs)):
+        raise ValueError
+    return incarnation, tuple(parent_refs)

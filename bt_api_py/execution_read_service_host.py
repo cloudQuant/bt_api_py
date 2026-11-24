@@ -27,12 +27,13 @@ from bt_api_execution.store import SqliteExecutionStore
 from bt_api_transport_zmq.server import CurveServerCredentials
 
 from .execution_management_read_grant import (ExecutionManagementReadGrant, PARENT_READ_V1,
-    PARENT_PLAN_READ_V1, PARENT_BY_REQUEST_READ_V1)
+    PARENT_PLAN_READ_V1, PARENT_BY_REQUEST_READ_V1, PARENT_DISCOVER_RECENT_V1)
 from .execution_management_read_host import ExecutionManagementReadHost, TrustedManagementReadListener
 from .monitor_service_config import read_bounded
 
 SCHEMA = 'bt_api_execution.management_read_service.v1'
-OPERATIONS = frozenset({PARENT_READ_V1, PARENT_PLAN_READ_V1, PARENT_BY_REQUEST_READ_V1})
+OPERATIONS = frozenset({PARENT_READ_V1, PARENT_PLAN_READ_V1, PARENT_BY_REQUEST_READ_V1,
+                        PARENT_DISCOVER_RECENT_V1})
 
 
 class ReadServiceError(ValueError):
@@ -95,6 +96,7 @@ class Config:
     instance_id: str
     scope_ref: str
     revision: str
+    operations: frozenset
     instruments: frozenset
     endpoint: str
     server_public: Path
@@ -129,7 +131,9 @@ def parse_config(raw):
         raise ReadServiceError('INVALID_CONFIGURATION')
     grant = _map(top['grant'], ('service_id', 'instance_id', 'scope_ref', 'revision', 'instruments', 'operations'))
     operations = grant['operations']
-    if type(operations) is not list or len(operations) != len(OPERATIONS) or frozenset(operations) != OPERATIONS:
+    if (type(operations) is not list or not operations or len(operations) > len(OPERATIONS)
+            or any(type(operation) is not str for operation in operations)
+            or len(set(operations)) != len(operations) or not set(operations) <= OPERATIONS):
         raise ReadServiceError('INVALID_CONFIGURATION')
     items = grant['instruments']
     if type(items) is not list or not 1 <= len(items) <= 1024:
@@ -140,7 +144,7 @@ def parse_config(raw):
     listener = _map(top['listener'], ('endpoint', 'server_public_key_file', 'server_secret_key_file', 'client_public_key_file'))
     return Config(local, wire, root, audit, sid, service, client,
                   *(_text(grant[k]) for k in ('service_id', 'instance_id', 'scope_ref', 'revision')),
-                  instruments, _endpoint(listener['endpoint']), *(_path(listener[k]) for k in
+                  frozenset(operations), instruments, _endpoint(listener['endpoint']), *(_path(listener[k]) for k in
                   ('server_public_key_file', 'server_secret_key_file', 'client_public_key_file')))
 
 
@@ -336,7 +340,7 @@ class ReadServiceHost:
             self.journal = borrowed if borrowed is not None else AccountJournalHost(
                 root=str(config.journal_root), scope=config.local_scope, storage_id=config.storage_id)
             grant = ExecutionManagementReadGrant(config.instance_id, config.client_identity, config.wire_scope,
-                                                  config.revision, config.instruments, OPERATIONS)
+                                                  config.revision, config.instruments, config.operations)
             self.listener = ExecutionManagementReadHost(TrustedManagementReadListener(
                 host=self.journal, local_scope=config.local_scope, grant=grant, scope_ref=config.scope_ref,
                 service_id=config.service_id, service_identity=config.service_identity, audit_root=config.audit_root,
