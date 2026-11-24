@@ -21,6 +21,7 @@ from pathlib import Path
 
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 
+from ._owner_stop_file import marker_requested, new_marker
 from .monitor_service_config import read_bounded
 from .risk_service_config import RiskServiceConfigError, load_document, resolve_path
 from .service_components import ComponentResources
@@ -353,6 +354,10 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="validate configuration without reading keys or opening files, sockets, or SQLite",
     )
+    run.add_argument(
+        "--enable-owner-stop-file", action="store_true",
+        help="allow local cooperative shutdown with a protected empty marker",
+    )
     return parser
 
 
@@ -368,6 +373,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     stopping = False
+
+    def announce_stop_file():
+        if not args.enable_owner_stop_file:
+            return None
+        marker = new_marker(Path(args.config).parent, "monitor-query")
+        print("MONITOR_OBSERVATION_QUERY_STOP_FILE " + marker.name, flush=True)
+        return marker
 
     def stop(_signum, _frame):
         nonlocal stopping
@@ -394,7 +406,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             host = _build_host(config)
             host.start()
             print("MONITOR_OBSERVATION_QUERY_READY", flush=True)
-            while not stopping:
+            stop_file = announce_stop_file()
+            while not stopping and not marker_requested(stop_file):
                 host.serve_once(timeout_ms=50)
         except BaseException:
             failed = True
@@ -410,10 +423,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 with suppress(Exception):
                     print("MONITOR_OBSERVATION_QUERY_CLEANUP_PENDING", flush=True)
                 while pending:
-                    if not stopping:
+                    retry_file = None
+                    with suppress(Exception):
+                        retry_file = announce_stop_file()
+                    while not stopping and not marker_requested(retry_file):
                         with suppress(Exception):
                             time.sleep(0.1)
-                        continue
                     stopping = False
                     pending = not _close_confirmed(host)
                     if pending:

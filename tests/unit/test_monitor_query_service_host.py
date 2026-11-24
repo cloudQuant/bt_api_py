@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import queue
+import re
 import signal
 import subprocess
 import sys
@@ -225,8 +226,13 @@ def _next_line(lines: queue.Queue[str | None], process: subprocess.Popen[str]) -
     return line
 
 
-def _stop_query_process(process: subprocess.Popen[str]) -> None:
+def _stop_query_process(process: subprocess.Popen[str], marker: Path | None = None) -> None:
     if process.poll() is not None:
+        return
+    if marker is not None:
+        marker.write_bytes(b"")
+        _set_owner_only(marker)
+        process.wait(timeout=10)
         return
     if os.name == "nt":
         process.send_signal(signal.CTRL_BREAK_EVENT)
@@ -299,6 +305,7 @@ def test_spawned_host_serves_one_authenticated_synthetic_query_and_stops(tmp_pat
         "run",
         "--config",
         str(config_path),
+        "--enable-owner-stop-file",
     ]
     creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
     process = subprocess.Popen(
@@ -313,8 +320,17 @@ def test_spawned_host_serves_one_authenticated_synthetic_query_and_stops(tmp_pat
     reader = threading.Thread(target=_read_lines, args=(process, lines), daemon=True)
     reader.start()
     runtime = None
+    stop_marker = None
     try:
         assert _next_line(lines, process) == "MONITOR_OBSERVATION_QUERY_READY"
+        marker = re.fullmatch(
+            r"MONITOR_OBSERVATION_QUERY_STOP_FILE (monitor-query-[0-9a-f]{32}\.stop)",
+            _next_line(lines, process),
+        )
+        assert marker is not None
+        stop_marker = config_path.with_name(marker[1])
+        stop_marker.write_bytes(b"synthetic invalid stop request")
+        _set_owner_only(stop_marker)
         service_identity = WireIdentity(WireRole.SERVICE, _SERVICE_PRINCIPAL, _SERVICE_ID)
         client_identity = WireIdentity(WireRole.APPLICATION_CLIENT, _CLIENT_PRINCIPAL, _CLIENT_ACTOR)
         runtime = ServiceClientRuntime(
@@ -387,7 +403,7 @@ def test_spawned_host_serves_one_authenticated_synthetic_query_and_stops(tmp_pat
     finally:
         if runtime is not None:
             runtime.close()
-        _stop_query_process(process)
+        _stop_query_process(process, stop_marker)
     output = _drain_output(lines)
     assert "MONITOR_OBSERVATION_QUERY_STOPPED" in output
     assert "MONITOR_OBSERVATION_QUERY_FAILED" not in output
