@@ -7,17 +7,15 @@ from __future__ import annotations
 
 import argparse
 import signal
-import stat
 import sys
 import threading
 from pathlib import Path
-from uuid import uuid4
 
 from bt_api_runtime.control_http import ControlTransportError
 from bt_api_runtime.events import EventStore
 from bt_api_runtime.supervision import SystemClock
 
-from bt_api_py.monitor_service_config import read_bounded
+from bt_api_py._owner_stop_file import marker_requested, new_marker
 from bt_api_py.runtime_operator_config import build_bridges, load_authenticator, load_config
 from bt_api_py.runtime_service_host import RuntimeServiceHost
 
@@ -60,15 +58,11 @@ def _wait_for_stop_request(requested, stop_directory):
     if stop_directory is None:
         requested.wait()
     else:
-        marker = stop_directory / f'runtime-{uuid4().hex}.stop'
+        marker = new_marker(stop_directory, 'runtime')
         _emit(f'runtime_control_stop_file {marker.name}')
         while not requested.wait(0.2):
-            try:
-                if (stat.S_ISREG(marker.lstat().st_mode)
-                        and read_bounded(marker, 0, protected=True) == b''):
-                    break
-            except (OSError, ValueError):
-                continue
+            if marker_requested(marker):
+                break
     requested.clear()
 
 

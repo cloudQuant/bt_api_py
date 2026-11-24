@@ -19,7 +19,9 @@ import sys
 import threading
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
+from ._owner_stop_file import marker_requested, new_marker
 from .execution_parent_service_host import ParentConfig, ParentServiceHost, parse_config as parse_parent
 from .execution_read_service_host import Config as ReadConfig, ReadServiceHost, _path, parse_config as parse_read
 from .execution_gateway_source_config import (GatewaySourceClient, StdinSourceControl,
@@ -190,6 +192,8 @@ def main(argv=None):
         child.add_argument('--config', required=True)
         if command == 'run':
             child.add_argument('--source-control-stdin', action='store_true')
+            child.add_argument('--enable-owner-stop-file', action='store_true',
+                               help='allow local cooperative shutdown with a protected empty marker')
     args = parser.parse_args(argv)
     control = None
     control_requested = args.command == 'run' and args.source_control_stdin
@@ -208,7 +212,16 @@ def main(argv=None):
             else:
                 control.report(line)
                 control.flush()
+        def announce_stop_file():
+            if not args.enable_owner_stop_file:
+                return None
+            marker = new_marker(Path(args.config).parent, 'execution')
+            emit('EXECUTION_COMBINED_STOP_FILE ' + marker.name)
+            return marker
         host, signals, failed = CombinedServiceHost(config), 0, False
+        stop_file = None
+        def stop_requested():
+            return bool(signals) or marker_requested(stop_file)
         def stop(_signum, _frame):
             nonlocal signals
             signals += 1
@@ -221,9 +234,10 @@ def main(argv=None):
                 emit('EXECUTION_COMBINED_MANAGEMENT_' + status['management'])
                 if 'gateway_source' in status:
                     emit('EXECUTION_COMBINED_GATEWAY_SOURCE_' + status['gateway_source'])
-                while not signals and 'UNAVAILABLE' not in status.values():
+                stop_file = announce_stop_file()
+                while not stop_requested() and 'UNAVAILABLE' not in status.values():
                     status = host.poll()
-                    if signals or 'UNAVAILABLE' in status.values():
+                    if stop_requested() or 'UNAVAILABLE' in status.values():
                         break
                     if control is not None:
                         control.flush()
@@ -234,7 +248,7 @@ def main(argv=None):
                             emit('EXECUTION_SOURCE_QUEUE_FULL')
                         if item is not False:
                             value = control.request(item)
-                            if signals:
+                            if stop_requested():
                                 break
                             result = ('INVALID_REQUEST' if value is None else host.observe_source(
                                 value['parent_ref'], request_id=value['request_id'], request_sha256=value['request_sha256']))
@@ -254,7 +268,8 @@ def main(argv=None):
                     except Exception:
                         failed = True
                         emit('EXECUTION_COMBINED_CLEANUP_PENDING')
-                        while signals == before:
+                        retry_file = announce_stop_file()
+                        while signals == before and not marker_requested(retry_file):
                             time.sleep(0.1)
         finally:
             for sig, handler in previous.items():

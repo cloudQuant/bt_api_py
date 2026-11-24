@@ -521,6 +521,13 @@ keys. The deployment must bind its client proof to Gateway's independently
 installed proof; the existing wire does not exchange delegation IDs. Starting
 the control listener does not start strategies or prove trading readiness.
 
+The combined Execution CLI accepts `run --enable-owner-stop-file` for
+cooperative shutdown without a console. Create an empty owner-protected regular
+file beside the deployment config, with the basename announced by
+`EXECUTION_COMBINED_STOP_FILE`. `EXECUTION_COMBINED_STOPPED` and exit code `0`
+confirm that the listener and journal owner closed. A cleanup failure retains
+the original owner and announces a fresh marker for an explicit retry.
+
 `bt_api_py.execution_read_service_host` provides an independent authenticated
 management listener for three local parent-journal reads. See
 [`execution-read-service.example.json`](examples/services/execution-read-service.example.json).
