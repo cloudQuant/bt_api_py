@@ -12,7 +12,7 @@ import pytest
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_py import service_runtime as service_runtime_module
 from bt_api_py import service_runtime_thread as runtime_thread_module
-from bt_api_py.execution_management_read_grant import PARENT_READ_V1
+from bt_api_py.execution_management_read_grant import PARENT_DISCOVER_RECENT_V1, PARENT_READ_V1
 from bt_api_py.execution_management_read_client import ExecutionManagementReadClient
 from bt_api_py.service_runtime import (
     BoundExecutionManagementReadTarget,
@@ -237,6 +237,42 @@ def test_low_socket_budget_rotates_before_dispatch(monkeypatch):
     assert snapshot.run_id == "runtime-1"
     assert snapshot.min_socket_message_ids_remaining == 4096
     wrapper.close(timeout_seconds=2)
+
+
+@pytest.mark.parametrize("originally_granted", [True, False])
+def test_first_read_after_rotation_requires_its_original_operation_grant(monkeypatch, originally_granted):
+    factory, created = _install_synthetic_factory(monkeypatch, mount="application.execution_management")
+
+    def with_discovery_grant():
+        runtime = factory()
+        if originally_granted or runtime.index == 1:
+            runtime._binding.operations |= {PARENT_DISCOVER_RECENT_V1}
+        return runtime
+
+    wrapper = ThreadedServiceClientRuntime(
+        with_discovery_grant,
+        require_unregister_ack=True,
+        recover_on_socket_retirement=True,
+    )
+    wrapper.start(timeout_seconds=2)
+    try:
+        target = _target(BoundExecutionManagementReadTarget, created[0])
+        created[0].retire_after_call = True
+        assert wrapper.call_bound(target, PARENT_READ_V1, {}, timeout_seconds=2) == {"runtime_index": 0}
+        _wait_until(lambda: wrapper.status().run_id == "runtime-1")
+
+        if originally_granted:
+            assert wrapper.call_bound(target, PARENT_DISCOVER_RECENT_V1, {}, timeout_seconds=2) == {
+                "runtime_index": 1
+            }
+            assert [call[1] for call in created[1].calls] == [PARENT_DISCOVER_RECENT_V1]
+        else:
+            with pytest.raises(ServiceRuntimeRequestNotSentError):
+                wrapper.call_bound(target, PARENT_DISCOVER_RECENT_V1, {}, timeout_seconds=2)
+            assert created[1].calls == []
+        assert [call[1] for call in created[0].calls] == [PARENT_READ_V1]
+    finally:
+        wrapper.close(timeout_seconds=2)
 
 
 def test_execution_read_adapter_rebinds_successor_without_replaying_query(monkeypatch):

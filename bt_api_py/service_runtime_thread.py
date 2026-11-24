@@ -1179,6 +1179,16 @@ class ThreadedServiceClientRuntime:
                 route_key = self._recovery_target_route_key(target, operation)
                 if supplied == current:
                     self._remember_recovery_target_locked(route_key, supplied)
+                    # Remember the other supported reads granted on this same
+                    # authenticated binding. An empty discovery can leave those
+                    # reads unused until after the socket rotates.
+                    for companion in binding.operations - {operation}:
+                        try:
+                            _validate_bound_target_operation(target, companion)
+                        except ValueError:
+                            continue
+                        companion_key = self._recovery_target_route_key(target, companion)
+                        self._remember_recovery_target_locked(companion_key, supplied)
                     return target
                 anchors = self._recovery_target_anchors.get(route_key, {})
                 anchor_generation = anchors.get(supplied)
