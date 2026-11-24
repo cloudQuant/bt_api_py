@@ -2,6 +2,7 @@
 import copy
 import hashlib
 import json
+import os
 import queue
 import select
 import signal
@@ -33,11 +34,21 @@ from tests.unit.test_iter65_fresh_intake_host import KEY, parent_payload
 from tests.unit.test_service_host import _request
 
 
+def _owner_only_fixture_tree(root):
+    """chmod does not set Windows DACLs on the synthetic Read fixtures."""
+    if os.name == 'nt':
+        from bt_api_py._win32_security import _set_owner_only_acl
+
+        for path in (root, *root.rglob('*')):
+            _set_owner_only_acl(path)
+
+
 def setup_combined(tmp_path):
     parent_dir, read_dir = tmp_path / 'parent', tmp_path / 'read'
     parent_dir.mkdir(mode=0o700); read_dir.mkdir(mode=0o700)
     parent, parent_endpoint, parent_keys = setup_parent(parent_dir)
     read, _, read_keys = setup_read(read_dir)
+    _owner_only_fixture_tree(read_dir)
     read['storage'].update(journal_root=parent['storage']['journal_root'], storage_id=parent['storage']['storage_id'])
     read['execution_scope'] = copy.deepcopy(parent['execution_scope'])
     read['wire_scope'] = {'domain': 'paper', 'account_ref': 'account-a', 'strategy_ref': 'strategy-a', 'run_id': None}
