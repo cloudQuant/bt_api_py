@@ -1,0 +1,211 @@
+{
+  "schema": "iteration10-afi10-service-market-quote-consumer-r254-evidence-v1",
+  "round": "R254",
+  "status": "READY_FOR_ROOT_REVIEW_AND_SCOPED_COMMIT",
+  "captured_utc": "2026-10-16T15:41:44.328945+00:00",
+  "formal_afi10_pass": false,
+  "progress_document_modified": false,
+  "evidence_directory_file_count": 3,
+  "parent_repository": {
+    "path": "D:\\bt_api_py",
+    "branch": "dev",
+    "qa_head_at_packet_creation": "489354905d914d6a1f2c4fc5353553e3b82ae814",
+    "index_empty_at_packet_creation": true,
+    "commit_status": "PENDING_ROOT_REVIEW_AND_SCOPED_COMMIT",
+    "staging_or_commit_performed_by_author": false
+  },
+  "afi_source_round": {
+    "repository": "D:\\source_code\\ai-for-investor",
+    "branch": "dev",
+    "head_at_candidate_freeze": "80d9b8ad5eb48df9e2f01d944d57cee428950a12",
+    "head_at_qa_execution": "not captured; source hashes are pinned in this packet",
+    "evidence_level": "AUTHOR_LOCAL_SYNTHETIC_HOST_UI_ONLY",
+    "index_empty": true,
+    "source_scope": [
+      {
+        "path": "src/backend/app/services/quote_service.py",
+        "mode": "100644",
+        "head_blob_oid": "ede3011d4acc59e4d082c1733f2d45ec5faf36c3",
+        "candidate_blob_oid": "0110f70f090a7cf204c64c6115d7e5740868fc8b",
+        "candidate_sha256": "1df5d2d99836c928ea7090c7e2e72da926156f8e84f4d4bb4b3d252fbe246908",
+        "candidate_bytes": 57012,
+        "candidate_file": "D:\\temp\\afi10-service-market-ad9c8dcc-r254\\source\\afi\\src\\backend\\app\\services\\quote_service.py"
+      },
+      {
+        "path": "src/backend/app/services/quote/service_market.py",
+        "mode": "100644",
+        "head_blob_oid": null,
+        "candidate_blob_oid": "66838e416577f43f6f9db1dbe901376c76496b96",
+        "candidate_sha256": "3f3fd9a879e3b1086ddf97803109d3b5ac243013f3dc299652b53dfd3e7036fc",
+        "candidate_bytes": 31660,
+        "candidate_file": "D:\\temp\\afi10-service-market-ad9c8dcc-r254\\source\\afi\\src\\backend\\app\\services\\quote\\service_market.py"
+      },
+      {
+        "path": "src/backend/tests/test_quote_service_market.py",
+        "mode": "100644",
+        "head_blob_oid": null,
+        "candidate_blob_oid": "819c83c5e2d1c7e0948f59a9dac2d51e65527ab7",
+        "candidate_sha256": "833ad834fb4b1fd3fd65a424f3441378cb82f827706c58e74a7ecbe57f43da2f",
+        "candidate_bytes": 20437,
+        "candidate_file": "D:\\temp\\afi10-service-market-ad9c8dcc-r254\\source\\afi\\src\\backend\\tests\\test_quote_service_market.py"
+      },
+      {
+        "path": "src/backend/tests/integration/test_quote_service_market_host_integration.py",
+        "mode": "100644",
+        "head_blob_oid": null,
+        "candidate_blob_oid": "efec7f044dedabe7c5518b2649510566d6319a43",
+        "candidate_sha256": "841f8c77f6cfc0c59cec330579df85c7a3b82fa3ad01f13f162ad617b6037581",
+        "candidate_bytes": 18073,
+        "candidate_file": "D:\\temp\\afi10-service-market-ad9c8dcc-r254\\source\\afi\\src\\backend\\tests\\integration\\test_quote_service_market_host_integration.py"
+      }
+    ],
+    "candidate_partial_index": "candidate-partial-index.json",
+    "candidate_source_root": "D:\\temp\\afi10-service-market-ad9c8dcc-r254\\source\\afi",
+    "qa": {
+      "selected_nodes": [
+        "tests/test_quote_service_market.py::test_get_data_sources_keeps_legacy_receivers_only_for_unconfigured_symbols",
+        "tests/test_quote_service_market.py::test_workspace_only_configured_v2_quote_avoids_legacy_path",
+        "tests/test_quote_service_market.py::test_uncertain_service_market_close_retains_closed_owner_and_fails_closed",
+        "tests/integration/test_quote_service_market_host_integration.py::test_quote_http_route_reads_real_service_market_client_and_host"
+      ],
+      "collected": 4,
+      "passed": 4,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "pytest_exit": 0,
+      "warning_count": 1,
+      "junit_test_duration_seconds": 3.629,
+      "pytest_reported_duration_seconds": 3.86,
+      "raw_stdout_available": true,
+      "junit_available": true,
+      "rerun_of_r248_suite": false
+    },
+    "static_checks": {
+      "ruff_check_exit": 0,
+      "candidate_whitespace_check_passed": true,
+      "tracked_quote_service_git_diff_check_exit": 0,
+      "ruff_format_advisory_exit": 1,
+      "ruff_format_advisory_scope": "whole candidate files; reported locations are inherited R248 formatting, not new R254 hunks"
+    },
+    "limitations": [
+      "Synthetic provider publishes on the GatewayMarketHub owner thread; no production OKX WSS queue-to-Hub proof.",
+      "MIG01 SDK owner-thread bounded drain and OKX provider leaf are separate work.",
+      "Legacy runtime/receiver and manager GatewayRuntime consumers remain active for unconfigured paths and other routes.",
+      "No real provider/account/service installation or formal AFI10 acceptance."
+    ]
+  },
+  "archive": {
+    "path": "raw-evidence.zip",
+    "size_bytes": 36385,
+    "sha256": "5278a8c6e248645fab0cb1ca4dda0cfdd751a2f274b1459b5df228a885b5fc20",
+    "entry_count": 20,
+    "entries": [
+      {
+        "path": "acceptance-spec.md",
+        "size_bytes": 2719,
+        "sha256": "015ba00479e22fb18bbb85ad6295f9adc68408be14e87ee8ac1611fe5fa9b2d9"
+      },
+      {
+        "path": "candidate-partial-index.json",
+        "size_bytes": 2172,
+        "sha256": "22a24e5016fe901653e5acce7940b930d2e79aa0c6fbde826b3a5e036b624d2b"
+      },
+      {
+        "path": "source/afi/src/backend/app/services/quote_service.py",
+        "size_bytes": 57012,
+        "sha256": "1df5d2d99836c928ea7090c7e2e72da926156f8e84f4d4bb4b3d252fbe246908"
+      },
+      {
+        "path": "source/afi/src/backend/app/services/quote/service_market.py",
+        "size_bytes": 31660,
+        "sha256": "3f3fd9a879e3b1086ddf97803109d3b5ac243013f3dc299652b53dfd3e7036fc"
+      },
+      {
+        "path": "source/afi/src/backend/tests/test_quote_service_market.py",
+        "size_bytes": 20437,
+        "sha256": "833ad834fb4b1fd3fd65a424f3441378cb82f827706c58e74a7ecbe57f43da2f"
+      },
+      {
+        "path": "source/afi/src/backend/tests/integration/test_quote_service_market_host_integration.py",
+        "size_bytes": 18073,
+        "sha256": "841f8c77f6cfc0c59cec330579df85c7a3b82fa3ad01f13f162ad617b6037581"
+      },
+      {
+        "path": "author/pytest-command-result.json",
+        "size_bytes": 2243,
+        "sha256": "bd41506d72d4e0afbeed68721037190e826883ae4b82e5e845e044eaec6d0465"
+      },
+      {
+        "path": "author/pytest-stdout.txt",
+        "size_bytes": 1805,
+        "sha256": "00e9d332257bf7b3b1dad3efbded4108db0e237082e7371c2be32aba1833ba1c"
+      },
+      {
+        "path": "author/pytest-stderr.txt",
+        "size_bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "author/pytest-junit.xml",
+        "size_bytes": 820,
+        "sha256": "72b7413f529c8ff04fade437e133f93072f1a0c3350bda6e7adf65d780badfda"
+      },
+      {
+        "path": "author/static-check-result.json",
+        "size_bytes": 315,
+        "sha256": "d400b15105b5c9d2bc20b0541885c176fdec31ff879591156bd064042440e0e8"
+      },
+      {
+        "path": "author/ruff-check.txt",
+        "size_bytes": 19,
+        "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+      },
+      {
+        "path": "author/ruff-check-stderr.txt",
+        "size_bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "author/git-diff-check.txt",
+        "size_bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "author/git-diff-check-stderr.txt",
+        "size_bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "author/ruff-format-advisory.txt",
+        "size_bytes": 8746,
+        "sha256": "5665849bbd067f3fb92ea41fe01997e57b1c83eff6dc0d01a452b5ae1abbda79"
+      },
+      {
+        "path": "author/ruff-format-advisory-stderr.txt",
+        "size_bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "author/candidate-whitespace-check.json",
+        "size_bytes": 266,
+        "sha256": "c791a9a545c4a98d2136cae0cf3a04793827a647dcf7f77ac3184a6fd4d215e1"
+      },
+      {
+        "path": "author/candidate-whitespace-check-stderr.txt",
+        "size_bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "author/candidate-whitespace-check.py",
+        "size_bytes": 732,
+        "sha256": "791bc9871d61b5304662b06115d5b4f7a0031615930043ff3bb803aefa5af19d"
+      }
+    ]
+  },
+  "round_record": {
+    "path": "round-record.md",
+    "size_bytes": 1938,
+    "sha256": "2aa99e80db09bc3400c1a1df7dbf2da07a15fbf86ce6aafd63edfe8c84957e37"
+  }
+}

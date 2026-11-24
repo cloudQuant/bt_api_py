@@ -1,0 +1,25 @@
+{
+  "base_head": "1ee1c1ea9aefa961f0c555d0487f03bac2511521",
+  "note": "Partial MIG03 payloads reconstructed from current HEAD plus only owner-approved MIG03 hunks; live mixed working files are not copied.",
+  "sources": {
+    "bt_api_py/service_execution_group.py": {
+      "head_blob_sha256": "90e9f4e8c61efd43af1db033b28bbd186813599b2e88591e1b9b191b5f8b34ff",
+      "live_working_tree_sha256": "ed88114d37c1ed93a32d36fa2fb07c2e0d428c9ce3a344e74a58b6e252a7e880",
+      "patch_bytes": 1253,
+      "selected_patch_sha256": "0caef076348d6fda6ab67ff74f75c9bef15e7e9523b1793fb2fc3aa3abfb4d8c"
+    },
+    "bt_api_py/service_host.py": {
+      "head_blob_sha256": "7e0589130f07af06e21fe216151d00c009a813f2a6bcbdd2477158c6aacbabce",
+      "live_working_tree_sha256": "25a07d5c6b14108ba699d2b86a59c99acacbd77e1a2c4f411f6f7e0d7350ab7e",
+      "patch_bytes": 10379,
+      "selected_patch_sha256": "80e2d76c600461e88838bda27189eec2b5e24147615452c386bd6169be495a95"
+    },
+    "bt_api_py/service_registry.py": {
+      "head_blob_sha256": "fd80f893c138fbfe33663befe91cfa4f431faf8cb04565543768bdd1c462120c",
+      "live_working_tree_sha256": "260127e4d947364b627ce46be75f53e66a1e7bde1723811b422826141030a9d2",
+      "patch_bytes": 8807,
+      "selected_patch_sha256": "a6289385f43c98e9e2117d81368865c291bef922b5c184dfe645ce172d19cfe1"
+    }
+  },
+  "validation": "git apply --check and apply succeeded against pinned HEAD blobs in an isolated temporary directory; all three selected overlays compile; shared index/worktree untouched by validation."
+}

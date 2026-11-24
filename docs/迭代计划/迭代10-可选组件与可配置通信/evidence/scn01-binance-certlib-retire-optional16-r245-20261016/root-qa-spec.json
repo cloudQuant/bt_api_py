@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "round_id": "iteration10-scn01-binance-certlib-retire-optional16-r245-2026-10-16",
+  "status": "READY_FOR_ROOT_SOURCE_QA",
+  "evidence_level": "SOURCE_FAKE_BINANCE_NORMAL_FACTORY_RETIRED_BRIDGE_FAIL_CLOSED_ONLY",
+  "repository": "D:/source_code/backtrader",
+  "branch": "dev",
+  "base_head": "57c9fc613f263877b08da11eacadcb5a8eaccaad",
+  "scope": [
+    {
+      "path": "examples/live/000_live_certification/binance_penetration/certlib/__init__.py",
+      "role": "Retire the Optional16 Gateway/component bridge from the normal Binance certlib entry; reject unsupported topology before importing the venue client and preserve direct construction.",
+      "sha256": "e70dd0bad27a3b9b51048d74c181dd93276bca68ffa229157ed79da0cfff666b",
+      "size_bytes": 2119
+    },
+    {
+      "path": "tests/unit/test_scn01_binance_certlib_fail_closed.py",
+      "role": "Exercise the real factory source: five unsupported topology variants fail before bridge/provider imports, and default direct construction still passes the original synthetic credential/config values to BinanceDemoClient.",
+      "sha256": "5e250d8290345420116e9b3108c36444e5aadf0915e89f79cacebe47003c7ce0",
+      "size_bytes": 3555
+    }
+  ],
+  "root_command": [
+    "C:/anaconda3/python.exe",
+    "-B",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-q",
+    "-p",
+    "no:cacheprovider",
+    "-p",
+    "no:asyncio",
+    "tests/unit/test_scn01_binance_certlib_fail_closed.py"
+  ],
+  "root_command_cwd": "D:/source_code/backtrader",
+  "root_output": "D:\\temp\\iteration10-scn01-binance-certlib-root-20261016-r245",
+  "expected": {
+    "collected": 6,
+    "passed": 6,
+    "failed": 0,
+    "network_or_provider_actions": 0,
+    "optional16_import_attempts_on_rejected_requests": 0,
+    "binance_client_import_attempts_on_rejected_requests": 0,
+    "direct_fake_client_constructions": 1,
+    "transport_error": "transport_not_implemented:gateway_zmq",
+    "component_errors": [
+      "component_not_implemented:execution",
+      "component_not_implemented:risk",
+      "component_not_implemented:monitor"
+    ],
+    "real_credential_or_config_file_reads": 0
+  },
+  "preserved_conditions": [
+    "No case strategy source, provider action, identity, approval, research boundary, or evidence schema is modified.",
+    "Unsupported gateway/component requests fail before Optional16 or Binance venue-client import.",
+    "Default direct factory still constructs the existing BinanceDemoClient with the same API key, secret, host, and timeout mapping.",
+    "The synthetic direct test uses fixed fake credentials and a fake client module only; no provider/account call is made."
+  ],
+  "not_established": [
+    "No real provider, account, or credential acceptance.",
+    "No SCN01 formal case PASS or increase to 39/68.",
+    "No normal SDK ServiceClientRuntime backend integration; that is the next separate implementation round.",
+    "No SCN02 unified-directory, Backtrader Store/Broker, or dual-host acceptance."
+  ]
+}

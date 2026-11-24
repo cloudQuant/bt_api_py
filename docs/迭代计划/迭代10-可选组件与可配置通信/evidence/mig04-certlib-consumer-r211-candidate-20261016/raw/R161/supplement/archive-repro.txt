@@ -1,0 +1,16 @@
+MIG04 r3 commit-time supplement A: archive re-reproduction
+command shape: git -C <repo> archive -o <abs out.tar> <pin>
+git --version: git version 2.42.0.windows.2
+
+sdk            pin=466977392985ef1d7fa9b282a220096c8d19dff8 expected=5812863b36829975406772db79057db4be05d6041824994659ef5927fab86c5e actual=5812863b36829975406772db79057db4be05d6041824994659ef5927fab86c5e match=True
+base           pin=b4aabd1e17b9c7252fa7b4d266932087d99b5517 expected=155ee31167570385db4f7ae7ba107fa618ca078d0c7ce0f09dad043570c22c54 actual=155ee31167570385db4f7ae7ba107fa618ca078d0c7ce0f09dad043570c22c54 match=True
+transport_zmq  pin=a397fdb460d2deb22e67ceb4963992ef63dbbb0e expected=46bff70138e8a615237d3824296727ccb755c2edf0e3ae5a0999ad141820732f actual=46bff70138e8a615237d3824296727ccb755c2edf0e3ae5a0999ad141820732f match=True
+gateway        pin=59b164ab7f89c6428ae6546103aad6058dab4c16 expected=2cfc2fe748742d732888d7fcb90bd89c93bb6237800407c7f0862da950c1781d actual=2cfc2fe748742d732888d7fcb90bd89c93bb6237800407c7f0862da950c1781d match=True
+execution      pin=dc8bd7a3682d00cfaef4f15261607043c6d24fca expected=5ed61c7b752786bf8b90d1dbbc4e158cdfff3d497ef9ecfbab94ba0f8c1d0af2 actual=5ed61c7b752786bf8b90d1dbbc4e158cdfff3d497ef9ecfbab94ba0f8c1d0af2 match=True
+risk           pin=131175a4070c930f1dd5186ea707d6bc9bbb4310 expected=32ebf5f48ef01d1314f3b96061ca7c1ed4dc00f30583ae3e0e2b9df62b494050 actual=32ebf5f48ef01d1314f3b96061ca7c1ed4dc00f30583ae3e0e2b9df62b494050 match=True
+monitor        pin=536a4f04747182749fabdac5e28624f80465bc53 expected=11526e5e83626df4038705474a38d0bed5c1fa1db542b32f6a08be7efeb02015 actual=11526e5e83626df4038705474a38d0bed5c1fa1db542b32f6a08be7efeb02015 match=True
+binance        pin=b438a277c92a22851a16be0be1a8c8ee9f852b79 expected=d1906782353e389d93d194fc23c08eff4bbe08cf48eac15fae6d97adbc326d8a actual=d1906782353e389d93d194fc23c08eff4bbe08cf48eac15fae6d97adbc326d8a match=True
+backtrader     pin=b002afa2da66ca6d14f1623280109be8e653a1b6 expected=1002e24219cf7a4f178e9c159301deb2d63ced1b7a46adef8a17fdde8f51d4fb actual=1002e24219cf7a4f178e9c159301deb2d63ced1b7a46adef8a17fdde8f51d4fb match=True
+afi            pin=34f59117ac9a2e73f00b6908cfeeb11fa53f5610 expected=388cefe657ae3219243101df383e496d13a11e259cb557537331b38040173cb7 actual=388cefe657ae3219243101df383e496d13a11e259cb557537331b38040173cb7 match=True
+
+ALL_MATCH=True (10/10 pins re-archived at commit time, byte-identical to logs/01b-archive-sha256.txt)

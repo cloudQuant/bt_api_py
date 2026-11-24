@@ -1,0 +1,44 @@
+{
+  "schema": "iteration10-afi10-service-market-quote-consumer-candidate-partial-index-v1",
+  "base_head": "80d9b8ad5eb48df9e2f01d944d57cee428950a12",
+  "base_branch": "dev",
+  "index_empty_at_freeze": true,
+  "files": [
+    {
+      "path": "src/backend/app/services/quote_service.py",
+      "mode": "100644",
+      "head_blob_oid": "ede3011d4acc59e4d082c1733f2d45ec5faf36c3",
+      "candidate_blob_oid": "0110f70f090a7cf204c64c6115d7e5740868fc8b",
+      "candidate_sha256": "1df5d2d99836c928ea7090c7e2e72da926156f8e84f4d4bb4b3d252fbe246908",
+      "candidate_bytes": 57012,
+      "candidate_file": "D:\\temp\\afi10-service-market-ad9c8dcc-r254\\source\\afi\\src\\backend\\app\\services\\quote_service.py"
+    },
+    {
+      "path": "src/backend/app/services/quote/service_market.py",
+      "mode": "100644",
+      "head_blob_oid": null,
+      "candidate_blob_oid": "66838e416577f43f6f9db1dbe901376c76496b96",
+      "candidate_sha256": "3f3fd9a879e3b1086ddf97803109d3b5ac243013f3dc299652b53dfd3e7036fc",
+      "candidate_bytes": 31660,
+      "candidate_file": "D:\\temp\\afi10-service-market-ad9c8dcc-r254\\source\\afi\\src\\backend\\app\\services\\quote\\service_market.py"
+    },
+    {
+      "path": "src/backend/tests/test_quote_service_market.py",
+      "mode": "100644",
+      "head_blob_oid": null,
+      "candidate_blob_oid": "819c83c5e2d1c7e0948f59a9dac2d51e65527ab7",
+      "candidate_sha256": "833ad834fb4b1fd3fd65a424f3441378cb82f827706c58e74a7ecbe57f43da2f",
+      "candidate_bytes": 20437,
+      "candidate_file": "D:\\temp\\afi10-service-market-ad9c8dcc-r254\\source\\afi\\src\\backend\\tests\\test_quote_service_market.py"
+    },
+    {
+      "path": "src/backend/tests/integration/test_quote_service_market_host_integration.py",
+      "mode": "100644",
+      "head_blob_oid": null,
+      "candidate_blob_oid": "efec7f044dedabe7c5518b2649510566d6319a43",
+      "candidate_sha256": "841f8c77f6cfc0c59cec330579df85c7a3b82fa3ad01f13f162ad617b6037581",
+      "candidate_bytes": 18073,
+      "candidate_file": "D:\\temp\\afi10-service-market-ad9c8dcc-r254\\source\\afi\\src\\backend\\tests\\integration\\test_quote_service_market_host_integration.py"
+    }
+  ]
+}

@@ -1,0 +1,202 @@
+{
+  "commands": [
+    {
+      "argv": [
+        "C:\\Anaconda3\\python.exe",
+        "-m",
+        "pip",
+        "--isolated",
+        "download",
+        "--disable-pip-version-check",
+        "--index-url",
+        "https://pypi.org/simple",
+        "--only-binary=:all:",
+        "--no-deps",
+        "--dest",
+        "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\wheelhouse",
+        "--requirement",
+        "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\consumer-dependencies.lock"
+      ],
+      "cwd": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016",
+      "exit_code": 0,
+      "label": "01-download-public-lock",
+      "stderr": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\logs\\01-download-public-lock.stderr.log",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\logs\\01-download-public-lock.stdout.log",
+      "stdout_sha256": "318d31141bebc4c4e90c2135785bb5c2445a670be222181aaf86d6a5e609d7b9"
+    },
+    {
+      "argv": [
+        "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Scripts\\python.exe",
+        "-m",
+        "pip",
+        "install",
+        "--disable-pip-version-check",
+        "--no-index",
+        "--find-links",
+        "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\wheelhouse",
+        "--no-deps",
+        "--requirement",
+        "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\consumer-dependencies.lock",
+        "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\wheelhouse\\ai_for_investor_backend-0.1.0-py3-none-any.whl",
+        "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\wheelhouse\\backtrader-1.4.0-py3-none-any.whl",
+        "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\wheelhouse\\bt_api_base-0.15.8-py3-none-any.whl",
+        "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\wheelhouse\\bt_api_binance-2.0.1-py3-none-any.whl",
+        "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\wheelhouse\\bt_api_py-0.15.5-py3-none-any.whl",
+        "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\wheelhouse\\bt_api_binance_certlib-0.1.0-py3-none-any.whl"
+      ],
+      "cwd": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016",
+      "exit_code": 0,
+      "label": "02-install-exact-combo",
+      "stderr": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\logs\\02-install-exact-combo.stderr.log",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\logs\\02-install-exact-combo.stdout.log",
+      "stdout_sha256": "c2c5e52341f1f66d894d17a0c9864facd88a752943667e909b34051350ba31b4"
+    },
+    {
+      "argv": [
+        "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Scripts\\python.exe",
+        "-m",
+        "pip",
+        "check"
+      ],
+      "cwd": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016",
+      "exit_code": 0,
+      "label": "03-pip-check",
+      "stderr": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\logs\\03-pip-check.stderr.log",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\logs\\03-pip-check.stdout.log",
+      "stdout_sha256": "672aec65a45bed50e70229c70934a7eebf0462595c459b83023027645d57cccf"
+    },
+    {
+      "argv": [
+        "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Scripts\\python.exe",
+        "-I",
+        "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\consumer\\binance_penetration\\cases\\MIG04\\run.py",
+        "--config",
+        "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\consumer\\binance_penetration\\cases\\MIG04\\config.yaml"
+      ],
+      "cwd": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016",
+      "exit_code": 0,
+      "label": "04-normal-installed-entry",
+      "stderr": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\logs\\04-normal-installed-entry.stderr.log",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\logs\\04-normal-installed-entry.stdout.log",
+      "stdout_sha256": "de210c154ac7e6dc6ef9c7cb947572819daffcb58dcf232732fe57071fd65a0e"
+    },
+    {
+      "argv": [
+        "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Scripts\\python.exe",
+        "-I",
+        "-c",
+        "\nimport hashlib, importlib.metadata as md, json, re, site, sys\nfrom pathlib import Path\nimport certlib\nfrom certlib import binance_client, context, envfile, monitor, runner, validation\nimport yaml\nexpected = json.loads(sys.argv[1])\nexpected_env = Path(sys.argv[2]).resolve()\nroots = [Path(value).resolve() for value in site.getsitepackages()]\nmodules = {\"certlib\": certlib, \"certlib.binance_client\": binance_client,\n    \"certlib.context\": context, \"certlib.envfile\": envfile,\n    \"certlib.monitor\": monitor, \"certlib.runner\": runner,\n    \"certlib.validation\": validation, \"yaml\": yaml}\norigins = {}\nfor name, module in modules.items():\n    path = Path(module.__file__).resolve()\n    assert any(path.is_relative_to(root) for root in roots), (name, str(path))\n    origins[name] = str(path)\nsource_hashes = {}\nfor name, module in modules.items():\n    if name == \"yaml\":\n        continue\n    filename = \"__init__.py\" if name == \"certlib\" else name.split(\".\", 1)[1] + \".py\"\n    digest = hashlib.sha256(Path(module.__file__).read_bytes()).hexdigest()\n    assert digest == expected[filename], (filename, digest)\n    source_hashes[filename] = digest\nnormalize = lambda value: re.sub(r\"[-_.]+\", \"-\", value).lower()\ndist = \"bt-api-binance-certlib\"\nowners = md.packages_distributions().get(\"certlib\", [])\nassert md.version(dist) == \"0.1.0\"\nassert [normalize(item) for item in owners] == [normalize(dist)], owners\nassert md.version(\"PyYAML\") == \"6.0.3\"\nassert envfile.default_env_path().resolve() == expected_env\nassert not expected_env.exists()\nprint(json.dumps({\"distribution\": dist, \"version\": md.version(dist),\n    \"owners\": owners, \"origins\": origins, \"source_hashes\": source_hashes,\n    \"site_roots\": [str(path) for path in roots], \"PyYAML\": md.version(\"PyYAML\"),\n    \"default_env_path\": str(expected_env), \"default_env_exists\": expected_env.exists()},\n    sort_keys=True))\n",
+        "{\"__init__.py\": \"d00e80e6c9129ece4d6f10bbe6c582addf6576d58e19ce012a8c551602097baa\", \"binance_client.py\": \"95ff4186b3642ed9b6c4df2934e1f1aac740a0f302b8b882670f61ac78b90db6\", \"context.py\": \"cc95002367f0c6241240e431f3b79c155793d260aa0897bb0e124c8a27c58ba9\", \"envfile.py\": \"de3613ea601c87d2dcbd88b068375c270dc75c98aedd29e0f8fce132a6ecf30d\", \"monitor.py\": \"7e3be314e2b24e11247207d62c6e31c9c1449a1a2804e66fde7f12fe3bede5f7\", \"runner.py\": \"0c7754790655bfb4c0ece0dfb2787854cc27d8807b3d59b758dd5a1db2c2811d\", \"validation.py\": \"8996f4c4e5a1e841d16ff60cc7b68e848d6da10933793855d709fe389c8fa78f\", \"pyproject.toml\": \"7a54ffeefddb0b53f16f7d74247669f369bcde1930addff3b8c3a257c2f97e5c\"}",
+        "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\.env"
+      ],
+      "cwd": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016",
+      "exit_code": 0,
+      "label": "05-installed-certlib-provenance",
+      "stderr": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\logs\\05-installed-certlib-provenance.stderr.log",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\logs\\05-installed-certlib-provenance.stdout.log",
+      "stdout_sha256": "81a18c2db806ad869b628259d9961d9b85456476aacb0b904ad392b42ee7979e"
+    },
+    {
+      "argv": [
+        "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Scripts\\python.exe",
+        "-I",
+        "-c",
+        "\nimport importlib, importlib.metadata as md, json, socket, sys\nfrom pathlib import Path\nblocked = []\ndef deny(name, *args, **kwargs):\n    blocked.append(name)\n    raise RuntimeError(\"blocked external operation: \" + name)\ndef audit(event, args):\n    if event.startswith(\"socket.\"):\n        deny(event)\nsocket.create_connection = lambda *a, **k: deny(\"socket.create_connection\")\nsocket.getaddrinfo = lambda *a, **k: deny(\"socket.getaddrinfo\")\nsys.addaudithook(audit)\nimport app, backtrader, bt_api_binance, certlib\nroots = [Path(value).resolve() for value in __import__(\"site\").getsitepackages()]\nmodules = {\"app\": app, \"backtrader\": backtrader,\n    \"bt_api_binance\": bt_api_binance, \"certlib\": certlib}\norigins = {name: str(Path(module.__file__).resolve()) for name, module in modules.items()}\nfor name, value in origins.items():\n    assert any(Path(value).is_relative_to(root) for root in roots), (name, value)\nentry_points = md.entry_points(group=\"bt_api.plugins\")\nmatches = [item for item in entry_points if item.name == \"binance\"]\nassert len(matches) == 1\nprovider = matches[0].load()\nprovider_module = importlib.import_module(provider.__module__)\nprovider_path = Path(provider_module.__file__).resolve()\nassert any(provider_path.is_relative_to(root) for root in roots)\nassert not blocked, blocked\nversions = {name: md.version(name) for name in (\n    \"ai-for-investor-backend\", \"backtrader\", \"bt_api_base\",\n    \"bt_api_binance\", \"bt_api_py\", \"bt-api-binance-certlib\")}\nprint(json.dumps({\"origins\": origins, \"provider_origin\": str(provider_path),\n    \"provider_entry_point\": matches[0].value,\n    \"versions\": versions, \"network_or_process_attempts\": blocked}, sort_keys=True))\n"
+      ],
+      "cwd": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016",
+      "exit_code": 1,
+      "label": "06-installed-crossrepo-origin",
+      "stderr": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\logs\\06-installed-crossrepo-origin.stderr.log",
+      "stderr_sha256": "2b1db64042069ffd952866b8f91fea8589c31f9576bf57039e31bbc3db024a21",
+      "stdout": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\logs\\06-installed-crossrepo-origin.stdout.log",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "error": "06-installed-crossrepo-origin exited 1",
+  "error_type": "RuntimeError",
+  "formal_mig04_acceptance": false,
+  "installed_certlib": {
+    "PyYAML": "6.0.3",
+    "default_env_exists": false,
+    "default_env_path": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\.env",
+    "distribution": "bt-api-binance-certlib",
+    "origins": {
+      "certlib": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Lib\\site-packages\\certlib\\__init__.py",
+      "certlib.binance_client": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Lib\\site-packages\\certlib\\binance_client.py",
+      "certlib.context": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Lib\\site-packages\\certlib\\context.py",
+      "certlib.envfile": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Lib\\site-packages\\certlib\\envfile.py",
+      "certlib.monitor": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Lib\\site-packages\\certlib\\monitor.py",
+      "certlib.runner": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Lib\\site-packages\\certlib\\runner.py",
+      "certlib.validation": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Lib\\site-packages\\certlib\\validation.py",
+      "yaml": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Lib\\site-packages\\yaml\\__init__.py"
+    },
+    "owners": [
+      "bt-api-binance-certlib"
+    ],
+    "site_roots": [
+      "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env",
+      "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Lib\\site-packages"
+    ],
+    "source_hashes": {
+      "__init__.py": "d00e80e6c9129ece4d6f10bbe6c582addf6576d58e19ce012a8c551602097baa",
+      "binance_client.py": "95ff4186b3642ed9b6c4df2934e1f1aac740a0f302b8b882670f61ac78b90db6",
+      "context.py": "cc95002367f0c6241240e431f3b79c155793d260aa0897bb0e124c8a27c58ba9",
+      "envfile.py": "de3613ea601c87d2dcbd88b068375c270dc75c98aedd29e0f8fce132a6ecf30d",
+      "monitor.py": "7e3be314e2b24e11247207d62c6e31c9c1449a1a2804e66fde7f12fe3bede5f7",
+      "runner.py": "0c7754790655bfb4c0ece0dfb2787854cc27d8807b3d59b758dd5a1db2c2811d",
+      "validation.py": "8996f4c4e5a1e841d16ff60cc7b68e848d6da10933793855d709fe389c8fa78f"
+    },
+    "version": "0.1.0"
+  },
+  "old_consumer_wheels": {
+    "ai-for-investor-backend": {
+      "sha256": "287ee6fcef1ff50f0d51600e951285741596cc3a1d365906dbb0d7afcb0fa234",
+      "version": "0.1.0"
+    },
+    "backtrader": {
+      "sha256": "d825efaeb82245fe91dbfcce213e85f6bacf43a1ef27f5c5955463f20ab0749d",
+      "version": "1.4.0"
+    },
+    "bt-api-base": {
+      "sha256": "840090fbc13e7b1fefdc686805ec8685a5e5a7dfd39ace3e7a5763922fd5dbb0",
+      "version": "0.15.8"
+    },
+    "bt-api-binance": {
+      "sha256": "7cac597539bfa6a2a6fa6249e9983df1494d30c4f427898346f22940c9b89a23",
+      "version": "2.0.1"
+    },
+    "bt-api-py": {
+      "sha256": "6ed0ccc39991ef715f33a8a816c41ee6244b4490b911c2204eba4486a04377b8",
+      "version": "0.15.5"
+    }
+  },
+  "old_matrix_rebuilt": false,
+  "public_dependency_lock": {
+    "download": "public PyPI only; exact versions; binary wheels only; no dependency expansion",
+    "exact_pins": 115,
+    "pyyaml": "6.0.3",
+    "sha256": "727edc571ba827b74b365613eda477bc6346a0e620eb223f1be512cb6329c66e",
+    "source": "D:\\temp\\it10mig04-r3-20261016-r1\\logs\\06-consumers-freeze.txt"
+  },
+  "scope": "one certlib wheel plus prior accepted consumer combo",
+  "static_preflight": {
+    "backtrader_branch": "dev",
+    "backtrader_head": "223d5b68a55bb167e2d310f9565b511093b01742",
+    "certlib_build_source_revision": "be07a50ed3b4ddb5b419855827e7a965d5230b84",
+    "certlib_committed_source_head": "223d5b68a55bb167e2d310f9565b511093b01742",
+    "certlib_sdist_sha256_checked_not_rebuilt": "deb5520156d2838f7def48e507f6963edf8ff0117e8b13f481f3700d886f0b26",
+    "certlib_wheel_sha256": "164ca44a402ba8153cf55890b9b954ce29becf57ae9bbbc8feefc283a007a2c3",
+    "normal_entry_sha256": "4d8604f87996f566777c97c91c53b3aca1292a44271b3f1fc94b712a4f392920",
+    "old_freeze_exact_dependency_count": 115,
+    "old_freeze_sha256": "727edc571ba827b74b365613eda477bc6346a0e620eb223f1be512cb6329c66e",
+    "old_locked_pyyaml": "6.0.3",
+    "python": "3.11.5 | packaged by Anaconda, Inc. | (main, Sep 11 2023, 13:26:23) [MSC v.1916 64 bit (AMD64)]",
+    "python_executable": "C:\\Anaconda3\\python.exe"
+  },
+  "status": "HOLD_COMBO_CHECK"
+}

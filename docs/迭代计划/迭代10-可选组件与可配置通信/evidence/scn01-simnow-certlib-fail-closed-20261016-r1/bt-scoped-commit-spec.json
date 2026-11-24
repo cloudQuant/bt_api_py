@@ -1,0 +1,29 @@
+{
+  "helper": "D:/bt_api_py/.codex-tmp/iteration10-scoped-source-delivery.py",
+  "helper_contract": "repository, post_path, parent, message, independent_static_review, evidence_sha256, junit, tests_passed, source_sha256",
+  "execution_ready": false,
+  "blocked_until": "Root records an independent static review; the generic helper guard requires independent_static_review=GO.",
+  "repository": "D:/source_code/backtrader",
+  "parent": "438b127fcff2c0619b13835248ee3ef210cc0728",
+  "post_path": "D:\\source_code\\backtrader\\.codex-tmp\\iteration10-scn01-simnow-certlib-fail-closed-postcommit-r1-20261016.json",
+  "message": "fix(scn01): reject unavailable client backends before CTP import",
+  "independent_static_review": "PENDING_ROOT_REVIEW",
+  "evidence_sha256": {
+    "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\scn01-simnow-certlib-fail-closed-20261016-r1\\raw-evidence.zip": "b2ec06d724e5525d5841c5ea01ded7fdf971c3da31102cd0b20fa6cd1ad65b53",
+    "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\scn01-simnow-certlib-fail-closed-20261016-r1\\manifest.json": "512c01a5030f9b6291bcf33604578c66588eb41b0424801894f1efc7c16b0667",
+    "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\scn01-simnow-certlib-fail-closed-20261016-r1\\round-record.md": "42c8451e5b4a04a24002e7f943180694b637e12de006bc7f5bdc19ce1bd42717"
+  },
+  "junit": "D:\\temp\\iteration10-scn01-certlib-root-20261016-r1\\junit.xml",
+  "tests_passed": 4,
+  "source_sha256": {
+    "examples/live/000_live_certification/simnow_penetration/certlib/__init__.py": "abb476fd2d0b5f6ad87809dbfbde25eab5f88f5a7c7ae5de5e060803fe0da64f",
+    "tests/unit/test_scn01_simnow_certlib_fail_closed.py": "992a9fb555a0fffc112c452c202613792b19f555e62d502ba4f39d66ac73ea48"
+  },
+  "allowed_blank_at_eof": {},
+  "allowed_markdown_hardbreaks": {},
+  "sdk_evidence_commit_scope": [
+    "raw-evidence.zip",
+    "manifest.json",
+    "round-record.md"
+  ]
+}

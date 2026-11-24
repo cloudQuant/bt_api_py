@@ -1,0 +1,16 @@
+# 已消费 step06 R1–R8 历史索引
+
+本包仅复制能帮助判断失败性质的有限结果、preflight、stderr/stdout 及 R1 清理收据。原脚本与完整原始目录继续保留在以下路径；没有改写、重新运行或把失败轮次覆盖成成功。
+
+| 轮次 | 原脚本（字节 / SHA-256） | 结果 | 具体状态 |
+|---|---|---|---|
+| R1 | `D:\bt_api_py\.codex-tmp\it10_mig04_certlib_consumer_step06_supplement_r1_20261016.py`（17,489 / `f59b44c1c4d854c5599893b62577c4a85fa09a893ff27d610b011f29dd3260bd`） | `D:\temp\it10-mig04-certlib-consumer-step06-supplement-r1-20261016\result.json`（11,404 / `3fc13df54a08d5e47febf3c934f6379ad7efdafaa48288b1a526f5d44e92344e`） | CMD AutoRun `ver` 触发 Conda/python 递归；Root 只清理本轮拥有的后代，最终收据记录 `owned_remaining=0`。本包保留结果、preflight 和最终收据。 |
+| R2 | `D:\bt_api_py\.codex-tmp\it10_mig04_certlib_consumer_step06_supplement_r2_20261016.py`（36,073 / `d111dc1717419bd1b7c2cd06f1b29be290d2b804c9d7b3de40eaf109ba47ee0b`） | 没有生成 child/result/output | Root preflight 在 CPython `subprocess.py` 源 pin 转录长度错误处退出；未启动 step06。原脚本保留。 |
+| R3 | `D:\bt_api_py\.codex-tmp\it10_mig04_certlib_consumer_step06_supplement_r3_20261016.py`（36,074 / `c793a8fe760cce94844721e3e8f666da50119a6c4f345de2d963eb9e10c0bd1c`） | `D:\temp\it10-mig04-certlib-consumer-step06-supplement-r3-20261016\result.json`（23,607 / `4def695595f4aa3ac9dd9f05291a8911e8d44e8801e4de86b7507bc4980f0d20`） | 安装版 NumPy `check_support_sve` 的本机 `lscpu` 探测被 harness 进程闸门拒绝；R4 后续增加精确源绑定探测。 |
+| R4 | `D:\bt_api_py\.codex-tmp\it10_mig04_certlib_consumer_step06_supplement_r4_20261016.py`（57,179 / `4960b4c3445dbffa02d1d5fb4baa7de714de308890fd503ab69dc009c21b25bc`） | 未生成 child/result | preflight 将 Windows 反斜杠源码路径按斜杠匹配，未启动 child。 |
+| R5 | `D:\bt_api_py\.codex-tmp\it10_mig04_certlib_consumer_step06_supplement_r5_20261016.py`（57,198 / `accac6081e16256a933220bc71a3de868cfc9e4b4f33278555966e5a0b2fa036`） | `D:\temp\it10-mig04-certlib-consumer-step06-supplement-r5-20261016\result.json`（37,564 / `61f535402b59c1e6a2efa9582cadef3cb940b15f7105cc45598848ec1afe0d73`） | child 在 imports 前由 CRLF/LF 文本断言退出；R6 只规范化解码副本，原 bytes pin 保持不变。 |
+| R6 | `D:\bt_api_py\.codex-tmp\it10_mig04_certlib_consumer_step06_supplement_r6_20261016.py`（57,220 / `d9780658566ea486e984d1d024de3c886b840e750d7a99d67aaa8c11b131d003`） | `D:\temp\it10-mig04-certlib-consumer-step06-supplement-r6-20261016\result.json`（37,593 / `537e3f36d5baa618341f953e673b0b8f68fc22b786fe05b81805696a2fb3c181`） | 安装版 `bt_api_base.event_clock` 的本机 `socket.gethostname` 元数据被一刀切 guard 拒绝；R7 记录真实值但不留存 hostname。 |
+| R7 | `D:\bt_api_py\.codex-tmp\it10_mig04_certlib_consumer_step06_supplement_r7_20261016.py`（64,542 / `4ef3c282640f69d697318f505dbbe8148d32b3010c2a4c460db635aff70ff2c7`） | `D:\temp\it10-mig04-certlib-consumer-step06-supplement-r7-20261016\result.json`（43,110 / `f3d86415dc2114a789cc476324bfe4ca352bb84c1f6e3aa9e4389cc9662066e6`） | 安装版 urllib3 的本机 IPv6 loopback 能力探测触发 `socket.__new__`；R8 按来源约束真实探测。 |
+| R8 | `D:\bt_api_py\.codex-tmp\it10_mig04_certlib_consumer_step06_supplement_r8_20261016.py`（97,923 / `cfa7fad48c8406de483263669891abbc816c5ff3875aefeb16fbea4a1e2de06d`） | 仅 `preflight.json`（19,534 / `38ce23020a55e2c56d59ecbe26e9a22545dbdfa128345f9135480adb6ed4d08a`） | 生成子程序的 `-c` 命令行 36,776 字符超过 Windows 32,767 限值，WinError 206 在 child 启动前发生；R9 保持 child bytes，以固定文件 argv 启动。 |
+
+R1–R8 是已消费失败/未启动尝试，不是可重试许可。R9 仅为原消费者结果的 step06 增量，不重跑 01–05，不重建旧 wheel，不重装、不新建环境。

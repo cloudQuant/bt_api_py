@@ -1,0 +1,5 @@
+# MIG04 R211 candidate evidence bundle
+
+This archive contains selected, hash-preserved raw evidence for the frozen MIG04 Binance distribution combination: R161 original matrix, R197 certlib package artifacts/install subcheck, original consumer R1 steps 01–05, and additive successful step06 R9. `bundle-manifest.json` lists each bundled raw member's source path, byte length and SHA-256. It intentionally excludes wheelhouse/venv trees, environment files, account data, credentials and unrelated Iteration41 work.
+
+R1–R8 failure history is preserved at the original paths and indexed in `history-index.md`; selected result/preflight/log files are copied under `history/`. The successful R9 result records `formal_mig04_acceptance=false`; the draft adjudication outside this archive is for Root review only.

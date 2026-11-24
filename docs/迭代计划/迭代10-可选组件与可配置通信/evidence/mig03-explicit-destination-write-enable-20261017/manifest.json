@@ -1,0 +1,138 @@
+{
+  "schema": "iteration10-mig03-explicit-destination-write-enable-r1-v1",
+  "status": "PREPARED_FOR_INDEPENDENT_REVIEW_NOT_STAGED_OR_COMMITTED",
+  "date": "2026-10-17",
+  "repository": {
+    "path": "D:/bt_api_py",
+    "branch": "dev",
+    "head_at_freeze": "e6cd356c2c281543202ccf5f5f2433aeebfc6d65"
+  },
+  "execution_submodule": {
+    "path": "bt_api/bt_api_execution",
+    "head_at_freeze": "6eb925254e5653f25c8adf6fd3b318176fd46008"
+  },
+  "source_scope": [
+    {
+      "path": "bt_api_py/service_migration_boundary.py",
+      "bytes": 67756,
+      "sha256": "cdb3f3f61c220e0fba7f328d5823036dd526c4e61943e5c403e20836f22f4e73",
+      "scope": "Whole dedicated MIG03 source module."
+    },
+    {
+      "path": "tests/integration/test_service_migration_boundary_enable.py",
+      "bytes": 39303,
+      "sha256": "a967bfc381eb27f18da798fcb0c3d32bcec0c6ed9eea4f56605be8af06cafe5e",
+      "scope": "Whole dedicated integration node file."
+    },
+    {
+      "path": "bt_api_py/service_host.py",
+      "bytes": 98321,
+      "sha256": "0688d6151fa81b90aca25573f85719ad4a9ca58513e0a2bebc0b83bdbda77256",
+      "scope": "Partial only: ServiceHost.migration_consumer_inventory and ServiceHost.enable_migration_writes; exact extracted bytes are in raw-evidence.zip."
+    },
+    {
+      "path": "bt_api_py/service_registry.py",
+      "bytes": 126444,
+      "sha256": "75268e90f4a868ad4bc2e2f861a7611f20cfa0227960e8649e923dead31ff38a",
+      "scope": "Partial only: MIG03 latch state/methods and _dispatch write-attempt classification; exact extracted bytes are in raw-evidence.zip."
+    },
+    {
+      "path": "bt_api_py/service_execution_group.py",
+      "bytes": 103389,
+      "sha256": "ec7bd72918eacd98d3a2f891e7fcd173cb028132e0a1a11187f4d2fd1e026563",
+      "scope": "DIM09 dependency partial hunk only: maintain_registrations recover flag."
+    },
+    {
+      "path": "bt_api/bt_api_execution/src/bt_api_execution/group_order_contracts.py",
+      "bytes": 71219,
+      "sha256": "ebbcf80a00bbec3c34eb935f97bcf63261105ed4215e6cb74f7312bc4c3bf682",
+      "scope": "DIM09 dependency partial hunk only: GroupBudgetReservationState.DENIED."
+    }
+  ],
+  "evidence": {
+    "evidence_level": "LOCAL_SYNTHETIC_MIG03_DESTINATION_ENABLE_NODES_ONLY_NOT_FORMAL_MIG03_PASS",
+    "source_qa": false,
+    "host_provider_scope": "Temporary SQLite; actual local SDK Host/Registry/Runtime and synthetic provider; no provider account contacted.",
+    "nodes": [
+      {
+        "selector": "tests/integration/test_service_migration_boundary_enable.py::test_production_consumer_inventory_binds_authority_scope_and_exact_stop_set",
+        "status": "PASS",
+        "execution": "Earlier local focused full-file run. Original stdout/stderr not retained as files.",
+        "raw_output_retained": false
+      },
+      {
+        "selector": "tests/integration/test_service_migration_boundary_enable.py::test_nonempty_group_and_origin_binding_survive_same_path_restart_and_query",
+        "status": "PASS",
+        "execution": "Later local two-selector run. This node passed. Original stdout/stderr not retained as files.",
+        "raw_output_retained": false
+      },
+      {
+        "selector": "tests/integration/test_service_migration_boundary_enable.py::test_destination_host_waits_for_explicit_enable_then_seals_first_write",
+        "status": "PASS",
+        "command": "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1; python -m pytest -q -p no:cacheprovider tests/integration/test_service_migration_boundary_enable.py::test_destination_host_waits_for_explicit_enable_then_seals_first_write",
+        "python_exit_code": 0,
+        "summary": "1 passed, 2 warnings",
+        "warnings": [
+          "Existing asyncio configuration warning when plugin autoload is disabled.",
+          "pyzmq Proactor selector thread warning."
+        ],
+        "raw_output_retained": false
+      }
+    ],
+    "semantics": [
+      "Destination post-enable submit is expected REJECTED because the migrated UNKNOWN order retains its real Risk dispatch-inflight freeze.",
+      "Registry fact_kind=\"dispatch\" is a pre-handler write-attempt barrier, not provider dispatch or successful commit.",
+      "Inventory omission test uses synthetic receipts and does not prove real stop of every configured/active consumer."
+    ]
+  },
+  "artifact_payloads": [
+    {
+      "path": "candidate/bt_api_py/service_migration_boundary.py",
+      "bytes": 67756,
+      "sha256": "cdb3f3f61c220e0fba7f328d5823036dd526c4e61943e5c403e20836f22f4e73"
+    },
+    {
+      "path": "candidate/tests/integration/test_service_migration_boundary_enable.py",
+      "bytes": 39303,
+      "sha256": "a967bfc381eb27f18da798fcb0c3d32bcec0c6ed9eea4f56605be8af06cafe5e"
+    },
+    {
+      "path": "candidate/owned_hunks/service_host_migration_methods.py",
+      "bytes": 2687,
+      "sha256": "4fb87a3943e482794a3d0aae9c1c4a8c5b92118521de3b0b62e4a372c361d87b"
+    },
+    {
+      "path": "candidate/owned_hunks/service_registry_migration.py",
+      "bytes": 5796,
+      "sha256": "c2e554549cd770f498be4f21074485b8fd1e61075c253696a4c237d54f345d04"
+    },
+    {
+      "path": "dependencies/dim09_maintain_registrations_recover_flag.txt",
+      "bytes": 724,
+      "sha256": "492aecf00251fa33785368dd55a0e640f46e6531d25ad2790bbb7d173dda03ec"
+    },
+    {
+      "path": "dependencies/dim09_GroupBudgetReservationState.py",
+      "bytes": 211,
+      "sha256": "97c56e41d1b9b2f219c7b6d6020578fb0d38da4fc0b687a49f0544fab3b9380a"
+    },
+    {
+      "path": "execution/node-results-transcribed.json",
+      "bytes": 2050,
+      "sha256": "14562e6f385ac42e0c4ccfcc9d881815012fe60998615f812c68a0624c453cfb"
+    },
+    {
+      "path": "execution/raw-output-retention.md",
+      "bytes": 387,
+      "sha256": "9adcc10d35a22519f4b474f2fbe4ab45b5de74567bb091725cb7599f514b1685"
+    }
+  ],
+  "raw_evidence_zip": {
+    "bytes": 28458,
+    "sha256": "62e06a32070b854a76c3b2726828262c08be4d110b4181887bfe3ea66de58932"
+  },
+  "staging": "not staged; no commit",
+  "unrelated_status_preserved": true,
+  "status_snapshot_sha256": "f6fcba8bbc81e9169a9b8f364751ea831c2a26dadd06b3bd40caf8f82b8ec364",
+  "limitation": "This is local synthetic evidence only and does not prove production-wide process ownership or actual stop receipts for every configured consumer."
+}

@@ -1,0 +1,11 @@
+# AFI01 owner scope through ServiceHost — focused candidate R1
+
+This candidate adds one end-to-end test for the persisted-owner boundary committed as `860bd7ba034f1a13db46e48f0fd5d4115274dd3f`. The test persists two active `User` identities and two separate portfolio compositions, then exercises the real FastAPI service-read and portfolio routers, per-owner SDK read workers, and a local SQLite-backed ServiceHost with synthetic provider behavior.
+
+The author run passed one focused node in 3.93 seconds. It verified each owner can read only their own synthetic order and portfolio, forged user/actor/principal/delegate/tenant/workspace selectors do not change the authenticated owner, cross-account/order-scope/portfolio requests are denied, and denied reads add no ServiceRead worker operations or ServiceHost admission/provider/query counts. The HTTP client uses `httpx.ASGITransport`; this is an in-process HTTP route integration, not a TCP listener. The provider and exchange data are synthetic.
+
+Three setup attempts failed before the ServiceHost started: a test syntax error, a missing SDK source-root path in the venv, and the reused R93 helper's import-time synthetic-settings assertion. The common SDK path issue was diagnosed; the passing attempt used explicit SDK source roots and a temporary test-only settings accessor around that helper import. After that pass, the test's finalizer was tightened so a missing or malformed ServiceHost close reply could not be swallowed. That test-only delta is recorded as R2 in the sibling `afi01-owner-servicehost-integration-r2-20261017` directory, which supersedes this R1 candidate. Production files were not changed by R2.
+
+The exact candidate pin, command, source roots, result and limits are recorded in `author-focused-run.json`; captured pytest output is in `author-focused-run.log`. Current candidate test: `tests/test_afi01_owner_scope_service_host_integration.py`, 20,132 bytes, SHA-256 `01bd113af3e0646f73dc70eb388e8fa154c7e5266e587acafad7e4155972e13`.
+
+This is author evidence only. Root review and a Root-controlled focused run against rebound current source pins are still required before formal adjudication. No formal plan text or other source was changed in this round.

@@ -1,0 +1,8 @@
+case_id: MIG04
+credentials:
+  restricted_api_key_env: MIG04_DRY_OPTIONAL_KEY
+topology:
+  transport: direct
+  execution: false
+  risk: false
+  monitor: false

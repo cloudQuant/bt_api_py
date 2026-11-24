@@ -1,0 +1,9 @@
+# MIG03 legacy first-write compatibility safety — accepted local round
+
+Repository: `D:/bt_api_py`, branch `dev`. QA ran at `3b8025b7f81ad664d7da80796497fcb7419eedb3`; the delivery parent observed while preparing this packet is `1ee1c1ea9aefa961f0c555d0487f03bac2511521`. Root assigns the round sequence after the current SDK commit queue. This packet is prepared, not staged or committed.
+
+The legacy `record_migration_first_write` compatibility API now seals only an `ENABLED` marker. It refuses `COMMITTED` with no marker mutation; absence remains a benign no-op. The new Host integration regression proves a destination that restarts while the marker is `COMMITTED` remains write-disabled and makes no provider call when the legacy API is attempted. The drill now uses stable deployment epochs separately from per-process Registry epochs and enables only after a destination readback. Its readback is local synthetic evidence, not an external fence proof.
+
+Validation retained in `raw-evidence.zip`: the corrected affected unit selectors passed 6 cases (R3); the Host restart node passed 1 case (R4, with one existing pyzmq Proactor-loop warning); the first drill selector passed 1 case after fixture correction (R7). The second drill selector passed in R6 while the first failed on an absent fixture helper; the failed R2/R5/R6 outputs remain preserved. R1 stopped before pytest because the PowerShell `python` function exposed a null executable source. No accepted concurrent start/arm selector was rerun. Compilation and scoped `git diff --check` passed.
+
+Independent static review returned `GO_STATIC` for the six pinned payloads. Root accepted this as a local synthetic safety round. It does not establish full MIG03 completion, configured consumer quiescence, a nonempty production cutover, or real provider/account behavior. No tracker count is claimed. Other lanes' staged index entries and shared Host/Registry work were not touched.

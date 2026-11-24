@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "round_id": "iteration10-scn01-simnow-certlib-fail-closed-r1-2026-10-16",
+  "status": "READY_FOR_ROOT_SOURCE_QA",
+  "evidence_level": "SOURCE_FAKE_SIMNOW_NORMAL_FACTORY_FAIL_CLOSED_ONLY",
+  "repository": "D:/source_code/backtrader",
+  "branch": "dev",
+  "base_head": "438b127fcff2c0619b13835248ee3ef210cc0728",
+  "scope": [
+    {
+      "path": "examples/live/000_live_certification/simnow_penetration/certlib/__init__.py",
+      "role": "Move unsupported transport/component rejection ahead of the CTP client import and SDK-root resolution. The supported direct path body is unchanged.",
+      "sha256": "abb476fd2d0b5f6ad87809dbfbde25eab5f88f5a7c7ae5de5e060803fe0da64f",
+      "size_bytes": 2088
+    },
+    {
+      "path": "tests/unit/test_scn01_simnow_certlib_fail_closed.py",
+      "role": "Exercise the real factory source with an import sentinel for the CTP client across one unsupported transport and three unavailable component backends.",
+      "sha256": "992a9fb555a0fffc112c452c202613792b19f555e62d502ba4f39d66ac73ea48",
+      "size_bytes": 2097
+    }
+  ],
+  "root_command": [
+    "C:/anaconda3/python.exe",
+    "-B",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-q",
+    "-p",
+    "no:cacheprovider",
+    "-p",
+    "no:asyncio",
+    "tests/unit/test_scn01_simnow_certlib_fail_closed.py"
+  ],
+  "root_command_cwd": "D:/source_code/backtrader",
+  "expected": {
+    "collected": 4,
+    "passed": 4,
+    "failed": 0,
+    "network_or_provider_actions": 0,
+    "credential_or_config_reads": 0,
+    "ctp_client_import_attempts": 0,
+    "component_errors": [
+      "component_not_implemented:execution",
+      "component_not_implemented:risk",
+      "component_not_implemented:monitor"
+    ],
+    "transport_error": "transport_not_implemented:gateway_zmq"
+  },
+  "preserved_conditions": [
+    "No case strategy source, action, identity, approval, research boundary, or same-clock condition is modified.",
+    "A requested backend that is not implemented is rejected explicitly before provider-client import or SDK-root resolution.",
+    "The supported direct factory construction remains after the new early guard and is not exercised by this test."
+  ],
+  "not_established": [
+    "No provider or account acceptance.",
+    "No SCN01 formal case PASS or increase to the formal case count.",
+    "No CTP SDK availability, session, login, query, or order behavior.",
+    "No unified scenario, group, risk, registry, or dual-host acceptance."
+  ],
+  "author_local_result": {
+    "exit_code": 0,
+    "passed": 4,
+    "warning_count": 1,
+    "warning": "Existing pytest config option asyncio_default_fixture_loop_scope is unknown when the unrelated asyncio plugin is disabled.",
+    "command_adjustment": "The initial collection attempt hit the installed pytest-asyncio/pytest compatibility error before test collection; the synchronous test was then run with -p no:asyncio."
+  }
+}

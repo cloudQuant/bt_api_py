@@ -1,0 +1,1526 @@
+{
+  "schema": "iteration10-r249-bt-p5a-group-cerebro-evidence/v1",
+  "round": "R249",
+  "date": "2026-10-16",
+  "status": "READY_FOR_ROOT_SCOPED_DELIVERY",
+  "formal_case_pass_delta": 0,
+  "formal_case_count": "40/68 per current tracker; this package does not alter it",
+  "evidence_level": "BT_ADAPTER_CEREBRO_LOCAL_SERVICEHOST_CURVE_SYNTHETIC_PROVIDER_AUTHOR_RUN",
+  "claim_boundary": "One author-focused end-to-end Cerebro + local account/coordinator/monitor ServiceHost process + authenticated ZMQ/CURVE run passed with a SQLite synthetic provider. No exchange, real account, credentials, live provider, remote service, Root R28 rerun, formal DIM09 PASS, or nine-directory SCN02 closure is claimed.",
+  "backtrader": {
+    "repo": "D:\\source_code\\backtrader",
+    "branch": "dev",
+    "head_at_r28_run": "57c9fc613f263877b08da11eacadcb5a8eaccaad",
+    "candidate_scope_count": 2,
+    "candidate_files": [
+      {
+        "path": "backtrader/stores/service_execution_group.py",
+        "checkout_path": "D:\\source_code\\backtrader\\backtrader\\stores\\service_execution_group.py",
+        "bytes": 35792,
+        "sha256": "d46a4925534e999b8aa514f2f3e93f042ddf1684cbaf6e87a112cac2c07aa6c0",
+        "status_at_round": "candidate-overlay; Root scoped commit pending"
+      },
+      {
+        "path": "tests/integration/test_btapi_execution_group_cerebro_v3_host.py",
+        "checkout_path": "D:\\source_code\\backtrader\\tests\\integration\\test_btapi_execution_group_cerebro_v3_host.py",
+        "bytes": 68021,
+        "sha256": "46cc9e83306117a8c7dc26f41fa51c9ca30c96d12cf0b1aad0a3b22bf269bd1f",
+        "status_at_round": "candidate-overlay; Root scoped commit pending"
+      }
+    ],
+    "other_dirty_changes": "excluded and preserved; no other BT path is part of this candidate scope",
+    "r225_parent_packet": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/bt-p5a-group-cerebro-r225-20261016/manifest.json"
+  },
+  "sdk_fixed_sources": {
+    "sdk_root_runtime_archive_commit": "77b86e2139708455722a3f11955cce18b14647fe",
+    "sdk_gitlinks": {
+      "bt_api/bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+      "bt_api/bt_api_execution": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e",
+      "bt_api/bt_api_risk": "ede55dec5e8e7ad1c5376969eb54e9933ebf9e85",
+      "bt_api/bt_api_monitor": "536a4f04747182749fabdac5e28624f80465bc53",
+      "bt_api/bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e",
+      "bt_api/bt_api_binance": "7d2270ceac3fa6ff2c41e5b8776bdd47ae01526b",
+      "bt_api/bt_api_bitget": "2a555344b8826a8707e653f4181e79c12f33bb41",
+      "bt_api/bt_api_bybit": "2bfa8402fb6b6f506f1f356716dce315f68fde12",
+      "bt_api/bt_api_coinbase": "a41008fdbc0dc636c9acf532ad8ccefdf67c83c2",
+      "bt_api/bt_api_ctp": "a497bab6bb1b904891461aead1857093078226f0",
+      "bt_api/bt_api_dydx": "0323b9c1c3de0f197a1ac06016fa531e5d727efe",
+      "bt_api/bt_api_gateio": "1c629bfedd3c8e40c1cbdb57a0872bf224316a79",
+      "bt_api/bt_api_htx": "f63a1d990f2d2afbd12b131c9af5e51a6951247f",
+      "bt_api/bt_api_hyperliquid": "a745909fe1cb861fe4127c2a55db1fc594a35134",
+      "bt_api/bt_api_ib_web": "6ae25e92486301fafd2b0b458a35e890ec1042c3",
+      "bt_api/bt_api_kraken": "48a9ecc5b26bb160fd3d4b695b059727baa401a4",
+      "bt_api/bt_api_mexc": "f0a310ada3773cbade4c28b9694b704e42d96fde",
+      "bt_api/bt_api_mt5": "6bf2ec03d66c02f7bf0661888f0d6b3e84804415",
+      "bt_api/bt_api_okx": "fb24657f4b7aa4834935c3dd0c819c1c51f9358f"
+    },
+    "root_repository_head_guard_only": "9a1495ad4be0670f7f2efe7e81c3ae9650877023",
+    "run_repository_head_guards": {
+      "D:\\source_code\\backtrader": "57c9fc613f263877b08da11eacadcb5a8eaccaad",
+      "D:\\bt_api_py": "9a1495ad4be0670f7f2efe7e81c3ae9650877023",
+      "D:\\bt_api_py\\bt_api\\bt_api_base": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+      "D:\\bt_api_py\\bt_api\\bt_api_execution": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e",
+      "D:\\bt_api_py\\bt_api\\bt_api_risk": "503a0b351e309529a2e863aff9f57d0846d7d9cf",
+      "D:\\bt_api_py\\bt_api\\bt_api_monitor": "536a4f04747182749fabdac5e28624f80465bc53",
+      "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+    },
+    "dirty_sdk_checkout_bytes_exported": false,
+    "current_sdk_base_checkout_bytes_exported": false,
+    "source_archives": [
+      {
+        "path": "fixed-source-archives/backtrader-baseline-438b.zip",
+        "bytes": 1561111,
+        "sha256": "4dba87ff948f5eb17c494b29103fa5b282d1adae3f383f740ffd700c063d91d1"
+      },
+      {
+        "path": "fixed-source-archives/sdk-base-b4aabd.zip",
+        "bytes": 172244,
+        "sha256": "c897ad6149d26591399be119ed089e204143c50622b92dd1be0e3b3846f09722"
+      },
+      {
+        "path": "fixed-source-archives/sdk-execution-cb66.zip",
+        "bytes": 297865,
+        "sha256": "2e7cfe19a116f63bf6091b19e15b8bd2781ef6e49ddd303776d78490c3f3ac1d"
+      },
+      {
+        "path": "fixed-source-archives/sdk-host-fixtures-77b86.zip",
+        "bytes": 15409,
+        "sha256": "7cd443058332e326b54a5adcc40f635db6f274b7f1d48328b87a59fca783f596"
+      },
+      {
+        "path": "fixed-source-archives/sdk-monitor-536a.zip",
+        "bytes": 84641,
+        "sha256": "941d4badd2cab7fbf967abefcd7543fefc84a40f9b3bb19f633243a23bac2c57"
+      },
+      {
+        "path": "fixed-source-archives/sdk-risk-ede55.zip",
+        "bytes": 222886,
+        "sha256": "2b61cbdfd6c7291b81d160bde781211a80c64fd74e89a03e3f4c5c2b4ab20612"
+      },
+      {
+        "path": "fixed-source-archives/sdk-root-77b86.zip",
+        "bytes": 1299571,
+        "sha256": "47a5f07c08b3f93b4cbd1fa796370d955f7dbeb3d04aa7ad09669121685c5ba6"
+      },
+      {
+        "path": "fixed-source-archives/sdk-transport-a397.zip",
+        "bytes": 24379,
+        "sha256": "118cb2cd04327a61717b5eb129954a20ef49242ec70dfc6779d7c2b2db93ab05"
+      }
+    ],
+    "scope_note": "Accepted immutable SDK runtime and gitlink source bundles (including R174/R183/R187 group contracts) were used. No SDK source file is a candidate delta; dirty checkout bytes were excluded. 14 plugin roots and their generated dist-info entry points are pinned by the fixed export manifest."
+  },
+  "fixed_source_closure": {
+    "export_path": "D:\\temp\\iteration10-bt-p5a-group-source-20261016-r28",
+    "source_manifest": {
+      "path": "D:\\temp\\iteration10-bt-p5a-group-source-20261016-r28\\source-manifest.json",
+      "bytes": 543062,
+      "sha256": "a7787c22c658c7efa209aef3be01dfcab88959411016431e346d152074774a81"
+    },
+    "spec_top_level_source_manifest_sha256": "a7787c22c658c7efa209aef3be01dfcab88959411016431e346d152074774a81",
+    "spec_source_sha256_manifest_entry": "a7787c22c658c7efa209aef3be01dfcab88959411016431e346d152074774a81",
+    "candidate_overlay_pins": [
+      {
+        "path": "backtrader/stores/service_execution_group.py",
+        "checkout_path": "D:\\source_code\\backtrader\\backtrader\\stores\\service_execution_group.py",
+        "bytes": 35792,
+        "sha256": "d46a4925534e999b8aa514f2f3e93f042ddf1684cbaf6e87a112cac2c07aa6c0",
+        "status_at_round": "candidate-overlay; Root scoped commit pending"
+      },
+      {
+        "path": "tests/integration/test_btapi_execution_group_cerebro_v3_host.py",
+        "checkout_path": "D:\\source_code\\backtrader\\tests\\integration\\test_btapi_execution_group_cerebro_v3_host.py",
+        "bytes": 68021,
+        "sha256": "46cc9e83306117a8c7dc26f41fa51c9ca30c96d12cf0b1aad0a3b22bf269bd1f",
+        "status_at_round": "candidate-overlay; Root scoped commit pending"
+      }
+    ],
+    "source_count": 1440,
+    "source_pins_unchanged": true,
+    "repository_heads_before": {
+      "D:\\source_code\\backtrader": "57c9fc613f263877b08da11eacadcb5a8eaccaad",
+      "D:\\bt_api_py": "9a1495ad4be0670f7f2efe7e81c3ae9650877023",
+      "D:\\bt_api_py\\bt_api\\bt_api_base": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+      "D:\\bt_api_py\\bt_api\\bt_api_execution": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e",
+      "D:\\bt_api_py\\bt_api\\bt_api_risk": "503a0b351e309529a2e863aff9f57d0846d7d9cf",
+      "D:\\bt_api_py\\bt_api\\bt_api_monitor": "536a4f04747182749fabdac5e28624f80465bc53",
+      "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+    },
+    "repository_heads_after": {
+      "D:\\source_code\\backtrader": "57c9fc613f263877b08da11eacadcb5a8eaccaad",
+      "D:\\bt_api_py": "9a1495ad4be0670f7f2efe7e81c3ae9650877023",
+      "D:\\bt_api_py\\bt_api\\bt_api_base": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+      "D:\\bt_api_py\\bt_api\\bt_api_execution": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e",
+      "D:\\bt_api_py\\bt_api\\bt_api_risk": "503a0b351e309529a2e863aff9f57d0846d7d9cf",
+      "D:\\bt_api_py\\bt_api\\bt_api_monitor": "536a4f04747182749fabdac5e28624f80465bc53",
+      "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+    },
+    "repository_heads_unchanged": true,
+    "historical_nested_accepted_source_binding_manifest_sha256": "a7df7d5f0fbcdd4a99f7fecac3923c16c7017a173d4d0c21c633ace133f55615",
+    "historical_nested_metadata_note": "The nested accepted_source_binding manifest hash is historical; the R28 top-level manifest pin and the source_sha256 entry both match the exported manifest, and R28's 1440 source pins were verified unchanged. Independent static review found this non-blocking."
+  },
+  "r14_reused_node": {
+    "output_directory": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14",
+    "disposition": "reuse adapter node PASS only; mixed run failed in separate Host node and is not an overall pass",
+    "junit": {
+      "path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14\\junit.xml",
+      "bytes": 29247,
+      "sha256": "6a15aa2117068e836216f9eb4376d3b35f3bdf3466f3a78be66eaeb99a83dab8"
+    },
+    "result": {
+      "path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14\\result.json",
+      "bytes": 1672,
+      "sha256": "2799991ccbeaa448cb486fc300fbbf03ff51a2fec0f3417f9976904fa3e8418d"
+    },
+    "stdout": {
+      "path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14\\stdout.log",
+      "bytes": 37141,
+      "sha256": "91629fde745331244b15e45e7b4b8496b7dae9a6687986f9140dd21a514bb97e"
+    },
+    "stderr": {
+      "path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14\\stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "summary": "Two nodes: adapter binding/tamper node passed; C/P/F Host node failed Monitor ServiceHost startup (`START_FAILED`) and bounded cleanup reported monitor AssertionError. Root R14 remains preserved; this package does not relabel it as a successful run."
+  },
+  "r28_author_run": {
+    "node": "test_v3_cerebro_paired_three_leg_snapshot_over_real_curve_hosts",
+    "output_directory": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28",
+    "pytest_exit": 0,
+    "junit": {
+      "path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\junit.xml",
+      "bytes": 324,
+      "sha256": "8a1f27ef7cbbdb6d86e2f2b5c125b31ed3621eff0be1c1a93507120ac97dd8b9"
+    },
+    "result": {
+      "path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\result.json",
+      "bytes": 1673,
+      "sha256": "b484a1ee5406c8627bc398d644d485aff8cb8b3cd5d7e7167fb4e49b50e8e602"
+    },
+    "stdout": {
+      "path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\stdout.log",
+      "bytes": 658,
+      "sha256": "f0be558cd3ac9589aaffc02c5a0a888a6d252e288c8de581116e3104a733b4e8"
+    },
+    "stderr": {
+      "path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "focused_spec": {
+      "path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\spec.json",
+      "bytes": 288699,
+      "sha256": "0214e07a17082c7ed17a4dbd5781a78d35fb16f18e41a030ed1313cbfefc5e14"
+    },
+    "source_before": {
+      "path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\source-before.json",
+      "bytes": 267254,
+      "sha256": "0e9dbe219eefb07dc47a8a8cc65e23554702ce2ab4ccd3a9812e375caac69133"
+    },
+    "source_after": {
+      "path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\source-after.json",
+      "bytes": 267254,
+      "sha256": "0e9dbe219eefb07dc47a8a8cc65e23554702ce2ab4ccd3a9812e375caac69133"
+    },
+    "elapsed_seconds": 35.913,
+    "existing_warning": "One existing Quandl deprecation warning; stderr is empty.",
+    "observations": [
+      "Distinct typed Call/Put/Future instruments, ratios, quantities, prices, multipliers, contract steps, and metadata are preserved.",
+      "Budget quote gross notionals 80/60/20000 USD (total 20140 USD).",
+      "Persisted ATTEMPT_STARTED provider_request data asserts actual leg keys, quantities, prices, native units, and sides.",
+      "Synthetic SQLite provider records three order writes, three order queries, three fills; typed snapshot is PAIRED with zero residual vector and claims/resolutions.",
+      "Shared Broker economics remain unchanged and strategy-scoped route behavior is asserted.",
+      "All three local ServiceHosts, SDK runtimes/session/store complete bounded normal shutdown."
+    ],
+    "root_run": "No Root R28 rerun recorded in this packet; this is the author fixed-source focused run."
+  },
+  "failure_history": [
+    {
+      "round": "R23",
+      "kind": "author focused run; preserved failure history reference",
+      "path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r23",
+      "result": {
+        "path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r23\\result.json",
+        "bytes": 1673,
+        "sha256": "0a5581ccdacea45595d7eea19a6140606535d87ca1d271ba335332f059673d4e"
+      },
+      "summary": "Three-leg Host fixture did not satisfy its PAIRED snapshot assertion; R23-R25 remain unchanged historical failures. R25 traced the fixture unit mismatch, later confirmed precisely by the R26 static diagnosis."
+    },
+    {
+      "round": "R24",
+      "kind": "author focused run; preserved failure history reference",
+      "path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r24",
+      "result": {
+        "path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r24\\result.json",
+        "bytes": 1673,
+        "sha256": "19694bbcdeb49b61bc0d2794ab71564a411b1b37323309c17f84d9d3efeaeb46"
+      },
+      "summary": "Three-leg Host fixture did not satisfy its PAIRED snapshot assertion; R23-R25 remain unchanged historical failures. R25 traced the fixture unit mismatch, later confirmed precisely by the R26 static diagnosis."
+    },
+    {
+      "round": "R25",
+      "kind": "author focused run; preserved failure history reference",
+      "path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r25",
+      "result": {
+        "path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r25\\result.json",
+        "bytes": 1673,
+        "sha256": "991a8c3be8d4208e9f039a7572eb6399aebb4d4b4e96c5796063566981d4fb88"
+      },
+      "summary": "Three-leg Host fixture did not satisfy its PAIRED snapshot assertion; R23-R25 remain unchanged historical failures. R25 traced the fixture unit mismatch, later confirmed precisely by the R26 static diagnosis."
+    },
+    {
+      "round": "R17",
+      "kind": "Root fixed-source Host run",
+      "path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r17",
+      "summary": "Monitor Host startup failed; bounded finite payload was retained instead of being masked by cleanup."
+    },
+    {
+      "round": "R26",
+      "kind": "author focused run and independent static diagnosis",
+      "path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26",
+      "result": {
+        "path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\result.json",
+        "bytes": 1673,
+        "sha256": "e23987975183e334b1626efa3ef29e3504b7565d1e8a312c6c64e7d8224ff699"
+      },
+      "summary": "The fixture used quantity_unit=contracts on FIXTURE___SPOT; fixed SDK DirectBackend rejects that unit before feed/mapper/provider. No production allowlist was weakened."
+    },
+    {
+      "round": "R27",
+      "kind": "author focused run",
+      "path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27",
+      "result": {
+        "path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\result.json",
+        "bytes": 1673,
+        "sha256": "5399311bedba08972f100330d9b876ba71247b2f0ce77def4b661bab2a641c79"
+      },
+      "summary": "Service path reached PAIRED, three provider writes/queries/fills and clean Host shutdown; test failed only by reading nonexistent OrderIntent.quantity_unit."
+    },
+    {
+      "round": "R14",
+      "kind": "Root mixed run",
+      "path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14",
+      "summary": "Retain its adapter-node PASS separately from its failed Host node; raw result stays unchanged."
+    }
+  ],
+  "independent_static_review": {
+    "reviewer": "/root/review_bt_v3_cpf",
+    "disposition": "GO_STATIC_R28",
+    "scope": "Exact R28 adapter/test/spec/manifest pins; no QA/Host rerun or edits.",
+    "summary": "No static blocker. Adapter and test should be committed together. Reviewer confirms only test changed from R27; adapter is unchanged. DIM09 and SCN02 remain partial."
+  },
+  "formal_boundary": {
+    "dim09": "Partial. Missing staged zero/partial fills, rejection/UNKNOWN, restart and same-ID recovery, duplicate-dispatch prevention, nonzero residual compensation, budget-release and costs policy acceptance. No automatic formal PASS.",
+    "scn02": "One normal C/P/F path only; nine-directory matrix not closed.",
+    "bt03": "No separate formal case row; do not count separately.",
+    "tracker": "40/68 per current tracker; Root owns progress updates."
+  },
+  "archive": {
+    "path": "raw-evidence.zip",
+    "bytes": 5083735,
+    "sha256": "1388b6289f5d7728561e454cd14e8cbdccbc50ffe5863ac46bfd149340a3b1e1",
+    "entry_count": 199,
+    "entries": [
+      {
+        "path": "candidate-source/backtrader/stores/service_execution_group.py",
+        "source_path": "D:\\source_code\\backtrader\\backtrader\\stores\\service_execution_group.py",
+        "bytes": 35792,
+        "sha256": "d46a4925534e999b8aa514f2f3e93f042ddf1684cbaf6e87a112cac2c07aa6c0"
+      },
+      {
+        "path": "candidate-source/tests/integration/test_btapi_execution_group_cerebro_v3_host.py",
+        "source_path": "D:\\source_code\\backtrader\\tests\\integration\\test_btapi_execution_group_cerebro_v3_host.py",
+        "bytes": 68021,
+        "sha256": "46cc9e83306117a8c7dc26f41fa51c9ca30c96d12cf0b1aad0a3b22bf269bd1f"
+      },
+      {
+        "path": "run-context/r28-focused-qa-spec.json",
+        "source_path": "D:\\bt_api_py\\.codex-tmp\\iteration10_bt_p5a_group_cerebro_root_focused_qa_r28_20261016.json",
+        "bytes": 288699,
+        "sha256": "0214e07a17082c7ed17a4dbd5781a78d35fb16f18e41a030ed1313cbfefc5e14"
+      },
+      {
+        "path": "run-context/r28-source-manifest.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-source-20261016-r28\\source-manifest.json",
+        "bytes": 543062,
+        "sha256": "a7787c22c658c7efa209aef3be01dfcab88959411016431e346d152074774a81"
+      },
+      {
+        "path": "fixed-source-archives/backtrader-baseline-438b.zip",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-source-20261016-r28\\backtrader-baseline-438b.zip",
+        "bytes": 1561111,
+        "sha256": "4dba87ff948f5eb17c494b29103fa5b282d1adae3f383f740ffd700c063d91d1"
+      },
+      {
+        "path": "fixed-source-archives/sdk-base-b4aabd.zip",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-source-20261016-r28\\sdk-base-b4aabd.zip",
+        "bytes": 172244,
+        "sha256": "c897ad6149d26591399be119ed089e204143c50622b92dd1be0e3b3846f09722"
+      },
+      {
+        "path": "fixed-source-archives/sdk-execution-cb66.zip",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-source-20261016-r28\\sdk-execution-cb66.zip",
+        "bytes": 297865,
+        "sha256": "2e7cfe19a116f63bf6091b19e15b8bd2781ef6e49ddd303776d78490c3f3ac1d"
+      },
+      {
+        "path": "fixed-source-archives/sdk-host-fixtures-77b86.zip",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-source-20261016-r28\\sdk-host-fixtures-77b86.zip",
+        "bytes": 15409,
+        "sha256": "7cd443058332e326b54a5adcc40f635db6f274b7f1d48328b87a59fca783f596"
+      },
+      {
+        "path": "fixed-source-archives/sdk-monitor-536a.zip",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-source-20261016-r28\\sdk-monitor-536a.zip",
+        "bytes": 84641,
+        "sha256": "941d4badd2cab7fbf967abefcd7543fefc84a40f9b3bb19f633243a23bac2c57"
+      },
+      {
+        "path": "fixed-source-archives/sdk-risk-ede55.zip",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-source-20261016-r28\\sdk-risk-ede55.zip",
+        "bytes": 222886,
+        "sha256": "2b61cbdfd6c7291b81d160bde781211a80c64fd74e89a03e3f4c5c2b4ab20612"
+      },
+      {
+        "path": "fixed-source-archives/sdk-root-77b86.zip",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-source-20261016-r28\\sdk-root-77b86.zip",
+        "bytes": 1299571,
+        "sha256": "47a5f07c08b3f93b4cbd1fa796370d955f7dbeb3d04aa7ad09669121685c5ba6"
+      },
+      {
+        "path": "fixed-source-archives/sdk-transport-a397.zip",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-source-20261016-r28\\sdk-transport-a397.zip",
+        "bytes": 24379,
+        "sha256": "118cb2cd04327a61717b5eb129954a20ef49242ec70dfc6779d7c2b2db93ab05"
+      },
+      {
+        "path": "fixed-runner/iteration10-focused-qa.py",
+        "source_path": "D:\\bt_api_py\\.codex-tmp\\iteration10-focused-qa.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "fixed-runner/iteration10-resume-sync-pytest.ini",
+        "source_path": "D:\\bt_api_py\\.codex-tmp\\iteration10-resume-sync-pytest.ini",
+        "bytes": 10,
+        "sha256": "578fc1cd12d8d642df8eff41d71d5119626e9f88f21fafadba6b1092ac840a93"
+      },
+      {
+        "path": "fixed-runner/materialize_iteration10_bt_p5a_r26.py",
+        "source_path": "D:\\temp\\materialize_iteration10_bt_p5a_r26.py",
+        "bytes": 20137,
+        "sha256": "683872d683ded931c4edf77e806df46aafcd376b8bd7f4e711f6e5feeb110fde"
+      },
+      {
+        "path": "runs/root-r14/command.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14\\command.json",
+        "bytes": 1899,
+        "sha256": "328fecaef64b2fb534eba8ffd6d2cd2eecd0f2ffc0482735058b98d346a61039"
+      },
+      {
+        "path": "runs/root-r14/exit.txt",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14\\exit.txt",
+        "bytes": 3,
+        "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+      },
+      {
+        "path": "runs/root-r14/junit.xml",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14\\junit.xml",
+        "bytes": 29247,
+        "sha256": "6a15aa2117068e836216f9eb4376d3b35f3bdf3466f3a78be66eaeb99a83dab8"
+      },
+      {
+        "path": "runs/root-r14/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-accepted.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-accepted.sqlite3",
+        "bytes": 20480,
+        "sha256": "90b82e0acb0d97a8735b63e0ac42f8384a020e25b639c3cc3c51538b60032cf3"
+      },
+      {
+        "path": "runs/root-r14/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-execution.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-execution.sqlite3",
+        "bytes": 520192,
+        "sha256": "a1169533ff54c32e19dc6c411814f1f1a0235aa2921914c70d238b511a73210e"
+      },
+      {
+        "path": "runs/root-r14/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-execution.sqlite3.service_execution_owner.lock",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-execution.sqlite3.service_execution_owner.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "runs/root-r14/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-group_authority.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-group_authority.sqlite3",
+        "bytes": 40960,
+        "sha256": "29a317e5d52c8f62fbf14f42481e20bdca54dacb38799965146f87e2acf998d0"
+      },
+      {
+        "path": "runs/root-r14/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-proof.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-proof.sqlite3",
+        "bytes": 20480,
+        "sha256": "590abbefb49c4a6a3178921ac44da95926902ab8e3d04e57a30427dd0152b0ab"
+      },
+      {
+        "path": "runs/root-r14/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-provider.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-provider.sqlite3",
+        "bytes": 36864,
+        "sha256": "72ac8fa06d8fd836557693f612c210ba3e810fb5aea531a48f535ae200d7724b"
+      },
+      {
+        "path": "runs/root-r14/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-registry.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-registry.sqlite3",
+        "bytes": 40960,
+        "sha256": "211765b5b6159ce3d5e1e565f05dc06c141633b5e416afcc4cf8745cf36600d1"
+      },
+      {
+        "path": "runs/root-r14/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-registry.sqlite3.service_registry.lock",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-registry.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "runs/root-r14/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-risk_gate.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-risk_gate.sqlite3",
+        "bytes": 327680,
+        "sha256": "da736e9398e113cfc37b88235d287d4127f7559b8c949ae80ef1cd8ef52e10ce"
+      },
+      {
+        "path": "runs/root-r14/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-risk_order_journal.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-risk_order_journal.sqlite3",
+        "bytes": 77824,
+        "sha256": "8553d53d9d8b7a931c75741cc596af808a0976ba9524d393f632f3b4943f5d50"
+      },
+      {
+        "path": "runs/root-r14/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-groups.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\coordinator-groups.sqlite3",
+        "bytes": 40960,
+        "sha256": "00e658055888d5f8c0ebdc56a1eaa9091fa2a7cd2f7847656a18678c08020d5a"
+      },
+      {
+        "path": "runs/root-r14/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-registry.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\coordinator-registry.sqlite3",
+        "bytes": 40960,
+        "sha256": "85ff6ad401ee9b33cdafaf702eda4b40884645c306ba2d8b12a56bd21777fbe1"
+      },
+      {
+        "path": "runs/root-r14/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-registry.sqlite3.service_registry.lock",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\coordinator-registry.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "runs/root-r14/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-run-bindings.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\coordinator-run-bindings.sqlite3",
+        "bytes": 12288,
+        "sha256": "64f2d19ed7b431e1fb2add1c920ff060ebbf1259af2c617b96c0bf946ff7ca00"
+      },
+      {
+        "path": "runs/root-r14/pytest-tmp/test_v3_cerebro_paired_three_l0/monitor-outbox.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\monitor-outbox.sqlite3",
+        "bytes": 28672,
+        "sha256": "99886ff56a53c574529da3d66cc97039b5f8b603d5288404430d9d5ec5d1b673"
+      },
+      {
+        "path": "runs/root-r14/result.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14\\result.json",
+        "bytes": 1672,
+        "sha256": "2799991ccbeaa448cb486fc300fbbf03ff51a2fec0f3417f9976904fa3e8418d"
+      },
+      {
+        "path": "runs/root-r14/runner.py",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14\\runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "runs/root-r14/running.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14\\running.json",
+        "bytes": 76,
+        "sha256": "3da380a39d93aed89ee74c7a1e1c2438155a85d1af91268064701e532ad2c784"
+      },
+      {
+        "path": "runs/root-r14/source-after.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14\\source-after.json",
+        "bytes": 156189,
+        "sha256": "bf9344b30fcb54d0558d19068d30fe61f90ed7ea590e16d757ceb497b57dbf57"
+      },
+      {
+        "path": "runs/root-r14/source-before.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14\\source-before.json",
+        "bytes": 156189,
+        "sha256": "bf9344b30fcb54d0558d19068d30fe61f90ed7ea590e16d757ceb497b57dbf57"
+      },
+      {
+        "path": "runs/root-r14/spec.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14\\spec.json",
+        "bytes": 167566,
+        "sha256": "02e29332eb6408fa473e08f386da034305593cff1f444a729a7e12801ee73e82"
+      },
+      {
+        "path": "runs/root-r14/stderr.log",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14\\stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "runs/root-r14/stdout.log",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r14\\stdout.log",
+        "bytes": 37141,
+        "sha256": "91629fde745331244b15e45e7b4b8496b7dae9a6687986f9140dd21a514bb97e"
+      },
+      {
+        "path": "runs/root-r17/command.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r17\\command.json",
+        "bytes": 3004,
+        "sha256": "a1f88938817c200d7e6321be665d0ea716d1e573cad4aa41f2642bc33ccec3e3"
+      },
+      {
+        "path": "runs/root-r17/exit.txt",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r17\\exit.txt",
+        "bytes": 3,
+        "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+      },
+      {
+        "path": "runs/root-r17/junit.xml",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r17\\junit.xml",
+        "bytes": 8327,
+        "sha256": "657ecd90ac9ee2678761d35169659ab4520b266622b2db68dfebd788d217d555"
+      },
+      {
+        "path": "runs/root-r17/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-accepted.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r17\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-accepted.sqlite3",
+        "bytes": 20480,
+        "sha256": "90b82e0acb0d97a8735b63e0ac42f8384a020e25b639c3cc3c51538b60032cf3"
+      },
+      {
+        "path": "runs/root-r17/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-execution.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r17\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-execution.sqlite3",
+        "bytes": 520192,
+        "sha256": "4618afe9e4a6e28db2a1245a5a83f4f3e37a96f5791b53a1149d049e6acc4eb1"
+      },
+      {
+        "path": "runs/root-r17/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-execution.sqlite3.service_execution_owner.lock",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r17\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-execution.sqlite3.service_execution_owner.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "runs/root-r17/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-group_authority.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r17\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-group_authority.sqlite3",
+        "bytes": 40960,
+        "sha256": "b315335cbc26de10c58fbf1bd1df1cf5def350834a9ce9029f0ec6213eee4ae9"
+      },
+      {
+        "path": "runs/root-r17/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-proof.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r17\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-proof.sqlite3",
+        "bytes": 20480,
+        "sha256": "543c44c23e46d2bad2abba0c013e09d4d45e48ea4c2d1cee3beed140a5aeedb7"
+      },
+      {
+        "path": "runs/root-r17/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-provider.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r17\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-provider.sqlite3",
+        "bytes": 36864,
+        "sha256": "72ac8fa06d8fd836557693f612c210ba3e810fb5aea531a48f535ae200d7724b"
+      },
+      {
+        "path": "runs/root-r17/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-registry.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r17\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-registry.sqlite3",
+        "bytes": 40960,
+        "sha256": "56490d9d4b7e9377e9eeb035cb9c326e807f89c9f894de157f4bd73f037c0fdd"
+      },
+      {
+        "path": "runs/root-r17/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-registry.sqlite3.service_registry.lock",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r17\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-registry.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "runs/root-r17/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-risk_gate.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r17\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-risk_gate.sqlite3",
+        "bytes": 327680,
+        "sha256": "33d43d9c32a302c0afb04e1aecc7a4d86269559a421cd8be35175040458c271e"
+      },
+      {
+        "path": "runs/root-r17/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-risk_order_journal.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r17\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-risk_order_journal.sqlite3",
+        "bytes": 77824,
+        "sha256": "8553d53d9d8b7a931c75741cc596af808a0976ba9524d393f632f3b4943f5d50"
+      },
+      {
+        "path": "runs/root-r17/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-groups.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r17\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\coordinator-groups.sqlite3",
+        "bytes": 40960,
+        "sha256": "00e658055888d5f8c0ebdc56a1eaa9091fa2a7cd2f7847656a18678c08020d5a"
+      },
+      {
+        "path": "runs/root-r17/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-registry.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r17\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\coordinator-registry.sqlite3",
+        "bytes": 40960,
+        "sha256": "f8c904d863cbeea8db99b6287ebd3fe8cedc97ab4614ed5ff78f5bde378406ed"
+      },
+      {
+        "path": "runs/root-r17/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-registry.sqlite3.service_registry.lock",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r17\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\coordinator-registry.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "runs/root-r17/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-run-bindings.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r17\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\coordinator-run-bindings.sqlite3",
+        "bytes": 12288,
+        "sha256": "64f2d19ed7b431e1fb2add1c920ff060ebbf1259af2c617b96c0bf946ff7ca00"
+      },
+      {
+        "path": "runs/root-r17/pytest-tmp/test_v3_cerebro_paired_three_l0/monitor-outbox.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r17\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\monitor-outbox.sqlite3",
+        "bytes": 28672,
+        "sha256": "99886ff56a53c574529da3d66cc97039b5f8b603d5288404430d9d5ec5d1b673"
+      },
+      {
+        "path": "runs/root-r17/result.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r17\\result.json",
+        "bytes": 1673,
+        "sha256": "aab19ac0a941f52302210b5256020d87170c951a02e653ab3283f94d73166070"
+      },
+      {
+        "path": "runs/root-r17/runner.py",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r17\\runner.py",
+        "bytes": 3400,
+        "sha256": "7c6dd88c57aebff4de4f88fce8c3623599db9369d499fbd42dc9df9c7ea5b7a0"
+      },
+      {
+        "path": "runs/root-r17/running.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r17\\running.json",
+        "bytes": 76,
+        "sha256": "4eb7c21f57b56a22be1409c44ef3fdd6c3ae87182d551f6046ed7c38bdfbad57"
+      },
+      {
+        "path": "runs/root-r17/source-after.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r17\\source-after.json",
+        "bytes": 267267,
+        "sha256": "cebfc64b4150f357f2389a207f44b879fba402fc6af879f4b0df17f15d9d56a1"
+      },
+      {
+        "path": "runs/root-r17/source-before.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r17\\source-before.json",
+        "bytes": 267267,
+        "sha256": "cebfc64b4150f357f2389a207f44b879fba402fc6af879f4b0df17f15d9d56a1"
+      },
+      {
+        "path": "runs/root-r17/spec.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r17\\spec.json",
+        "bytes": 284408,
+        "sha256": "4d7a15d09768506e2feb4d0b9f86711b183f4ed4f6bf961b7ef4062fcdbb4ed4"
+      },
+      {
+        "path": "runs/root-r17/stderr.log",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r17\\stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "runs/root-r17/stdout.log",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r17\\stdout.log",
+        "bytes": 11252,
+        "sha256": "6307b3708e72c3276224f1d556a9ec9b77772981d739f5dbe69029fffebfd87e"
+      },
+      {
+        "path": "runs/author-r26/command.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\command.json",
+        "bytes": 3008,
+        "sha256": "b43442f0396932f6ee053c77b485946799c61c3e316bf9a894f5bc05be2e4b2f"
+      },
+      {
+        "path": "runs/author-r26/exit.txt",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\exit.txt",
+        "bytes": 3,
+        "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+      },
+      {
+        "path": "runs/author-r26/junit.xml",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\junit.xml",
+        "bytes": 15522,
+        "sha256": "1be474c5753edf29653f0a6551e5401a315f2844a9d2f78d9502e4d128b93d56"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-accepted.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-accepted.sqlite3",
+        "bytes": 24576,
+        "sha256": "952c7987ffc59309a0afe75175f5168a1a49885906d3f55372af2c4eeb3caebd"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-accepted.sqlite3-shm",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-accepted.sqlite3-shm",
+        "bytes": 32768,
+        "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-accepted.sqlite3-wal",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-accepted.sqlite3-wal",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-execution.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-execution.sqlite3",
+        "bytes": 520192,
+        "sha256": "55b7818e0a06315c9178d4d9d7075404f136329a941ac5590a156b3709c17a65"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-execution.sqlite3-shm",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-execution.sqlite3-shm",
+        "bytes": 32768,
+        "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-execution.sqlite3-wal",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-execution.sqlite3-wal",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-execution.sqlite3.service_execution_owner.lock",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-execution.sqlite3.service_execution_owner.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-group_authority.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-group_authority.sqlite3",
+        "bytes": 40960,
+        "sha256": "da7e09df2d9f9621b8677b4ccecd3f8a947c6399517895a262b3c0fd75076cea"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-group_authority.sqlite3-shm",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-group_authority.sqlite3-shm",
+        "bytes": 32768,
+        "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-group_authority.sqlite3-wal",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-group_authority.sqlite3-wal",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-proof.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-proof.sqlite3",
+        "bytes": 24576,
+        "sha256": "00042de59130d7e95a67fe87ffce35b67a1dbf3c5a6bea3970b7c00143de54e8"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-proof.sqlite3-shm",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-proof.sqlite3-shm",
+        "bytes": 32768,
+        "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-proof.sqlite3-wal",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-proof.sqlite3-wal",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-provider.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-provider.sqlite3",
+        "bytes": 36864,
+        "sha256": "72ac8fa06d8fd836557693f612c210ba3e810fb5aea531a48f535ae200d7724b"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-registry.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-registry.sqlite3",
+        "bytes": 40960,
+        "sha256": "a7c5e314f33dd2a0517875d76e88d87f585a70732cb6e54b03151670feaed586"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-registry.sqlite3-shm",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-registry.sqlite3-shm",
+        "bytes": 32768,
+        "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-registry.sqlite3-wal",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-registry.sqlite3-wal",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-registry.sqlite3.service_registry.lock",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-registry.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-risk_gate.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-risk_gate.sqlite3",
+        "bytes": 327680,
+        "sha256": "2dc7bf7879e70f4d60c0dcb46764594326d4807c326087e1f0bb59badb5a5873"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-risk_gate.sqlite3-shm",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-risk_gate.sqlite3-shm",
+        "bytes": 32768,
+        "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-risk_gate.sqlite3-wal",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-risk_gate.sqlite3-wal",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-risk_order_journal.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-risk_order_journal.sqlite3",
+        "bytes": 77824,
+        "sha256": "b0c80cf77636a1c85563266534beada10097bd24536d02b3a84296831a754608"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-risk_order_journal.sqlite3.f64f4ff007572e1487aaf9be7e1ed70c2123622cea62ba59f66994da295dda5f.writer.lock",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-risk_order_journal.sqlite3.f64f4ff007572e1487aaf9be7e1ed70c2123622cea62ba59f66994da295dda5f.writer.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-groups.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\coordinator-groups.sqlite3",
+        "bytes": 65536,
+        "sha256": "718bce18b681df2b01383fe2a38b2c2489c9e19a1d9bd7c1c89fe62dbfcef9c1"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-groups.sqlite3-shm",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\coordinator-groups.sqlite3-shm",
+        "bytes": 32768,
+        "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-groups.sqlite3-wal",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\coordinator-groups.sqlite3-wal",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-registry.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\coordinator-registry.sqlite3",
+        "bytes": 40960,
+        "sha256": "f0bc57bdf9ab7cf947529ab09a6a7ce55f79a82bf21ded4c6a6080b1842bdd80"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-registry.sqlite3-shm",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\coordinator-registry.sqlite3-shm",
+        "bytes": 32768,
+        "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-registry.sqlite3-wal",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\coordinator-registry.sqlite3-wal",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-registry.sqlite3.service_registry.lock",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\coordinator-registry.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-run-bindings.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\coordinator-run-bindings.sqlite3",
+        "bytes": 12288,
+        "sha256": "e688c4266326ef4cc28ba6fd7f64cb550ae5771be5b7e16506b3b04ade8901ea"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-run-bindings.sqlite3-shm",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\coordinator-run-bindings.sqlite3-shm",
+        "bytes": 32768,
+        "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-run-bindings.sqlite3-wal",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\coordinator-run-bindings.sqlite3-wal",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/monitor-outbox.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\monitor-outbox.sqlite3",
+        "bytes": 28672,
+        "sha256": "99886ff56a53c574529da3d66cc97039b5f8b603d5288404430d9d5ec5d1b673"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/monitor-outbox.sqlite3-shm",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\monitor-outbox.sqlite3-shm",
+        "bytes": 32768,
+        "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/monitor-outbox.sqlite3-wal",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\monitor-outbox.sqlite3-wal",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/monitor-registry.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\monitor-registry.sqlite3",
+        "bytes": 40960,
+        "sha256": "fae0eaaddcc21cb6b267f226e1245f7661185e20d328e7eef696eb0e2814664e"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/monitor-registry.sqlite3-shm",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\monitor-registry.sqlite3-shm",
+        "bytes": 32768,
+        "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/monitor-registry.sqlite3-wal",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\monitor-registry.sqlite3-wal",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/monitor-registry.sqlite3.service_registry.lock",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\monitor-registry.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/p5a-registry.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\p5a-registry.sqlite3",
+        "bytes": 40960,
+        "sha256": "dc7c57abaea0542d0b832f6597ce771699bbd9562c7e6d73d7e8a7529acb05dc"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/p5a-registry.sqlite3-shm",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\p5a-registry.sqlite3-shm",
+        "bytes": 32768,
+        "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/p5a-registry.sqlite3-wal",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\p5a-registry.sqlite3-wal",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/p5a-registry.sqlite3.service_registry.lock",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\p5a-registry.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/primary-monitor-outbox.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\primary-monitor-outbox.sqlite3",
+        "bytes": 28672,
+        "sha256": "99886ff56a53c574529da3d66cc97039b5f8b603d5288404430d9d5ec5d1b673"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/primary-monitor-outbox.sqlite3-shm",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\primary-monitor-outbox.sqlite3-shm",
+        "bytes": 32768,
+        "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+      },
+      {
+        "path": "runs/author-r26/pytest-tmp/test_v3_cerebro_paired_three_l0/primary-monitor-outbox.sqlite3-wal",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\primary-monitor-outbox.sqlite3-wal",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "runs/author-r26/result.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\result.json",
+        "bytes": 1673,
+        "sha256": "e23987975183e334b1626efa3ef29e3504b7565d1e8a312c6c64e7d8224ff699"
+      },
+      {
+        "path": "runs/author-r26/runner.py",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\runner.py",
+        "bytes": 3400,
+        "sha256": "7c6dd88c57aebff4de4f88fce8c3623599db9369d499fbd42dc9df9c7ea5b7a0"
+      },
+      {
+        "path": "runs/author-r26/running.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\running.json",
+        "bytes": 76,
+        "sha256": "f0a4b383a6a7973377d657d8c185cb59e5bce0828f2aff0f646f20ce38f412ee"
+      },
+      {
+        "path": "runs/author-r26/source-after.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\source-after.json",
+        "bytes": 267254,
+        "sha256": "1ad0204f7a5392152294481f0d1cb8972cf226efb3ce3729dfb814f425f22c86"
+      },
+      {
+        "path": "runs/author-r26/source-before.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\source-before.json",
+        "bytes": 267254,
+        "sha256": "1ad0204f7a5392152294481f0d1cb8972cf226efb3ce3729dfb814f425f22c86"
+      },
+      {
+        "path": "runs/author-r26/spec.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\spec.json",
+        "bytes": 284333,
+        "sha256": "79d1f93bed47b8b375eea0ef8a53048f8fa031d9fb52d19e3805ccaac43843f8"
+      },
+      {
+        "path": "runs/author-r26/stderr.log",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "runs/author-r26/stdout.log",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r26\\stdout.log",
+        "bytes": 17489,
+        "sha256": "22c8a7e3981026a8a37ecc0c0a0169d9022e8865fbf451140ed21e962c8a10e3"
+      },
+      {
+        "path": "runs/author-r27/command.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\command.json",
+        "bytes": 3008,
+        "sha256": "2725baa0d61ce19cae7220f84e7c63ad6edb5ac254c34f8fd69334688df73046"
+      },
+      {
+        "path": "runs/author-r27/exit.txt",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\exit.txt",
+        "bytes": 3,
+        "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+      },
+      {
+        "path": "runs/author-r27/junit.xml",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\junit.xml",
+        "bytes": 16654,
+        "sha256": "10f432348a71adfbdad70d69c24ca02472e370df0fc20ffad70686191dd57e63"
+      },
+      {
+        "path": "runs/author-r27/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-accepted.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-accepted.sqlite3",
+        "bytes": 24576,
+        "sha256": "d4cf726f9d3a80e41b8f30048b01c7b31ba034c67fc46549a769ad8cb9d1b577"
+      },
+      {
+        "path": "runs/author-r27/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-accepted.sqlite3-shm",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-accepted.sqlite3-shm",
+        "bytes": 32768,
+        "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+      },
+      {
+        "path": "runs/author-r27/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-accepted.sqlite3-wal",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-accepted.sqlite3-wal",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "runs/author-r27/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-execution.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-execution.sqlite3",
+        "bytes": 536576,
+        "sha256": "12dacb0601fdbae4585f91e447320645da01f98ba007ff476b6975a4b1982142"
+      },
+      {
+        "path": "runs/author-r27/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-execution.sqlite3-shm",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-execution.sqlite3-shm",
+        "bytes": 32768,
+        "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+      },
+      {
+        "path": "runs/author-r27/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-execution.sqlite3-wal",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-execution.sqlite3-wal",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "runs/author-r27/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-execution.sqlite3.service_execution_owner.lock",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-execution.sqlite3.service_execution_owner.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "runs/author-r27/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-group_authority.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-group_authority.sqlite3",
+        "bytes": 40960,
+        "sha256": "dd6f2850e7076b17c9f465ec5db9f31a65f4fe3b3dd248e1ef65b0edce6236b7"
+      },
+      {
+        "path": "runs/author-r27/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-proof.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-proof.sqlite3",
+        "bytes": 81920,
+        "sha256": "70672a9adee4da877a2513a41c30eb19ebdaa29aa42052e301faabe42035fdcc"
+      },
+      {
+        "path": "runs/author-r27/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-proof.sqlite3-shm",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-proof.sqlite3-shm",
+        "bytes": 32768,
+        "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+      },
+      {
+        "path": "runs/author-r27/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-proof.sqlite3-wal",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-proof.sqlite3-wal",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "runs/author-r27/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-provider.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-provider.sqlite3",
+        "bytes": 36864,
+        "sha256": "425cf96347669dcc81a4799e17a0569fea9e4ba7689f87f910870b201c4ae428"
+      },
+      {
+        "path": "runs/author-r27/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-registry.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-registry.sqlite3",
+        "bytes": 40960,
+        "sha256": "ea6e5c23c5870938992338de7405d9811d0257a378f20407cc1af10ed745cc89"
+      },
+      {
+        "path": "runs/author-r27/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-registry.sqlite3.service_registry.lock",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-registry.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "runs/author-r27/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-risk_gate.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-risk_gate.sqlite3",
+        "bytes": 335872,
+        "sha256": "275be508815532a983f312abd199b611bd6f3a74e30fdae3554cd5a94b7447ca"
+      },
+      {
+        "path": "runs/author-r27/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-risk_order_journal.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-risk_order_journal.sqlite3",
+        "bytes": 77824,
+        "sha256": "9d00293bbb7a1b008ba3db9d16084764a640d6ad5867a871763c7ed99a0e91ad"
+      },
+      {
+        "path": "runs/author-r27/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-risk_order_journal.sqlite3.f64f4ff007572e1487aaf9be7e1ed70c2123622cea62ba59f66994da295dda5f.writer.lock",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-risk_order_journal.sqlite3.f64f4ff007572e1487aaf9be7e1ed70c2123622cea62ba59f66994da295dda5f.writer.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "runs/author-r27/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-groups.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\coordinator-groups.sqlite3",
+        "bytes": 90112,
+        "sha256": "f5d57f9904a887f1a0dcac38eb2d15f174cc501f1635c6c70fdebe8dd5b97f77"
+      },
+      {
+        "path": "runs/author-r27/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-groups.sqlite3-shm",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\coordinator-groups.sqlite3-shm",
+        "bytes": 32768,
+        "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+      },
+      {
+        "path": "runs/author-r27/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-groups.sqlite3-wal",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\coordinator-groups.sqlite3-wal",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "runs/author-r27/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-registry.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\coordinator-registry.sqlite3",
+        "bytes": 40960,
+        "sha256": "5ba13451a631581e28b0bcaa44bd505749fbb0c183e75d43606096741d6e2877"
+      },
+      {
+        "path": "runs/author-r27/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-registry.sqlite3.service_registry.lock",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\coordinator-registry.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "runs/author-r27/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-run-bindings.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\coordinator-run-bindings.sqlite3",
+        "bytes": 12288,
+        "sha256": "cd80af5ebdd262c284d933b38521f53f6df5f78eb59bd350a55ca53cd65114b2"
+      },
+      {
+        "path": "runs/author-r27/pytest-tmp/test_v3_cerebro_paired_three_l0/monitor-outbox.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\monitor-outbox.sqlite3",
+        "bytes": 28672,
+        "sha256": "99886ff56a53c574529da3d66cc97039b5f8b603d5288404430d9d5ec5d1b673"
+      },
+      {
+        "path": "runs/author-r27/pytest-tmp/test_v3_cerebro_paired_three_l0/monitor-registry.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\monitor-registry.sqlite3",
+        "bytes": 40960,
+        "sha256": "90a7bcec7f2435d477fc20ee2edb914b6f30705ebdc64b59dc76c6c17a489f84"
+      },
+      {
+        "path": "runs/author-r27/pytest-tmp/test_v3_cerebro_paired_three_l0/monitor-registry.sqlite3.service_registry.lock",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\monitor-registry.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "runs/author-r27/pytest-tmp/test_v3_cerebro_paired_three_l0/p5a-registry.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\p5a-registry.sqlite3",
+        "bytes": 40960,
+        "sha256": "1b75986951d005c32ee8caafdaccf0985a35a22143a0ecd3b5205d84180a4ba8"
+      },
+      {
+        "path": "runs/author-r27/pytest-tmp/test_v3_cerebro_paired_three_l0/p5a-registry.sqlite3.service_registry.lock",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\p5a-registry.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "runs/author-r27/pytest-tmp/test_v3_cerebro_paired_three_l0/primary-monitor-outbox.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\primary-monitor-outbox.sqlite3",
+        "bytes": 28672,
+        "sha256": "99886ff56a53c574529da3d66cc97039b5f8b603d5288404430d9d5ec5d1b673"
+      },
+      {
+        "path": "runs/author-r27/result.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\result.json",
+        "bytes": 1673,
+        "sha256": "5399311bedba08972f100330d9b876ba71247b2f0ce77def4b661bab2a641c79"
+      },
+      {
+        "path": "runs/author-r27/runner.py",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "runs/author-r27/running.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\running.json",
+        "bytes": 74,
+        "sha256": "740a23d691a126b6bb5859f35a030f09139ec394f1eeacff5243f87e7634b2aa"
+      },
+      {
+        "path": "runs/author-r27/source-after.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\source-after.json",
+        "bytes": 267254,
+        "sha256": "a03e328a0bf979ca49e91a3bea98bbd8d2a946dd89de8de922ece6c150d80d9d"
+      },
+      {
+        "path": "runs/author-r27/source-before.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\source-before.json",
+        "bytes": 267254,
+        "sha256": "a03e328a0bf979ca49e91a3bea98bbd8d2a946dd89de8de922ece6c150d80d9d"
+      },
+      {
+        "path": "runs/author-r27/spec.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\spec.json",
+        "bytes": 287452,
+        "sha256": "21025b0948a085e236c493f13fd46dc9ab2a8d9aa0f516b5315bb9f67a289676"
+      },
+      {
+        "path": "runs/author-r27/stderr.log",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "runs/author-r27/stdout.log",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r27\\stdout.log",
+        "bytes": 19359,
+        "sha256": "e65510f3bc00fdab7a59dc05fcfe361275f06a80c0bdc9d310d6e6ac7d5a31bd"
+      },
+      {
+        "path": "runs/author-r28/command.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\command.json",
+        "bytes": 3008,
+        "sha256": "00b4114ab5b38e57da8c43ba98e8a20a755093c2c5ddf3775c19b19a3921c246"
+      },
+      {
+        "path": "runs/author-r28/exit.txt",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\exit.txt",
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      {
+        "path": "runs/author-r28/junit.xml",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\junit.xml",
+        "bytes": 324,
+        "sha256": "8a1f27ef7cbbdb6d86e2f2b5c125b31ed3621eff0be1c1a93507120ac97dd8b9"
+      },
+      {
+        "path": "runs/author-r28/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-accepted.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-accepted.sqlite3",
+        "bytes": 24576,
+        "sha256": "f8c3923ff5c2c64481c831ec2f2b379b56990d49e51d91e8d01c5aa33423b619"
+      },
+      {
+        "path": "runs/author-r28/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-execution.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-execution.sqlite3",
+        "bytes": 536576,
+        "sha256": "9160846087d196d946362eb47bd4a3edf9a6de0065adc02fe1bff6886540428c"
+      },
+      {
+        "path": "runs/author-r28/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-execution.sqlite3.service_execution_owner.lock",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-execution.sqlite3.service_execution_owner.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "runs/author-r28/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-group_authority.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-group_authority.sqlite3",
+        "bytes": 40960,
+        "sha256": "6d96dbfc803e1b2e82d3822ae9ecb39c4a9b453cd4d2bb2c61cbe2275bbbad42"
+      },
+      {
+        "path": "runs/author-r28/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-proof.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-proof.sqlite3",
+        "bytes": 4096,
+        "sha256": "31b0f6669e49303bea772658c76cd8557d01840c6b7b51f2eed54c4c0a44d4ff"
+      },
+      {
+        "path": "runs/author-r28/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-proof.sqlite3-shm",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-proof.sqlite3-shm",
+        "bytes": 32768,
+        "sha256": "d5b06066c563e52dba2787a8650076cb2c9b1335fda5a3cfd3cf2930f2457f9a"
+      },
+      {
+        "path": "runs/author-r28/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-proof.sqlite3-wal",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-proof.sqlite3-wal",
+        "bytes": 267832,
+        "sha256": "df97a6d449a4853bb8b982c489634ab8da1ad17fbf7858fce8df093b87c0b137"
+      },
+      {
+        "path": "runs/author-r28/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-provider.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-provider.sqlite3",
+        "bytes": 36864,
+        "sha256": "a507b6aa3a5405c16808bacbb59eff64ce730f2fd9460ef24eb5662b30f70216"
+      },
+      {
+        "path": "runs/author-r28/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-registry.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-registry.sqlite3",
+        "bytes": 40960,
+        "sha256": "be938b07911a1f78a07ed03e75e2025fb0c60aa8c2ef696c16a098faf0571c25"
+      },
+      {
+        "path": "runs/author-r28/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-registry.sqlite3.service_registry.lock",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-registry.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "runs/author-r28/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-risk_gate.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-risk_gate.sqlite3",
+        "bytes": 335872,
+        "sha256": "d8f6920eeab5fce3f3abb4c8bc9b8f6131335ab8b7e353d80313c1d4b17a7b93"
+      },
+      {
+        "path": "runs/author-r28/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-risk_order_journal.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-risk_order_journal.sqlite3",
+        "bytes": 77824,
+        "sha256": "9d00293bbb7a1b008ba3db9d16084764a640d6ad5867a871763c7ed99a0e91ad"
+      },
+      {
+        "path": "runs/author-r28/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-risk_order_journal.sqlite3.f64f4ff007572e1487aaf9be7e1ed70c2123622cea62ba59f66994da295dda5f.writer.lock",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\account-a-risk_order_journal.sqlite3.f64f4ff007572e1487aaf9be7e1ed70c2123622cea62ba59f66994da295dda5f.writer.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "runs/author-r28/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-groups.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\coordinator-groups.sqlite3",
+        "bytes": 90112,
+        "sha256": "fdab73ca8086d306ee40ca2451b115cf730214707c016de66273913a6fceed66"
+      },
+      {
+        "path": "runs/author-r28/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-registry.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\coordinator-registry.sqlite3",
+        "bytes": 40960,
+        "sha256": "04a55f66ccd33a607e934b42e4bbd92fc6fc522c3adf5e1ecbbb8b7e45f2ef98"
+      },
+      {
+        "path": "runs/author-r28/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-registry.sqlite3.service_registry.lock",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\coordinator-registry.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "runs/author-r28/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-run-bindings.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\coordinator-run-bindings.sqlite3",
+        "bytes": 12288,
+        "sha256": "0da8b5d0a977cd7001cea17506b80690b321f7d3cbc6f1141b4597f6c9113e51"
+      },
+      {
+        "path": "runs/author-r28/pytest-tmp/test_v3_cerebro_paired_three_l0/monitor-outbox.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\monitor-outbox.sqlite3",
+        "bytes": 28672,
+        "sha256": "99886ff56a53c574529da3d66cc97039b5f8b603d5288404430d9d5ec5d1b673"
+      },
+      {
+        "path": "runs/author-r28/pytest-tmp/test_v3_cerebro_paired_three_l0/monitor-registry.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\monitor-registry.sqlite3",
+        "bytes": 40960,
+        "sha256": "981db95d05fd3fe5ef067a350cac01685809e7851a68d79dc93e24fe92de56cb"
+      },
+      {
+        "path": "runs/author-r28/pytest-tmp/test_v3_cerebro_paired_three_l0/monitor-registry.sqlite3.service_registry.lock",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\monitor-registry.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "runs/author-r28/pytest-tmp/test_v3_cerebro_paired_three_l0/p5a-registry.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\p5a-registry.sqlite3",
+        "bytes": 40960,
+        "sha256": "01501102cf67797a59c2a3b5d6c54c8d6b94734ec1d1a9f14d85fbf236b39f0a"
+      },
+      {
+        "path": "runs/author-r28/pytest-tmp/test_v3_cerebro_paired_three_l0/p5a-registry.sqlite3.service_registry.lock",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\p5a-registry.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "runs/author-r28/pytest-tmp/test_v3_cerebro_paired_three_l0/primary-monitor-outbox.sqlite3",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\pytest-tmp\\test_v3_cerebro_paired_three_l0\\primary-monitor-outbox.sqlite3",
+        "bytes": 28672,
+        "sha256": "99886ff56a53c574529da3d66cc97039b5f8b603d5288404430d9d5ec5d1b673"
+      },
+      {
+        "path": "runs/author-r28/result.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\result.json",
+        "bytes": 1673,
+        "sha256": "b484a1ee5406c8627bc398d644d485aff8cb8b3cd5d7e7167fb4e49b50e8e602"
+      },
+      {
+        "path": "runs/author-r28/runner.py",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "runs/author-r28/running.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\running.json",
+        "bytes": 76,
+        "sha256": "5619c85e1bd58c06074ab4a6d1cfea310adea428d7bb2128cbf44912f468dd83"
+      },
+      {
+        "path": "runs/author-r28/source-after.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\source-after.json",
+        "bytes": 267254,
+        "sha256": "0e9dbe219eefb07dc47a8a8cc65e23554702ce2ab4ccd3a9812e375caac69133"
+      },
+      {
+        "path": "runs/author-r28/source-before.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\source-before.json",
+        "bytes": 267254,
+        "sha256": "0e9dbe219eefb07dc47a8a8cc65e23554702ce2ab4ccd3a9812e375caac69133"
+      },
+      {
+        "path": "runs/author-r28/spec.json",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\spec.json",
+        "bytes": 288699,
+        "sha256": "0214e07a17082c7ed17a4dbd5781a78d35fb16f18e41a030ed1313cbfefc5e14"
+      },
+      {
+        "path": "runs/author-r28/stderr.log",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "runs/author-r28/stdout.log",
+        "source_path": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r28\\stdout.log",
+        "bytes": 658,
+        "sha256": "f0be558cd3ac9589aaffc02c5a0a888a6d252e288c8de581116e3104a733b4e8"
+      }
+    ]
+  },
+  "artifacts": [
+    "raw-evidence.zip",
+    "manifest.json",
+    "round-record.md"
+  ]
+}

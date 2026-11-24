@@ -1,0 +1,16 @@
+{
+  "pytest_exit": 0,
+  "collected": 6,
+  "passed": 6,
+  "failed": 0,
+  "duration_seconds": 0.63,
+  "warning_count": 1,
+  "warning": "Existing pytest config warning: asyncio_default_fixture_loop_scope is unknown when the unrelated asyncio plugin is disabled.",
+  "evidence_level": "AUTHOR_SOURCE_FAKE_NORMAL_FACTORY_ONLY",
+  "root_qa": "PENDING_NOT_RUN",
+  "formal_status": {
+    "scn01_pass": false,
+    "before": "39/68",
+    "after": "39/68"
+  }
+}

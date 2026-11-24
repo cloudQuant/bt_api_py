@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="5" time="14.288" timestamp="2026-10-16T20:09:28.001959" hostname="yun"><testcase classname="tests.integration.test_service_execution_group_owner_recovery" name="test_owner_recovers_through_distinct_query_registration_after_strategy_exit" time="9.484"><failure message="AssertionError: read-only Registry route returned a business failure: code='GROUP_EVIDENCE_UNAVAILABLE'; reply={'code': 'GROUP_EVIDENCE_UNAVAILABLE', 'ok': False, 'result': {}}; first_owner_failure={'expected_query': {'intent_id': 'group:group-owner-recovery-01:leg:leg-a', 'registration_ids': ['d224ea712a404f2084f9860c649943d3', 'adc05b07dc224ad883b5dd3a1429f0e9']}, 'first_owner_failure': {'account_ref': 'account-a', 'active_exception_chain': [{'args': &quot;('GROUP_EVIDENCE_UNAVAILABLE',)&quot;, 'message': 'GROUP_EVIDENCE_UNAVAILABLE', 'next_link': 'context', 'suppress_context': True, 'type': 'bt_api_py.service_execution_group.ServiceExecutionGroupError'}, {'args': &quot;('GROUP_DISPATCH_HOLD_BINDING_MISMATCH',)&quot;, 'message': 'GROUP_DISPATCH_HOLD_BINDING_MISMATCH', 'next_link': None, 'suppress_context': False, 'type': 'bt_api_py.service_execution_group_proofs.GroupProofSourceError'}], 'failure_code': 'GROUP_EVIDENCE_UNAVAILABLE', 'intent_id': 'group:group-owner-recovery-01:leg:leg-a', 'operation': 'orders.query_group_leg', 'registration_id': 'd224ea712a404f2084f9860c649943d3'}}">tmp_path = WindowsPath('D:/temp/iteration10-dim09-owner-recovery-root-20261016-r10/pytest-tmp/test_owner_recovers_through_di0')
+
+    def test_owner_recovers_through_distinct_query_registration_after_strategy_exit(
+        tmp_path: Path,
+    ) -&gt; None:
+        """Exercise one terminal owner recovery through a distinct read registration."""
+    
+&gt;       _run_owner_recovery_case(
+            tmp_path,
+            "rejected",
+            ExecutionState.REJECTED,
+            GroupOrderState.CLOSED,
+            "REJECTED_NO_FILL",
+            explicit_query_probe=True,
+        )
+
+tests\integration\test_service_execution_group_owner_recovery.py:1201: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\integration\test_service_execution_group_owner_recovery.py:915: in _run_owner_recovery_case
+    _query_existing_intent_through_real_read_route(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+    def _query_existing_intent_through_real_read_route(
+        *,
+        coordinator_raw: dict[str, Any],
+        account_configs: dict[str, dict[str, Any]],
+        account_server_keys: dict[str, tuple[bytes, bytes]],
+        coordinator_client_public: bytes,
+        coordinator_client_secret: bytes,
+        account_ref: str,
+        intent_id: str,
+        owner_query_registration_id: str,
+        diagnostic_path: str,
+    ) -&gt; tuple[str, GroupLegOrderReceipt, object]:
+        """Call the actual read-only Registry route with a distinct registration."""
+    
+        query_ref = base._route_refs(account_ref)[2]
+        service_id = account_configs[account_ref]["service_id"]
+        configured_execution = coordinator_raw["clients"]["execution"]
+        query_binding = next(
+            binding
+            for binding in configured_execution["settings"]["bindings"]
+            if binding["mount"] == "upstream.order_query"
+            and binding["account_ref"] == account_ref
+        )
+        profile_ref = query_binding["transport_ref"]
+        security_ref = coordinator_raw["communication"]["profiles"][profile_ref][
+            "security_profile_ref"
+        ]
+        query_service_raw = dict(coordinator_raw)
+        query_service_raw["clients"] = {
+            "execution": {
+                "config_schema_version": configured_execution["config_schema_version"],
+                "settings": {
+                    "bindings": [dict(query_binding)],
+                    "options": dict(configured_execution["settings"]["options"]),
+                },
+            }
+        }
+        peer = WireIdentity(
+            WireRole.SERVICE,
+            f"group-owner-service-principal-{account_ref}",
+            service_id,
+        )
+        scope = base._owner_scope(account_ref)
+        security_profile = base.ClientCurveKeys(
+            server_key=account_server_keys[account_ref][0],
+            public_key=coordinator_client_public,
+            secret_key=coordinator_client_secret,
+        )
+        runtime = base.ServiceClientRuntime(
+            base.parse_service_config(query_service_raw),
+            identity=WireIdentity(
+                WireRole.SERVICE,
+                base._COORDINATOR_PRINCIPAL,
+                base._COORDINATOR_SERVICE_ID,
+            ),
+            scope_resolver=lambda scope_ref: scope if scope_ref == query_ref else None,
+            peer_resolver=lambda requested_service: peer if requested_service == service_id else None,
+            transport_factory=base.ZmqTransportFactory({security_ref: security_profile}),
+            requested_operations={
+                "upstream.order_query": frozenset({"orders.query_group_leg"})
+            },
+            run_id=base._RUN,
+        )
+        try:
+            started = runtime.start()
+            if started.degraded_count != 0:
+                raise AssertionError("read-only route registration degraded")
+            matches = tuple(
+                binding
+                for binding in runtime.bindings
+                if binding.active
+                and binding.mount == "upstream.order_query"
+                and binding.scope.account_ref == account_ref
+                and binding.scope_ref == query_ref
+                and "orders.query_group_leg" in binding.operations
+            )
+            if len(matches) != 1 or len(runtime.bindings) != 1:
+                raise AssertionError("one exact read-only query registration is required")
+            _include_owner_handler_diagnostic_registration(
+                diagnostic_path,
+                registration_id=matches[0].registration_id,
+                owner_registration_id=owner_query_registration_id,
+                intent_id=intent_id,
+            )
+            try:
+                reply = runtime.call(
+                    "upstream.order_query",
+                    "orders.query_group_leg",
+                    {"origin_run_id": base._RUN, "intent_id": intent_id},
+                    account_ref=account_ref,
+                    portfolio_ref=base._PORTFOLIO,
+                    scope_ref=query_ref,
+                    max_reply_message_bytes=base._MAX_MESSAGE_BYTES,
+                )
+            except BaseException as error:
+                owner_diagnostic = _read_owner_handler_diagnostic(diagnostic_path)
+                raise AssertionError(
+                    "read-only Registry route raised before returning a reply: "
+                    f"exception={type(error).__module__}.{type(error).__qualname__} "
+                    f"args={error.args!r}; first_owner_failure={owner_diagnostic!r}"
+                ) from error
+            owner_diagnostic = _read_owner_handler_diagnostic(diagnostic_path)
+            try:
+                complete_reply = (
+                    base._plain_runtime_json(reply)
+                    if isinstance(reply, Mapping)
+                    else {"unprojected_reply_repr": repr(reply)}
+                )
+            except BaseException as error:
+                complete_reply = {
+                    "unprojected_reply_repr": repr(reply),
+                    "reply_projection_exception": {
+                        "type": f"{type(error).__module__}.{type(error).__qualname__}",
+                        "args": repr(error.args)[:2000],
+                    },
+                }
+            # ServiceClientRuntime.call strips the outer transport envelope. This
+            # group-owner handler has its own business envelope, whose result is the
+            # GroupLegOrderReceipt payload.
+            if not isinstance(reply, Mapping) or set(reply) != {"ok", "code", "result"}:
+                raise AssertionError(
+                    "read-only Registry route returned an invalid group reply: "
+                    f"reply={complete_reply!r}; first_owner_failure={owner_diagnostic!r}"
+                )
+            if reply["ok"] is not True or reply["code"] != "OK":
+&gt;               raise AssertionError(
+                    "read-only Registry route returned a business failure: "
+                    f"code={reply['code']!r}; reply={complete_reply!r}; "
+                    f"first_owner_failure={owner_diagnostic!r}"
+                )
+E               AssertionError: read-only Registry route returned a business failure: code='GROUP_EVIDENCE_UNAVAILABLE'; reply={'code': 'GROUP_EVIDENCE_UNAVAILABLE', 'ok': False, 'result': {}}; first_owner_failure={'expected_query': {'intent_id': 'group:group-owner-recovery-01:leg:leg-a', 'registration_ids': ['d224ea712a404f2084f9860c649943d3', 'adc05b07dc224ad883b5dd3a1429f0e9']}, 'first_owner_failure': {'account_ref': 'account-a', 'active_exception_chain': [{'args': "('GROUP_EVIDENCE_UNAVAILABLE',)", 'message': 'GROUP_EVIDENCE_UNAVAILABLE', 'next_link': 'context', 'suppress_context': True, 'type': 'bt_api_py.service_execution_group.ServiceExecutionGroupError'}, {'args': "('GROUP_DISPATCH_HOLD_BINDING_MISMATCH',)", 'message': 'GROUP_DISPATCH_HOLD_BINDING_MISMATCH', 'next_link': None, 'suppress_context': False, 'type': 'bt_api_py.service_execution_group_proofs.GroupProofSourceError'}], 'failure_code': 'GROUP_EVIDENCE_UNAVAILABLE', 'intent_id': 'group:group-owner-recovery-01:leg:leg-a', 'operation': 'orders.query_group_leg', 'registration_id': 'd224ea712a404f2084f9860c649943d3'}}
+
+tests\integration\test_service_execution_group_owner_recovery.py:435: AssertionError</failure></testcase><testcase classname="tests.unit.test_service_execution_group_owner_recovery_receipt" name="test_query_pair_matches_result_callback_but_rejects_auth_context_changes[principal_ref]" time="0.098" /><testcase classname="tests.unit.test_service_execution_group_owner_recovery_receipt" name="test_query_pair_matches_result_callback_but_rejects_auth_context_changes[registration_id]" time="0.098" /><testcase classname="tests.unit.test_service_execution_group_owner_recovery_receipt" name="test_query_pair_matches_result_callback_but_rejects_auth_context_changes[scope]" time="0.085" /><testcase classname="tests.unit.test_service_execution_group_owner_recovery_receipt" name="test_query_pair_matches_result_callback_but_rejects_auth_context_changes[identity]" time="0.088" /></testsuite></testsuites>

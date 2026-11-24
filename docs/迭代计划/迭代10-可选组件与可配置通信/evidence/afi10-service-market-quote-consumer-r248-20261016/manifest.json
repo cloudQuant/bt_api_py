@@ -1,0 +1,154 @@
+{
+  "schema": "iteration10-afi10-service-market-quote-consumer-r248-evidence-v1",
+  "round": "R248",
+  "status": "READY_FOR_ROOT_REVIEW_AND_SCOPED_COMMIT",
+  "captured_utc": "2026-10-16T15:15:36.2603915Z",
+  "formal_afi10_pass": false,
+  "progress_document_modified": false,
+  "evidence_directory_file_count": 3,
+  "parent_repository": {
+    "path": "D:\\bt_api_py",
+    "branch": "dev",
+    "qa_head_at_packet_creation": "a208ccd8e904142fb309a48ff45eba1d6892721b",
+    "commit_status": "PENDING_ROOT_REVIEW_AND_SCOPED_COMMIT",
+    "staging_or_commit_performed_by_author": false
+  },
+  "afi_source_round": {
+    "repository": "D:\\source_code\\ai-for-investor",
+    "branch": "dev",
+    "head": "ad9c8dcc7ba6bef1d2cbd915551fe95932e92ee1",
+    "evidence_level": "AUTHOR_LOCAL_SYNTHETIC_HOST_UI_ONLY",
+    "index_empty": true,
+    "source_scope": [
+      {
+        "path": "src/backend/app/services/quote_service.py",
+        "mode": "100644",
+        "head_blob_oid": "ede3011d4acc59e4d082c1733f2d45ec5faf36c3",
+        "candidate_blob_oid": "7e2780ca73755241700ae5c527cadbc7320cc3b3",
+        "candidate_sha256": "892ecad86cbc5945358da4538c57bc7fbab814570a8903bea0b16c94629d0f93",
+        "candidate_bytes": 54507,
+        "candidate_file": "D:\\temp\\afi10-service-market-ad9c8dcc-r248\\source\\afi\\src\\backend\\app\\services\\quote_service.py"
+      },
+      {
+        "path": "src/backend/app/services/quote/service_market.py",
+        "mode": "100644",
+        "head_blob_oid": null,
+        "candidate_blob_oid": "66838e416577f43f6f9db1dbe901376c76496b96",
+        "candidate_sha256": "3f3fd9a879e3b1086ddf97803109d3b5ac243013f3dc299652b53dfd3e7036fc",
+        "candidate_bytes": 31660,
+        "candidate_file": "D:\\temp\\afi10-service-market-ad9c8dcc-r248\\source\\afi\\src\\backend\\app\\services\\quote\\service_market.py"
+      },
+      {
+        "path": "src/backend/tests/test_quote_service_market.py",
+        "mode": "100644",
+        "head_blob_oid": null,
+        "candidate_blob_oid": "6d1494ca6ff3d4a0b48bf0e9866b2b0d42c8fffb",
+        "candidate_sha256": "831484e5d04c0e546009054d22b1e50f5c97ad7c615adda180875b59234f10eb",
+        "candidate_bytes": 13990,
+        "candidate_file": "D:\\temp\\afi10-service-market-ad9c8dcc-r248\\source\\afi\\src\\backend\\tests\\test_quote_service_market.py"
+      },
+      {
+        "path": "src/backend/tests/integration/test_quote_service_market_host_integration.py",
+        "mode": "100644",
+        "head_blob_oid": null,
+        "candidate_blob_oid": "c5e742b584b5139296d847d6baf72b46878f14c9",
+        "candidate_sha256": "f3e2bdc00c2f1a9da5d23a73fc6ddfa193ca816e6c970e2ecffee61fbbf6bdd2",
+        "candidate_bytes": 17010,
+        "candidate_file": "D:\\temp\\afi10-service-market-ad9c8dcc-r248\\source\\afi\\src\\backend\\tests\\integration\\test_quote_service_market_host_integration.py"
+      }
+    ],
+    "candidate_partial_index": "candidate-partial-index.json",
+    "qa": {
+      "reported_passed": 11,
+      "reported_failed": 0,
+      "reported_errors": 0,
+      "reported_skipped": 0,
+      "pytest_exit": 0,
+      "duration_seconds": 3.65,
+      "raw_stdout_available": false,
+      "junit_available": false,
+      "result_json_available": false,
+      "rerun_for_archive": false
+    },
+    "limitations": [
+      "Synthetic provider only; no production OKX WSS queue-to-Hub delivery proof.",
+      "No cross-thread Hub publish; SDK owner-thread bounded drain is pending MIG01.",
+      "Legacy runtime/receiver path and manager GatewayRuntime consumers remain active.",
+      "No real provider/account/service install or formal AFI10 acceptance."
+    ],
+    "candidate_source_root": "D:\\temp\\afi10-service-market-ad9c8dcc-r248\\source\\afi\\src\\backend"
+  },
+  "archive": {
+    "path": "raw-evidence.zip",
+    "size_bytes": 31029,
+    "sha256": "e45d3dee331998539b612b52266a598406e3eb19c1bca46aa76af5e7cd61c226",
+    "entry_count": 12,
+    "entries": [
+      {
+        "path": "author/commands.ps1",
+        "size_bytes": 549,
+        "sha256": "be19569b769c614572eb1d53ac8b3614f07822b4da751d002dae6c2f54d62ce0"
+      },
+      {
+        "path": "author/local-qa-summary.json",
+        "size_bytes": 1150,
+        "sha256": "1e558aa1e1777b0cd9f4f6db17eeb5b9b6540f6a7f9e21c5c1f9609cc1b89216"
+      },
+      {
+        "path": "source/afi/",
+        "size_bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "source/afi/src/",
+        "size_bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "source/afi/src/backend/",
+        "size_bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "source/afi/src/backend/app/",
+        "size_bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "source/afi/src/backend/app/services/quote_service.py",
+        "size_bytes": 54507,
+        "sha256": "892ecad86cbc5945358da4538c57bc7fbab814570a8903bea0b16c94629d0f93"
+      },
+      {
+        "path": "source/afi/src/backend/app/services/quote/service_market.py",
+        "size_bytes": 31660,
+        "sha256": "3f3fd9a879e3b1086ddf97803109d3b5ac243013f3dc299652b53dfd3e7036fc"
+      },
+      {
+        "path": "source/afi/src/backend/tests/test_quote_service_market.py",
+        "size_bytes": 13990,
+        "sha256": "831484e5d04c0e546009054d22b1e50f5c97ad7c615adda180875b59234f10eb"
+      },
+      {
+        "path": "source/afi/src/backend/tests/integration/test_quote_service_market_host_integration.py",
+        "size_bytes": 17010,
+        "sha256": "f3e2bdc00c2f1a9da5d23a73fc6ddfa193ca816e6c970e2ecffee61fbbf6bdd2"
+      },
+      {
+        "path": "acceptance-spec.md",
+        "size_bytes": 2401,
+        "sha256": "18654261b325ccfc4a5d792da74aa4728ac60f0a0ab67b42c27a98e2e8a88224"
+      },
+      {
+        "path": "candidate-partial-index.json",
+        "size_bytes": 4950,
+        "sha256": "ab17e9eeb6fbe3ec23072dbc9dfd40fd4146dffa837ba71db832660bed4f3271"
+      }
+    ]
+  },
+  "round_record": {
+    "path": "round-record.md",
+    "size_bytes": 2113,
+    "sha256": "f4383b429c4ee5a8c5645617e85bdec212b4c78c0b926a278105a117790b4ae0"
+  }
+}

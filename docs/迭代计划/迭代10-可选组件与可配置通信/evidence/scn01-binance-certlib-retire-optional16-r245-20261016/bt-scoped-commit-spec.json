@@ -1,0 +1,29 @@
+{
+  "helper": "D:/bt_api_py/.codex-tmp/iteration10-scoped-source-delivery.py",
+  "helper_contract": "repository, post_path, parent, message, independent_static_review, evidence_sha256, junit, tests_passed, source_sha256",
+  "execution_ready": true,
+  "blocked_until": "Root completes source/raw-evidence review and sets independent_static_review=GO; do not rerun the already-passed author QA.",
+  "repository": "D:/source_code/backtrader",
+  "parent": "57c9fc613f263877b08da11eacadcb5a8eaccaad",
+  "branch": "dev",
+  "post_path": "D:\\source_code\\backtrader\\.codex-tmp\\iteration10-scn01-binance-certlib-postcommit-r245-20261016.json",
+  "message": "fix(scn01): retire Optional16 Binance factory bridge",
+  "independent_static_review": "PENDING_ROOT_REVIEW",
+  "qa_replay_required": false,
+  "verification_level": "AUTHOR_SOURCE_FAKE_NORMAL_FACTORY_ONLY",
+  "evidence_sha256": {
+    "raw-evidence.zip": "f8ec1379ae2e9031e2cfc81b7531e71399f96a6fc7b9af3a2f133e391ec989e9",
+    "manifest.json": "7d50c7e96282853b8d453d16ffcb4a8785aaf62c06589c5bf21dcb04c0387b48",
+    "round-record.md": "544b1365ea9080fd257dd8cbe26b9825c56713fa1316b1cd2c125d5d1a6925f6"
+  },
+  "tests_passed": 6,
+  "source_sha256": {
+    "examples/live/000_live_certification/binance_penetration/certlib/__init__.py": "e70dd0bad27a3b9b51048d74c181dd93276bca68ffa229157ed79da0cfff666b",
+    "tests/unit/test_scn01_binance_certlib_fail_closed.py": "5e250d8290345420116e9b3108c36444e5aadf0915e89f79cacebe47003c7ce0"
+  },
+  "sdk_evidence_commit_scope": [
+    "raw-evidence.zip",
+    "manifest.json",
+    "round-record.md"
+  ]
+}

@@ -1,0 +1,668 @@
+{
+  "schema": "iteration10-round-evidence-packet-v1",
+  "round": "R246",
+  "date": "2026-10-16",
+  "title": "DIM08 market expiry/roll and Monitor threshold local service-chain acceptance evidence",
+  "packet_status": "PREPARED_UNCOMMITTED",
+  "formal_status": {
+    "accepted_cases_before": "40/68",
+    "accepted_cases_after": "40/68",
+    "formal_DIM08": "OPEN_PARTIAL",
+    "formal_case_increment": 0
+  },
+  "candidate_scope": [
+    {
+      "repository": "monitor",
+      "path": "src/bt_api_monitor/threshold_rules.py",
+      "checkout_status": "untracked_candidate",
+      "bytes": 13897,
+      "sha256": "617722e269dbcf634ab7370fb3e9e46162bf22c9c254dcb59e38a591ee4f92a8",
+      "HEAD_at_R11": "536a4f04747182749fabdac5e28624f80465bc53",
+      "HEAD_at_packet": "536a4f04747182749fabdac5e28624f80465bc53"
+    },
+    {
+      "repository": "monitor",
+      "path": "tests/test_threshold_rules.py",
+      "checkout_status": "untracked_candidate",
+      "bytes": 22041,
+      "sha256": "6f7351cc46fce954bba0a5c3781246557d4bce4c44d30ae5759fffaed37f5887",
+      "HEAD_at_R11": "536a4f04747182749fabdac5e28624f80465bc53",
+      "HEAD_at_packet": "536a4f04747182749fabdac5e28624f80465bc53"
+    },
+    {
+      "repository": "sdk",
+      "path": "tests/integration/test_dim08_market_expiry_monitor_service.py",
+      "checkout_status": "untracked_candidate",
+      "bytes": 41088,
+      "sha256": "aaa5103b565c223fda9feaa946edb66c0dd489c7c2044fcbcccd600c39ccce21",
+      "HEAD_at_R11": "9a1495ad4be0670f7f2efe7e81c3ae9650877023",
+      "HEAD_at_packet": "a208ccd8e904142fb309a48ff45eba1d6892721b"
+    }
+  ],
+  "excluded_candidate_paths": [
+    {
+      "path": "bt_api/bt_api_monitor/src/bt_api_monitor/service_control.py",
+      "reason": "unrelated existing modification; not part of DIM08 candidate"
+    },
+    {
+      "path": "bt_api/bt_api_monitor/tests/test_service_control.py",
+      "reason": "unrelated existing modification; not part of DIM08 candidate"
+    }
+  ],
+  "r11_root_run": {
+    "output_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r11",
+    "spec_path": "D:\\bt_api_py\\.codex-tmp\\iteration10-dim08-market-expiry-monitor-root-spec-r11-20261016.json",
+    "spec_sha256": "e850eeef90b1db902a8d9f4b51cfef7a073c0a05530fa7c5116c1932b6ec87f1",
+    "fixed_source_manifest_path": "D:\\temp\\d8-src-r11\\source-manifest.json",
+    "fixed_source_manifest_sha256": "d1e5c7ed939a4e170c8d15a29fefa3e3df4fb77d6fa7f698e15d41e027402d45",
+    "node_ids": [
+      "D:\\temp\\d8-src-r11\\candidate\\sdk\\tests\\integration\\test_dim08_market_expiry_monitor_service.py::test_expiry_roll_keeps_account_position_on_old_key_and_replays_monitor_outbox"
+    ],
+    "pytest_exit": 0,
+    "junit": {
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "1",
+      "time": "6.620",
+      "timestamp": "2026-10-16T22:49:13.142761",
+      "hostname": "yun"
+    },
+    "result_sha256": "7d1c01051998ab67e6749323ff0a3d4dc6bc906f8d60c7f3ceeef30ae99e1df5",
+    "junit_sha256": "5ad9efaaf816a7f546fb76b4c52eb1e6c5a6931a38c5f41db0dc064054bfbfc0",
+    "stdout_sha256": "132c1c7990c6269368d7cd486973c6e7ea81b5a18da5019a9c05eab44bacd11e",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "source_pin_count": 3929,
+    "sources_unchanged": true,
+    "heads_unchanged": true,
+    "repository_heads": {
+      "bt_api_py": "9a1495ad4be0670f7f2efe7e81c3ae9650877023",
+      "bt_api_base": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+      "bt_api_gateway": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+      "bt_api_execution": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e",
+      "bt_api_risk": "503a0b351e309529a2e863aff9f57d0846d7d9cf",
+      "bt_api_monitor": "536a4f04747182749fabdac5e28624f80465bc53",
+      "bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+    },
+    "evidence_level": "DIM08_LOCAL_SERVICEHOST_CURVE_SYNTHETIC_MARKET_AND_ACCOUNT_PROVIDER_WITH_REAL_MONITOR_OUTBOX_THRESHOLD_REPLAY_ONLY"
+  },
+  "accepted_prior_evidence": [
+    {
+      "round": "DIM08 threshold_rules R2",
+      "monitor_HEAD": "536a4f04747182749fabdac5e28624f80465bc53",
+      "new_nodes": "2 passed / 0 failed",
+      "full_selected_run": "56 passed / 0 failed",
+      "threshold_module": "8 passed nodes",
+      "new_nodes_junit_sha256": "213c676a809c88daf697f38ee8212cecad24d0c88e4dfbcd90be029a5d070769",
+      "full_run_junit_sha256": "ff671454280ce3596a37499f05f1bd61cc5cd41941a215e8febf9ee3c0d23ffb",
+      "source_hash_manifest_sha256": "a6ca4f7d4cd47c36e1920eae06ac9ce4ef4600ac3bcf045cb68ac8bf1d7cf2c5",
+      "raw_inputs_in_zip_prefix": "accepted-monitor-r2/"
+    },
+    {
+      "round": "MON03 market observation projection, 63",
+      "commit": "7c9a669f4d6aeefd20e4a0ba028b1444e553aa1d",
+      "result": "3 passed; shared Base projection; synthetic GatewayHub publish; redacted system-scope ingress"
+    },
+    {
+      "round": "MON03 normal ServiceHost/CURVE relay, 78",
+      "result": "1 passed; Gateway/Monitor ingress/reader service path; SQLite outbox/read; child exit 0",
+      "result_sha256": "6f2270babdfafcdae3f2d22f3d85c9108de4788ae1e990f44b97e4f0300fd283",
+      "junit_sha256": "d8bb4edd3352a01ccb7f3de003e2e80d853ca507b3f5825b43cf91b55fdfb2fd",
+      "executed_test_sha256": "e8eb6cfe9cc97869d7ee66ca4360bcbf336719e52b06ce96821d4b14c56e0f01",
+      "raw_inputs_in_zip_prefix": "accepted-mon03-r78/"
+    }
+  ],
+  "dim08_clause_assessment": [
+    {
+      "clause": "expiry/roll subscriptions",
+      "status": "PASS_LOCAL_SYNTHETIC",
+      "evidence": "R11 starts old and new full MarketSubscriptionKey concurrently, observes both active, then releases old and verifies new remains subscribed."
+    },
+    {
+      "clause": "old position remains assigned to original full contract key",
+      "status": "PASS_LOCAL_SYNTHETIC",
+      "evidence": "AccountObservation refresh after new quote still contains exactly one quantity-2 position with _OLD_INSTRUMENT and not _NEW_INSTRUMENT."
+    },
+    {
+      "clause": "producer/outbox/consumer recovery",
+      "status": "PASS_LOCAL_SERVICEHOST_SYNTHETIC_PROVIDER",
+      "evidence": "R11 uses spawned real ServiceHost/CURVE clients, real Gateway hub/relay and SQLite Monitor outbox; same event replay is idempotent; a restarted threshold loop resumes the durable scope checkpoint."
+    },
+    {
+      "clause": "threshold configuration, windows and multiple dimensions",
+      "status": "PARTIAL",
+      "evidence": "ThresholdRule is bounded and binds exact outbox_scope + event_type; R2 unit tests validate window re-arm/replay; R11 uses a 60-second/two-event rule and proves wrong scope and wrong event type do not count. Strategy/account/instrument/product/group threshold dimensions and combined-dimension coverage are not established. The current rule window uses the consumer processing clock, not the source event timestamp."
+    },
+    {
+      "clause": "duplicate-event behavior",
+      "status": "PARTIAL_AT_LEAST_ONCE_DISCLOSURE",
+      "evidence": "Same source_event_id replay shares sequence and does not add a row; sequence watermark and acked durable checkpoint prevent ordinary replay double count. R2 explicitly demonstrates that lost ACK at a crossing may re-alert at a different event, and sink failure at crossing followed by restart may not re-emit; rule-window state is in-memory rather than durable."
+    },
+    {
+      "clause": "authorization/permission boundaries",
+      "status": "PARTIAL_LOCAL",
+      "evidence": "R11 account-scoped relay registration fails with SCOPE_DENIED before any provider start or outbox row; system-scoped market read and telemetry append are granted. Full monitor read/ack/control-role matrix is not exercised."
+    },
+    {
+      "clause": "tag/cardinality capacity",
+      "status": "NOT_ESTABLISHED",
+      "evidence": "R11 sets bounded pending-event/byte and ingress max-event/count/byte limits, but these are queue/payload limits and do not test metric-label/tag cardinality capacity."
+    },
+    {
+      "clause": "alerting does not act as hard risk/admission control",
+      "status": "PASS_NARROW_ADVISORY_PATH",
+      "evidence": "R11 route only reads market and appends telemetry; threshold component is read-only with respect to producer outbox and imports/calls no Risk/admission route in the accepted R2 source evidence."
+    }
+  ],
+  "commit_plan": {
+    "sequence": [
+      "Monitor submodule first",
+      "bt_api_py parent second"
+    ],
+    "monitor_exact_paths": [
+      "src/bt_api_monitor/threshold_rules.py",
+      "tests/test_threshold_rules.py"
+    ],
+    "sdk_exact_paths_after_monitor_commit": [
+      "tests/integration/test_dim08_market_expiry_monitor_service.py",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim08-market-expiry-monitor-r246-20261016/manifest.json",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim08-market-expiry-monitor-r246-20261016/raw-evidence.zip",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim08-market-expiry-monitor-r246-20261016/round-record.md",
+      "bt_api/bt_api_monitor (gitlink update only to accepted Monitor commit)"
+    ],
+    "excluded": [
+      "docs/迭代计划/迭代10-可选组件与可配置通信/开发与验收进度.md",
+      "bt_api/bt_api_monitor/src/bt_api_monitor/service_control.py",
+      "bt_api/bt_api_monitor/tests/test_service_control.py",
+      "all unrelated SDK/Monitor worktree changes"
+    ],
+    "staged_or_committed": false
+  },
+  "raw_archive": {
+    "path": "raw-evidence.zip",
+    "bytes": 2733017,
+    "sha256": "55df5bd6e5f2e82014833cfa72c00e549762d609652383f2382d8776368f64a7",
+    "member_count": 70,
+    "members": [
+      {
+        "member": "root-qa/r7/command.json",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r7\\command.json",
+        "bytes": 1462,
+        "sha256": "4501235fe9a463af45dd62ebef83273948be4e5016b82cdf0e447887dbf738d5"
+      },
+      {
+        "member": "root-qa/r7/exit.txt",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r7\\exit.txt",
+        "bytes": 3,
+        "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+      },
+      {
+        "member": "root-qa/r7/junit.xml",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r7\\junit.xml",
+        "bytes": 1078,
+        "sha256": "243de34a6104713012d42c6c10311d3e5b78233fa7e3519ddbe06379fc992a53"
+      },
+      {
+        "member": "root-qa/r7/result.json",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r7\\result.json",
+        "bytes": 1746,
+        "sha256": "937f81238ad6f57f4e07f805f12eb80029104f4cbe1eb09e3881904c1f21e1bb"
+      },
+      {
+        "member": "root-qa/r7/runner.py",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r7\\runner.py",
+        "bytes": 3400,
+        "sha256": "7c6dd88c57aebff4de4f88fce8c3623599db9369d499fbd42dc9df9c7ea5b7a0"
+      },
+      {
+        "member": "root-qa/r7/running.json",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r7\\running.json",
+        "bytes": 76,
+        "sha256": "84065931c89288118c8915e471671d22c849ab020d856e56c58110a60c158d6f"
+      },
+      {
+        "member": "root-qa/r7/source-after.json",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r7\\source-after.json",
+        "bytes": 834774,
+        "sha256": "2e9d7c809f509a01fee5c3dce2999ee2023da3c564917ce1d2dd5a3fb5a502b2"
+      },
+      {
+        "member": "root-qa/r7/source-before.json",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r7\\source-before.json",
+        "bytes": 834774,
+        "sha256": "2e9d7c809f509a01fee5c3dce2999ee2023da3c564917ce1d2dd5a3fb5a502b2"
+      },
+      {
+        "member": "root-qa/r7/spec.json",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r7\\spec.json",
+        "bytes": 847447,
+        "sha256": "f622187f09b7ffde18dd1ad746d5d3e376b0a780ab4473b560aa818ac1c477ff"
+      },
+      {
+        "member": "root-qa/r7/stderr.log",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r7\\stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "member": "root-qa/r7/stdout.log",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r7\\stdout.log",
+        "bytes": 2147,
+        "sha256": "dfacdd16ebe301a40b34192ef90c7075ca071ab070d65541793973596c0cf00e"
+      },
+      {
+        "member": "root-qa/r9/command.json",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r9\\command.json",
+        "bytes": 1462,
+        "sha256": "bfdf03ccb63bea26564502238576cc23be607f45feeba9211276085152b92409"
+      },
+      {
+        "member": "root-qa/r9/exit.txt",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r9\\exit.txt",
+        "bytes": 3,
+        "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+      },
+      {
+        "member": "root-qa/r9/junit.xml",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r9\\junit.xml",
+        "bytes": 1076,
+        "sha256": "a090848b453e247bfdba63eef112f49eef93e4c1e78a47e7d42984f0821be7bc"
+      },
+      {
+        "member": "root-qa/r9/result.json",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r9\\result.json",
+        "bytes": 1746,
+        "sha256": "e0e69008095130ca1e318c7482eea967d91ab7a43a75db37876fc39d5733ae22"
+      },
+      {
+        "member": "root-qa/r9/runner.py",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r9\\runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "member": "root-qa/r9/running.json",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r9\\running.json",
+        "bytes": 76,
+        "sha256": "b1e754c26e7422cb8a31866542b4a67690693b2426a4c15f885e768dab653a12"
+      },
+      {
+        "member": "root-qa/r9/source-after.json",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r9\\source-after.json",
+        "bytes": 836506,
+        "sha256": "927e30de45da5c129dc83b3ef69fad5635e7fe85cd0cb00787596592ee0de7e8"
+      },
+      {
+        "member": "root-qa/r9/source-before.json",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r9\\source-before.json",
+        "bytes": 836506,
+        "sha256": "927e30de45da5c129dc83b3ef69fad5635e7fe85cd0cb00787596592ee0de7e8"
+      },
+      {
+        "member": "root-qa/r9/spec.json",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r9\\spec.json",
+        "bytes": 849201,
+        "sha256": "7ef3be0e607c8b2097f12e786885f625bc22cf6dbfa4b60cf0cb38d27bbe2106"
+      },
+      {
+        "member": "root-qa/r9/stderr.log",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r9\\stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "member": "root-qa/r9/stdout.log",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r9\\stdout.log",
+        "bytes": 1976,
+        "sha256": "c3e8585ac0fec45177476cafb2637028ef465df294a44acda9517e76a3444896"
+      },
+      {
+        "member": "root-qa/r10/command.json",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r10\\command.json",
+        "bytes": 1475,
+        "sha256": "3d7e945729170b05781bd4df0caf77f03cd47ff8dcee1f3c55b08186eb1d6b07"
+      },
+      {
+        "member": "root-qa/r10/exit.txt",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r10\\exit.txt",
+        "bytes": 3,
+        "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+      },
+      {
+        "member": "root-qa/r10/junit.xml",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r10\\junit.xml",
+        "bytes": 1545,
+        "sha256": "b9e216d7e4e13a90d6cfc32479f9fe91078614d727e204438c6d15db93ed57ec"
+      },
+      {
+        "member": "root-qa/r10/result.json",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r10\\result.json",
+        "bytes": 1746,
+        "sha256": "6c946939c2aecc461fe48564a27ceb6f71248742cb78c9a5173e940ebeb598fe"
+      },
+      {
+        "member": "root-qa/r10/runner.py",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r10\\runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "member": "root-qa/r10/running.json",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r10\\running.json",
+        "bytes": 76,
+        "sha256": "7f38991187710cd8952f5fb161e4e5a722ce4703fb3a0ca774908a46c80aad6c"
+      },
+      {
+        "member": "root-qa/r10/source-after.json",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r10\\source-after.json",
+        "bytes": 842691,
+        "sha256": "551e280692acb9e2ba719e7b03b880c9792155ebe81a7b9d0feed2ce9ea6eb2d"
+      },
+      {
+        "member": "root-qa/r10/source-before.json",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r10\\source-before.json",
+        "bytes": 842691,
+        "sha256": "551e280692acb9e2ba719e7b03b880c9792155ebe81a7b9d0feed2ce9ea6eb2d"
+      },
+      {
+        "member": "root-qa/r10/spec.json",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r10\\spec.json",
+        "bytes": 855426,
+        "sha256": "c329e447ccd252a9e370acacb2229f3e6fa169f381afb395631e7f3cacce62a0"
+      },
+      {
+        "member": "root-qa/r10/stderr.log",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r10\\stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "member": "root-qa/r10/stdout.log",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r10\\stdout.log",
+        "bytes": 2425,
+        "sha256": "f7736ad7d59920eb57b13136ac8a1cce99df0c348f41bb3f168053aeeeed4e98"
+      },
+      {
+        "member": "root-qa/r11/command.json",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r11\\command.json",
+        "bytes": 1475,
+        "sha256": "db0e43e2a3ff90b682af16839802146f7a882037e6eeac0981d6113891cd7f78"
+      },
+      {
+        "member": "root-qa/r11/exit.txt",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r11\\exit.txt",
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      {
+        "member": "root-qa/r11/junit.xml",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r11\\junit.xml",
+        "bytes": 394,
+        "sha256": "5ad9efaaf816a7f546fb76b4c52eb1e6c5a6931a38c5f41db0dc064054bfbfc0"
+      },
+      {
+        "member": "root-qa/r11/result.json",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r11\\result.json",
+        "bytes": 1746,
+        "sha256": "7d1c01051998ab67e6749323ff0a3d4dc6bc906f8d60c7f3ceeef30ae99e1df5"
+      },
+      {
+        "member": "root-qa/r11/runner.py",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r11\\runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "member": "root-qa/r11/running.json",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r11\\running.json",
+        "bytes": 76,
+        "sha256": "0ed1d5051d7072a6f9e9998f79e4590428513e6bfbcdb46462c6295b10887e75"
+      },
+      {
+        "member": "root-qa/r11/source-after.json",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r11\\source-after.json",
+        "bytes": 842691,
+        "sha256": "4276798465ea6fec44bdd6c26c9f66ad492c51c1ecc262f21bfef70c7762f303"
+      },
+      {
+        "member": "root-qa/r11/source-before.json",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r11\\source-before.json",
+        "bytes": 842691,
+        "sha256": "4276798465ea6fec44bdd6c26c9f66ad492c51c1ecc262f21bfef70c7762f303"
+      },
+      {
+        "member": "root-qa/r11/spec.json",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r11\\spec.json",
+        "bytes": 855426,
+        "sha256": "e850eeef90b1db902a8d9f4b51cfef7a073c0a05530fa7c5116c1932b6ec87f1"
+      },
+      {
+        "member": "root-qa/r11/stderr.log",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r11\\stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "member": "root-qa/r11/stdout.log",
+        "source_path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r11\\stdout.log",
+        "bytes": 204,
+        "sha256": "132c1c7990c6269368d7cd486973c6e7ea81b5a18da5019a9c05eab44bacd11e"
+      },
+      {
+        "member": "root-qa/r11-root-spec.json",
+        "source_path": "D:\\bt_api_py\\.codex-tmp\\iteration10-dim08-market-expiry-monitor-root-spec-r11-20261016.json",
+        "bytes": 855426,
+        "sha256": "e850eeef90b1db902a8d9f4b51cfef7a073c0a05530fa7c5116c1932b6ec87f1"
+      },
+      {
+        "member": "root-qa/r11-fixed-source-manifest.json",
+        "source_path": "D:\\temp\\d8-src-r11\\source-manifest.json",
+        "bytes": 859160,
+        "sha256": "d1e5c7ed939a4e170c8d15a29fefa3e3df4fb77d6fa7f698e15d41e027402d45"
+      },
+      {
+        "member": "candidate/monitor/src/bt_api_monitor/threshold_rules.py",
+        "source_path": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\threshold_rules.py",
+        "bytes": 13897,
+        "sha256": "617722e269dbcf634ab7370fb3e9e46162bf22c9c254dcb59e38a591ee4f92a8"
+      },
+      {
+        "member": "candidate/monitor/tests/test_threshold_rules.py",
+        "source_path": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\tests\\test_threshold_rules.py",
+        "bytes": 22041,
+        "sha256": "6f7351cc46fce954bba0a5c3781246557d4bce4c44d30ae5759fffaed37f5887"
+      },
+      {
+        "member": "candidate/sdk/tests/integration/test_dim08_market_expiry_monitor_service.py",
+        "source_path": "D:\\bt_api_py\\tests\\integration\\test_dim08_market_expiry_monitor_service.py",
+        "bytes": 41088,
+        "sha256": "aaa5103b565c223fda9feaa946edb66c0dd489c7c2044fcbcccd600c39ccce21"
+      },
+      {
+        "member": "candidate/sdk/tests/unit/test_service_account_integration.py",
+        "source_path": "D:\\temp\\d8-src-r11\\candidate\\sdk\\tests\\unit\\test_service_account_integration.py",
+        "bytes": 46213,
+        "sha256": "e930ec08396275bd0b5162b318522c8aab96c1ec8823d0dd0668cf3f1d8bdbc3"
+      },
+      {
+        "member": "accepted-monitor-r2/new-nodes-exit.txt",
+        "source_path": "D:\\temp\\it10dim08-rule-20261016-r2\\new-nodes-exit.txt",
+        "bytes": 7,
+        "sha256": "418a5c17f33c70e99b0cc0a07fce69191489cfedc94164bfa903785777c5bd4b"
+      },
+      {
+        "member": "accepted-monitor-r2/new-nodes-junit.xml",
+        "source_path": "D:\\temp\\it10dim08-rule-20261016-r2\\new-nodes-junit.xml",
+        "bytes": 508,
+        "sha256": "213c676a809c88daf697f38ee8212cecad24d0c88e4dfbcd90be029a5d070769"
+      },
+      {
+        "member": "accepted-monitor-r2/new-nodes-stderr.txt",
+        "source_path": "D:\\temp\\it10dim08-rule-20261016-r2\\new-nodes-stderr.txt",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "member": "accepted-monitor-r2/new-nodes-stdout.txt",
+        "source_path": "D:\\temp\\it10dim08-rule-20261016-r2\\new-nodes-stdout.txt",
+        "bytes": 1195,
+        "sha256": "02867f73a793fa095d216ddb9ebe363d120b904697bd809fb711ca8f600d4e93"
+      },
+      {
+        "member": "accepted-monitor-r2/runA-exit.txt",
+        "source_path": "D:\\temp\\it10dim08-rule-20261016-r2\\runA-exit.txt",
+        "bytes": 7,
+        "sha256": "418a5c17f33c70e99b0cc0a07fce69191489cfedc94164bfa903785777c5bd4b"
+      },
+      {
+        "member": "accepted-monitor-r2/runA-junit.xml",
+        "source_path": "D:\\temp\\it10dim08-rule-20261016-r2\\runA-junit.xml",
+        "bytes": 7990,
+        "sha256": "ff671454280ce3596a37499f05f1bd61cc5cd41941a215e8febf9ee3c0d23ffb"
+      },
+      {
+        "member": "accepted-monitor-r2/runA-stderr.txt",
+        "source_path": "D:\\temp\\it10dim08-rule-20261016-r2\\runA-stderr.txt",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "member": "accepted-monitor-r2/runA-stdout.txt",
+        "source_path": "D:\\temp\\it10dim08-rule-20261016-r2\\runA-stdout.txt",
+        "bytes": 8515,
+        "sha256": "1d8899a4eb36b5bee93f81d04f986e7a7acf7950c68c9af8393317291ab70688"
+      },
+      {
+        "member": "accepted-monitor-r2/ruff-check.txt",
+        "source_path": "D:\\temp\\it10dim08-rule-20261016-r2\\ruff-check.txt",
+        "bytes": 26,
+        "sha256": "7e8e995beb6b942867c80817910cf3a80d4b9cb10974bc60ce55e6e21f00e688"
+      },
+      {
+        "member": "accepted-monitor-r2/ruff-format-check.txt",
+        "source_path": "D:\\temp\\it10dim08-rule-20261016-r2\\ruff-format-check.txt",
+        "bytes": 33,
+        "sha256": "9090c08889157b50d542e16e718120353c3dcee6a62c1ffdf42dedc4c2acad49"
+      },
+      {
+        "member": "accepted-monitor-r2/sha256-files-post-remediation.txt",
+        "source_path": "D:\\temp\\it10dim08-rule-20261016-r2\\sha256-files-post-remediation.txt",
+        "bytes": 244,
+        "sha256": "a6ca4f7d4cd47c36e1920eae06ac9ce4ef4600ac3bcf045cb68ac8bf1d7cf2c5"
+      },
+      {
+        "member": "accepted-monitor-r2/git-state-final.txt",
+        "source_path": "D:\\temp\\it10dim08-rule-20261016-r2\\git-state-final.txt",
+        "bytes": 1772,
+        "sha256": "2b98fc18c8ef2cfa99009183f7d9b517be9739db482c0a26c5f5f25c39b1aa1f"
+      },
+      {
+        "member": "accepted-mon03-r78/executed-test.py",
+        "source_path": "D:\\temp\\iteration10-mon03-root-curve-20261015-h\\executed-test.py",
+        "bytes": 42080,
+        "sha256": "e8eb6cfe9cc97869d7ee66ca4360bcbf336719e52b06ce96821d4b14c56e0f01"
+      },
+      {
+        "member": "accepted-mon03-r78/inputs-after.json",
+        "source_path": "D:\\temp\\iteration10-mon03-root-curve-20261015-h\\inputs-after.json",
+        "bytes": 5286,
+        "sha256": "4241d3a914e7faa4a327959b177a149a31ba973d6a2382678bc5ca4890d868f3"
+      },
+      {
+        "member": "accepted-mon03-r78/inputs-before.json",
+        "source_path": "D:\\temp\\iteration10-mon03-root-curve-20261015-h\\inputs-before.json",
+        "bytes": 5685,
+        "sha256": "4d88552fd80b84236b63980a3080ad72ee6b7b3c4e41c001902a9de00c91655f"
+      },
+      {
+        "member": "accepted-mon03-r78/junit.xml",
+        "source_path": "D:\\temp\\iteration10-mon03-root-curve-20261015-h\\junit.xml",
+        "bytes": 398,
+        "sha256": "d8bb4edd3352a01ccb7f3de003e2e80d853ca507b3f5825b43cf91b55fdfb2fd"
+      },
+      {
+        "member": "accepted-mon03-r78/pytest.log",
+        "source_path": "D:\\temp\\iteration10-mon03-root-curve-20261015-h\\pytest.log",
+        "bytes": 2048,
+        "sha256": "bc75998c32fd3f689f4f10d4a803a7b544f2e799fd7794c52a1d7a51bfe1901a"
+      },
+      {
+        "member": "accepted-mon03-r78/result.json",
+        "source_path": "D:\\temp\\iteration10-mon03-root-curve-20261015-h\\result.json",
+        "bytes": 7892,
+        "sha256": "6f2270babdfafcdae3f2d22f3d85c9108de4788ae1e990f44b97e4f0300fd283"
+      },
+      {
+        "member": "plan/formal-iteration-plan.md",
+        "source_path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\正式迭代计划.md",
+        "bytes": 161040,
+        "sha256": "a6f8dba3e749bd321e0ba118f666914fe6bf540ae9ea1396c2a4273087d75349"
+      },
+      {
+        "member": "plan/current-progress-snapshot.md",
+        "source_path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\开发与验收进度.md",
+        "bytes": 523260,
+        "sha256": "26935db55bafc7f52e8b0b5182c7682621a27a79831f5c4c462944892edcd4d4"
+      }
+    ]
+  },
+  "repository_state_at_packet_assembly": {
+    "repositories": {
+      "bt_api_py": {
+        "branch": "dev",
+        "HEAD": "a208ccd8e904142fb309a48ff45eba1d6892721b"
+      },
+      "bt_api_monitor": {
+        "branch": "dev",
+        "HEAD": "536a4f04747182749fabdac5e28624f80465bc53"
+      }
+    },
+    "SDK_HEAD_at_R11": "9a1495ad4be0670f7f2efe7e81c3ae9650877023",
+    "SDK_commits_after_R11_before_packet": "a208ccd8e904142fb309a48ff45eba1d6892721b",
+    "SDK_delta": "R236 docs/evidence only: three new AFI04 evidence files plus progress document; no runtime source or submodule gitlink movement",
+    "verified_name_status_since_R11": [
+      {
+        "status": "A",
+        "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/afi04-analytics-http-risk-r236-20261016/manifest.json"
+      },
+      {
+        "status": "A",
+        "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/afi04-analytics-http-risk-r236-20261016/raw-evidence.zip"
+      },
+      {
+        "status": "A",
+        "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/afi04-analytics-http-risk-r236-20261016/round-record.md"
+      },
+      {
+        "status": "M",
+        "path": "docs/迭代计划/迭代10-可选组件与可配置通信/开发与验收进度.md"
+      }
+    ],
+    "candidate_source_overlay_pins_unchanged": true
+  },
+  "plan_source": {
+    "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\正式迭代计划.md",
+    "sha256": "a6f8dba3e749bd321e0ba118f666914fe6bf540ae9ea1396c2a4273087d75349",
+    "DIM08_line": 780,
+    "archived_member": "plan/formal-iteration-plan.md"
+  },
+  "progress_snapshot": {
+    "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\开发与验收进度.md",
+    "sha256": "26935db55bafc7f52e8b0b5182c7682621a27a79831f5c4c462944892edcd4d4",
+    "formal_status": "40/68",
+    "archived_member": "plan/current-progress-snapshot.md",
+    "note": "read-only snapshot; repository file not modified by this round"
+  },
+  "round_record": {
+    "path": "round-record.md",
+    "bytes": 5014,
+    "sha256": "5d9e6c2dc835b6ad58d7b73f20b9f906aad7aad1cc27132df6cce9695ceb020e"
+  },
+  "observed_monitor_worktree_status_at_packet_assembly": [
+    " M src/bt_api_monitor/service_control.py",
+    " M tests/test_service_control.py",
+    "?? src/bt_api_monitor/threshold_rules.py",
+    "?? tests/test_threshold_rules.py"
+  ]
+}

@@ -1,0 +1,468 @@
+{
+  "_schema": "bt_api_py-dev-commit-spec-v1",
+  "_status": "DRAFT_FOR_ROOT_QUEUE; NOT_STAGED; NOT_COMMITTED",
+  "_round": null,
+  "_round_note": "Root assigns the round number after the current SDK queue.",
+  "_repository": "D:/bt_api_py",
+  "_branch": "dev",
+  "_qa_head": "3b8025b7f81ad664d7da80796497fcb7419eedb3",
+  "_delivery_parent_observed": "1ee1c1ea9aefa961f0c555d0487f03bac2511521",
+  "_accepted_evidence_level": "LOCAL_SYNTHETIC_MIG03_FIRST_WRITE_COMPATIBILITY_SAFETY",
+  "_commit_scope_paths": [
+    "bt_api_py/service_migration_gate.py",
+    "tests/unit/test_service_migration_gate.py",
+    "tests/unit/test_service_migration_gate_atomicity.py",
+    "tests/unit/test_service_migration_map.py",
+    "tests/unit/test_service_migration_drill.py",
+    "tests/integration/test_service_migration_boundary_enable.py",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03-legacy-firstwrite-compat-20261017/raw-evidence.zip",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03-legacy-firstwrite-compat-20261017/manifest.json",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03-legacy-firstwrite-compat-20261017/round-record.md"
+  ],
+  "_excluded_parallel_paths": [
+    "bt_api_py/service_host.py",
+    "bt_api_py/service_registry.py",
+    "bt_api_py/service_migration_boundary.py",
+    "bt_api_py/service_execution_group.py",
+    "tests/unit/test_service_migration_boundary.py",
+    "all other lane-owned paths and already-staged index entries"
+  ],
+  "_qa": {
+    "python": "C:/Anaconda3/python.exe",
+    "pytest_options": [
+      "-q",
+      "--noconftest",
+      "-c D:/bt_api_py/.codex-tmp/iteration10-resume-sync-pytest.ini"
+    ],
+    "cwd": "D:/bt_api_py",
+    "qa_runs": [
+      {
+        "id": "r1-precase",
+        "original_output_directory": "D:\\temp\\iteration10-mig03-compat-firstwrite-local-20261017-r1",
+        "command_argv": [
+          "",
+          "-m",
+          "pytest",
+          "-q",
+          "--noconftest",
+          "-c",
+          "D:\\bt_api_py\\.codex-tmp\\iteration10-resume-sync-pytest.ini",
+          "tests/unit/test_service_migration_gate.py",
+          "tests/unit/test_service_migration_gate_atomicity.py::test_late_rollback_rereads_sealed_marker_before_removing_it",
+          "tests/unit/test_service_migration_gate_atomicity.py::test_lock_wait_is_bounded_and_released_after_contention",
+          "tests/unit/test_service_migration_gate_atomicity.py::test_pre_replace_write_failure_preserves_old_file_and_allows_recovery",
+          "tests/unit/test_service_migration_gate_atomicity.py::test_atomic_file_readers_observe_only_complete_marker_documents",
+          "tests/unit/test_service_migration_map.py::test_conflict_refusal_and_partition_invariant_under_sealed_cutover_epoch"
+        ],
+        "cwd": "D:\\bt_api_py",
+        "exit_code": null,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderr_bytes": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "source_sha256_before": null,
+        "source_sha256_after": null
+      },
+      {
+        "id": "r2-initial-unit",
+        "original_output_directory": "D:\\temp\\iteration10-mig03-compat-firstwrite-local-20261017-r2",
+        "command_argv": [
+          "C:\\Anaconda3\\python.exe",
+          "-m",
+          "pytest",
+          "-q",
+          "--noconftest",
+          "-c",
+          "D:\\bt_api_py\\.codex-tmp\\iteration10-resume-sync-pytest.ini",
+          "tests/unit/test_service_migration_gate.py",
+          "tests/unit/test_service_migration_gate_atomicity.py::test_late_rollback_rereads_sealed_marker_before_removing_it",
+          "tests/unit/test_service_migration_gate_atomicity.py::test_lock_wait_is_bounded_and_released_after_contention",
+          "tests/unit/test_service_migration_gate_atomicity.py::test_pre_replace_write_failure_preserves_old_file_and_allows_recovery",
+          "tests/unit/test_service_migration_gate_atomicity.py::test_atomic_file_readers_observe_only_complete_marker_documents",
+          "tests/unit/test_service_migration_map.py::test_conflict_refusal_and_partition_invariant_under_sealed_cutover_epoch"
+        ],
+        "cwd": "D:\\bt_api_py",
+        "exit_code": 1,
+        "stdout_bytes": 5719,
+        "stdout_sha256": "f33c4abee528c9ae8de812ea389958fa033fc2a6f814c71ab3dd1b2ebc70c73f",
+        "stderr_bytes": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "source_sha256_before": {
+          "tests/integration/test_service_migration_boundary_enable.py": "FC287425254D85F8BA7554582E70E1AEC78565CCABBD79B53ACD81AE28E586A3",
+          "bt_api_py/service_host.py": "25A07D5C6B14108BA699D2B86A59C99ACACBD77E1A2C4F411F6F7E0D7350AB7E",
+          "tests/unit/test_service_migration_gate_atomicity.py": "3139BACA3A494377E68D0C58B41BFEDDDE550F3D3C0BFF81A5EE64758F437341",
+          "tests/unit/test_service_migration_gate.py": "0F24866DC94C1EB8605821965C177C2ADE0FCBD8B97B9313CC58A40BF64AE1C1",
+          "tests/unit/test_service_migration_drill.py": "8C4370C3C6B8E8D762B4A8D9EE5CC1720B71432FEB18FFE66C62797A71DDAC7B",
+          "tests/unit/test_service_migration_map.py": "74CE31AD28059B2677C9A328332F903EE0BA8850D6F46126AA4F037BA073295E",
+          "bt_api_py/service_migration_gate.py": "8FDAEED23E74E31C1B360DD6D4139AF21805C0322467D7726BF469FCEAB8020E",
+          "bt_api_py/service_registry.py": "260127E4D947364B627CE46BE75F53E66A1E7BDE1723811B422826141030A9D2"
+        },
+        "source_sha256_after": {
+          "tests/integration/test_service_migration_boundary_enable.py": "FC287425254D85F8BA7554582E70E1AEC78565CCABBD79B53ACD81AE28E586A3",
+          "bt_api_py/service_host.py": "25A07D5C6B14108BA699D2B86A59C99ACACBD77E1A2C4F411F6F7E0D7350AB7E",
+          "tests/unit/test_service_migration_gate_atomicity.py": "3139BACA3A494377E68D0C58B41BFEDDDE550F3D3C0BFF81A5EE64758F437341",
+          "tests/unit/test_service_migration_gate.py": "0F24866DC94C1EB8605821965C177C2ADE0FCBD8B97B9313CC58A40BF64AE1C1",
+          "tests/unit/test_service_migration_drill.py": "8C4370C3C6B8E8D762B4A8D9EE5CC1720B71432FEB18FFE66C62797A71DDAC7B",
+          "tests/unit/test_service_migration_map.py": "74CE31AD28059B2677C9A328332F903EE0BA8850D6F46126AA4F037BA073295E",
+          "bt_api_py/service_migration_gate.py": "8FDAEED23E74E31C1B360DD6D4139AF21805C0322467D7726BF469FCEAB8020E",
+          "bt_api_py/service_registry.py": "260127E4D947364B627CE46BE75F53E66A1E7BDE1723811B422826141030A9D2"
+        }
+      },
+      {
+        "id": "r3-unit-fix",
+        "original_output_directory": "D:\\temp\\iteration10-mig03-compat-firstwrite-local-20261017-r3",
+        "command_argv": [
+          "C:\\Anaconda3\\python.exe",
+          "-m",
+          "pytest",
+          "-q",
+          "--noconftest",
+          "-c",
+          "D:\\bt_api_py\\.codex-tmp\\iteration10-resume-sync-pytest.ini",
+          "tests/unit/test_service_migration_gate.py::test_no_marker_is_a_benign_noop",
+          "tests/unit/test_service_migration_gate.py::test_pre_first_write_old_epoch_start_allowed_and_rollback_restores_unchanged",
+          "tests/unit/test_service_migration_gate.py::test_service_host_start_unchanged_without_marker_or_before_first_write"
+        ],
+        "cwd": "D:\\bt_api_py",
+        "exit_code": 0,
+        "stdout_bytes": 100,
+        "stdout_sha256": "49a0ba74b14fec5aeeeaa912f77ead6924a4061df7f5a2aea595aa1243cc812c",
+        "stderr_bytes": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "source_sha256_before": {
+          "tests/unit/test_service_migration_drill.py": "8C4370C3C6B8E8D762B4A8D9EE5CC1720B71432FEB18FFE66C62797A71DDAC7B",
+          "tests/unit/test_service_migration_gate_atomicity.py": "3139BACA3A494377E68D0C58B41BFEDDDE550F3D3C0BFF81A5EE64758F437341",
+          "bt_api_py/service_registry.py": "260127E4D947364B627CE46BE75F53E66A1E7BDE1723811B422826141030A9D2",
+          "bt_api_py/service_migration_gate.py": "8FDAEED23E74E31C1B360DD6D4139AF21805C0322467D7726BF469FCEAB8020E",
+          "bt_api_py/service_host.py": "25A07D5C6B14108BA699D2B86A59C99ACACBD77E1A2C4F411F6F7E0D7350AB7E",
+          "tests/integration/test_service_migration_boundary_enable.py": "FC287425254D85F8BA7554582E70E1AEC78565CCABBD79B53ACD81AE28E586A3",
+          "tests/unit/test_service_migration_gate.py": "D0EF6A462E7148F0AF21EA4C6ABB54BFBDDAD99ABAA5A32768A03507EA5E4708",
+          "tests/unit/test_service_migration_map.py": "74CE31AD28059B2677C9A328332F903EE0BA8850D6F46126AA4F037BA073295E"
+        },
+        "source_sha256_after": {
+          "tests/unit/test_service_migration_drill.py": "8C4370C3C6B8E8D762B4A8D9EE5CC1720B71432FEB18FFE66C62797A71DDAC7B",
+          "tests/unit/test_service_migration_gate_atomicity.py": "3139BACA3A494377E68D0C58B41BFEDDDE550F3D3C0BFF81A5EE64758F437341",
+          "bt_api_py/service_registry.py": "260127E4D947364B627CE46BE75F53E66A1E7BDE1723811B422826141030A9D2",
+          "bt_api_py/service_migration_gate.py": "8FDAEED23E74E31C1B360DD6D4139AF21805C0322467D7726BF469FCEAB8020E",
+          "bt_api_py/service_host.py": "25A07D5C6B14108BA699D2B86A59C99ACACBD77E1A2C4F411F6F7E0D7350AB7E",
+          "tests/integration/test_service_migration_boundary_enable.py": "FC287425254D85F8BA7554582E70E1AEC78565CCABBD79B53ACD81AE28E586A3",
+          "tests/unit/test_service_migration_gate.py": "D0EF6A462E7148F0AF21EA4C6ABB54BFBDDAD99ABAA5A32768A03507EA5E4708",
+          "tests/unit/test_service_migration_map.py": "74CE31AD28059B2677C9A328332F903EE0BA8850D6F46126AA4F037BA073295E"
+        }
+      },
+      {
+        "id": "r4-host",
+        "original_output_directory": "D:\\temp\\iteration10-mig03-compat-firstwrite-local-20261017-r4-host",
+        "command_argv": [
+          "C:\\Anaconda3\\python.exe",
+          "-m",
+          "pytest",
+          "-q",
+          "--noconftest",
+          "-c",
+          "D:\\bt_api_py\\.codex-tmp\\iteration10-resume-sync-pytest.ini",
+          "tests/integration/test_service_migration_boundary_enable.py::test_legacy_first_write_cannot_enable_restarted_destination_host"
+        ],
+        "cwd": "D:\\bt_api_py",
+        "exit_code": 0,
+        "stdout_bytes": 684,
+        "stdout_sha256": "46da4915e845b43bc057de2451788da40c022161361cf96d13b4dd2e1dcb314f",
+        "stderr_bytes": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "source_sha256_before": {
+          "bt_api_py/service_host.py": "25A07D5C6B14108BA699D2B86A59C99ACACBD77E1A2C4F411F6F7E0D7350AB7E",
+          "bt_api_py/service_registry.py": "260127E4D947364B627CE46BE75F53E66A1E7BDE1723811B422826141030A9D2",
+          "tests/unit/test_service_migration_drill.py": "8C4370C3C6B8E8D762B4A8D9EE5CC1720B71432FEB18FFE66C62797A71DDAC7B",
+          "bt_api_py/service_migration_gate.py": "8FDAEED23E74E31C1B360DD6D4139AF21805C0322467D7726BF469FCEAB8020E",
+          "tests/integration/test_service_migration_boundary_enable.py": "FC287425254D85F8BA7554582E70E1AEC78565CCABBD79B53ACD81AE28E586A3"
+        },
+        "source_sha256_after": {
+          "bt_api_py/service_host.py": "25A07D5C6B14108BA699D2B86A59C99ACACBD77E1A2C4F411F6F7E0D7350AB7E",
+          "bt_api_py/service_registry.py": "260127E4D947364B627CE46BE75F53E66A1E7BDE1723811B422826141030A9D2",
+          "tests/unit/test_service_migration_drill.py": "8C4370C3C6B8E8D762B4A8D9EE5CC1720B71432FEB18FFE66C62797A71DDAC7B",
+          "bt_api_py/service_migration_gate.py": "8FDAEED23E74E31C1B360DD6D4139AF21805C0322467D7726BF469FCEAB8020E",
+          "tests/integration/test_service_migration_boundary_enable.py": "FC287425254D85F8BA7554582E70E1AEC78565CCABBD79B53ACD81AE28E586A3"
+        }
+      },
+      {
+        "id": "r5-drill-fixture",
+        "original_output_directory": "D:\\temp\\iteration10-mig03-compat-firstwrite-local-20261017-r5-drill",
+        "command_argv": [
+          "C:\\Anaconda3\\python.exe",
+          "-m",
+          "pytest",
+          "-q",
+          "--noconftest",
+          "-c",
+          "D:\\bt_api_py\\.codex-tmp\\iteration10-resume-sync-pytest.ini",
+          "tests/unit/test_service_migration_drill.py::test_two_epoch_controlled_migration_drill_preserves_facts_and_refuses_old_epoch_after_first_new_write",
+          "tests/unit/test_service_migration_drill.py::test_controlled_migration_rollback_window_and_import_failure_negatives"
+        ],
+        "cwd": "D:\\bt_api_py",
+        "exit_code": 1,
+        "stdout_bytes": 1640,
+        "stdout_sha256": "bebd68da3c03d301d14b52a0d0fe5faca5060d458d44782315771c6f46e416e3",
+        "stderr_bytes": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "source_sha256_before": {
+          "bt_api_py/service_host.py": "25A07D5C6B14108BA699D2B86A59C99ACACBD77E1A2C4F411F6F7E0D7350AB7E",
+          "bt_api_py/service_migration_boundary.py": "9B98FBEB2BF7E93C647E10C41435F7F193A833F81D0A420B945F2D5EC909F38C",
+          "bt_api_py/service_risk_order_entry.py": "F191815A3EB38297558A6119BA48278DFF73C9B75F3AE00352B083CAC289F985",
+          "bt_api_py/service_migration_gate.py": "8FDAEED23E74E31C1B360DD6D4139AF21805C0322467D7726BF469FCEAB8020E",
+          "tests/unit/test_service_migration_drill.py": "8C4370C3C6B8E8D762B4A8D9EE5CC1720B71432FEB18FFE66C62797A71DDAC7B",
+          "bt_api_py/service_registry.py": "260127E4D947364B627CE46BE75F53E66A1E7BDE1723811B422826141030A9D2",
+          "bt_api_py/service_execution.py": "31EBB0DC6B4994A4B5363627E6DCFC13BA00A1B2A772AB7E81C4C3D0140B7FE3"
+        },
+        "source_sha256_after": {
+          "bt_api_py/service_host.py": "25A07D5C6B14108BA699D2B86A59C99ACACBD77E1A2C4F411F6F7E0D7350AB7E",
+          "bt_api_py/service_migration_boundary.py": "9B98FBEB2BF7E93C647E10C41435F7F193A833F81D0A420B945F2D5EC909F38C",
+          "bt_api_py/service_risk_order_entry.py": "F191815A3EB38297558A6119BA48278DFF73C9B75F3AE00352B083CAC289F985",
+          "bt_api_py/service_migration_gate.py": "8FDAEED23E74E31C1B360DD6D4139AF21805C0322467D7726BF469FCEAB8020E",
+          "tests/unit/test_service_migration_drill.py": "8C4370C3C6B8E8D762B4A8D9EE5CC1720B71432FEB18FFE66C62797A71DDAC7B",
+          "bt_api_py/service_registry.py": "260127E4D947364B627CE46BE75F53E66A1E7BDE1723811B422826141030A9D2",
+          "bt_api_py/service_execution.py": "31EBB0DC6B4994A4B5363627E6DCFC13BA00A1B2A772AB7E81C4C3D0140B7FE3"
+        }
+      },
+      {
+        "id": "r6-drill-fixture",
+        "original_output_directory": "D:\\temp\\iteration10-mig03-compat-firstwrite-local-20261017-r6-drill",
+        "command_argv": [
+          "C:\\Anaconda3\\python.exe",
+          "-m",
+          "pytest",
+          "-q",
+          "--noconftest",
+          "-c",
+          "D:\\bt_api_py\\.codex-tmp\\iteration10-resume-sync-pytest.ini",
+          "tests/unit/test_service_migration_drill.py::test_two_epoch_controlled_migration_drill_preserves_facts_and_refuses_old_epoch_after_first_new_write",
+          "tests/unit/test_service_migration_drill.py::test_controlled_migration_rollback_window_and_import_failure_negatives"
+        ],
+        "cwd": "D:\\bt_api_py",
+        "exit_code": 1,
+        "stdout_bytes": 18650,
+        "stdout_sha256": "439b40698bdf5429636463ee2e2959240a023acd1227983acf2048439137ae3c",
+        "stderr_bytes": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "source_sha256_before": {
+          "bt_api_py/service_migration_boundary.py": "9B98FBEB2BF7E93C647E10C41435F7F193A833F81D0A420B945F2D5EC909F38C",
+          "bt_api_py/service_host.py": "25A07D5C6B14108BA699D2B86A59C99ACACBD77E1A2C4F411F6F7E0D7350AB7E",
+          "tests/unit/test_service_migration_drill.py": "89B0820D7A394A1648E27ADCE1A8200390FECCB4C632A33451EA172CDAD7B005",
+          "bt_api_py/service_registry.py": "260127E4D947364B627CE46BE75F53E66A1E7BDE1723811B422826141030A9D2",
+          "bt_api_py/service_execution.py": "31EBB0DC6B4994A4B5363627E6DCFC13BA00A1B2A772AB7E81C4C3D0140B7FE3",
+          "bt_api_py/service_risk_order_entry.py": "F191815A3EB38297558A6119BA48278DFF73C9B75F3AE00352B083CAC289F985",
+          "bt_api_py/service_migration_gate.py": "8FDAEED23E74E31C1B360DD6D4139AF21805C0322467D7726BF469FCEAB8020E"
+        },
+        "source_sha256_after": {
+          "bt_api_py/service_migration_boundary.py": "9B98FBEB2BF7E93C647E10C41435F7F193A833F81D0A420B945F2D5EC909F38C",
+          "bt_api_py/service_host.py": "25A07D5C6B14108BA699D2B86A59C99ACACBD77E1A2C4F411F6F7E0D7350AB7E",
+          "tests/unit/test_service_migration_drill.py": "89B0820D7A394A1648E27ADCE1A8200390FECCB4C632A33451EA172CDAD7B005",
+          "bt_api_py/service_registry.py": "260127E4D947364B627CE46BE75F53E66A1E7BDE1723811B422826141030A9D2",
+          "bt_api_py/service_execution.py": "31EBB0DC6B4994A4B5363627E6DCFC13BA00A1B2A772AB7E81C4C3D0140B7FE3",
+          "bt_api_py/service_risk_order_entry.py": "F191815A3EB38297558A6119BA48278DFF73C9B75F3AE00352B083CAC289F985",
+          "bt_api_py/service_migration_gate.py": "8FDAEED23E74E31C1B360DD6D4139AF21805C0322467D7726BF469FCEAB8020E"
+        }
+      },
+      {
+        "id": "r7-drill-fix",
+        "original_output_directory": "D:\\temp\\iteration10-mig03-compat-firstwrite-local-20261017-r7-drill",
+        "command_argv": [
+          "C:\\Anaconda3\\python.exe",
+          "-m",
+          "pytest",
+          "-q",
+          "--noconftest",
+          "-c",
+          "D:\\bt_api_py\\.codex-tmp\\iteration10-resume-sync-pytest.ini",
+          "tests/unit/test_service_migration_drill.py::test_two_epoch_controlled_migration_drill_preserves_facts_and_refuses_old_epoch_after_first_new_write"
+        ],
+        "cwd": "D:\\bt_api_py",
+        "exit_code": 0,
+        "stdout_bytes": 101,
+        "stdout_sha256": "17ac47d061fc597a6e146368cacd86b8e7503219164c02b88bc4fa26fd7a6acf",
+        "stderr_bytes": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "source_sha256_before": {
+          "bt_api_py/service_risk_order_entry.py": "24D733CB5F4103C2FD758ABC10E2D371948B89645E4F3503609F564C8BA44584",
+          "bt_api_py/service_host.py": "25A07D5C6B14108BA699D2B86A59C99ACACBD77E1A2C4F411F6F7E0D7350AB7E",
+          "bt_api_py/service_migration_gate.py": "8FDAEED23E74E31C1B360DD6D4139AF21805C0322467D7726BF469FCEAB8020E",
+          "tests/unit/test_service_migration_drill.py": "C66BBDFBF34E741CDCA3F04D711C6393938F97351A922CAC4CB1DB59811625C6",
+          "bt_api_py/service_execution.py": "31EBB0DC6B4994A4B5363627E6DCFC13BA00A1B2A772AB7E81C4C3D0140B7FE3",
+          "bt_api_py/service_migration_boundary.py": "9B98FBEB2BF7E93C647E10C41435F7F193A833F81D0A420B945F2D5EC909F38C",
+          "bt_api_py/service_registry.py": "260127E4D947364B627CE46BE75F53E66A1E7BDE1723811B422826141030A9D2"
+        },
+        "source_sha256_after": {
+          "bt_api_py/service_risk_order_entry.py": "24D733CB5F4103C2FD758ABC10E2D371948B89645E4F3503609F564C8BA44584",
+          "bt_api_py/service_host.py": "25A07D5C6B14108BA699D2B86A59C99ACACBD77E1A2C4F411F6F7E0D7350AB7E",
+          "bt_api_py/service_migration_gate.py": "8FDAEED23E74E31C1B360DD6D4139AF21805C0322467D7726BF469FCEAB8020E",
+          "tests/unit/test_service_migration_drill.py": "C66BBDFBF34E741CDCA3F04D711C6393938F97351A922CAC4CB1DB59811625C6",
+          "bt_api_py/service_execution.py": "31EBB0DC6B4994A4B5363627E6DCFC13BA00A1B2A772AB7E81C4C3D0140B7FE3",
+          "bt_api_py/service_migration_boundary.py": "9B98FBEB2BF7E93C647E10C41435F7F193A833F81D0A420B945F2D5EC909F38C",
+          "bt_api_py/service_registry.py": "260127E4D947364B627CE46BE75F53E66A1E7BDE1723811B422826141030A9D2"
+        }
+      }
+    ],
+    "pre_case_r1_note": "No pytest execution; PowerShell's `python` function had null .Source.",
+    "final_checks": [
+      "py_compile passed",
+      "scoped git diff --check passed"
+    ]
+  },
+  "_review": {
+    "reviewer": "/root/resume_pass_audit_reg_risk_cfg",
+    "conclusion": "GO_STATIC",
+    "all_six_source_pins_matched": true,
+    "review_artifact_note": "The original review arrived as a collaboration message; a precise source disclosure is archived in raw-evidence.zip."
+  },
+  "_limitations": [
+    "Local synthetic Host/Registry/store evidence only; no real provider/account cutover.",
+    "Does not prove configured consumer quiescence or complete MIG03 inventory.",
+    "No formal acceptance tracker count changes in this round.",
+    "Root must stage only the nine explicit paths after the SDK commit queue reaches this round."
+  ],
+  "source_files": {
+    "bt_api_py/service_migration_gate.py": {
+      "bytes": 35384,
+      "sha256": "8FDAEED23E74E31C1B360DD6D4139AF21805C0322467D7726BF469FCEAB8020E"
+    },
+    "tests/unit/test_service_migration_gate.py": {
+      "bytes": 20467,
+      "sha256": "D0EF6A462E7148F0AF21EA4C6ABB54BFBDDAD99ABAA5A32768A03507EA5E4708"
+    },
+    "tests/unit/test_service_migration_gate_atomicity.py": {
+      "bytes": 19793,
+      "sha256": "3139BACA3A494377E68D0C58B41BFEDDDE550F3D3C0BFF81A5EE64758F437341"
+    },
+    "tests/unit/test_service_migration_map.py": {
+      "bytes": 16807,
+      "sha256": "74CE31AD28059B2677C9A328332F903EE0BA8850D6F46126AA4F037BA073295E"
+    },
+    "tests/unit/test_service_migration_drill.py": {
+      "bytes": 92159,
+      "sha256": "C66BBDFBF34E741CDCA3F04D711C6393938F97351A922CAC4CB1DB59811625C6"
+    },
+    "tests/integration/test_service_migration_boundary_enable.py": {
+      "bytes": 44904,
+      "sha256": "FC287425254D85F8BA7554582E70E1AEC78565CCABBD79B53ACD81AE28E586A3"
+    }
+  },
+  "required_test_dependencies": {
+    "bt_api_py/service_host.py": {
+      "bytes": 103121,
+      "sha256": "25A07D5C6B14108BA699D2B86A59C99ACACBD77E1A2C4F411F6F7E0D7350AB7E"
+    },
+    "bt_api_py/service_registry.py": {
+      "bytes": 136807,
+      "sha256": "260127E4D947364B627CE46BE75F53E66A1E7BDE1723811B422826141030A9D2"
+    },
+    "bt_api_py/service_migration_boundary.py": {
+      "bytes": 67870,
+      "sha256": "9B98FBEB2BF7E93C647E10C41435F7F193A833F81D0A420B945F2D5EC909F38C"
+    },
+    "bt_api_py/service_risk_order_entry.py": {
+      "bytes": 264208,
+      "sha256": "24D733CB5F4103C2FD758ABC10E2D371948B89645E4F3503609F564C8BA44584"
+    },
+    "bt_api_py/service_execution.py": {
+      "bytes": 28531,
+      "sha256": "31EBB0DC6B4994A4B5363627E6DCFC13BA00A1B2A772AB7E81C4C3D0140B7FE3"
+    }
+  },
+  "raw_archive_members": {
+    "qa/r1-precase/result.json": {
+      "bytes": 928,
+      "sha256": "9128b4843517ec69054505c2ce6b0641d7f99e437979663bafd70dca8418206a"
+    },
+    "qa/r2-initial-unit/result.json": {
+      "bytes": 9797,
+      "sha256": "04ca6860c5e22330a81d35efe4335aea43f97defb3c0abc2a7431ade6d0e30ea"
+    },
+    "qa/r2-initial-unit/source-before.json": {
+      "bytes": 1426,
+      "sha256": "f16ca5c3803e3fc394d617061c4b60debaa3845f3d47667f48486dc004c5178d"
+    },
+    "qa/r2-initial-unit/stderr.txt": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "qa/r2-initial-unit/stdout.txt": {
+      "bytes": 5719,
+      "sha256": "f33c4abee528c9ae8de812ea389958fa033fc2a6f814c71ab3dd1b2ebc70c73f"
+    },
+    "qa/r3-unit-fix/result.json": {
+      "bytes": 2661,
+      "sha256": "5fca71c6fbd190c5c7991fabaa78a767a3be2f2db3e82ae583421f764e40bd5f"
+    },
+    "qa/r3-unit-fix/stderr.txt": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "qa/r3-unit-fix/stdout.txt": {
+      "bytes": 100,
+      "sha256": "49a0ba74b14fec5aeeeaa912f77ead6924a4061df7f5a2aea595aa1243cc812c"
+    },
+    "qa/r4-host/result.json": {
+      "bytes": 2337,
+      "sha256": "de34e495993c784bf3c4ed3eb87623e9d0eec529cf5de700dbd18ff1fbbf02f8"
+    },
+    "qa/r4-host/stderr.txt": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "qa/r4-host/stdout.txt": {
+      "bytes": 684,
+      "sha256": "46da4915e845b43bc057de2451788da40c022161361cf96d13b4dd2e1dcb314f"
+    },
+    "qa/r5-drill-fixture/result.json": {
+      "bytes": 3881,
+      "sha256": "6879cddb016fbc93faf97e6064a3144d08f99679f21f533fbd34b1120333c0b4"
+    },
+    "qa/r5-drill-fixture/stderr.txt": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "qa/r5-drill-fixture/stdout.txt": {
+      "bytes": 1640,
+      "sha256": "bebd68da3c03d301d14b52a0d0fe5faca5060d458d44782315771c6f46e416e3"
+    },
+    "qa/r6-drill-fixture/result.json": {
+      "bytes": 21847,
+      "sha256": "efadc14ecd184e65b959377ea5c17a21403c5fe668de3683e3ddf1de197b715f"
+    },
+    "qa/r6-drill-fixture/stderr.txt": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "qa/r6-drill-fixture/stdout.txt": {
+      "bytes": 18650,
+      "sha256": "439b40698bdf5429636463ee2e2959240a023acd1227983acf2048439137ae3c"
+    },
+    "qa/r7-drill-fix/result.json": {
+      "bytes": 2159,
+      "sha256": "f469a27a1a7869595e41559bae756a558e0190ce4fe1cf8a11ff573723f2dc38"
+    },
+    "qa/r7-drill-fix/stderr.txt": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "qa/r7-drill-fix/stdout.txt": {
+      "bytes": 101,
+      "sha256": "17ac47d061fc597a6e146368cacd86b8e7503219164c02b88bc4fa26fd7a6acf"
+    },
+    "review/review-summary.json": {
+      "bytes": 1733,
+      "sha256": "c0d1d9c701cb86709723548134ed279e43cb4a25c1efc25a4ff46163ba5e5965"
+    },
+    "source/source-pins.json": {
+      "bytes": 2033,
+      "sha256": "ad48c7a6b339cd7d63d3ce47ec4d20df59f7afa62a040dbc61356939b33e1cef"
+    }
+  },
+  "archive": {
+    "bytes": 23964,
+    "sha256": "B3B977B34EEB5CF8DCDE3F577CFBDB079329737AC395C32303002202B6CEF361"
+  },
+  "round_record": {
+    "bytes": 1949,
+    "sha256": "fd388af73f4d6e80eb042b29e125184ae51905fba69248ea91cb6c9b26d1ea31"
+  }
+}

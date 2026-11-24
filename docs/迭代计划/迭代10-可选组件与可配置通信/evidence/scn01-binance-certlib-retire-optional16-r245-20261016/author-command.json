@@ -1,0 +1,18 @@
+{
+  "argv": [
+    "python",
+    "-B",
+    "-m",
+    "pytest",
+    "-q",
+    "-p",
+    "no:cacheprovider",
+    "--confcutdir=tests/unit",
+    "tests/unit/test_scn01_binance_certlib_fail_closed.py"
+  ],
+  "cwd": "D:/source_code/backtrader",
+  "environment": {
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+  "capture": "functions.exec_command combined output; no credentials or provider requests"
+}

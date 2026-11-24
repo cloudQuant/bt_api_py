@@ -1,0 +1,324 @@
+{
+  "command": {
+    "argv": [
+      "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Scripts\\python.exe",
+      "-I",
+      "-c",
+      "\nimport importlib, importlib.metadata as md, json, hashlib, os, platform, socket, subprocess, sys, threading\nfrom pathlib import Path\n_harness_blocked = []\n_harness_prewarm = {\n    \"active\": True,\n    \"inside_platform_machine\": False,\n    \"inside_platform_ver\": False,\n    \"check_output_calls\": 0,\n    \"popen_events\": 0,\n    \"hostname_events\": 0,\n}\n_platform_path = Path(platform.__file__).resolve()\n_subprocess_path = Path(subprocess.__file__).resolve()\nassert _platform_path == Path(r\"C:\\Anaconda3\\Lib\\platform.py\").resolve()\nassert _subprocess_path == Path(r\"C:\\Anaconda3\\Lib\\subprocess.py\").resolve()\nassert hashlib.sha256(_platform_path.read_bytes()).hexdigest() == \"0b41720e16faa3101996864c28f1c85fe61fc19608a0187068d5e1716bdf883e\"\nassert hashlib.sha256(_subprocess_path.read_bytes()).hexdigest() == \"2ff641d58f8696496e8718538cd96cd7afcd503ae271fb23da22422b3aee9fc7\"\n_system_root = os.environ.get(\"SYSTEMROOT\")\nassert _system_root and Path(_system_root).is_absolute()\n_ver_cmd = str((Path(_system_root) / \"System32\" / \"cmd.exe\").resolve())\nassert Path(_ver_cmd).is_file()\n_ver_argv = [_ver_cmd, \"/d\", \"/c\", \"ver\"]\n_ver_audit_cmdline = subprocess.list2cmdline(_ver_argv)\n_real_check_output = subprocess.check_output\n_original_syscmd_ver = platform._syscmd_ver\n_platform_metadata_env = {\n    key: os.environ[key]\n    for key in (\"PROCESSOR_ARCHITEW6432\", \"PROCESSOR_ARCHITECTURE\", \"PROCESSOR_IDENTIFIER\")\n    if key in os.environ\n}\n_numpy_utils_path = Path(r\"D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Lib\\site-packages\\numpy\\testing\\_private\\utils.py\").resolve()\nassert _numpy_utils_path.is_file()\nassert _numpy_utils_path.stat().st_size == 87751\n_numpy_utils_source = _numpy_utils_path.read_bytes()\n_numpy_utils_sha256 = hashlib.sha256(_numpy_utils_source).hexdigest()\nassert _numpy_utils_sha256 == \"15a67bea0d5acd4f22d345e44d065512b06d1456639de5c2d100a25276a67b8c\"\n_numpy_utils_text = _numpy_utils_source.decode(\"utf-8\")\nassert \"def check_support_sve():\" in _numpy_utils_text\nassert \"cmd = 'lscpu'\" in _numpy_utils_text\nassert \"output = subprocess.run(cmd, capture_output=True, text=True)\" in _numpy_utils_text\nassert \"except OSError:\\n        return False\" in _numpy_utils_text\n_numpy_probe = {\n    \"active\": False,\n    \"thread_id\": None,\n    \"run_calls\": 0,\n    \"popen_events\": 0,\n    \"popen_event\": None,\n    \"outcome\": None,\n    \"exception_type\": None,\n    \"process_created\": None,\n    \"return_code\": None,\n    \"stdout_character_count\": None,\n    \"stdout_sha256\": None,\n    \"stderr_character_count\": None,\n    \"stderr_sha256\": None,\n    \"stdout_contains_sve\": None,\n    \"supports_sve\": None,\n    \"source_sha256\": _numpy_utils_sha256,\n}\n_real_subprocess_run = subprocess.run\n\ndef _process_audit_event(name):\n    return (\n        name == \"subprocess.Popen\"\n        or name in {\"os.system\", \"os.startfile\", \"os.fork\", \"os.forkpty\", \"os.posix_spawn\"}\n        or name.startswith((\"os.exec\", \"os.spawn\", \"os.posix_spawn\"))\n    )\n\ndef _prewarm_deny(name):\n    _harness_blocked.append(name)\n    raise RuntimeError(\"blocked external operation: \" + name)\n\ndef _prewarm_audit(event, args):\n    if event.startswith(\"socket.\"):\n        if (\n            _harness_prewarm[\"active\"]\n            and _harness_prewarm[\"inside_platform_machine\"]\n            and event == \"socket.gethostname\"\n            and args == ()\n            and _harness_prewarm[\"hostname_events\"] == 0\n        ):\n            _harness_prewarm[\"hostname_events\"] += 1\n            return\n        _prewarm_deny(event)\n    if _process_audit_event(event):\n        if (\n            event == \"subprocess.Popen\"\n            and _harness_prewarm[\"active\"]\n            and _harness_prewarm[\"inside_platform_ver\"]\n            and _harness_prewarm[\"popen_events\"] == 0\n            and len(args) == 4\n            and args[0] is None\n            and args[1] == _ver_audit_cmdline\n            and args[2] is None\n            and args[3] is None\n        ):\n            _harness_prewarm[\"popen_events\"] += 1\n            return\n        if (\n            event == \"subprocess.Popen\"\n            and _numpy_probe[\"active\"]\n            and threading.get_ident() == _numpy_probe[\"thread_id\"]\n            and _numpy_probe[\"popen_events\"] == 0\n            and len(args) == 4\n            and args[0] is None\n            and args[1] == \"lscpu\"\n            and args[2] is None\n            and args[3] is None\n        ):\n            _event_frame = sys._getframe(1)\n            assert _event_frame.f_code is subprocess.Popen._execute_child.__code__\n            assert _event_frame.f_globals is subprocess.__dict__\n            assert _event_frame.f_back.f_code is subprocess.Popen.__init__.__code__\n            assert _event_frame.f_back.f_back.f_code is _real_subprocess_run.__code__\n            assert _event_frame.f_back.f_back.f_back.f_code is _numpy_probe_run.__code__\n            _caller_frame = _event_frame.f_back.f_back.f_back.f_back\n            assert _caller_frame.f_code.co_name == \"check_support_sve\"\n            assert _caller_frame.f_globals is sys.modules[\"numpy.testing._private.utils\"].__dict__\n            _numpy_probe[\"popen_events\"] += 1\n            _numpy_probe[\"popen_event\"] = {\n                \"executable\": args[0],\n                \"command_line\": args[1],\n                \"cwd\": args[2],\n                \"env_is_none\": args[3] is None,\n            }\n            return\n        _prewarm_deny(event)\n\ndef _platform_safe_check_output(command, *args, **kwargs):\n    expected = {\n        \"stdin\": subprocess.DEVNULL,\n        \"stderr\": subprocess.DEVNULL,\n        \"text\": True,\n        \"encoding\": \"locale\",\n        \"shell\": True,\n    }\n    if (\n        not _harness_prewarm[\"active\"]\n        or _harness_prewarm[\"inside_platform_ver\"]\n        or _harness_prewarm[\"check_output_calls\"] != 0\n        or command != \"ver\"\n        or args\n        or kwargs != expected\n        or sys._getframe(1).f_code is not _original_syscmd_ver.__code__\n        or sys._getframe(1).f_globals is not platform.__dict__\n    ):\n        _prewarm_deny(\"unexpected platform subprocess.check_output\")\n    _harness_prewarm[\"check_output_calls\"] += 1\n    _harness_prewarm[\"inside_platform_ver\"] = True\n    try:\n        output = _real_check_output(\n            _ver_argv,\n            stdin=subprocess.DEVNULL,\n            stderr=subprocess.DEVNULL,\n            text=True,\n            encoding=\"locale\",\n            shell=False,\n            timeout=10,\n        )\n    finally:\n        _harness_prewarm[\"inside_platform_ver\"] = False\n    if not isinstance(output, str):\n        _prewarm_deny(\"platform ver output was not decoded text\")\n    _harness_prewarm[\"completed\"] = True\n    _harness_prewarm[\"return_code\"] = 0\n    _harness_prewarm[\"stdout_character_count\"] = len(output)\n    _harness_prewarm[\"stdout_utf8_sha256\"] = hashlib.sha256(output.encode(\"utf-8\")).hexdigest()\n    return output\n\nassert platform._uname_cache is None\nsys.addaudithook(_prewarm_audit)\nsubprocess.check_output = _platform_safe_check_output\ntry:\n    _harness_prewarm[\"inside_platform_machine\"] = True\n    _prewarmed_machine = platform.machine()\nfinally:\n    _harness_prewarm[\"inside_platform_machine\"] = False\n    subprocess.check_output = _real_check_output\n    _harness_prewarm[\"active\"] = False\n    _harness_prewarm[\"inside_platform_ver\"] = False\nassert subprocess.check_output is _real_check_output\nassert platform._syscmd_ver is _original_syscmd_ver\nassert isinstance(_prewarmed_machine, str) and _prewarmed_machine\nassert _harness_prewarm[\"check_output_calls\"] == 1\nassert _harness_prewarm[\"popen_events\"] == 1\nassert _harness_prewarm[\"hostname_events\"] == 1\nassert _harness_blocked == []\nassert _prewarmed_machine == (\n    os.environ.get(\"PROCESSOR_ARCHITEW6432\", \"\")\n    or os.environ.get(\"PROCESSOR_ARCHITECTURE\", \"\")\n)\n_harness_platform_prewarm = {\n    \"machine\": _prewarmed_machine,\n    \"platform_source_sha256\": \"0b41720e16faa3101996864c28f1c85fe61fc19608a0187068d5e1716bdf883e\",\n    \"subprocess_source_sha256\": \"2ff641d58f8696496e8718538cd96cd7afcd503ae271fb23da22422b3aee9fc7\",\n    \"command\": _ver_cmd,\n    \"argv\": _ver_argv,\n    \"audit_event\": {\n        \"executable\": None,\n        \"command_line\": _ver_audit_cmdline,\n        \"cwd\": None,\n        \"env\": None,\n    },\n    \"shell\": False,\n    \"timeout_seconds\": 10,\n    \"check_output_calls\": _harness_prewarm[\"check_output_calls\"],\n    \"popen_events\": _harness_prewarm[\"popen_events\"],\n    \"hostname_events\": _harness_prewarm[\"hostname_events\"],\n    \"completion_observed\": _harness_prewarm[\"completed\"],\n    \"completion_source\": \"pinned subprocess.check_output returned normally with its default check=True behavior\",\n    \"return_code\": _harness_prewarm[\"return_code\"],\n    \"stdout_character_count\": _harness_prewarm[\"stdout_character_count\"],\n    \"stdout_utf8_sha256\": _harness_prewarm[\"stdout_utf8_sha256\"],\n    \"platform_metadata_environment\": _platform_metadata_env,\n    \"candidate_provider_action\": False,\n    \"classification\": \"one harness-only local platform version probe; /d disables cmd AutoRun\",\n}\n\ndef _numpy_probe_run(*popenargs, **kwargs):\n    caller = sys._getframe(1)\n    module = sys.modules.get(\"numpy.testing._private.utils\")\n    if (\n        _numpy_probe[\"run_calls\"] != 0\n        or _numpy_probe[\"active\"]\n        or module is None\n        or Path(module.__file__).resolve() != _numpy_utils_path\n        or module.__spec__ is None\n        or module.__spec__.origin != str(_numpy_utils_path)\n        or hashlib.sha256(_numpy_utils_path.read_bytes()).hexdigest() != _numpy_probe[\"source_sha256\"]\n        or caller.f_code.co_name != \"check_support_sve\"\n        or caller.f_code.co_firstlineno != 1239\n        or Path(caller.f_code.co_filename).resolve() != _numpy_utils_path\n        or caller.f_globals is not module.__dict__\n        or module.check_support_sve.__code__ is not caller.f_code\n        or caller.f_locals.get(\"subprocess\") is not subprocess\n        or caller.f_locals.get(\"cmd\") != \"lscpu\"\n        or popenargs != (\"lscpu\",)\n        or kwargs != {\"capture_output\": True, \"text\": True}\n    ):\n        _prewarm_deny(\"unexpected subprocess.run during installed imports\")\n    _numpy_probe[\"run_calls\"] += 1\n    _numpy_probe[\"active\"] = True\n    _numpy_probe[\"thread_id\"] = threading.get_ident()\n    try:\n        completed = _real_subprocess_run(\n            \"lscpu\",\n            capture_output=True,\n            text=True,\n            timeout=10,\n        )\n    except FileNotFoundError as exc:\n        _numpy_probe[\"outcome\"] = \"file_not_found\"\n        _numpy_probe[\"exception_type\"] = type(exc).__name__\n        _numpy_probe[\"process_created\"] = False\n        raise\n    except subprocess.TimeoutExpired as exc:\n        _numpy_probe[\"outcome\"] = \"timeout\"\n        _numpy_probe[\"exception_type\"] = type(exc).__name__\n        _numpy_probe[\"process_created\"] = True\n        raise\n    except OSError as exc:\n        _numpy_probe[\"outcome\"] = \"unexpected_oserror\"\n        _numpy_probe[\"exception_type\"] = type(exc).__name__\n        _numpy_probe[\"process_created\"] = None\n        raise RuntimeError(\"unexpected OSError from the exact NumPy local CPU probe\") from None\n    except Exception as exc:\n        _numpy_probe[\"outcome\"] = \"unexpected_exception\"\n        _numpy_probe[\"exception_type\"] = type(exc).__name__\n        _numpy_probe[\"process_created\"] = None\n        raise\n    else:\n        if not isinstance(completed.stdout, str) or not isinstance(completed.stderr, str):\n            _numpy_probe[\"outcome\"] = \"unexpected_result_type\"\n            _numpy_probe[\"exception_type\"] = \"CompletedProcessOutputNotText\"\n            _numpy_probe[\"process_created\"] = True\n            raise RuntimeError(\"NumPy local CPU probe did not return captured text\")\n        _numpy_probe[\"outcome\"] = \"completed\"\n        _numpy_probe[\"process_created\"] = True\n        _numpy_probe[\"return_code\"] = completed.returncode\n        _numpy_probe[\"stdout_character_count\"] = len(completed.stdout)\n        _numpy_probe[\"stdout_sha256\"] = hashlib.sha256(completed.stdout.encode(\"utf-8\")).hexdigest()\n        _numpy_probe[\"stderr_character_count\"] = len(completed.stderr)\n        _numpy_probe[\"stderr_sha256\"] = hashlib.sha256(completed.stderr.encode(\"utf-8\")).hexdigest()\n        _numpy_probe[\"stdout_contains_sve\"] = \"sve\" in completed.stdout\n        return completed\n    finally:\n        _numpy_probe[\"active\"] = False\n        _numpy_probe[\"thread_id\"] = None\n\nblocked = _harness_blocked\ndef deny(name, *args, **kwargs):\n    blocked.append(name)\n    raise RuntimeError(\"blocked external operation: \" + name)\ndef audit(event, args):\n    if event.startswith(\"socket.\"):\n        deny(event)\nsocket.create_connection = lambda *a, **k: deny(\"socket.create_connection\")\nsocket.getaddrinfo = lambda *a, **k: deny(\"socket.getaddrinfo\")\nsys.addaudithook(audit)\nimport app\nsubprocess.run = _numpy_probe_run\ntry:\n    import backtrader\nfinally:\n    subprocess.run = _real_subprocess_run\nassert subprocess.run is _real_subprocess_run\nimport bt_api_binance, certlib\n_numpy_utils_module_name = \"numpy.testing._private.utils\"\n_numpy_utils_module = sys.modules.get(_numpy_utils_module_name)\nassert _numpy_utils_module is not None\nassert Path(_numpy_utils_module.__file__).resolve() == _numpy_utils_path\nassert _numpy_utils_module.__spec__.origin == str(_numpy_utils_path)\nassert hashlib.sha256(_numpy_utils_path.read_bytes()).hexdigest() == _numpy_probe[\"source_sha256\"]\nassert _numpy_probe[\"run_calls\"] == 1 and _numpy_probe[\"popen_events\"] == 1\nassert not _numpy_probe[\"active\"] and _numpy_probe[\"thread_id\"] is None\nassert _numpy_probe[\"outcome\"] in {\"file_not_found\", \"completed\"}\n_numpy_probe[\"supports_sve\"] = _numpy_utils_module._SUPPORTS_SVE\nif _numpy_probe[\"outcome\"] == \"file_not_found\":\n    assert _numpy_probe[\"exception_type\"] == \"FileNotFoundError\"\n    assert _numpy_probe[\"process_created\"] is False\n    assert _numpy_probe[\"supports_sve\"] is False\nelse:\n    assert _numpy_probe[\"process_created\"] is True\n    assert isinstance(_numpy_probe[\"return_code\"], int)\n    assert isinstance(_numpy_probe[\"stdout_contains_sve\"], bool)\n    assert _numpy_probe[\"supports_sve\"] is _numpy_probe[\"stdout_contains_sve\"]\n_harness_local_process_probes = [{\n    \"caller_module\": _numpy_utils_module_name,\n    \"caller_name\": \"check_support_sve\",\n    \"caller_first_line\": 1239,\n    \"source_path\": str(_numpy_utils_path),\n    \"source_sha256\": _numpy_probe[\"source_sha256\"],\n    \"command_argument\": \"lscpu\",\n    \"shell\": False,\n    \"timeout_seconds\": 10,\n    \"run_calls\": _numpy_probe[\"run_calls\"],\n    \"popen_audit_events\": _numpy_probe[\"popen_events\"],\n    \"popen_audit_event\": _numpy_probe[\"popen_event\"],\n    \"outcome\": _numpy_probe[\"outcome\"],\n    \"exception_type\": _numpy_probe[\"exception_type\"],\n    \"process_created\": _numpy_probe[\"process_created\"],\n    \"return_code\": _numpy_probe[\"return_code\"],\n    \"stdout_character_count\": _numpy_probe[\"stdout_character_count\"],\n    \"stdout_sha256\": _numpy_probe[\"stdout_sha256\"],\n    \"stderr_character_count\": _numpy_probe[\"stderr_character_count\"],\n    \"stderr_sha256\": _numpy_probe[\"stderr_sha256\"],\n    \"stdout_contains_sve\": _numpy_probe[\"stdout_contains_sve\"],\n    \"supports_sve\": _numpy_probe[\"supports_sve\"],\n    \"candidate_provider_action\": False,\n    \"classification\": \"one harness-observed optional local CPU-feature probe during NumPy import; not a provider or account action\",\n}]\nassert len(_harness_local_process_probes) == 1\nroots = [Path(value).resolve() for value in __import__(\"site\").getsitepackages()]\nmodules = {\"app\": app, \"backtrader\": backtrader,\n    \"bt_api_binance\": bt_api_binance, \"certlib\": certlib}\norigins = {name: str(Path(module.__file__).resolve()) for name, module in modules.items()}\nfor name, value in origins.items():\n    assert any(Path(value).is_relative_to(root) for root in roots), (name, value)\nentry_points = md.entry_points(group=\"bt_api.plugins\")\nmatches = [item for item in entry_points if item.name == \"binance\"]\nassert len(matches) == 1\nprovider = matches[0].load()\nprovider_module = importlib.import_module(provider.__module__)\nprovider_path = Path(provider_module.__file__).resolve()\nassert any(provider_path.is_relative_to(root) for root in roots)\nassert not blocked, blocked\nversions = {name: md.version(name) for name in (\n    \"ai-for-investor-backend\", \"backtrader\", \"bt_api_base\",\n    \"bt_api_binance\", \"bt_api_py\", \"bt-api-binance-certlib\")}\nprint(json.dumps({\"origins\": origins, \"provider_origin\": str(provider_path),\n    \"provider_entry_point\": matches[0].value,\n    \"versions\": versions, \"blocked_network_or_process_attempts\": blocked, \"harness_platform_prewarm\": _harness_platform_prewarm, \"harness_local_process_probes\": _harness_local_process_probes}, sort_keys=True))\n"
+    ],
+    "argv_prefix": [
+      "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Scripts\\python.exe",
+      "-I",
+      "-c"
+    ],
+    "candidate_process_policy": "during installed imports, allow only the exact once-only NumPy SVE caller from the hash-pinned installed numpy/testing/_private/utils.py, with literal lscpu arguments, shell=False and ten-second timeout; audit-stack/thread/source checks bind its one Popen attempt; all other process starts and all socket events remain blocked",
+    "change": "preserve R3 /d platform-ver prewarm and add exactly one source-pinned NumPy check_support_sve subprocess.run('lscpu', capture_output=True, text=True) with timeout=10; real FileNotFoundError is re-raised for NumPy's pinned OSError handler, while all results and process facts are reported separately",
+    "consumer_venv_python": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Scripts\\python.exe",
+    "cwd": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016",
+    "exit_code": 1,
+    "installed_certlib_source_hashes": {
+      "__init__.py": "d00e80e6c9129ece4d6f10bbe6c582addf6576d58e19ce012a8c551602097baa",
+      "binance_client.py": "95ff4186b3642ed9b6c4df2934e1f1aac740a0f302b8b882670f61ac78b90db6",
+      "context.py": "cc95002367f0c6241240e431f3b79c155793d260aa0897bb0e124c8a27c58ba9",
+      "envfile.py": "de3613ea601c87d2dcbd88b068375c270dc75c98aedd29e0f8fce132a6ecf30d",
+      "monitor.py": "7e3be314e2b24e11247207d62c6e31c9c1449a1a2804e66fde7f12fe3bede5f7",
+      "runner.py": "0c7754790655bfb4c0ece0dfb2787854cc27d8807b3d59b758dd5a1db2c2811d",
+      "validation.py": "8996f4c4e5a1e841d16ff60cc7b68e848d6da10933793855d709fe389c8fa78f"
+    },
+    "label": "06-installed-crossrepo-origin",
+    "numpy_local_probe": {
+      "caller_first_line": 1239,
+      "caller_name": "check_support_sve",
+      "command_argument": "lscpu",
+      "expected_keyword_arguments": {
+        "capture_output": true,
+        "text": true
+      },
+      "popen_audit_event": [
+        null,
+        "lscpu",
+        null,
+        null
+      ],
+      "source_bytes": 87751,
+      "source_path": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Lib\\site-packages\\numpy\\testing\\_private\\utils.py",
+      "source_sha256": "15a67bea0d5acd4f22d345e44d065512b06d1456639de5c2d100a25276a67b8c"
+    },
+    "numpy_local_probe_timeout_seconds": 10,
+    "original_code_sha256": "5b001b99ba240647a69cf73769d2a140aabba431cef0fc2a9e7941957b3df052",
+    "parent_timeout_seconds": 120,
+    "platform_metadata_environment": {
+      "PROCESSOR_ARCHITECTURE": "AMD64",
+      "PROCESSOR_IDENTIFIER": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel"
+    },
+    "platform_metadata_environment_keys_added": [
+      "PROCESSOR_ARCHITECTURE",
+      "PROCESSOR_IDENTIFIER"
+    ],
+    "platform_source_sha256": "0b41720e16faa3101996864c28f1c85fe61fc19608a0187068d5e1716bdf883e",
+    "platform_ver_timeout_seconds": 10,
+    "prewarm_process_policy": "allow only the exact one Windows subprocess audit event (None, list2cmdline([absolute cmd.exe, /d, /c, ver]), None, None) inside the pinned platform ver call; the persistent hook rejects all other subprocess.Popen, os.system, os.startfile, os.exec, os.spawn, os.posix_spawn and socket events except the single real socket.gethostname needed for this prewarm",
+    "sanitized_environment_base_keys": [
+      "PATH",
+      "SYSTEMROOT",
+      "TEMP",
+      "TMP",
+      "WINDIR"
+    ],
+    "stderr": "D:\\temp\\it10-mig04-certlib-consumer-step06-supplement-r5-20261016\\logs\\06-installed-crossrepo-origin.stderr.log",
+    "stderr_sha256": "a811c7715c1becc64dfc35f6ba706dc1436ee11759a6f56a120ddb6b5fa8e80e",
+    "stdout": "D:\\temp\\it10-mig04-certlib-consumer-step06-supplement-r5-20261016\\logs\\06-installed-crossrepo-origin.stdout.log",
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "subprocess_source_sha256": "2ff641d58f8696496e8718538cd96cd7afcd503ae271fb23da22422b3aee9fc7",
+    "supplement_code_sha256": "a6dd472bf260b5b8898e6864dfaa9531b1842f57d5faaa2db199adf575ae6fd1",
+    "timed_out": false,
+    "timeout_cleanup": null,
+    "timeout_seconds": 120,
+    "wheel_count": 121,
+    "wheelhouse_manifest_sha256": "d806e5961c794f077167312f191855ebe1319d169190fd28b1c97c06cbccd7d3",
+    "windows_cmd_path": "C:\\Windows\\System32\\cmd.exe"
+  },
+  "command_binding": {
+    "argv_prefix": [
+      "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Scripts\\python.exe",
+      "-I",
+      "-c"
+    ],
+    "candidate_process_policy": "during installed imports, allow only the exact once-only NumPy SVE caller from the hash-pinned installed numpy/testing/_private/utils.py, with literal lscpu arguments, shell=False and ten-second timeout; audit-stack/thread/source checks bind its one Popen attempt; all other process starts and all socket events remain blocked",
+    "change": "preserve R3 /d platform-ver prewarm and add exactly one source-pinned NumPy check_support_sve subprocess.run('lscpu', capture_output=True, text=True) with timeout=10; real FileNotFoundError is re-raised for NumPy's pinned OSError handler, while all results and process facts are reported separately",
+    "consumer_venv_python": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Scripts\\python.exe",
+    "cwd": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016",
+    "installed_certlib_source_hashes": {
+      "__init__.py": "d00e80e6c9129ece4d6f10bbe6c582addf6576d58e19ce012a8c551602097baa",
+      "binance_client.py": "95ff4186b3642ed9b6c4df2934e1f1aac740a0f302b8b882670f61ac78b90db6",
+      "context.py": "cc95002367f0c6241240e431f3b79c155793d260aa0897bb0e124c8a27c58ba9",
+      "envfile.py": "de3613ea601c87d2dcbd88b068375c270dc75c98aedd29e0f8fce132a6ecf30d",
+      "monitor.py": "7e3be314e2b24e11247207d62c6e31c9c1449a1a2804e66fde7f12fe3bede5f7",
+      "runner.py": "0c7754790655bfb4c0ece0dfb2787854cc27d8807b3d59b758dd5a1db2c2811d",
+      "validation.py": "8996f4c4e5a1e841d16ff60cc7b68e848d6da10933793855d709fe389c8fa78f"
+    },
+    "label": "06-installed-crossrepo-origin",
+    "numpy_local_probe": {
+      "caller_first_line": 1239,
+      "caller_name": "check_support_sve",
+      "command_argument": "lscpu",
+      "expected_keyword_arguments": {
+        "capture_output": true,
+        "text": true
+      },
+      "popen_audit_event": [
+        null,
+        "lscpu",
+        null,
+        null
+      ],
+      "source_bytes": 87751,
+      "source_path": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Lib\\site-packages\\numpy\\testing\\_private\\utils.py",
+      "source_sha256": "15a67bea0d5acd4f22d345e44d065512b06d1456639de5c2d100a25276a67b8c"
+    },
+    "numpy_local_probe_timeout_seconds": 10,
+    "original_code_sha256": "5b001b99ba240647a69cf73769d2a140aabba431cef0fc2a9e7941957b3df052",
+    "parent_timeout_seconds": 120,
+    "platform_metadata_environment": {
+      "PROCESSOR_ARCHITECTURE": "AMD64",
+      "PROCESSOR_IDENTIFIER": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel"
+    },
+    "platform_metadata_environment_keys_added": [
+      "PROCESSOR_ARCHITECTURE",
+      "PROCESSOR_IDENTIFIER"
+    ],
+    "platform_source_sha256": "0b41720e16faa3101996864c28f1c85fe61fc19608a0187068d5e1716bdf883e",
+    "platform_ver_timeout_seconds": 10,
+    "prewarm_process_policy": "allow only the exact one Windows subprocess audit event (None, list2cmdline([absolute cmd.exe, /d, /c, ver]), None, None) inside the pinned platform ver call; the persistent hook rejects all other subprocess.Popen, os.system, os.startfile, os.exec, os.spawn, os.posix_spawn and socket events except the single real socket.gethostname needed for this prewarm",
+    "sanitized_environment_base_keys": [
+      "PATH",
+      "SYSTEMROOT",
+      "TEMP",
+      "TMP",
+      "WINDIR"
+    ],
+    "subprocess_source_sha256": "2ff641d58f8696496e8718538cd96cd7afcd503ae271fb23da22422b3aee9fc7",
+    "supplement_code_sha256": "a6dd472bf260b5b8898e6864dfaa9531b1842f57d5faaa2db199adf575ae6fd1",
+    "wheel_count": 121,
+    "wheelhouse_manifest_sha256": "d806e5961c794f077167312f191855ebe1319d169190fd28b1c97c06cbccd7d3",
+    "windows_cmd_path": "C:\\Windows\\System32\\cmd.exe"
+  },
+  "crossrepo": null,
+  "environment_binding": {
+    "added_platform_metadata_keys": [
+      "PROCESSOR_ARCHITECTURE",
+      "PROCESSOR_IDENTIFIER"
+    ],
+    "base_keys": [
+      "PATH",
+      "SYSTEMROOT",
+      "TEMP",
+      "TMP",
+      "WINDIR"
+    ],
+    "final_keys": [
+      "PATH",
+      "PROCESSOR_ARCHITECTURE",
+      "PROCESSOR_IDENTIFIER",
+      "SYSTEMROOT",
+      "TEMP",
+      "TMP",
+      "WINDIR"
+    ],
+    "platform_metadata_values": {
+      "PROCESSOR_ARCHITECTURE": "AMD64",
+      "PROCESSOR_IDENTIFIER": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel"
+    }
+  },
+  "environment_policy": "sanitized PATH, TEMP, TMP and present SYSTEMROOT/WINDIR, plus only present parent PROCESSOR_ARCHITEW6432/PROCESSOR_ARCHITECTURE/PROCESSOR_IDENTIFIER values; no other inherited environment keys",
+  "execution_bounds": {
+    "child_tree_bound": "the prewarm permits only fixed /d cmd.exe built-in ver; candidate import permits one pinned shell=False lscpu attempt with a ten-second timeout; all other process-start events remain rejected",
+    "numpy_local_probe_child_timeout_seconds": 10,
+    "parent_step06_timeout_seconds": 120,
+    "platform_ver_child_timeout_seconds": 10,
+    "timeout_cleanup": "each authorized subprocess.run uses its pinned timeout behavior, which kills and waits for its direct child on timeout; the parent step has a 120-second timeout"
+  },
+  "formal_mig04_acceptance": false,
+  "original_evidence": {
+    "installed_certlib": {
+      "default_env_exists": false,
+      "default_env_path": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\.env",
+      "distribution": "bt-api-binance-certlib",
+      "origins": {
+        "certlib": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Lib\\site-packages\\certlib\\__init__.py",
+        "certlib.binance_client": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Lib\\site-packages\\certlib\\binance_client.py",
+        "certlib.context": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Lib\\site-packages\\certlib\\context.py",
+        "certlib.envfile": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Lib\\site-packages\\certlib\\envfile.py",
+        "certlib.monitor": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Lib\\site-packages\\certlib\\monitor.py",
+        "certlib.runner": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Lib\\site-packages\\certlib\\runner.py",
+        "certlib.validation": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Lib\\site-packages\\certlib\\validation.py",
+        "yaml": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Lib\\site-packages\\yaml\\__init__.py"
+      },
+      "source_hashes": {
+        "__init__.py": "d00e80e6c9129ece4d6f10bbe6c582addf6576d58e19ce012a8c551602097baa",
+        "binance_client.py": "95ff4186b3642ed9b6c4df2934e1f1aac740a0f302b8b882670f61ac78b90db6",
+        "context.py": "cc95002367f0c6241240e431f3b79c155793d260aa0897bb0e124c8a27c58ba9",
+        "envfile.py": "de3613ea601c87d2dcbd88b068375c270dc75c98aedd29e0f8fce132a6ecf30d",
+        "monitor.py": "7e3be314e2b24e11247207d62c6e31c9c1449a1a2804e66fde7f12fe3bede5f7",
+        "runner.py": "0c7754790655bfb4c0ece0dfb2787854cc27d8807b3d59b758dd5a1db2c2811d",
+        "validation.py": "8996f4c4e5a1e841d16ff60cc7b68e848d6da10933793855d709fe389c8fa78f"
+      },
+      "version": "0.1.0"
+    },
+    "original_outer_invocation": {
+      "exit_code": 2,
+      "exit_sha256": "df4e26a04a444901b95afef44e4a96cfae34690fff2ad2c66389c70079cdff2b",
+      "path": "D:\\temp\\iteration10-certlib-consumer-root-execution-20261016",
+      "stderr": "HOLD_COMBO_CHECK RuntimeError: 06-installed-crossrepo-origin exited 1",
+      "stderr_sha256": "9e62b08cbd050664d6bd9812db71f5e7af2d2b006f409d5724beb5f2f14a81e8",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "original_result": {
+      "formal_mig04_acceptance": false,
+      "path": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\result.json",
+      "sha256": "b72809d9b2eb45b68e34323caf55eabdd66b444a49eb211bec31a0b28c56972a",
+      "status": "HOLD_COMBO_CHECK"
+    },
+    "prior_steps": [
+      {
+        "exit_code": 0,
+        "label": "01-download-public-lock",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "318d31141bebc4c4e90c2135785bb5c2445a670be222181aaf86d6a5e609d7b9"
+      },
+      {
+        "exit_code": 0,
+        "label": "02-install-exact-combo",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "c2c5e52341f1f66d894d17a0c9864facd88a752943667e909b34051350ba31b4"
+      },
+      {
+        "exit_code": 0,
+        "label": "03-pip-check",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "672aec65a45bed50e70229c70934a7eebf0462595c459b83023027645d57cccf"
+      },
+      {
+        "exit_code": 0,
+        "label": "04-normal-installed-entry",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "de210c154ac7e6dc6ef9c7cb947572819daffcb58dcf232732fe57071fd65a0e"
+      },
+      {
+        "exit_code": 0,
+        "label": "05-installed-certlib-provenance",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "81a18c2db806ad869b628259d9961d9b85456476aacb0b904ad392b42ee7979e"
+      }
+    ],
+    "r1_diagnostic_and_cleanup": {
+      "cleanup_log_path": "D:\\temp\\it10-mig04-certlib-consumer-step06-r1-owned-cleanup.log",
+      "cleanup_log_sha256": "6283740de8e33e2f0f873eb81b7792e6054c5db169f8f68bcb319528178acf05",
+      "cleanup_receipt_path": "D:\\temp\\it10-mig04-certlib-consumer-step06-owned-cleanup-final.json",
+      "cleanup_receipt_sha256": "fbf0dd18d47f67e90300c003e37e159e6658b118565c639866ab0080a40e5f46",
+      "cleanup_scope_from_root_observation": "only this QA-owned process chain; unrelated PID 81428 and historical hosts were untouched",
+      "owned_remaining": 0,
+      "r1_process_chain_observed_by_root": "cmd.exe /c ver -> conda.exe shell.cmd.exe activate C:\\anaconda3 -> python",
+      "result_path": "D:\\temp\\it10-mig04-certlib-consumer-step06-supplement-r1-20261016\\result.json",
+      "result_sha256": "3fc13df54a08d5e47febf3c934f6379ad7efdafaa48288b1a526f5d44e92344e",
+      "result_status": "HOLD_STEP06_FAILED",
+      "stderr_path": "D:\\temp\\it10-mig04-certlib-consumer-step06-supplement-r1-20261016\\logs\\06-installed-crossrepo-origin.stderr.log",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_path": "D:\\temp\\it10-mig04-certlib-consumer-step06-supplement-r1-20261016\\logs\\06-installed-crossrepo-origin.stdout.log",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "step06_exit_code": 1
+    },
+    "r3_step06_diagnostic": {
+      "command": "lscpu",
+      "exit_code": 1,
+      "first_denied_process_caller": "numpy.testing._private.utils.check_support_sve",
+      "result_path": "D:\\temp\\it10-mig04-certlib-consumer-step06-supplement-r3-20261016\\result.json",
+      "result_sha256": "4def695595f4aa3ac9dd9f05291a8911e8d44e8801e4de86b7507bc4980f0d20",
+      "script_path": "D:\\bt_api_py\\.codex-tmp\\it10_mig04_certlib_consumer_step06_supplement_r3_20261016.py",
+      "script_sha256": "c793a8fe760cce94844721e3e8f666da50119a6c4f345de2d963eb9e10c0bd1c",
+      "source_path": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\containers\\consumer\\env\\Lib\\site-packages\\numpy\\testing\\_private\\utils.py",
+      "source_sha256": "15a67bea0d5acd4f22d345e44d065512b06d1456639de5c2d100a25276a67b8c",
+      "static_disposition": "the installed pinned NumPy helper catches OSError and returns False; R4 only preserves genuine FileNotFoundError or genuine completed output and adds a ten-second timeout",
+      "status": "HOLD_STEP06_FAILED",
+      "stderr_path": "D:\\temp\\it10-mig04-certlib-consumer-step06-supplement-r3-20261016\\logs\\06-installed-crossrepo-origin.stderr.log",
+      "stderr_sha256": "5012521c82db90e6c72b92e366a9294570676ce9e15fe1f30eb9673dafa9f409",
+      "stdout_path": "D:\\temp\\it10-mig04-certlib-consumer-step06-supplement-r3-20261016\\logs\\06-installed-crossrepo-origin.stdout.log",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "timed_out": false
+    },
+    "static_import_probe_inventory": {
+      "import_time_process_probe": "only the pinned NumPy check_support_sve lscpu invocation is currently identified in the observed import chain",
+      "local_socket_metadata_call_sites": "bt_api_base.event_clock and bt_api_py._normalization contain module-level socket.gethostname metadata reads; no additional allowance is added, and the existing socket audit still blocks any such event if reached",
+      "network_audit_remains_blocking": true,
+      "no_allowance_for_other_processes": true,
+      "other_process_call_sites": "static rg hits in app Docker helpers, NumPy build/compiler/test helpers, SciPy build/test helpers, statsmodels X13 helpers and Backtrader notification helpers are function or test paths; R3 reaches the app import and then fails at the NumPy probe before later candidate imports",
+      "runtime_limit": "R3 stops at this first denied process event; imports after the NumPy helper and later consumer imports were not runtime-completed by R3, so R4 rejects any process or socket event outside the explicit prewarm and one NumPy probe",
+      "scope": [
+        "app",
+        "backtrader",
+        "bt_api_base",
+        "bt_api_binance",
+        "bt_api_py",
+        "certlib",
+        "numpy",
+        "scipy",
+        "statsmodels"
+      ]
+    },
+    "wheelhouse": {
+      "consumer_dependency_lock_sha256": "29b79469307509553d26842d69c2539460d663d3bcbcfba8bcf9529d7b69ac51",
+      "direct_wheels": {
+        "ai_for_investor_backend-0.1.0-py3-none-any.whl": "287ee6fcef1ff50f0d51600e951285741596cc3a1d365906dbb0d7afcb0fa234",
+        "backtrader-1.4.0-py3-none-any.whl": "d825efaeb82245fe91dbfcce213e85f6bacf43a1ef27f5c5955463f20ab0749d",
+        "bt_api_base-0.15.8-py3-none-any.whl": "840090fbc13e7b1fefdc686805ec8685a5e5a7dfd39ace3e7a5763922fd5dbb0",
+        "bt_api_binance-2.0.1-py3-none-any.whl": "7cac597539bfa6a2a6fa6249e9983df1494d30c4f427898346f22940c9b89a23",
+        "bt_api_binance_certlib-0.1.0-py3-none-any.whl": "164ca44a402ba8153cf55890b9b954ce29becf57ae9bbbc8feefc283a007a2c3",
+        "bt_api_py-0.15.5-py3-none-any.whl": "6ed0ccc39991ef715f33a8a816c41ee6244b4490b911c2204eba4486a04377b8"
+      },
+      "manifest_sha256": "d806e5961c794f077167312f191855ebe1319d169190fd28b1c97c06cbccd7d3",
+      "wheel_count": 121
+    }
+  },
+  "script_sha256": "accac6081e16256a933220bc71a3de868cfc9e4b4f33278555966e5a0b2fa036",
+  "status": "HOLD_STEP06_FAILED"
+}

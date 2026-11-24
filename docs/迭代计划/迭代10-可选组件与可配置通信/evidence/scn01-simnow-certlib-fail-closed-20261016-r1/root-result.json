@@ -1,0 +1,16 @@
+{
+  "pytest_exit": 0,
+  "finished_utc": "2026-10-16T13:36:07.373020+00:00",
+  "source_count": 4,
+  "sources_unchanged": true,
+  "heads_before": {
+    "D:\\source_code\\backtrader": "438b127fcff2c0619b13835248ee3ef210cc0728"
+  },
+  "heads_after": {
+    "D:\\source_code\\backtrader": "438b127fcff2c0619b13835248ee3ef210cc0728"
+  },
+  "heads_unchanged": true,
+  "stdout_sha256": "d279f5272c0e15b4bf26e4bf01f65f10ae8d8d095371488cc676d9c4fa4b860a",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "SOURCE_FAKE_SIMNOW_NORMAL_FACTORY_FAIL_CLOSED_ONLY"
+}
