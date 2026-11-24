@@ -20,6 +20,7 @@ from pathlib import Path
 
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 
+from bt_api_py._owner_stop_file import marker_requested, new_marker
 from bt_api_py.gateway_storage_trust import assert_gateway_storage_isolated
 from bt_api_py.monitor_service_config import (
     Listener,
@@ -424,8 +425,13 @@ def _close_confirmed(host: MonitorServiceHost) -> bool:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
-    for command in ("run", "validate"):
-        sub.add_parser(command).add_argument("--config", required=True)
+    run = sub.add_parser("run")
+    run.add_argument("--config", required=True)
+    run.add_argument(
+        "--enable-owner-stop-file", action="store_true",
+        help="allow local cooperative shutdown with a protected empty marker",
+    )
+    sub.add_parser("validate").add_argument("--config", required=True)
     args = parser.parse_args(argv)
     try:
         config = load_monitor_service_config(args.config)
@@ -437,6 +443,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     host = MonitorServiceHost(config)
     stopping = False
+
+    def announce_stop_file():
+        if not args.enable_owner_stop_file:
+            return None
+        marker = new_marker(Path(args.config).parent, "monitor")
+        print("MONITOR_STOP_FILE " + marker.name, flush=True)
+        return marker
 
     def stop(_signum, _frame):
         nonlocal stopping
@@ -458,12 +471,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:
             host.start()
             print("MONITOR_LISTENERS_READY", flush=True)
-            while not stopping:
+            stop_file = announce_stop_file()
+            while not stopping and not marker_requested(stop_file):
                 host.serve_once()
         except BaseException:
             failed = True
         # A failed start may already have attempted rollback. Do not repeat an
-        # uncertain close until the operator signals a retry.
+        # uncertain close until the operator requests a retry.
         pending = host.state == "close_failed"
         if not pending:
             stopping = False
@@ -473,10 +487,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             with suppress(Exception):
                 print("MONITOR_CLEANUP_PENDING", flush=True)
             while pending:
-                if not stopping:
+                retry_file = None
+                with suppress(Exception):
+                    retry_file = announce_stop_file()
+                while not stopping and not marker_requested(retry_file):
                     with suppress(BaseException):
                         time.sleep(0.1)
-                    continue
                 stopping = False
                 pending = not _close_confirmed(host)
                 if pending:

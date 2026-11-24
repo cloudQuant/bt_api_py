@@ -118,6 +118,47 @@ def read_line(process):
     return process.stdout.readline().strip()
 
 
+def test_owner_stop_requires_fresh_marker_after_unconfirmed_close(tmp_path, monkeypatch, capsys):
+    path, _, _ = deployment(tmp_path)
+
+    class Host:
+        state = "running"
+
+        def start(self):
+            pass
+
+    host = Host()
+    attempts, markers = [], []
+
+    def close_confirmed(candidate):
+        assert candidate is host
+        attempts.append(candidate)
+        return len(attempts) == 2
+
+    def marker_requested(marker):
+        markers.append(marker)
+        if len(markers) == 1:
+            return True
+        assert marker != markers[0]
+        assert attempts == [host] and host in module._RETAINED_HOSTS
+        return len(markers) == 3
+
+    monkeypatch.setattr(module, "MonitorServiceHost", lambda config: host)
+    monkeypatch.setattr(module, "_close_confirmed", close_confirmed)
+    monkeypatch.setattr(module, "marker_requested", marker_requested)
+    monkeypatch.setattr(module.time, "sleep", lambda seconds: None)
+    assert module.main(["run", "--config", str(path), "--enable-owner-stop-file"]) == 0
+    assert len(markers) == 3 and markers[1] == markers[2]
+    assert attempts == [host, host] and host not in module._RETAINED_HOSTS
+    assert capsys.readouterr().out.splitlines() == [
+        "MONITOR_LISTENERS_READY",
+        f"MONITOR_STOP_FILE {markers[0].name}",
+        "MONITOR_CLEANUP_PENDING",
+        f"MONITOR_STOP_FILE {markers[1].name}",
+        "MONITOR_STOPPED",
+    ]
+
+
 def test_real_process_retains_owner_and_handlers_until_signal_retry(tmp_path):
     path, _, _ = deployment(tmp_path)
     script = r'''

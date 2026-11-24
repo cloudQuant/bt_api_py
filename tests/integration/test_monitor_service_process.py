@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import queue
-import signal
+import re
 import socket
 import subprocess
 import sys
@@ -14,6 +14,7 @@ import yaml
 import zmq
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 
+from bt_api_py import _win32_security
 from bt_api_py.service_config import parse_service_config
 from bt_api_py.service_runtime import (
     ClientCurveKeys,
@@ -29,6 +30,13 @@ def endpoint():
         return f"tcp://127.0.0.1:{s.getsockname()[1]}"
 
 
+def _protect_file(path):
+    if _win32_security.WINDOWS:
+        _win32_security._set_owner_only_acl(path)
+    else:
+        path.chmod(0o600)
+
+
 def deployment(tmp_path):
     keys = {}
     for name in ("events", "heartbeat", "producer", "gateway", "outsider"):
@@ -37,7 +45,7 @@ def deployment(tmp_path):
         for suffix, value in (("public", public), ("secret", secret)):
             path = tmp_path / f"{name}.{suffix}"
             path.write_bytes(value)
-            path.chmod(0o600)
+            _protect_file(path)
 
     def listener(name, principal):
         return {
@@ -152,33 +160,41 @@ def start(path):
             "run",
             "--config",
             str(path),
+            "--enable-owner-stop-file",
         ],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
     )
     # select() only supports sockets on Windows; a reader thread with a queue
-    # gives the same bounded first-line wait on every platform.
-    ready: queue.Queue = queue.Queue(maxsize=1)
+    # gives the same bounded startup wait on every platform.
+    ready: queue.Queue = queue.Queue(maxsize=2)
 
-    def _read_first_line():
+    def _read_startup():
+        ready.put(process.stdout.readline())
         ready.put(process.stdout.readline())
 
-    reader = threading.Thread(target=_read_first_line, daemon=True)
+    reader = threading.Thread(target=_read_startup, daemon=True)
     reader.start()
     try:
         line = ready.get(timeout=20).strip()
     except queue.Empty as exc:
         process.terminate()
+        process.wait(timeout=5)
         raise AssertionError("Monitor process did not report startup") from exc
     if line != "MONITOR_LISTENERS_READY":
         process.wait(timeout=5)
         raise AssertionError((line, process.stderr.read()))
+    marker = ready.get(timeout=5).strip()
+    match = re.fullmatch(r"MONITOR_STOP_FILE (monitor-[0-9a-f]{32}\.stop)", marker)
+    assert match is not None, marker
+    process.stop_marker = path.with_name(match[1])
     return process
 
 
 def stop(process):
-    process.send_signal(signal.SIGTERM)
+    process.stop_marker.write_bytes(b"")
+    _protect_file(process.stop_marker)
     out, err = process.communicate(timeout=15)
     assert process.returncode == 0, (out, err)
     assert "MONITOR_STOPPED" in out
@@ -194,7 +210,10 @@ def test_two_authenticated_listeners_persist_and_deduplicate_after_restart(tmp_p
         "data": {"value": 1},
     }
     process = start(path)
+    first_marker = process.stop_marker
     try:
+        first_marker.write_bytes(b"invalid nonempty stop request")
+        _protect_file(first_marker)
         ingress = client(
             doc["ingress"], keys["events"][0], keys["producer"], "producer", "events.append"
         )
@@ -228,8 +247,10 @@ def test_two_authenticated_listeners_persist_and_deduplicate_after_restart(tmp_p
             bad.close()
     finally:
         stop(process)
+    assert first_marker.is_file()
     process = start(path)
     try:
+        assert process.stop_marker != first_marker
         ingress = client(
             doc["ingress"], keys["events"][0], keys["producer"], "producer", "events.append"
         )
