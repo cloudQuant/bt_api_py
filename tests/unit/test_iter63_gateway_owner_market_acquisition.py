@@ -279,8 +279,7 @@ def test_probe_does_not_consume_pending_epoch_ack(system):
     assert settle_action(lambda: bridge.source_epoch_reset_required(handle)) is True
     release = threading.Event()
     native.gate = ("ack", release)
-    with pytest.raises(GatewayOwnerMarketError, match="MARKET_OPERATION_PENDING"):
-        bridge.acknowledge_source_epoch_reset(handle, epoch="new")
+    assert bridge.acknowledge_source_epoch_reset(handle, epoch="new") is None
     assert native.entered.wait(1)
     original = bridge._states[handle].pending
     assert (
@@ -292,6 +291,7 @@ def test_probe_does_not_consume_pending_epoch_ack(system):
     assert bridge._states[handle].pending is original
     release.set()
     wait_until(lambda: original.done)
+    assert bridge.acknowledge_source_epoch_reset(handle, epoch="new") is True
     assert settle_action(lambda: bridge.source_epoch_reset_required(handle)) is False
     assert native.ack_epochs == ["new"]
     assert native.calls.count("describe") == 0

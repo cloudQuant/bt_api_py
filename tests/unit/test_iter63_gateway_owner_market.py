@@ -351,9 +351,11 @@ def test_delayed_ack_settles_before_reset_requery(system):
     assert settle_action(lambda: bridge.source_epoch_reset_required(handle))
     release = threading.Event()
     native.gate = ("ack", release)
-    with pytest.raises(GatewayOwnerMarketError, match="MARKET_OPERATION_PENDING"):
-        bridge.acknowledge_source_epoch_reset(handle, epoch="new-epoch")
+    assert bridge.acknowledge_source_epoch_reset(handle, epoch="new-epoch") is None
     assert native.entered.wait(1)
+    assert bridge.acknowledge_source_epoch_reset(handle, epoch="new-epoch") is None
+    with pytest.raises(GatewayOwnerMarketError, match="MARKET_OPERATION_PENDING"):
+        bridge.acknowledge_source_epoch_reset(handle, epoch="other-epoch")
     with pytest.raises(GatewayOwnerMarketError, match="MARKET_OPERATION_PENDING"):
         bridge.source_epoch_reset_required(handle)
     assert native.calls.count("ack") == 1 and native.calls.count("reset") == 1
@@ -362,6 +364,56 @@ def test_delayed_ack_settles_before_reset_requery(system):
     assert settle_action(lambda: bridge.source_epoch_reset_required(handle)) is False
     assert native.calls.count("ack") == 1 and native.calls.count("reset") == 2
     assert release_handle(bridge, handle)
+
+
+def test_hub_settles_exact_pending_owner_ack_before_publishing(system):
+    bridge, _, holder = system
+    published = []
+    hub = make_hub(bridge, [_KEY], published)
+    hub.subscribe("principal", _KEY, "registration")
+    native = holder["provider"]
+    original_epoch = hub.head(_KEY)["epoch"]
+    release = threading.Event()
+    native.gate = ("ack", release)
+    native.reset = True
+
+    def has_started_ack():
+        hub.maintain(["registration"])
+        return native.entered.is_set()
+
+    def has_confirmed_ack():
+        hub.maintain(["registration"])
+        return hub.source_diagnostics["provider_epoch_resets"] == 1
+
+    def has_published():
+        hub.maintain(["registration"])
+        return bool(published)
+
+    try:
+        wait_until(has_started_ack)
+        epoch = hub.head(_KEY)["epoch"]
+        assert epoch != original_epoch
+        for _ in range(3):
+            hub.maintain(["registration"])
+            assert hub.head(_KEY)["epoch"] == epoch
+        assert hub.source_diagnostics["provider_epoch_resets"] == 0
+        assert native.calls.count("ack") == 1
+        assert "poll" not in native.calls and not published
+
+        release.set()
+        wait_until(has_confirmed_ack)
+        assert native.ack_epochs == [epoch]
+        assert "poll" not in native.calls and not published
+        native.events.append(
+            MarketProviderEvent(native.generation, "2026-01-01T00:00:00Z", {"fresh": True})
+        )
+        wait_until(has_published)
+        assert len(published) == 1
+        assert published[0].header.stream_epoch == epoch
+        assert published[0].payload["data"] == {"fresh": True}
+    finally:
+        release.set()
+        close_hub(hub)
 
 
 def test_failed_result_latches_gap_and_release_still_works(system):
@@ -540,7 +592,7 @@ def test_reset_discards_old_completed_poll_before_publish(system):
     wait_until(lambda: bridge._states[handle].pending.done)
     native.reset = True
     assert settle_action(lambda: bridge.source_epoch_reset_required(handle)) is True
-    assert settle_action(lambda: bridge.acknowledge_source_epoch_reset(handle, epoch="new"))
+    wait_until(lambda: bridge.acknowledge_source_epoch_reset(handle, epoch="new") is True)
     native.events.append(MarketProviderEvent("gen", "2026-01-01T00:00:01Z", {"new": True}))
     assert poll_after_ready(bridge, handle, limit=1) == ()
     wait_until(lambda: bridge._states[handle].pending.done)
@@ -695,8 +747,7 @@ def test_expired_queued_poll_and_ack_resume_safely(tmp_path, kind):
         if kind == "poll":
             assert bridge.poll(handle, limit=1) == ()
         else:
-            with pytest.raises(GatewayOwnerMarketError, match="MARKET_OPERATION_PENDING"):
-                bridge.acknowledge_source_epoch_reset(handle, epoch="epoch-kept")
+            assert bridge.acknowledge_source_epoch_reset(handle, epoch="epoch-kept") is None
         time.sleep(0.06)
         release.set()
         active.result(timeout_seconds=1)

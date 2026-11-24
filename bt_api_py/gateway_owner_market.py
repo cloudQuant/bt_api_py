@@ -759,27 +759,30 @@ class GatewayOwnerMarketProvider:
         state.ready_until = completed + self._timeout
         return result
 
-    def acknowledge_source_epoch_reset(self, handle: object, *, epoch: str) -> bool:
+    def acknowledge_source_epoch_reset(self, handle: object, *, epoch: str) -> bool | None:
+        """Return None while the owner is completing this exact epoch ACK."""
         self._check()
         state = self._state(handle)
         state.ready_permit = False
         if not _text(epoch):
             raise GatewayOwnerMarketError("INVALID_SOURCE_EPOCH")
-        if state.pending is not None and state.pending_kind == "ack":
-            if state.ack_epoch != epoch:
-                raise GatewayOwnerMarketError("MARKET_OPERATION_PENDING")
+        if (state.ack_epoch is not None or state.pending_kind == "ack") and state.ack_epoch != epoch:
+            raise GatewayOwnerMarketError("MARKET_OPERATION_PENDING")
+        try:
+            if state.pending_kind != "ack":
+                if state.ack_epoch is not None:
+                    self._settle_before(state, wait=0)
+                    return True
+                self._settle_before(state, wait=0)
+                state.ack_epoch = epoch
+                self._enqueue_ack(state, epoch)
             _, result, _ = self._settle(state, wait=0)
             return result
-        if state.ack_epoch is not None:
-            if state.ack_epoch != epoch:
-                raise GatewayOwnerMarketError("MARKET_OPERATION_PENDING")
-            self._settle_before(state, wait=0)
-            return True
-        self._settle_before(state, wait=0)
-        state.ack_epoch = epoch
-        self._enqueue_ack(state, epoch)
-        _, result, _ = self._settle(state, wait=0)
-        return result
+        except GatewayOwnerMarketError as error:
+            if (error.code == "MARKET_OPERATION_PENDING" and state.pending_kind == "ack"
+                    and state.ack_epoch == epoch):
+                return None
+            raise
 
     def begin_close(self) -> None:
         self._check(closing=True)
