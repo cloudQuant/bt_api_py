@@ -14,10 +14,11 @@ detector is provided; inputs are public synthetic material.
 
 from __future__ import annotations
 
-import fcntl
+from bt_api_py._calendar_compat import fcntl
 import hashlib
 import json
 import os
+from bt_api_py import _calendar_fdops as fdops
 import stat
 from dataclasses import asdict
 from pathlib import Path
@@ -63,10 +64,10 @@ def _root_lock_identity(root):
     entry = os.lstat(root)
     if not stat.S_ISDIR(entry.st_mode):
         raise ValueError("root")
-    fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    fd = fdops.open(root, os.O_RDONLY | fdops.O_DIRECTORY | fdops.O_NOFOLLOW)
     try:
-        opened = os.fstat(fd)
-        lock = os.stat(".lock", dir_fd=fd, follow_symlinks=False)
+        opened = fdops.fstat(fd)
+        lock = fdops.stat(".lock", dir_fd=fd, follow_symlinks=False)
         after = os.lstat(root)
         identity = (entry.st_dev, entry.st_ino)
         if (
@@ -78,7 +79,7 @@ def _root_lock_identity(root):
             raise ValueError("root or lock changed")
         return identity, (lock.st_dev, lock.st_ino)
     finally:
-        os.close(fd)
+        fdops.close(fd)
 
 
 def _policy_readonly(store, current):
@@ -91,12 +92,12 @@ def _policy_readonly(store, current):
         root_before = os.lstat(store.root)
         if not stat.S_ISDIR(root_before.st_mode):
             raise ValueError("root")
-        root_fd = os.open(store.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        root_fd = fdops.open(store.root, os.O_RDONLY | fdops.O_DIRECTORY | fdops.O_NOFOLLOW)
         root_identity = (root_before.st_dev, root_before.st_ino)
-        if (os.fstat(root_fd).st_dev, os.fstat(root_fd).st_ino) != root_identity:
+        if (fdops.fstat(root_fd).st_dev, fdops.fstat(root_fd).st_ino) != root_identity:
             raise ValueError("root changed")
-        lock_fd = os.open(".lock", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=root_fd)
-        lock_info = os.fstat(lock_fd)
+        lock_fd = fdops.open(".lock", os.O_RDONLY | fdops.O_NOFOLLOW | fdops.O_NONBLOCK, dir_fd=root_fd)
+        lock_info = fdops.fstat(lock_fd)
         if not stat.S_ISREG(lock_info.st_mode):
             raise ValueError("lock")
         lock_identity = (lock_info.st_dev, lock_info.st_ino)
@@ -105,14 +106,14 @@ def _policy_readonly(store, current):
 
         def stable():
             root = os.lstat(store.root)
-            lock = os.stat(".lock", dir_fd=root_fd, follow_symlinks=False)
+            lock = fdops.stat(".lock", dir_fd=root_fd, follow_symlinks=False)
             return (
                 stat.S_ISDIR(root.st_mode)
                 and (root.st_dev, root.st_ino) == root_identity
                 and stat.S_ISREG(lock.st_mode)
                 and (lock.st_dev, lock.st_ino) == lock_identity
-                and (os.fstat(root_fd).st_dev, os.fstat(root_fd).st_ino) == root_identity
-                and (os.fstat(lock_fd).st_dev, os.fstat(lock_fd).st_ino) == lock_identity
+                and (fdops.fstat(root_fd).st_dev, fdops.fstat(root_fd).st_ino) == root_identity
+                and (fdops.fstat(lock_fd).st_dev, fdops.fstat(lock_fd).st_ino) == lock_identity
             )
 
         if not stable():
@@ -183,9 +184,9 @@ def _policy_readonly(store, current):
                 if locked:
                     fcntl.flock(lock_fd, fcntl.LOCK_UN)
             finally:
-                os.close(lock_fd)
+                fdops.close(lock_fd)
         if root_fd is not None:
-            os.close(root_fd)
+            fdops.close(root_fd)
 
 
 def _target(candidate):

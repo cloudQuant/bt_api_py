@@ -9,10 +9,11 @@ and review bundle/source rereads do not share a single total I/O budget.
 
 from __future__ import annotations
 
-import fcntl
+from bt_api_py._calendar_compat import fcntl
 import hashlib
 import json
 import os
+from bt_api_py import _calendar_fdops as fdops
 import re
 import unicodedata
 from pathlib import Path
@@ -103,7 +104,7 @@ def _inventory(store, snapshot):
             event_id, expected = previous["publication_id"], previous["publication_sha256"]
     for dirname, ids in (("publications", seen), ("receipts", seen), ("versions", versions)):
         names = set()
-        with os.scandir(store.root / dirname) as entries:
+        with fdops.scandir(store.root / dirname) as entries:
             for entry in entries:
                 if len(names) >= _READ_BUDGET.max_publications or not entry.is_file(
                     follow_symlinks=False
@@ -117,14 +118,14 @@ def _inventory(store, snapshot):
 def _current(root):
     store = TradingCalendarStore(root)
     # Hold the store lock over both the receipt-consistent read and inventory.
-    fd = os.open(Path(root) / ".lock", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    fd = fdops.open(Path(root) / ".lock", os.O_RDONLY | fdops.O_NOFOLLOW | fdops.O_NONBLOCK)
     try:
         fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
         observation = store.read_current_with_consistent_receipts(budget=_READ_BUDGET)
         _inventory(store, observation.snapshot)
         return observation.snapshot
     finally:
-        os.close(fd)
+        fdops.close(fd)
 
 
 def _artifacts(content, manifest_bytes, manifest_sha, binding_bytes, binding_sha):

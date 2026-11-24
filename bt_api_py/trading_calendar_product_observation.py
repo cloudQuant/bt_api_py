@@ -2,6 +2,7 @@
 
 import json
 import os
+from bt_api_py import _calendar_fdops as fdops
 import stat
 from dataclasses import asdict
 
@@ -71,31 +72,31 @@ def _read_page(path):
     # Symlink ancestors are rejected, including macOS /tmp. Callers can pass
     # the explicit physical path (e.g. /private/tmp) when appropriate.
     if parent_path == os.sep:
-        descriptors = [os.open(os.sep, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)]
+        descriptors = [fdops.open(os.sep, os.O_RDONLY | fdops.O_DIRECTORY | fdops.O_NOFOLLOW)]
         chain = []
     else:
         descriptors, chain = _open_directory(parent_path)
-    flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0)
+    flags = os.O_RDONLY | fdops.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0)
     fd = None
     try:
         if not _directory_matches(chain):
             raise ValueError("directory changed")
-        fd = os.open(name, flags, dir_fd=descriptors[-1])
-        before = os.fstat(fd)
+        fd = fdops.open(name, flags, dir_fd=descriptors[-1])
+        before = fdops.fstat(fd)
         if not stat.S_ISREG(before.st_mode):
             raise ValueError("not a regular file")
         if before.st_size > _MAX_PAGE_BYTES:
             raise OverflowError("page too large")
         data = bytearray()
         while len(data) <= _MAX_PAGE_BYTES:
-            part = os.read(fd, _MAX_PAGE_BYTES + 1 - len(data))
+            part = fdops.read(fd, _MAX_PAGE_BYTES + 1 - len(data))
             if not part:
                 break
             data.extend(part)
         if len(data) > _MAX_PAGE_BYTES:
             raise OverflowError("page too large")
-        after = os.fstat(fd)
-        entry = os.stat(name, dir_fd=descriptors[-1], follow_symlinks=False)
+        after = fdops.fstat(fd)
+        entry = fdops.stat(name, dir_fd=descriptors[-1], follow_symlinks=False)
         if (
             _identity(before) != _identity(after)
             or _identity(after) != _identity(entry)
@@ -107,9 +108,9 @@ def _read_page(path):
         return bytes(data)
     finally:
         if fd is not None:
-            os.close(fd)
+            fdops.close(fd)
         for directory_fd in reversed(descriptors):
-            os.close(directory_fd)
+            fdops.close(directory_fd)
 
 
 def observe_product_page(*, source_url, path, filesystem, additional_sensitive=()):

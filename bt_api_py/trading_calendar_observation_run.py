@@ -26,6 +26,7 @@ import stat
 import sys
 import time
 import uuid
+from bt_api_py import _calendar_fdops as fdops
 from dataclasses import replace
 from datetime import date
 
@@ -86,15 +87,15 @@ def _open_runs(root, *, create):
     try:
         if create:
             with contextlib.suppress(FileExistsError):
-                os.mkdir("observation-runs", 0o700, dir_fd=parent)
-        info = os.stat("observation-runs", dir_fd=parent, follow_symlinks=False)
-        if not stat.S_ISDIR(info.st_mode) or info.st_mode & 0o077 or info.st_uid != os.geteuid():
+                fdops.mkdir("observation-runs", 0o700, dir_fd=parent)
+        info = fdops.stat("observation-runs", dir_fd=parent, follow_symlinks=False)
+        if not stat.S_ISDIR(info.st_mode) or info.st_mode & 0o077 or info.st_uid != fdops.geteuid():
             raise ValueError("invalid run directory")
-        fd = os.open(
-            "observation-runs", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent
+        fd = fdops.open(
+            "observation-runs", os.O_RDONLY | fdops.O_DIRECTORY | fdops.O_NOFOLLOW, dir_fd=parent
         )
         descriptors.append(fd)
-        if _identity(os.fstat(fd)) != _identity(info):
+        if _identity(fdops.fstat(fd)) != _identity(info):
             raise ValueError("directory changed")
         chain.append((parent, "observation-runs", fd, _identity(info)))
         if not _directory_matches(chain):
@@ -103,42 +104,42 @@ def _open_runs(root, *, create):
     except Exception:
         for fd in reversed(descriptors):
             with contextlib.suppress(OSError):
-                os.close(fd)
+                fdops.close(fd)
         raise
 
 
 def _close(descriptors):
     for fd in reversed(descriptors):
         with contextlib.suppress(OSError):
-            os.close(fd)
+            fdops.close(fd)
 
 
 def _read_entry(directory, chain, name):
     if not _directory_matches(chain):
         raise ValueError("directory changed")
     try:
-        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+        fd = fdops.open(name, os.O_RDONLY | fdops.O_NOFOLLOW | fdops.O_NONBLOCK, dir_fd=directory)
     except FileNotFoundError:
         if not _directory_matches(chain):
             raise ValueError("directory changed") from None
         return None
     try:
-        before = os.fstat(fd)
+        before = fdops.fstat(fd)
         if (
             not stat.S_ISREG(before.st_mode)
             or before.st_mode & 0o077
-            or before.st_uid != os.geteuid()
+            or before.st_uid != fdops.geteuid()
             or before.st_size > _LIMIT
         ):
             raise ValueError("invalid file")
         data = bytearray()
         while len(data) <= _LIMIT:
-            part = os.read(fd, _LIMIT + 1 - len(data))
+            part = fdops.read(fd, _LIMIT + 1 - len(data))
             if not part:
                 break
             data.extend(part)
-        after = os.fstat(fd)
-        entry = os.stat(name, dir_fd=directory, follow_symlinks=False)
+        after = fdops.fstat(fd)
+        entry = fdops.stat(name, dir_fd=directory, follow_symlinks=False)
 
         def identity(x):
             return (
@@ -160,7 +161,7 @@ def _read_entry(directory, chain, name):
             raise ValueError("file changed")
         return bytes(data)
     finally:
-        os.close(fd)
+        fdops.close(fd)
 
 
 def _write_once(directory, chain, name, data):
@@ -171,34 +172,34 @@ def _write_once(directory, chain, name, data):
     fd, ident, attempted = None, None, False
     try:
         temp = f".observation-{uuid.uuid4().hex}.tmp"
-        fd = os.open(
-            temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=directory
+        fd = fdops.open(
+            temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | fdops.O_NOFOLLOW, 0o600, dir_fd=directory
         )
-        os.fchmod(fd, 0o600)
-        ident = _identity(os.fstat(fd))
+        fdops.fchmod(fd, 0o600)
+        ident = _identity(fdops.fstat(fd))
         offset = 0
         while offset < len(data):
-            count = os.write(fd, data[offset:])
+            count = fdops.write(fd, data[offset:])
             if count <= 0:
                 raise OSError("short write")
             offset += count
-        os.fsync(fd)
+        fdops.fsync(fd)
         if not _directory_matches(chain):
             raise ValueError("directory changed")
         attempted = True
         try:
-            os.link(temp, name, src_dir_fd=directory, dst_dir_fd=directory, follow_symlinks=False)
+            fdops.link(temp, name, src_dir_fd=directory, dst_dir_fd=directory, follow_symlinks=False)
         except FileExistsError:
-            old = os.stat(name, dir_fd=directory, follow_symlinks=False)
+            old = fdops.stat(name, dir_fd=directory, follow_symlinks=False)
             if _identity(old) == ident or not _directory_matches(chain):
                 raise
             attempted = False
             return "NOT_COMMITTED", "ID_EXISTS"
         if _read_entry(directory, chain, name) != data:
             raise ValueError("readback mismatch")
-        os.unlink(temp, dir_fd=directory)
+        fdops.unlink(temp, dir_fd=directory)
         ident = None
-        os.fsync(directory)
+        fdops.fsync(directory)
         if not _directory_matches(chain):
             raise ValueError("directory changed")
         return "COMMITTED", "NONE"
@@ -207,7 +208,7 @@ def _write_once(directory, chain, name, data):
     finally:
         if fd is not None:
             with contextlib.suppress(OSError):
-                os.close(fd)
+                fdops.close(fd)
         if ident is not None:
             _remove_owned_temp(directory, temp, ident)
 
@@ -2225,16 +2226,16 @@ def _scan_run_names(directory, chain, max_entries):
     """Bounded name observation; neither a snapshot nor an authenticity proof."""
     if not _directory_matches(chain):
         raise ValueError("directory changed")
-    before = os.fstat(directory)
-    if before.st_uid != os.geteuid() or before.st_mode & 0o077:
+    before = fdops.fstat(directory)
+    if before.st_uid != fdops.geteuid() or before.st_mode & 0o077:
         raise ValueError("directory permissions changed")
     names = set()
-    with os.scandir(directory) as entries:
+    with fdops.scandir(directory) as entries:
         for count, entry in enumerate(entries, start=1):
             if count > max_entries:
                 raise OverflowError("entry limit")
             names.add(entry.name)
-    after = os.fstat(directory)
+    after = fdops.fstat(directory)
     if (_identity(before), before.st_uid, before.st_mtime_ns, before.st_ctime_ns) != (
         _identity(after),
         after.st_uid,

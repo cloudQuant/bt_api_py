@@ -26,6 +26,7 @@ import contextlib
 import json
 import math
 import os
+from bt_api_py import _calendar_fdops as fdops
 import re
 import selectors
 import signal
@@ -1048,7 +1049,7 @@ def _supervise_core(args):
                         continue
                     for key, _ in events:
                         if key.data == "input":
-                            amount = os.write(child.stdin.fileno(), payload[sent:])
+                            amount = fdops.write(child.stdin.fileno(), payload[sent:])
                             if amount <= 0:
                                 raise OSError("worker input error")
                             sent += amount
@@ -1056,7 +1057,7 @@ def _supervise_core(args):
                                 selector.unregister(child.stdin)
                                 child.stdin.close()
                         else:
-                            chunk = os.read(
+                            chunk = fdops.read(
                                 child.stdout.fileno(), min(65536, _MAX_PROTOCOL + 1 - received)
                             )
                             if not chunk:

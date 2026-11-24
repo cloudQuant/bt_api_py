@@ -42,6 +42,15 @@ def settings(tmp_path, mode="auto"):
     root.mkdir(mode=0o700)
     config = base / "config.json"
     config.write_text(json.dumps({"calendars": {"root": str(root), "review_mode": mode}}))
+    if os.name == "nt":
+        # POSIX mkdir(mode=0o700) makes a private root; Windows ignores that
+        # mode argument and inherits a DACL granting the user's group write.
+        # Narrow both paths to owner-only so the test exercises the same
+        # private-root condition on all platforms.
+        from bt_api_py._win32_security import _set_owner_only_acl
+
+        _set_owner_only_acl(root)
+        _set_owner_only_acl(config)
     return root, config
 
 
@@ -159,10 +168,34 @@ def test_refuses_unsafe_explicit_root(tmp_path, scenario):
     elif scenario == "mode":
         extra = ("--mock-review-mode", "manual")
     elif scenario == "nonprivate":
-        root.chmod(0o755)
+        if os.name == "nt":
+            # Windows chmod(0o755) does not change the DACL, so it cannot
+            # express "others writable".  Grant Everyone write explicitly to
+            # construct the same unsafe-root condition the test intends.
+            import win32con
+            import win32security
+
+            sd = win32security.GetFileSecurity(
+                str(root), win32security.DACL_SECURITY_INFORMATION)
+            dacl = sd.GetSecurityDescriptorDacl()
+            if dacl is None:
+                dacl = win32security.ACL()
+            dacl.AddAccessAllowedAce(
+                win32security.ACL_REVISION, win32con.GENERIC_ALL,
+                win32security.ConvertStringSidToSid("S-1-1-0"))
+            sd.SetSecurityDescriptorDacl(1, dacl, 0)
+            win32security.SetFileSecurity(
+                str(root), win32security.DACL_SECURITY_INFORMATION, sd)
+        else:
+            root.chmod(0o755)
     else:
         link = root.parent / "linked"
-        link.symlink_to(root, target_is_directory=True)
+        try:
+            link.symlink_to(root, target_is_directory=True)
+        except OSError as exc:
+            if os.name == "nt":
+                pytest.skip("symlink creation requires privilege on this host")
+            raise
         root = link
     rc, _, _ = command(env, *run_args(root, config, *extra))
     assert rc != 0

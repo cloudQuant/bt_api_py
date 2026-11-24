@@ -23,6 +23,7 @@ from __future__ import annotations
 import inspect
 import math
 import os
+from bt_api_py import _calendar_fdops as fdops
 import re
 import sqlite3
 import stat
@@ -312,7 +313,7 @@ def read_notification_outcome(*, journal_path, kind, event_id, period=None):
         directory = path.parent.stat()
         if (
             not stat.S_ISDIR(directory.st_mode)
-            or directory.st_uid != os.geteuid()
+            or directory.st_uid != fdops.geteuid()
             or stat.S_IMODE(directory.st_mode) != 0o700
         ):
             return {"status": "INVALID_INPUT", "journal_status": None, "period": None}
@@ -322,7 +323,7 @@ def read_notification_outcome(*, journal_path, kind, event_id, period=None):
             return {"status": "ABSENT", "journal_status": None, "period": None}
         if (
             not stat.S_ISREG(info.st_mode)
-            or info.st_uid != os.geteuid()
+            or info.st_uid != fdops.geteuid()
             or stat.S_IMODE(info.st_mode) != 0o600
             or info.st_nlink != 1
         ):

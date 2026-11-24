@@ -10,7 +10,8 @@ original ID rather than retried.
 from __future__ import annotations
 
 import contextlib
-import fcntl
+from bt_api_py._calendar_compat import fcntl
+from bt_api_py import _calendar_fdops as fdops
 import hashlib
 import json
 import math
@@ -183,7 +184,7 @@ def _retain_pending(operator, ids, proposal, *, input_binding=None):
             with contextlib.suppress(OSError):
                 fcntl.flock(lock, fcntl.LOCK_UN)
             with contextlib.suppress(OSError):
-                os.close(lock)
+                fdops.close(lock)
         runs._close(fds)
 
 
@@ -1433,17 +1434,17 @@ def confirm(*, root, run_id, review_id, review_sha256, reviewer, confirmed_at):
     lock = None
     try:
         lock_name = f".mock-confirm-{review_id}.lock"
-        lock = os.open(lock_name, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600, dir_fd=fds[-1])
-        info = os.fstat(lock)
+        lock = fdops.open(lock_name, os.O_RDWR | os.O_CREAT | fdops.O_NOFOLLOW, 0o600, dir_fd=fds[-1])
+        info = fdops.fstat(lock)
         if (
             not stat.S_ISREG(info.st_mode)
-            or info.st_uid != os.geteuid()
+            or info.st_uid != fdops.geteuid()
             or info.st_mode & 0o077
             or info.st_nlink != 1
         ):
             raise ValueError("invalid review confirmation lock")
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        entry = os.stat(lock_name, dir_fd=fds[-1], follow_symlinks=False)
+        entry = fdops.stat(lock_name, dir_fd=fds[-1], follow_symlinks=False)
         if (entry.st_dev, entry.st_ino) != (
             info.st_dev,
             info.st_ino,
@@ -1464,7 +1465,7 @@ def confirm(*, root, run_id, review_id, review_sha256, reviewer, confirmed_at):
             with contextlib.suppress(OSError):
                 fcntl.flock(lock, fcntl.LOCK_UN)
             with contextlib.suppress(OSError):
-                os.close(lock)
+                fdops.close(lock)
         runs._close(fds)
 
 

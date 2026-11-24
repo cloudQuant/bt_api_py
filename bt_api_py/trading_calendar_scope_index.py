@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+from bt_api_py import _calendar_fdops as fdops
 import sqlite3
 import stat
 from pathlib import Path
@@ -49,14 +50,14 @@ def _identity(info):
 
 def _regular(fd, name, *, required):
     try:
-        info = os.stat(name, dir_fd=fd, follow_symlinks=False)
+        info = fdops.stat(name, dir_fd=fd, follow_symlinks=False)
     except FileNotFoundError:
         if required:
             raise ValueError("index file unavailable") from None
         return None
     if (
         not stat.S_ISREG(info.st_mode)
-        or info.st_uid != os.geteuid()
+        or info.st_uid != fdops.geteuid()
         or info.st_nlink != 1
         or stat.S_IMODE(info.st_mode) != 0o600
     ):
@@ -165,10 +166,10 @@ def connect(*, root, fd, chain, database_id, migration_id, write, recovery=False
 
 def create(*, root, fd, chain, database_id, migration_id, records):
     name = f"scope-check-index-{database_id}.sqlite3"
-    index_fd = os.open(name, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd)
-    os.fchmod(index_fd, 0o600)
-    os.close(index_fd)
-    os.fsync(fd)
+    index_fd = fdops.open(name, os.O_RDWR | os.O_CREAT | os.O_EXCL | fdops.O_NOFOLLOW, 0o600, dir_fd=fd)
+    fdops.fchmod(index_fd, 0o600)
+    fdops.close(index_fd)
+    fdops.fsync(fd)
     with connect(
         root=root,
         fd=fd,
@@ -193,7 +194,7 @@ def create(*, root, fd, chain, database_id, migration_id, records):
             with contextlib.suppress(sqlite3.Error):
                 connection.execute("ROLLBACK")
             raise
-    os.fsync(fd)
+    fdops.fsync(fd)
     with connect(
         root=root,
         fd=fd,
@@ -347,7 +348,7 @@ def _ensure_migration_intent(root, fd, chain, migration_id):
         )
         if state != "COMMITTED":
             raise ValueError("migration intent outcome unknown")
-        os.fsync(fd)
+        fdops.fsync(fd)
         existing = checks._read(fd, chain, f"scope-check-migration-{migration_id}.json")
     if existing != pending:
         raise ValueError("migration intent and barrier differ")
@@ -358,8 +359,8 @@ def _clear_migration_pending(root, fd, chain, pending):
     if pending is not None:
         if _migration_pending(root, fd, chain) != pending:
             raise ValueError("migration barrier changed")
-        os.unlink("scope-check-migration-pending.json", dir_fd=fd)
-        os.fsync(fd)
+        fdops.unlink("scope-check-migration-pending.json", dir_fd=fd)
+        fdops.fsync(fd)
 
 
 def check_migration_barrier(root, *, allow_migration_id=None):
@@ -487,7 +488,7 @@ def begin(*, operator, migration_id, legacy_ids, declaration):
                         "barrier_state": state,
                         "detail": reason,
                     }
-                os.fsync(fd)
+                fdops.fsync(fd)
                 pending = _migration_pending(operator.root, fd, chain)
                 if pending is None or pending[0] != body:
                     raise ValueError("migration barrier uncertain")
@@ -502,7 +503,7 @@ def begin(*, operator, migration_id, legacy_ids, declaration):
                         "intent_state": state,
                         "detail": reason,
                     }
-                os.fsync(fd)
+                fdops.fsync(fd)
                 stored, digest = _migration_intent(operator.root, fd, chain, migration_id)
                 if stored != body:
                     raise ValueError("migration intent differs")
@@ -634,7 +635,7 @@ def resume(*, operator, migration_id, declaration):
                     ):
                         pass
                     _clear_migration_pending(operator.root, fd, chain, pending)
-                    os.fsync(fd)
+                    fdops.fsync(fd)
                     return {
                         **result,
                         "status": "VISIBLE_UNAUTHENTICATED",
@@ -997,12 +998,12 @@ def record_locked(*, operator, fd, chain, batch_id, evidence_sha256):
         )
         if state != "COMMITTED":
             raise ValueError("scope pending uncertain")
-        os.fsync(fd)
+        fdops.fsync(fd)
         saved_pending = _pending(operator.root, fd, chain)
         if saved_pending is None or saved_pending[0] != pending:
             raise ValueError("scope pending unavailable")
         _apply_intent(connection, pending)
-        os.fsync(fd)
+        fdops.fsync(fd)
         saved = _indexed_record(connection, operator.root, fd, chain, body["sequence"])
         if saved != (body, digest) or _pending(operator.root, fd, chain)[0] != pending:
             raise ValueError("scope index write uncertain")
@@ -1011,8 +1012,8 @@ def record_locked(*, operator, fd, chain, batch_id, evidence_sha256):
             for entry in entries
         ]
         result = _result_for_targets(connection, operator.root, fd, chain, targets)
-        os.unlink("scope-check-index-pending.json", dir_fd=fd)
-        os.fsync(fd)
+        fdops.unlink("scope-check-index-pending.json", dir_fd=fd)
+        fdops.fsync(fd)
         return {**result, "record_state": "COMMITTED", "batch_id": batch_id}
 
 
@@ -1107,7 +1108,7 @@ def reconcile_locked(*, operator, fd, chain, batch_id):
         if operator.run_id not in {source_intent["run_id"], source_intent["original_run_id"]}:
             raise ValueError("scope run identity mismatch")
         outcome = _apply_intent(connection, body)
-        os.fsync(fd)
+        fdops.fsync(fd)
         if _indexed_record(connection, operator.root, fd, chain, body["record"]["sequence"]) != (
             body["record"],
             body["record_sha256"],
@@ -1116,8 +1117,8 @@ def reconcile_locked(*, operator, fd, chain, batch_id):
         if pending is not None:
             if _pending(operator.root, fd, chain) != pending:
                 raise ValueError("scope pending changed")
-            os.unlink("scope-check-index-pending.json", dir_fd=fd)
-            os.fsync(fd)
+            fdops.unlink("scope-check-index-pending.json", dir_fd=fd)
+            fdops.fsync(fd)
         return {
             **result,
             "status": "VISIBLE_UNAUTHENTICATED",
@@ -1193,7 +1194,7 @@ def audit(*, operator, audit_id, action, limit=16):
                             with contextlib.suppress(sqlite3.Error):
                                 connection.execute("ROLLBACK")
                             raise
-                        os.fsync(fd)
+                        fdops.fsync(fd)
                         row = (sequence, digest)
                     elif row is None:
                         return {**result, "status": "UNKNOWN", "reason": "AUDIT_ID_NOT_OBSERVED"}
@@ -1249,7 +1250,7 @@ def audit(*, operator, audit_id, action, limit=16):
                             raise
                         finally:
                             connection.create_function("scope_audit_authorize", 6, lambda *_: 0)
-                        os.fsync(fd)
+                        fdops.fsync(fd)
                         next_sequence = stop
                         page_revalidated = True
                     status = "COMPLETE" if next_sequence == target + 1 else "IN_PROGRESS"

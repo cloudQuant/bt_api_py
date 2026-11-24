@@ -9,10 +9,11 @@ when explicitly requested. No network, accounts, CURRENT or publication.
 """
 
 import contextlib
-import fcntl
+from bt_api_py._calendar_compat import fcntl
 import hashlib
 import json
 import os
+from bt_api_py import _calendar_fdops as fdops
 import stat
 import uuid
 
@@ -38,15 +39,15 @@ def _open(root, create):
         parent = fds[-1]
         if create:
             with contextlib.suppress(FileExistsError):
-                os.mkdir("supplement-captures", 0o700, dir_fd=parent)
-        info = os.stat("supplement-captures", dir_fd=parent, follow_symlinks=False)
-        if not stat.S_ISDIR(info.st_mode) or info.st_mode & 0o077 or info.st_uid != os.geteuid():
+                fdops.mkdir("supplement-captures", 0o700, dir_fd=parent)
+        info = fdops.stat("supplement-captures", dir_fd=parent, follow_symlinks=False)
+        if not stat.S_ISDIR(info.st_mode) or info.st_mode & 0o077 or info.st_uid != fdops.geteuid():
             raise ValueError("invalid directory")
-        fd = os.open(
-            "supplement-captures", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent
+        fd = fdops.open(
+            "supplement-captures", os.O_RDONLY | fdops.O_DIRECTORY | fdops.O_NOFOLLOW, dir_fd=parent
         )
         fds.append(fd)
-        if _identity(os.fstat(fd)) != _identity(info):
+        if _identity(fdops.fstat(fd)) != _identity(info):
             raise ValueError("directory changed")
         chain.append((parent, "supplement-captures", fd, _identity(info)))
         if not _directory_matches(chain):
@@ -126,52 +127,52 @@ def retain_capture(*, root, run_id, capture_id, candidate, guard, filesystem, se
         if guard() is not True or _normalize(candidate) != (content, digest):
             return {"status": "NOT_COMMITTED", "capture_id": capture_id, "payload_sha256": None}
         temp = f".capture-{uuid.uuid4().hex}.tmp"
-        fd = os.open(
-            temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fds[-1]
+        fd = fdops.open(
+            temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | fdops.O_NOFOLLOW, 0o600, dir_fd=fds[-1]
         )
-        os.fchmod(fd, 0o600)
-        identity = _identity(os.fstat(fd))
+        fdops.fchmod(fd, 0o600)
+        identity = _identity(fdops.fstat(fd))
         offset = 0
         while offset < len(encoded):
-            count = os.write(fd, encoded[offset:])
+            count = fdops.write(fd, encoded[offset:])
             if count <= 0:
                 raise OSError("short write")
             offset += count
-        os.fsync(fd)
+        fdops.fsync(fd)
         storage._check_lock(fds[-1], chain, lock, lock_id)
         if (
             guard() is not True
             or _normalize(candidate) != (content, digest)
-            or _identity(os.fstat(fd)) != identity
-            or _identity(os.stat(temp, dir_fd=fds[-1], follow_symlinks=False)) != identity
+            or _identity(fdops.fstat(fd)) != identity
+            or _identity(fdops.stat(temp, dir_fd=fds[-1], follow_symlinks=False)) != identity
         ):
             return {"status": "NOT_COMMITTED", "capture_id": capture_id, "payload_sha256": None}
         name = f"capture-{capture_id}.json"
         attempted = True
         try:
-            os.link(temp, name, src_dir_fd=fds[-1], dst_dir_fd=fds[-1], follow_symlinks=False)
+            fdops.link(temp, name, src_dir_fd=fds[-1], dst_dir_fd=fds[-1], follow_symlinks=False)
         except FileExistsError:
-            old = os.stat(name, dir_fd=fds[-1], follow_symlinks=False)
+            old = fdops.stat(name, dir_fd=fds[-1], follow_symlinks=False)
             if _identity(old) == identity or not _directory_matches(chain):
                 raise
             attempted = False
             return {"status": "NOT_COMMITTED", "capture_id": capture_id, "payload_sha256": None}
         if (
             storage._read(fds[-1], chain, name, _LIMIT) != encoded
-            or _identity(os.stat(name, dir_fd=fds[-1], follow_symlinks=False)) != identity
-            or _identity(os.fstat(fd)) != identity
-            or _identity(os.stat(temp, dir_fd=fds[-1], follow_symlinks=False)) != identity
+            or _identity(fdops.stat(name, dir_fd=fds[-1], follow_symlinks=False)) != identity
+            or _identity(fdops.fstat(fd)) != identity
+            or _identity(fdops.stat(temp, dir_fd=fds[-1], follow_symlinks=False)) != identity
         ):
             raise ValueError("capture changed")
         _remove_owned_temp(fds[-1], temp, identity)
         try:
-            os.stat(temp, dir_fd=fds[-1], follow_symlinks=False)
+            fdops.stat(temp, dir_fd=fds[-1], follow_symlinks=False)
         except FileNotFoundError:
             pass
         else:
             raise ValueError("temporary entry changed or remained")
         identity = None
-        os.fsync(fds[-1])
+        fdops.fsync(fds[-1])
         storage._check_lock(fds[-1], chain, lock, lock_id)
         # A change observed after installation makes the outcome uncertain. This
         # check cannot exclude non-cooperating writers, ABA, or later changes.
@@ -191,7 +192,7 @@ def retain_capture(*, root, run_id, capture_id, candidate, guard, filesystem, se
     finally:
         if fd is not None:
             with contextlib.suppress(OSError):
-                os.close(fd)
+                fdops.close(fd)
         if identity is not None:
             with contextlib.suppress(OSError):
                 _remove_owned_temp(fds[-1], temp, identity)
@@ -199,7 +200,7 @@ def retain_capture(*, root, run_id, capture_id, candidate, guard, filesystem, se
             with contextlib.suppress(OSError):
                 fcntl.flock(lock, fcntl.LOCK_UN)
             with contextlib.suppress(OSError):
-                os.close(lock)
+                fdops.close(lock)
         runs._close(fds)
 
 

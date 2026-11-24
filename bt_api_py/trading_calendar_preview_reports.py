@@ -21,6 +21,7 @@ import stat
 import uuid
 from dataclasses import dataclass, fields
 
+from bt_api_py import _calendar_fdops as fdops
 from bt_api_py.trading_calendar_preview import (
     _PAGE,
     _TRANSPORT,
@@ -210,6 +211,15 @@ def _validated_report(report: object) -> bytes | None:
 
 
 def _supported() -> bool:
+    if os.name == "nt":
+        from bt_api_py import _calendar_fdops as fdops
+        from bt_api_py import _win32_security as security
+
+        return bool(
+            security.has_privileges_available()
+            and fdops._WIN_OK
+            and callable(fdops.open_root)
+        )
     return (
         os.name == "posix"
         and all(hasattr(os, name) for name in ("O_NOFOLLOW", "O_DIRECTORY"))
@@ -242,16 +252,29 @@ def _open_directory(
     descriptors = []
     chain = []
     try:
-        root = os.open(os.sep, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        if os.name == "nt":
+            # Windows has no dir_fd: open the volume root, then walk the
+            # remaining components one descriptor at a time.  Every component
+            # keeps the same nofollow + by-handle identity check as POSIX.
+            absolute = os.path.abspath(raw)
+            drive, tail = os.path.splitdrive(absolute)
+            anchor = drive + os.sep
+            components = [part for part in tail.split(os.sep) if part and part != "."]
+            if not components:
+                raise ValueError("invalid directory")
+            root = fdops.open_root(anchor, check_owner=False)
+        else:
+            components = [part for part in raw.split(os.sep) if part and part != "."]
+            root = fdops.open(os.sep, os.O_RDONLY | fdops.O_DIRECTORY | fdops.O_NOFOLLOW)
         descriptors.append(root)
         parent = root
         for name in components:
-            before = os.stat(name, dir_fd=parent, follow_symlinks=False)
+            before = fdops.stat(name, dir_fd=parent, follow_symlinks=False)
             if not stat.S_ISDIR(before.st_mode):
                 raise ValueError("directory must not be a symlink")
-            fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
+            fd = fdops.open(name, os.O_RDONLY | fdops.O_DIRECTORY | fdops.O_NOFOLLOW, dir_fd=parent)
             descriptors.append(fd)
-            identity = _identity(os.fstat(fd))
+            identity = _identity(fdops.fstat(fd))
             if _identity(before) != identity:
                 raise ValueError("directory changed")
             chain.append((parent, name, fd, identity))
@@ -259,15 +282,16 @@ def _open_directory(
         return descriptors, chain
     except Exception:
         for fd in reversed(descriptors):
-            os.close(fd)
+            with contextlib.suppress(OSError):
+                fdops.close(fd)
         raise
 
 
 def _directory_matches(chain) -> bool:
     try:
         return all(
-            _identity(os.stat(name, dir_fd=parent, follow_symlinks=False)) == identity
-            and _identity(os.fstat(fd)) == identity
+            _identity(fdops.stat(name, dir_fd=parent, follow_symlinks=False)) == identity
+            and _identity(fdops.fstat(fd)) == identity
             for parent, name, fd, identity in chain
         )
     except OSError:
@@ -276,8 +300,8 @@ def _directory_matches(chain) -> bool:
 
 def _remove_owned_temp(directory: int, name: str, identity: tuple[int, int, int]) -> None:
     try:
-        if _identity(os.stat(name, dir_fd=directory, follow_symlinks=False)) == identity:
-            os.unlink(name, dir_fd=directory)
+        if _identity(fdops.stat(name, dir_fd=directory, follow_symlinks=False)) == identity:
+            fdops.unlink(name, dir_fd=directory)
     except OSError:
         pass
 
@@ -309,7 +333,7 @@ def retain_preview_report(
     except Exception:
         for fd in reversed(descriptors):
             with contextlib.suppress(OSError):
-                os.close(fd)
+                fdops.close(fd)
         return PreviewRetentionResult("NOT_COMMITTED", "NOT_OBSERVED", reason="RANDOM_UNAVAILABLE")
     directory_fd = descriptors[-1]
     temp_fd = None
@@ -323,52 +347,52 @@ def retain_preview_report(
         payload = prefix[:-1] + b',"report":' + validated_report + b"}"
         if len(payload) > _LIMIT or not _directory_matches(chain):
             raise ValueError("report or directory invalid")
-        temp_fd = os.open(
-            temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=directory_fd
+        temp_fd = fdops.open(
+            temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | fdops.O_NOFOLLOW, 0o600, dir_fd=directory_fd
         )
-        temp_identity = _identity(os.fstat(temp_fd))
+        temp_identity = _identity(fdops.fstat(temp_fd))
         offset = 0
         while offset < len(payload):
-            written = os.write(temp_fd, payload[offset:])
+            written = fdops.write(temp_fd, payload[offset:])
             if written <= 0:
                 raise OSError("short write")
             offset += written
-        os.fchmod(temp_fd, 0o400)
-        temp_identity = _identity(os.fstat(temp_fd))
-        os.fsync(temp_fd)
+        fdops.fchmod(temp_fd, 0o400)
+        temp_identity = _identity(fdops.fstat(temp_fd))
+        fdops.fsync(temp_fd)
         if not _directory_matches(chain):
             raise ValueError("directory changed")
         attempted = True
         try:
-            os.link(
+            fdops.link(
                 temp, name, src_dir_fd=directory_fd, dst_dir_fd=directory_fd, follow_symlinks=False
             )
         except FileExistsError:
-            existing = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+            existing = fdops.stat(name, dir_fd=directory_fd, follow_symlinks=False)
             if _identity(existing) == temp_identity or not _directory_matches(chain):
                 raise
             attempted = False
             return PreviewRetentionResult(
                 "NOT_COMMITTED", "NOT_OBSERVED", run_id=run_id, reason="RUN_ID_EXISTS"
             )
-        final_fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=directory_fd)
+        final_fd = fdops.open(name, os.O_RDONLY | fdops.O_NOFOLLOW, dir_fd=directory_fd)
         try:
-            if _identity(os.fstat(final_fd)) != temp_identity:
+            if _identity(fdops.fstat(final_fd)) != temp_identity:
                 raise ValueError("readback identity mismatch")
             received = bytearray()
             while len(received) <= _LIMIT:
-                part = os.read(final_fd, _LIMIT + 1 - len(received))
+                part = fdops.read(final_fd, _LIMIT + 1 - len(received))
                 if not part:
                     break
                 received.extend(part)
             if bytes(received) != payload or not _directory_matches(chain):
                 raise ValueError("readback mismatch")
         finally:
-            os.close(final_fd)
+            fdops.close(final_fd)
         visible = True
-        os.unlink(temp, dir_fd=directory_fd)
+        fdops.unlink(temp, dir_fd=directory_fd)
         temp_identity = None
-        os.fsync(directory_fd)
+        fdops.fsync(directory_fd)
         if not _directory_matches(chain):
             raise ValueError("directory changed")
         return PreviewRetentionResult("COMMITTED", "VISIBLE", run_id=run_id)
@@ -382,9 +406,9 @@ def retain_preview_report(
     finally:
         if temp_fd is not None:
             with contextlib.suppress(OSError):
-                os.close(temp_fd)
+                fdops.close(temp_fd)
         if temp_identity is not None:
             _remove_owned_temp(directory_fd, temp, temp_identity)
         for fd in reversed(descriptors):
             with contextlib.suppress(OSError):
-                os.close(fd)
+                fdops.close(fd)

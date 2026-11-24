@@ -20,10 +20,11 @@ permission for an automatic retry. Python callers must not expose private files.
 from __future__ import annotations
 
 import contextlib
-import fcntl
+from bt_api_py._calendar_compat import fcntl
 import hashlib
 import math
 import os
+from bt_api_py import _calendar_fdops as fdops
 import re
 import sqlite3
 import stat
@@ -113,15 +114,15 @@ def _open(root, create):
         parent = fds[-1]
         if create:
             with contextlib.suppress(FileExistsError):
-                os.mkdir("akshare-observations", 0o700, dir_fd=parent)
-        info = os.stat("akshare-observations", dir_fd=parent, follow_symlinks=False)
-        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
+                fdops.mkdir("akshare-observations", 0o700, dir_fd=parent)
+        info = fdops.stat("akshare-observations", dir_fd=parent, follow_symlinks=False)
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != fdops.geteuid() or info.st_mode & 0o077:
             raise ValueError("invalid private directory")
-        fd = os.open(
-            "akshare-observations", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent
+        fd = fdops.open(
+            "akshare-observations", os.O_RDONLY | fdops.O_DIRECTORY | fdops.O_NOFOLLOW, dir_fd=parent
         )
         fds.append(fd)
-        if _identity(os.fstat(fd)) != _identity(info):
+        if _identity(fdops.fstat(fd)) != _identity(info):
             raise ValueError("directory changed")
         chain.append((parent, "akshare-observations", fd, _identity(info)))
         if not _directory_matches(chain):
@@ -158,14 +159,14 @@ def _settings(venue, contract, requested_date, timeout):
 
 def _registry_file(fd, name, required=False):
     try:
-        info = os.stat(name, dir_fd=fd, follow_symlinks=False)
+        info = fdops.stat(name, dir_fd=fd, follow_symlinks=False)
     except FileNotFoundError:
         if required:
             raise ValueError("registry file unavailable") from None
         return None
     if (
         not stat.S_ISREG(info.st_mode)
-        or info.st_uid != os.geteuid()
+        or info.st_uid != fdops.geteuid()
         or info.st_nlink != 1
         or stat.S_IMODE(info.st_mode) != 0o600
     ):
@@ -195,7 +196,7 @@ def _require_no_old_reservations(fd, chain):
     # Only initialization scans; exhaustion, not a capped prefix, proves absence.
     if not _directory_matches(chain):
         raise ValueError("directory changed")
-    with os.scandir(fd) as entries:
+    with fdops.scandir(fd) as entries:
         for entry in entries:
             if entry.name.startswith("reservation-attempt-") or entry.name == _RESERVATION_PENDING:
                 raise ValueError("prior reservation evidence exists")
@@ -209,8 +210,8 @@ def _clear_pending(fd, chain, expected):
         raise ValueError("pending reservation changed")
     if _registry_file(fd, _RESERVATION_PENDING, required=True) != before:
         raise ValueError("pending identity changed")
-    os.unlink(_RESERVATION_PENDING, dir_fd=fd)
-    os.fsync(fd)
+    fdops.unlink(_RESERVATION_PENDING, dir_fd=fd)
+    fdops.fsync(fd)
     if not _directory_matches(chain) or _pending(fd, chain) is not None:
         raise ValueError("pending removal uncertain")
 
@@ -229,18 +230,18 @@ def _registry(root, fd, chain):
         state, _ = runs._write_once(fd, chain, _REGISTRY_MARKER, marker_bytes)
         if state != "COMMITTED":
             raise ValueError("registry initialization uncertain")
-        dbfd = os.open(
+        dbfd = fdops.open(
             _REGISTRY,
-            os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+            os.O_RDWR | os.O_CREAT | os.O_EXCL | fdops.O_NOFOLLOW,
             0o600,
             dir_fd=fd,
         )
         try:
-            os.fchmod(dbfd, 0o600)
-            os.fsync(dbfd)
+            fdops.fchmod(dbfd, 0o600)
+            fdops.fsync(dbfd)
         finally:
-            os.close(dbfd)
-        os.fsync(fd)
+            fdops.close(dbfd)
+        fdops.fsync(fd)
         initialize = True
     else:
         if storage._unwrap(marker)[0] != {"schema": _REGISTRY_SCHEMA} or current is None:
@@ -384,7 +385,7 @@ def reserve_observations(*, root, reservation_id, batch_id, run_id, requests, fi
     try:
         fds, chain = _open(root, True)
         lock, ident = storage._lock(fds[-1], chain)
-        if os.fstat(lock).st_nlink != 1:
+        if fdops.fstat(lock).st_nlink != 1:
             raise ValueError("invalid lock")
         storage._check_lock(fds[-1], chain, lock, ident)
         _require_no_pending(fds[-1], chain)
@@ -451,7 +452,7 @@ def reserve_observations(*, root, reservation_id, batch_id, run_id, requests, fi
             with contextlib.suppress(OSError):
                 fcntl.flock(lock, fcntl.LOCK_UN)
             with contextlib.suppress(OSError):
-                os.close(lock)
+                fdops.close(lock)
         if fds is not None:
             runs._close(fds)
 
@@ -583,15 +584,15 @@ def _verify_abort(db, fd, chain, reservation_id, encoded, expected_pending=None)
 
 def _sync_registry(fd, chain):
     before = _registry_file(fd, _REGISTRY, required=True)
-    dbfd = os.open(_REGISTRY, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=fd)
+    dbfd = fdops.open(_REGISTRY, os.O_RDONLY | fdops.O_NOFOLLOW, dir_fd=fd)
     try:
-        info = os.fstat(dbfd)
+        info = fdops.fstat(dbfd)
         if (info.st_dev, info.st_ino, info.st_mode, info.st_uid, info.st_nlink) != before:
             raise ValueError("registry identity changed")
-        os.fsync(dbfd)
+        fdops.fsync(dbfd)
     finally:
-        os.close(dbfd)
-    os.fsync(fd)
+        fdops.close(dbfd)
+    fdops.fsync(fd)
     if (_registry_file(fd, _REGISTRY, required=True) != before or not _directory_matches(chain)):
         raise ValueError("registry identity changed")
     _registry_sidecars(fd)
@@ -608,7 +609,7 @@ def abort_reservation(*, root, reservation_id, filesystem):
     try:
         fds, chain = _open(root, False)
         lock, ident = storage._lock(fds[-1], chain)
-        if os.fstat(lock).st_nlink != 1:
+        if fdops.fstat(lock).st_nlink != 1:
             raise ValueError("invalid lock")
         storage._check_lock(fds[-1], chain, lock, ident)
         pending = _pending(fds[-1], chain)
@@ -660,7 +661,7 @@ def abort_reservation(*, root, reservation_id, filesystem):
             with contextlib.suppress(OSError):
                 fcntl.flock(lock, fcntl.LOCK_UN)
             with contextlib.suppress(OSError):
-                os.close(lock)
+                fdops.close(lock)
         if fds is not None:
             runs._close(fds)
 
@@ -676,7 +677,7 @@ def reconcile_reservation(*, root, reservation_id, filesystem):
     try:
         fds, chain = _open(root, False)
         lock, ident = storage._lock(fds[-1], chain)
-        if os.fstat(lock).st_nlink != 1:
+        if fdops.fstat(lock).st_nlink != 1:
             raise ValueError("invalid lock")
         storage._check_lock(fds[-1], chain, lock, ident)
         raw = _pending(fds[-1], chain)
@@ -722,7 +723,7 @@ def reconcile_reservation(*, root, reservation_id, filesystem):
             with contextlib.suppress(OSError):
                 fcntl.flock(lock, fcntl.LOCK_UN)
             with contextlib.suppress(OSError):
-                os.close(lock)
+                fdops.close(lock)
         if fds is not None:
             runs._close(fds)
 
@@ -745,7 +746,7 @@ def show_reservation(*, root, reservation_id, filesystem):
     try:
         fds, chain = _open(root, False)
         lock, ident = storage._lock(fds[-1], chain)
-        if os.fstat(lock).st_nlink != 1:
+        if fdops.fstat(lock).st_nlink != 1:
             raise ValueError("invalid lock")
         storage._check_lock(fds[-1], chain, lock, ident)
         pending = _pending(fds[-1], chain)
@@ -807,7 +808,7 @@ def show_reservation(*, root, reservation_id, filesystem):
             with contextlib.suppress(OSError):
                 fcntl.flock(lock, fcntl.LOCK_UN)
             with contextlib.suppress(OSError):
-                os.close(lock)
+                fdops.close(lock)
         if fds is not None:
             runs._close(fds)
 
@@ -850,8 +851,8 @@ def verify_reservation_readonly(
         _require_no_pending(fd, chain)
         _registry_sidecars(fd)
         before = _registry_file(fd, _REGISTRY, required=True)
-        anchor = os.open(_REGISTRY, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
-        info = os.fstat(anchor)
+        anchor = fdops.open(_REGISTRY, os.O_RDONLY | fdops.O_NOFOLLOW | fdops.O_NONBLOCK, dir_fd=fd)
+        info = fdops.fstat(anchor)
         if (
             info.st_dev,
             info.st_ino,
@@ -896,7 +897,7 @@ def verify_reservation_readonly(
         _require_no_pending(fd, chain)
         _registry_sidecars(fd)
         _validate_attempt(fd, chain, reservation_id)
-        after = os.fstat(anchor)
+        after = fdops.fstat(anchor)
         if (
             _registry_file(fd, _REGISTRY, required=True) != before
             or (after.st_size, after.st_mtime_ns, after.st_ctime_ns) != stamp
@@ -911,7 +912,7 @@ def verify_reservation_readonly(
         _require_no_pending(fd, chain)
         _registry_sidecars(fd)
         _validate_attempt(fd, chain, reservation_id)
-        after = os.fstat(anchor)
+        after = fdops.fstat(anchor)
         if (
             _registry_file(fd, _REGISTRY, required=True) != before
             or (after.st_size, after.st_mtime_ns, after.st_ctime_ns) != stamp
@@ -927,7 +928,7 @@ def verify_reservation_readonly(
         if db is not None:
             db.close()
         if anchor is not None:
-            os.close(anchor)
+            fdops.close(anchor)
         if fds is not None:
             runs._close(fds)
 
@@ -1475,7 +1476,7 @@ def _observe_impl(
     registry_check = True
     try:
         lock, ident = storage._lock(fds[-1], chain)
-        if os.fstat(lock).st_nlink != 1:
+        if fdops.fstat(lock).st_nlink != 1:
             raise ValueError("invalid lock")
         storage._check_lock(fds[-1], chain, lock, ident)
         _require_no_pending(fds[-1], chain)
@@ -1551,7 +1552,7 @@ def _observe_impl(
             with contextlib.suppress(OSError):
                 fcntl.flock(lock, fcntl.LOCK_UN)
             with contextlib.suppress(OSError):
-                os.close(lock)
+                fdops.close(lock)
         runs._close(fds)
     try:
         capture = collector(
@@ -1626,7 +1627,7 @@ def _observe_impl(
             with contextlib.suppress(OSError):
                 fcntl.flock(lock, fcntl.LOCK_UN)
             with contextlib.suppress(OSError):
-                os.close(lock)
+                fdops.close(lock)
         runs._close(fds)
 
 

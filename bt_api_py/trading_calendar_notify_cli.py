@@ -27,6 +27,7 @@ import hashlib
 import json
 import math
 import os
+from bt_api_py import _calendar_fdops as fdops
 import re
 import stat
 import sys
@@ -103,11 +104,11 @@ def _review_observation_lock(operator, review_id):
     locked = False
     try:
         name = f".mock-confirm-{review_id}.lock"
-        lock = os.open(name, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600, dir_fd=fds[-1])
-        info = os.fstat(lock)
+        lock = fdops.open(name, os.O_RDWR | os.O_CREAT | fdops.O_NOFOLLOW, 0o600, dir_fd=fds[-1])
+        info = fdops.fstat(lock)
         if (
             not stat.S_ISREG(info.st_mode)
-            or info.st_uid != os.geteuid()
+            or info.st_uid != fdops.geteuid()
             or info.st_mode & 0o077
             or info.st_nlink != 1
         ):
@@ -116,11 +117,11 @@ def _review_observation_lock(operator, review_id):
         locked = True
 
         def verify():
-            entry = os.stat(name, dir_fd=fds[-1], follow_symlinks=False)
+            entry = fdops.stat(name, dir_fd=fds[-1], follow_symlinks=False)
             if (
                 (entry.st_dev, entry.st_ino) != (info.st_dev, info.st_ino)
                 or not stat.S_ISREG(entry.st_mode)
-                or entry.st_uid != os.geteuid()
+                or entry.st_uid != fdops.geteuid()
                 or entry.st_mode & 0o077
                 or entry.st_nlink != 1
                 or not runs._directory_matches(chain)
@@ -137,7 +138,7 @@ def _review_observation_lock(operator, review_id):
                     if locked:
                         fcntl.flock(lock, fcntl.LOCK_UN)
                 finally:
-                    os.close(lock)
+                    fdops.close(lock)
         finally:
             runs._close(fds)
 
@@ -149,47 +150,47 @@ def _protected_journal(path):
     if not path.is_absolute() or str(path) != os.path.realpath(path) or not path.name:
         raise ValueError("invalid journal")
     parent = path.parent
-    dfd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    dfd = fdops.open(parent, os.O_RDONLY | fdops.O_DIRECTORY | fdops.O_NOFOLLOW)
     fd = None
     try:
-        directory = os.fstat(dfd)
+        directory = fdops.fstat(dfd)
         if (
             not stat.S_ISDIR(directory.st_mode)
-            or directory.st_uid != os.geteuid()
+            or directory.st_uid != fdops.geteuid()
             or stat.S_IMODE(directory.st_mode) != 0o700
         ):
             raise ValueError("invalid journal directory")
-        flags = os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK
+        flags = os.O_RDWR | fdops.O_NOFOLLOW | fdops.O_NONBLOCK
         try:
-            fd = os.open(path.name, flags | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=dfd)
+            fd = fdops.open(path.name, flags | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=dfd)
         except FileExistsError:
-            fd = os.open(path.name, flags, dir_fd=dfd)
-        original = os.fstat(fd)
+            fd = fdops.open(path.name, flags, dir_fd=dfd)
+        original = fdops.fstat(fd)
 
         def valid_file(info):
             return (
                 stat.S_ISREG(info.st_mode)
-                and info.st_uid == os.geteuid()
+                and info.st_uid == fdops.geteuid()
                 and stat.S_IMODE(info.st_mode) == 0o600
                 and info.st_nlink == 1
             )
 
         def verify():
-            current_dir = os.stat(parent, follow_symlinks=False)
-            current_file = os.stat(path.name, dir_fd=dfd, follow_symlinks=False)
+            current_dir = fdops.stat(parent, follow_symlinks=False)
+            current_file = fdops.stat(path.name, dir_fd=dfd, follow_symlinks=False)
             if (
                 (current_dir.st_dev, current_dir.st_ino) != (directory.st_dev, directory.st_ino)
                 or not stat.S_ISDIR(current_dir.st_mode)
-                or current_dir.st_uid != os.geteuid()
+                or current_dir.st_uid != fdops.geteuid()
                 or stat.S_IMODE(current_dir.st_mode) != 0o700
                 or (current_file.st_dev, current_file.st_ino) != (original.st_dev, original.st_ino)
                 or not valid_file(current_file)
-                or not valid_file(os.fstat(fd))
+                or not valid_file(fdops.fstat(fd))
             ):
                 raise ValueError("journal identity changed")
             for suffix in ("-journal", "-wal", "-shm"):
                 try:
-                    auxiliary = os.stat(path.name + suffix, dir_fd=dfd, follow_symlinks=False)
+                    auxiliary = fdops.stat(path.name + suffix, dir_fd=dfd, follow_symlinks=False)
                 except FileNotFoundError:
                     continue
                 if not valid_file(auxiliary):
@@ -200,9 +201,9 @@ def _protected_journal(path):
     finally:
         try:
             if fd is not None:
-                os.close(fd)
+                fdops.close(fd)
         finally:
-            os.close(dfd)
+            fdops.close(dfd)
 
 
 def _candidate_binding(operator, candidate_id, publication_id=None):
@@ -746,18 +747,18 @@ def _auto(operator, publication_id):
 def _read_protected_json(path):
     if not os.path.isabs(path) or os.path.realpath(path) != path:
         raise ValueError("noncanonical config")
-    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    fd = fdops.open(path, os.O_RDONLY | fdops.O_NOFOLLOW | fdops.O_NONBLOCK)
     try:
-        info = os.fstat(fd)
+        info = fdops.fstat(fd)
         if (
             not stat.S_ISREG(info.st_mode)
-            or info.st_uid != os.geteuid()
+            or info.st_uid != fdops.geteuid()
             or info.st_mode & 0o077
             or info.st_nlink != 1
             or info.st_size > 16384
         ):
             raise ValueError("unprotected config")
-        raw = os.read(fd, 16385)
+        raw = fdops.read(fd, 16385)
         if len(raw) != info.st_size:
             raise ValueError("config changed")
 
@@ -773,8 +774,8 @@ def _read_protected_json(path):
                 item.st_nlink,
             )
 
-        if version(info) != version(os.fstat(fd)) or version(info) != version(
-            os.stat(path, follow_symlinks=False)
+        if version(info) != version(fdops.fstat(fd)) or version(info) != version(
+            fdops.stat(path, follow_symlinks=False)
         ):
             raise ValueError("config changed")
 
@@ -788,7 +789,7 @@ def _read_protected_json(path):
 
         return json.loads(raw, object_pairs_hook=unique), version(info)
     finally:
-        os.close(fd)
+        fdops.close(fd)
 
 
 def _read_config(path):

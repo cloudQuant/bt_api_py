@@ -18,6 +18,7 @@ import hashlib
 import json
 import math
 import os
+from bt_api_py import _calendar_fdops as fdops
 import re
 import sqlite3
 import stat
@@ -123,11 +124,11 @@ def _read_config(path):
     fds, chain = _open_directory(parent)
     fd = None
     try:
-        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fds[-1])
-        before = os.fstat(fd)
+        fd = fdops.open(name, os.O_RDONLY | fdops.O_NOFOLLOW | fdops.O_NONBLOCK, dir_fd=fds[-1])
+        before = fdops.fstat(fd)
         if (
             not stat.S_ISREG(before.st_mode)
-            or before.st_uid != os.geteuid()
+            or before.st_uid != fdops.geteuid()
             or before.st_nlink != 1
             or before.st_mode & 0o022
             or before.st_size > _CONFIG_LIMIT
@@ -135,12 +136,12 @@ def _read_config(path):
             raise ValueError("invalid config file")
         data = bytearray()
         while len(data) <= _CONFIG_LIMIT:
-            part = os.read(fd, _CONFIG_LIMIT + 1 - len(data))
+            part = fdops.read(fd, _CONFIG_LIMIT + 1 - len(data))
             if not part:
                 break
             data.extend(part)
-        after = os.fstat(fd)
-        current = os.stat(name, dir_fd=fds[-1], follow_symlinks=False)
+        after = fdops.fstat(fd)
+        current = fdops.stat(name, dir_fd=fds[-1], follow_symlinks=False)
 
         def identity(info):
             return (
@@ -167,7 +168,7 @@ def _read_config(path):
         return value, hashlib.sha256(data).hexdigest()
     finally:
         if fd is not None:
-            os.close(fd)
+            fdops.close(fd)
         runs._close(fds)
 
 
@@ -248,26 +249,26 @@ def _replace(fd, chain, name, value):
     if not _directory_matches(chain):
         raise ValueError("schedule directory changed")
     temp = f".schedule-replace-{uuid.uuid4().hex}.tmp"
-    tfd = os.open(
-        temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd
+    tfd = fdops.open(
+        temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | fdops.O_NOFOLLOW, 0o600, dir_fd=fd
     )
     try:
-        os.fchmod(tfd, 0o600)
+        fdops.fchmod(tfd, 0o600)
         offset = 0
         while offset < len(encoded):
-            count = os.write(tfd, encoded[offset:])
+            count = fdops.write(tfd, encoded[offset:])
             if count <= 0:
                 raise OSError("short write")
             offset += count
-        os.fsync(tfd)
+        fdops.fsync(tfd)
         if not _directory_matches(chain):
             raise ValueError("schedule directory changed")
         os.replace(temp, name, src_dir_fd=fd, dst_dir_fd=fd)
-        os.fsync(fd)
+        fdops.fsync(fd)
     finally:
-        os.close(tfd)
+        fdops.close(tfd)
         with contextlib.suppress(FileNotFoundError):
-            os.unlink(temp, dir_fd=fd)
+            fdops.unlink(temp, dir_fd=fd)
     checked = _read(fd, chain, name)
     if checked is None or checked[0] != value:
         raise ValueError("replacement readback unavailable")
@@ -337,14 +338,14 @@ def _read_exact(fd, chain, name, value):
 
 def _ledger_file(fd, name, *, required=False):
     try:
-        info = os.stat(name, dir_fd=fd, follow_symlinks=False)
+        info = fdops.stat(name, dir_fd=fd, follow_symlinks=False)
     except FileNotFoundError:
         if required:
             raise ValueError("schedule ledger file missing") from None
         return None
     if (
         not stat.S_ISREG(info.st_mode)
-        or info.st_uid != os.geteuid()
+        or info.st_uid != fdops.geteuid()
         or stat.S_IMODE(info.st_mode) != 0o600
         or info.st_nlink != 1
     ):
@@ -360,16 +361,16 @@ def _ledger_sidecars(fd):
 
 def _scan_legacy_once(fd, chain, *, allow_fence=False):
     """Exhaust the existing directory only when the ledger has never been enabled."""
-    before = os.fstat(fd)
+    before = fdops.fstat(fd)
     if not _directory_matches(chain):
         raise ValueError("schedule directory changed")
-    with os.scandir(fd) as entries:
+    with fdops.scandir(fd) as entries:
         for entry in entries:
             if entry.name.startswith("schedule-once-") and not (
                 allow_fence and entry.name == _INIT_FENCE
             ):
                 raise ValueError("legacy schedule migration required")
-    after = os.fstat(fd)
+    after = fdops.fstat(fd)
     if (before.st_dev, before.st_ino, before.st_mtime_ns, before.st_ctime_ns) != (
         after.st_dev,
         after.st_ino,
@@ -396,15 +397,15 @@ def _ledger(root, fd, chain, *, initialize=False, readonly=False, initial_fence=
         registry_id = uuid.uuid4().hex
         if not runs._id(registry_id):
             raise ValueError("registry ID invalid")
-        dbfd = os.open(
-            _LEDGER_FILE, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd
+        dbfd = fdops.open(
+            _LEDGER_FILE, os.O_RDWR | os.O_CREAT | os.O_EXCL | fdops.O_NOFOLLOW, 0o600, dir_fd=fd
         )
         try:
-            os.fchmod(dbfd, 0o600)
-            os.fsync(dbfd)
+            fdops.fchmod(dbfd, 0o600)
+            fdops.fsync(dbfd)
         finally:
-            os.close(dbfd)
-        os.fsync(fd)
+            fdops.close(dbfd)
+        fdops.fsync(fd)
         identity = _ledger_file(fd, _LEDGER_FILE, required=True)
         uri = (
             "file:"
@@ -426,12 +427,12 @@ def _ledger(root, fd, chain, *, initialize=False, readonly=False, initial_fence=
         _ledger_sidecars(fd)
         if _ledger_file(fd, _LEDGER_FILE, required=True) != identity:
             raise ValueError("schedule ledger changed")
-        dbfd = os.open(_LEDGER_FILE, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=fd)
+        dbfd = fdops.open(_LEDGER_FILE, os.O_RDONLY | fdops.O_NOFOLLOW, dir_fd=fd)
         try:
-            os.fsync(dbfd)
+            fdops.fsync(dbfd)
         finally:
-            os.close(dbfd)
-        os.fsync(fd)
+            fdops.close(dbfd)
+        fdops.fsync(fd)
         marker_body = {
             "schema": _LEDGER_SCHEMA,
             "registry_id": registry_id,
@@ -456,10 +457,10 @@ def _ledger(root, fd, chain, *, initialize=False, readonly=False, initial_fence=
     _ledger_sidecars(fd)
     if not _directory_matches(chain):
         raise ValueError("schedule directory changed")
-    anchor = os.open(_LEDGER_FILE, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
+    anchor = fdops.open(_LEDGER_FILE, os.O_RDONLY | fdops.O_NOFOLLOW | fdops.O_NONBLOCK, dir_fd=fd)
     db = None
     try:
-        info = os.fstat(anchor)
+        info = fdops.fstat(anchor)
         if (info.st_dev, info.st_ino, info.st_mode, info.st_uid, info.st_nlink) != before:
             raise ValueError("schedule ledger anchor changed")
         uri = (
@@ -514,7 +515,7 @@ def _ledger(root, fd, chain, *, initialize=False, readonly=False, initial_fence=
     finally:
         if db is not None:
             db.close()
-        os.close(anchor)
+        fdops.close(anchor)
 
 
 def _ledger_row(db, operation_id, root):
@@ -632,18 +633,18 @@ def _store_lock(root, *, readonly=False):
     anchor = None
     try:
         rootfd = fds[-2]
-        rootinfo = os.fstat(rootfd)
-        if rootinfo.st_uid != os.geteuid() or stat.S_IMODE(rootinfo.st_mode) != 0o700:
+        rootinfo = fdops.fstat(rootfd)
+        if rootinfo.st_uid != fdops.geteuid() or stat.S_IMODE(rootinfo.st_mode) != 0o700:
             raise ValueError("invalid simulation root")
-        anchor = os.open(".lock", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=rootfd)
-        info = os.fstat(anchor)
+        anchor = fdops.open(".lock", os.O_RDONLY | fdops.O_NOFOLLOW | fdops.O_NONBLOCK, dir_fd=rootfd)
+        info = fdops.fstat(anchor)
 
         def identity(value):
             return (value.st_dev, value.st_ino, value.st_mode, value.st_uid, value.st_nlink)
 
         if (
             not stat.S_ISREG(info.st_mode)
-            or info.st_uid != os.geteuid()
+            or info.st_uid != fdops.geteuid()
             or stat.S_IMODE(info.st_mode) != 0o600
             or info.st_nlink != 1
         ):
@@ -651,8 +652,8 @@ def _store_lock(root, *, readonly=False):
 
         def check():
             if (
-                identity(os.fstat(anchor)) != identity(info)
-                or identity(os.stat(".lock", dir_fd=rootfd, follow_symlinks=False))
+                identity(fdops.fstat(anchor)) != identity(info)
+                or identity(fdops.stat(".lock", dir_fd=rootfd, follow_symlinks=False))
                 != identity(info)
                 or not _directory_matches(chain)
             ):
@@ -667,7 +668,7 @@ def _store_lock(root, *, readonly=False):
             check()
     finally:
         if anchor is not None:
-            os.close(anchor)
+            fdops.close(anchor)
         runs._close(fds)
 
 
@@ -1430,9 +1431,9 @@ def _terminal_records(pending, pending_sha, returned, returned_sha, proof):
 
 def _release_initial_fence(fd, chain, check):
     check()
-    os.fsync(fd)
-    os.unlink(_INIT_FENCE, dir_fd=fd)
-    os.fsync(fd)
+    fdops.fsync(fd)
+    fdops.unlink(_INIT_FENCE, dir_fd=fd)
+    fdops.fsync(fd)
     check()
     if _read(fd, chain, _INIT_FENCE) is not None:
         raise ValueError("initialization fence removal uncertain")
@@ -1440,9 +1441,9 @@ def _release_initial_fence(fd, chain, check):
 
 def _release_pending(fd, chain, check):
     check()
-    os.fsync(fd)
-    os.unlink(_PENDING_FILE, dir_fd=fd)
-    os.fsync(fd)
+    fdops.fsync(fd)
+    fdops.unlink(_PENDING_FILE, dir_fd=fd)
+    fdops.fsync(fd)
     check()
     if _read(fd, chain, _PENDING_FILE) is not None:
         raise ValueError("pending removal uncertain")

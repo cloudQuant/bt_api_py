@@ -16,6 +16,7 @@ import contextlib
 import hashlib
 import json
 import os
+from bt_api_py import _calendar_fdops as fdops
 import re
 import stat
 import sys
@@ -921,13 +922,13 @@ def _open_inbox(root, *, create):
     try:
         if create:
             with contextlib.suppress(FileExistsError):
-                os.mkdir("inbox", 0o700, dir_fd=root_fd)
-        info = os.stat("inbox", dir_fd=root_fd, follow_symlinks=False)
+                fdops.mkdir("inbox", 0o700, dir_fd=root_fd)
+        info = fdops.stat("inbox", dir_fd=root_fd, follow_symlinks=False)
         if not stat.S_ISDIR(info.st_mode):
             raise ValueError("inbox is not a directory")
-        fd = os.open("inbox", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=root_fd)
+        fd = fdops.open("inbox", os.O_RDONLY | fdops.O_DIRECTORY | fdops.O_NOFOLLOW, dir_fd=root_fd)
         descriptors.append(fd)
-        identity = _identity(os.fstat(fd))
+        identity = _identity(fdops.fstat(fd))
         if _identity(info) != identity:
             raise ValueError("inbox changed")
         chain.append((root_fd, "inbox", fd, identity))
@@ -935,7 +936,7 @@ def _open_inbox(root, *, create):
     except Exception:
         for fd in reversed(descriptors):
             with contextlib.suppress(OSError):
-                os.close(fd)
+                fdops.close(fd)
         raise
 
 
@@ -1102,46 +1103,46 @@ def retain_candidate(
         temp = f".candidate-{candidate_id}-{uuid.uuid4().hex}.tmp"
         if not _directory_matches(chain):
             raise ValueError("directory changed")
-        temp_fd = os.open(
-            temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=directory
+        temp_fd = fdops.open(
+            temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | fdops.O_NOFOLLOW, 0o600, dir_fd=directory
         )
-        temp_identity = _identity(os.fstat(temp_fd))
-        os.fchmod(temp_fd, 0o600)
+        temp_identity = _identity(fdops.fstat(temp_fd))
+        fdops.fchmod(temp_fd, 0o600)
         offset = 0
         while offset < len(envelope):
-            count = os.write(temp_fd, envelope[offset:])
+            count = fdops.write(temp_fd, envelope[offset:])
             if count <= 0:
                 raise OSError("short write")
             offset += count
-        os.fsync(temp_fd)
+        fdops.fsync(temp_fd)
         if not _directory_matches(chain):
             raise ValueError("directory changed")
         attempted = True
         try:
-            os.link(temp, name, src_dir_fd=directory, dst_dir_fd=directory, follow_symlinks=False)
+            fdops.link(temp, name, src_dir_fd=directory, dst_dir_fd=directory, follow_symlinks=False)
         except FileExistsError:
-            existing = os.stat(name, dir_fd=directory, follow_symlinks=False)
+            existing = fdops.stat(name, dir_fd=directory, follow_symlinks=False)
             if _identity(existing) == temp_identity or not _directory_matches(chain):
                 raise
             attempted = False
             return CandidateRetention("NOT_COMMITTED", "ID_EXISTS", candidate_id)
-        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=directory)
+        fd = fdops.open(name, os.O_RDONLY | fdops.O_NOFOLLOW, dir_fd=directory)
         try:
-            if _identity(os.fstat(fd)) != temp_identity:
+            if _identity(fdops.fstat(fd)) != temp_identity:
                 raise ValueError("candidate changed")
             data = bytearray()
             while len(data) <= limit:
-                part = os.read(fd, limit + 1 - len(data))
+                part = fdops.read(fd, limit + 1 - len(data))
                 if not part:
                     break
                 data.extend(part)
             if bytes(data) != envelope or not _directory_matches(chain):
                 raise ValueError("candidate readback mismatch")
         finally:
-            os.close(fd)
-        os.unlink(temp, dir_fd=directory)
+            fdops.close(fd)
+        fdops.unlink(temp, dir_fd=directory)
         temp_identity = None
-        os.fsync(directory)
+        fdops.fsync(directory)
         if not _directory_matches(chain):
             raise ValueError("directory changed")
         return CandidateRetention("COMMITTED", "NONE", candidate_id)
@@ -1152,12 +1153,12 @@ def retain_candidate(
     finally:
         if temp_fd is not None:
             with contextlib.suppress(OSError):
-                os.close(temp_fd)
+                fdops.close(temp_fd)
         if temp_identity is not None:
             _remove_owned_temp(directory, temp, temp_identity)
         for fd in reversed(descriptors):
             with contextlib.suppress(OSError):
-                os.close(fd)
+                fdops.close(fd)
 
 
 def read_candidate(*, root, candidate_id, filesystem):
@@ -1171,13 +1172,13 @@ def read_candidate(*, root, candidate_id, filesystem):
         raise ValueError("candidate unavailable")
     descriptors, chain = _open_inbox(root, create=False)
     try:
-        fd = os.open(
+        fd = fdops.open(
             f"candidate-{candidate_id}.json",
-            os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0),
+            os.O_RDONLY | fdops.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0),
             dir_fd=descriptors[-1],
         )
         try:
-            before = os.fstat(fd)
+            before = fdops.fstat(fd)
             if (
                 not stat.S_ISREG(before.st_mode)
                 or before.st_size > _LIMIT_CATALOG
@@ -1189,7 +1190,7 @@ def read_candidate(*, root, candidate_id, filesystem):
                 # 2 and 3 envelopes are canonical and put the schema last; inspect
                 # only a bounded tail before allowing the larger read.
                 os.lseek(fd, max(0, before.st_size - 128), os.SEEK_SET)
-                tail = os.read(fd, 128)
+                tail = fdops.read(fd, 128)
                 if not any(
                     tail.endswith(suffix)
                     for suffix in (
@@ -1204,12 +1205,12 @@ def read_candidate(*, root, candidate_id, filesystem):
                 os.lseek(fd, 0, os.SEEK_SET)
             data = bytearray()
             while len(data) <= _LIMIT_CATALOG:
-                part = os.read(fd, _LIMIT_CATALOG + 1 - len(data))
+                part = fdops.read(fd, _LIMIT_CATALOG + 1 - len(data))
                 if not part:
                     break
                 data.extend(part)
-            after = os.fstat(fd)
-            final_entry = os.stat(
+            after = fdops.fstat(fd)
+            final_entry = fdops.stat(
                 f"candidate-{candidate_id}.json", dir_fd=descriptors[-1], follow_symlinks=False
             )
             if (
@@ -1227,7 +1228,7 @@ def read_candidate(*, root, candidate_id, filesystem):
             ):
                 raise ValueError("candidate changed")
         finally:
-            os.close(fd)
+            fdops.close(fd)
 
         def pairs(rows):
             result = {}
@@ -1278,7 +1279,7 @@ def read_candidate(*, root, candidate_id, filesystem):
     finally:
         for fd in reversed(descriptors):
             with contextlib.suppress(OSError):
-                os.close(fd)
+                fdops.close(fd)
 
 
 class _ComparisonUnknownError(ValueError):
@@ -1831,7 +1832,7 @@ def compare_candidate_with_current(*, root, candidate_id, filesystem):
     finally:
         for fd in reversed(descriptors):
             with contextlib.suppress(OSError):
-                os.close(fd)
+                fdops.close(fd)
     baseline = {
         "publication_id": snapshot.publication_id,
         "publication_sha256": snapshot.publication_sha256,

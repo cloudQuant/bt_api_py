@@ -19,6 +19,18 @@ from bt_api_py.trading_calendar_binding import SimulationCalendarBinding
 from tests.calendar_test_store import FixtureCalendarStore
 
 
+def _symlink(link, target, *, target_is_directory=False):
+    """Create a symlink, skipping on hosts without the privilege (Windows)."""
+    import os as _os
+
+    try:
+        link.symlink_to(target, target_is_directory=target_is_directory)
+    except OSError as exc:
+        if _os.name == "nt" and getattr(exc, "winerror", None) == 1314:
+            pytest.skip("symlink creation requires privilege on this host")
+        raise
+
+
 class Gate:
     def verify(self, event, context):
         raise AssertionError("no activation")
@@ -321,7 +333,7 @@ def test_explicit_save_is_exclusive_and_no_parent_is_created(tmp_path, bundle):
     with pytest.raises(seed.LegacySeedError, match="SIMULATION_SEED_LOAD_UNAVAILABLE"):
         seed.load_seed(str(target), expected_sha256="0" * 64, mode="SIMULATION_ONLY")
     link = tmp_path / "seed-link"
-    link.symlink_to(target)
+    _symlink(link, target)
     with pytest.raises(seed.LegacySeedError, match="SIMULATION_SEED_LOAD_UNAVAILABLE"):
         seed.load_seed(str(link), expected_sha256=bundle.sha256, mode="SIMULATION_ONLY")
     with pytest.raises(seed.LegacySeedError, match="SIMULATION_SEED_SAVE_UNKNOWN"):
@@ -480,10 +492,15 @@ def test_missing_nofollow_fails_closed_and_does_not_create(
     tmp_path, bundle, monkeypatch, unavailable
 ):
     target = tmp_path / "missing-capability"
-    if unavailable is None:
-        monkeypatch.delattr(seed.os, "O_NOFOLLOW")
-    else:
-        monkeypatch.setattr(seed.os, "O_NOFOLLOW", unavailable)
+    # Simulate the platform lacking a usable no-follow flag.  On POSIX that is
+    # os.O_NOFOLLOW; on Windows the capability comes from fdops, so neutralise
+    # both and let _no_follow_available make the cross-platform decision.
+    if hasattr(seed.os, "O_NOFOLLOW"):
+        if unavailable is None:
+            monkeypatch.delattr(seed.os, "O_NOFOLLOW")
+        else:
+            monkeypatch.setattr(seed.os, "O_NOFOLLOW", unavailable)
+    monkeypatch.setattr(seed.fdops, "O_NOFOLLOW", unavailable or 0)
     with pytest.raises(seed.LegacySeedError, match="SIMULATION_SEED_SAVE_NOT_CREATED"):
         seed.save_seed(str(target), bundle, mode="SIMULATION_ONLY")
     assert not target.exists()
@@ -501,7 +518,7 @@ def test_trusted_parent_symlink_is_followed_but_final_symlink_is_not(tmp_path, b
     parent = tmp_path / "trusted"
     parent.mkdir()
     alias = tmp_path / "parent-alias"
-    alias.symlink_to(parent, target_is_directory=True)
+    _symlink(alias, parent, target_is_directory=True)
     via_parent = alias / "mock.json"
     seed.save_seed(str(via_parent), bundle, mode="SIMULATION_ONLY")
     report = seed.inspect_saved_seed(
@@ -511,7 +528,7 @@ def test_trusted_parent_symlink_is_followed_but_final_symlink_is_not(tmp_path, b
     assert report.parent_path == "CALLER_TRUSTED_PARENT_SYMLINKS_MAY_BE_FOLLOWED"
     assert (parent / "mock.json").read_bytes() == bundle.payload
     final_link = tmp_path / "final-link"
-    final_link.symlink_to(parent / "mock.json")
+    _symlink(final_link, parent / "mock.json")
     assert (
         seed.inspect_saved_seed(
             str(final_link), expected_sha256=bundle.sha256, mode="SIMULATION_ONLY"
@@ -530,7 +547,7 @@ def test_interruption_immediately_after_open_is_unknown_and_retained(tmp_path, b
     monkeypatch.setattr(seed, "verify_seed", lambda *_args, **_kwargs: True)
     lines, start_line = inspect.getsourcelines(seed.save_seed)
     marker = next(
-        i for i, line in enumerate(lines) if line.strip() == 'stream = os.fdopen(owned_fd, "wb")'
+        i for i, line in enumerate(lines) if line.strip() == 'stream = os.fdopen(int(owned_fd), "wb")'
     )
 
     def trace(frame, event, arg):
@@ -567,7 +584,7 @@ def test_file_exists_error_after_successful_open_is_unknown(tmp_path, bundle, mo
     monkeypatch.setattr(seed, "verify_seed", lambda *_args, **_kwargs: True)
     lines, start_line = inspect.getsourcelines(seed.save_seed)
     marker = next(
-        i for i, line in enumerate(lines) if line.strip() == 'stream = os.fdopen(owned_fd, "wb")'
+        i for i, line in enumerate(lines) if line.strip() == 'stream = os.fdopen(int(owned_fd), "wb")'
     )
 
     def trace(frame, event, arg):

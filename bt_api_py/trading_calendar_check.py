@@ -30,6 +30,7 @@ from typing import Any
 
 from bt_api_py.service_config import ServiceConfigError
 from bt_api_py.service_config_io import _read_yaml
+from bt_api_py import _calendar_fdops as fdops
 from bt_api_py.trading_calendar_config import CalendarConfigError, parse_trading_calendar_config
 
 
@@ -157,6 +158,44 @@ def _resolve_supplement(path: Path) -> tuple[Path, tuple, tuple[int, ...]]:
 
 def _read_checked_supplement(path: Path, reader: Any, *, _guard_sink=None) -> tuple[str, Any]:
     """Keep a target descriptor while the provider reads the no-link pathname."""
+    if os.name == "nt":
+        import sys as _dbg; print("DBG_RCS_ENTER", repr(str(path)), file=_dbg.stderr, flush=True)
+        # fdops.open refuses every reparse point on the literal path and pins
+        # the final entry by handle; the provider still reads by path, and the
+        # before/after identity comparison detects a swap (POSIX parity).
+        from bt_api_py import _win32_security as security
+
+        if not security.has_privileges_available() or not fdops._WIN_OK:
+            return "UNSUPPORTED", None
+        try:
+            descriptor = fdops.open(path, os.O_RDONLY | fdops.O_NOFOLLOW)
+        except FileNotFoundError:
+            return "MISSING", None
+        except (OSError, fdops.FdOpsError):
+            return "READ_ERROR", None
+        try:
+            before = fdops.fstat(descriptor)
+            if not stat.S_ISREG(before.st_mode):
+                return "NOT_REGULAR", None
+            result = reader(path)
+            after = fdops.fstat(descriptor)
+            try:
+                path_after = fdops.stat(path, follow_symlinks=False)
+            except (OSError, fdops.FdOpsError):
+                return "CHANGED", None
+            if _metadata(before) != _metadata(after) or _metadata(before) != _metadata(path_after):
+                return "CHANGED", None
+            if _guard_sink is not None:
+                def unchanged():
+                    try:
+                        return _metadata(fdops.stat(path, follow_symlinks=False)) == _metadata(before)
+                    except (OSError, fdops.FdOpsError):
+                        return False
+
+                _guard_sink(unchanged)
+            return result.status, result
+        finally:
+            fdops.close(descriptor)
     if os.name != "posix" or not all(hasattr(os, name) for name in ("O_NOFOLLOW", "O_NONBLOCK")):
         return "UNSUPPORTED", None
     try:
@@ -164,16 +203,16 @@ def _read_checked_supplement(path: Path, reader: Any, *, _guard_sink=None) -> tu
     except _SupplementPathError as exc:
         return exc.status, None
     try:
-        descriptor = os.open(canonical, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        descriptor = fdops.open(canonical, os.O_RDONLY | fdops.O_NOFOLLOW | fdops.O_NONBLOCK)
     except OSError:
         return "CHANGED", None
     try:
-        if _metadata(os.fstat(descriptor)) != before_file:
+        if _metadata(fdops.fstat(descriptor)) != before_file:
             return "CHANGED", None
         result = reader(canonical)
         try:
             after_path, after_trace, after_file = _resolve_supplement(path)
-            after_fd = _metadata(os.fstat(descriptor))
+            after_fd = _metadata(fdops.fstat(descriptor))
         except (OSError, _SupplementPathError):
             return "CHANGED", None
         if (canonical, before_trace, before_file) != (after_path, after_trace, after_file) or (
@@ -191,34 +230,64 @@ def _read_checked_supplement(path: Path, reader: Any, *, _guard_sink=None) -> tu
             _guard_sink(unchanged)
         return result.status, result
     finally:
-        os.close(descriptor)
+        fdops.close(descriptor)
 
 
 def _read_config(path: Path) -> dict:
     """Use the existing bounded YAML loader via a held, no-follow descriptor."""
+    if os.name == "nt":
+        from bt_api_py import _win32_security as security
+        from bt_api_py.service_config_io import MAX_CONFIG_BYTES, _parse_yaml_bytes
+
+        if not security.has_privileges_available() or not fdops._WIN_OK:
+            raise ServiceConfigError("CONFIG_PLATFORM_UNSUPPORTED", "$")
+        try:
+            descriptor = fdops.open(path, os.O_RDONLY | fdops.O_NOFOLLOW)
+        except (OSError, fdops.FdOpsError):
+            raise ServiceConfigError("CONFIG_READ_FAILED", "$") from None
+        try:
+            before = fdops.fstat(descriptor)
+            if not stat.S_ISREG(before.st_mode):
+                raise ServiceConfigError("CONFIG_NOT_REGULAR_FILE", "$")
+            raw = bytearray()
+            while len(raw) <= MAX_CONFIG_BYTES:
+                chunk = fdops.read(descriptor, MAX_CONFIG_BYTES + 1 - len(raw))
+                if not chunk:
+                    break
+                raw.extend(chunk)
+            after = fdops.fstat(descriptor)
+            try:
+                path_after = fdops.stat(path, follow_symlinks=False)
+            except (OSError, fdops.FdOpsError):
+                raise ServiceConfigError("CONFIG_CHANGED", "$") from None
+            if _metadata(before) != _metadata(after) or _metadata(before) != _metadata(path_after):
+                raise ServiceConfigError("CONFIG_CHANGED", "$")
+            return _parse_yaml_bytes(bytes(raw))
+        finally:
+            fdops.close(descriptor)
     if os.name != "posix" or not all(hasattr(os, name) for name in ("O_NOFOLLOW", "O_NONBLOCK")):
         raise ServiceConfigError("CONFIG_PLATFORM_UNSUPPORTED", "$")
-    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+    flags = os.O_RDONLY | fdops.O_NOFOLLOW | fdops.O_NONBLOCK
     try:
-        descriptor = os.open(path, flags)
+        descriptor = fdops.open(path, flags)
     except OSError:
         raise ServiceConfigError("CONFIG_READ_FAILED", "$") from None
     try:
-        before = os.fstat(descriptor)
+        before = fdops.fstat(descriptor)
         if not stat.S_ISREG(before.st_mode):
             raise ServiceConfigError("CONFIG_NOT_REGULAR_FILE", "$")
         # /dev/fd duplicates the already-open descriptor; no second config-path open.
         config = _read_yaml(f"/dev/fd/{descriptor}")
-        after = os.fstat(descriptor)
+        after = fdops.fstat(descriptor)
         try:
-            path_after = os.stat(path, follow_symlinks=False)
+            path_after = fdops.stat(path, follow_symlinks=False)
         except OSError:
             raise ServiceConfigError("CONFIG_CHANGED", "$") from None
         if _metadata(before) != _metadata(after) or _metadata(before) != _metadata(path_after):
             raise ServiceConfigError("CONFIG_CHANGED", "$")
         return config
     finally:
-        os.close(descriptor)
+        fdops.close(descriptor)
 
 
 def _check_calendar_inputs(
@@ -343,6 +412,7 @@ def _check_calendar_inputs(
         return CalendarCheckReport(
             "ERROR", "SUPPLEMENT_MISSING", 3, supplement_status="MISSING", **common
         )
+    import sys as _sys; print("DBG_STATUS", repr(status), file=_sys.stderr, flush=True)
     if status in ("UNSUPPORTED", "DEPENDENCY_UNAVAILABLE"):
         return CalendarCheckReport(
             "ERROR", "SUPPLEMENT_" + status, 5, supplement_status=status, **common

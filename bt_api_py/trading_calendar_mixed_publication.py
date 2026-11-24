@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import contextlib
-import fcntl
+from bt_api_py._calendar_compat import fcntl
 import hashlib
 import json
 import math
 import os
+from bt_api_py import _calendar_fdops as fdops
 import re
 from copy import deepcopy
 from datetime import date
@@ -1170,7 +1171,7 @@ def build_batch_once(
             with contextlib.suppress(OSError):
                 fcntl.flock(lock, fcntl.LOCK_UN)
             with contextlib.suppress(OSError):
-                os.close(lock)
+                fdops.close(lock)
         runs._close(fds)
 
 
@@ -1245,7 +1246,7 @@ def build_once(*, root, filesystem, candidate_id, template, evidence_sha256):
             with contextlib.suppress(OSError):
                 fcntl.flock(lock, fcntl.LOCK_UN)
             with contextlib.suppress(OSError):
-                os.close(lock)
+                fdops.close(lock)
         runs._close(fds)
 
 

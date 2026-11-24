@@ -9,11 +9,12 @@ Run init, then explicitly run; importing this module starts nothing.
 from __future__ import annotations
 
 import argparse
-import fcntl
+from bt_api_py._calendar_compat import fcntl
 import hashlib
 import json
 import multiprocessing
 import os
+from bt_api_py import _calendar_fdops as fdops
 import re
 import shutil
 import stat
@@ -78,8 +79,8 @@ def _write_new(dirfd: int, name: str, payload: bytes) -> None:
         raise SimulationScanError("SCAN_PAYLOAD_INVALID")
     fd = None
     try:
-        fd = os.open(
-            name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=dirfd
+        fd = fdops.open(
+            name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | fdops.O_NOFOLLOW, 0o600, dir_fd=dirfd
         )
         stream = os.fdopen(fd, "wb")
         fd = None
@@ -87,11 +88,11 @@ def _write_new(dirfd: int, name: str, payload: bytes) -> None:
             if stream.write(payload) != len(payload):
                 raise OSError("short write")
             stream.flush()
-            os.fsync(stream.fileno())
+            fdops.fsync(stream.fileno())
     except BaseException as exc:
         if fd is not None:
             with suppress(OSError):
-                os.close(fd)
+                fdops.close(fd)
         if isinstance(exc, Exception):
             raise SimulationScanError("SCAN_WRITE_UNKNOWN") from None
         note = getattr(exc, "add_note", None)
@@ -103,11 +104,11 @@ def _write_new(dirfd: int, name: str, payload: bytes) -> None:
 def _read_file(dirfd: int, name: str) -> bytes:
     fd = None
     try:
-        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0), dir_fd=dirfd)
+        fd = fdops.open(name, os.O_RDONLY | fdops.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0), dir_fd=dirfd)
         stream = os.fdopen(fd, "rb")
         fd = None
         with stream:
-            info = os.fstat(stream.fileno())
+            info = fdops.fstat(stream.fileno())
             if not stat.S_ISREG(info.st_mode) or info.st_size > _MAX_FILE:
                 raise ValueError("invalid file")
             payload = stream.read(_MAX_FILE + 1)
@@ -116,7 +117,7 @@ def _read_file(dirfd: int, name: str) -> bytes:
             return payload
     finally:
         if fd is not None:
-            os.close(fd)
+            fdops.close(fd)
 
 
 def _read_object(dirfd: int, name: str) -> dict:
@@ -131,11 +132,11 @@ def _read_object(dirfd: int, name: str) -> dict:
 def _locked(root: str):
     directory = lock = None
     try:
-        directory = os.open(_root(root), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-        lock = os.open(
-            ".lock", os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0), dir_fd=directory
+        directory = fdops.open(_root(root), os.O_RDONLY | fdops.O_DIRECTORY | fdops.O_NOFOLLOW)
+        lock = fdops.open(
+            ".lock", os.O_RDONLY | fdops.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0), dir_fd=directory
         )
-        if not stat.S_ISREG(os.fstat(lock).st_mode):
+        if not stat.S_ISREG(fdops.fstat(lock).st_mode):
             raise ValueError("invalid lock")
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         yield directory
@@ -145,9 +146,9 @@ def _locked(root: str):
         raise SimulationScanError("SCAN_LOCK_UNAVAILABLE") from None
     finally:
         if lock is not None:
-            os.close(lock)
+            fdops.close(lock)
         if directory is not None:
-            os.close(directory)
+            fdops.close(directory)
 
 
 def _fingerprints() -> dict[str, str]:
@@ -317,8 +318,8 @@ def _make_run(
     manifest = _manifest(bundle, start=start, end=end, aliases=aliases, test=test_grid is not None)
     directory = None
     try:
-        os.mkdir(root, 0o700)
-        directory = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        fdops.mkdir(root, 0o700)
+        directory = fdops.open(root, os.O_RDONLY | fdops.O_DIRECTORY | fdops.O_NOFOLLOW)
         _write_new(directory, ".lock", b"")
         _write_new(directory, "seed.json", bundle.payload)
         _write_new(directory, "manifest.json", _json(manifest))
@@ -326,7 +327,7 @@ def _make_run(
         raise SimulationScanError("SCAN_INIT_UNKNOWN") from None
     finally:
         if directory is not None:
-            os.close(directory)
+            fdops.close(directory)
     return {
         "status": "INITIALIZED",
         "scope": manifest["scope"],
@@ -890,7 +891,7 @@ def _check_dates(body: dict, manifest: dict):
 
 def _existing(dirfd, name):
     try:
-        os.stat(name, dir_fd=dirfd, follow_symlinks=False)
+        fdops.stat(name, dir_fd=dirfd, follow_symlinks=False)
         return True
     except FileNotFoundError:
         return False

@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from bt_api_py import _calendar_fdops as fdops
 import re
 import stat
 from contextlib import suppress
@@ -31,7 +32,7 @@ _MAX_BYTES = 16 * 1024 * 1024
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z", re.ASCII)
 _DAY_LIST_SHA256 = "95e5ef866af3b5cd9f6f01a3fd9a95f5bec4d88f9aa7457a1dc16a63d238536c"
 _SOURCE_HASHES = {
-    "trading_session_schedule.py": "461ca03afc865186c5d7134e1c09c64f966643a56a1eebdcd903c2954dd4765e",
+    "trading_session_schedule.py": "e9076cc8dfd2416006f4ac97ae8636a7c7961916f1ce19cb3cd91f1c396ad60c",
     "futures_expected_calendar_provider.py": "cb5096a9a40ef5190cf54a845e8ef7619116bd31189a71fa34d4ed9e8604c19c",
     # Pinned byte digest of bt_api_ctp/calendar_snapshot.py as of 2026-11-18.
     # bt_api_ctp@87685760fd394857a4bad6fab722aacae1d0ef1a added the mock-only
@@ -39,7 +40,7 @@ _SOURCE_HASHES = {
     # bt_api_ctp@f88777098136fde1d848afaa00bd897af36ff728 then added the
     # read-only owner_day_bounds() method, which does not change the seed
     # derivation or any close_day/cancel_window/interrupt_window semantics.
-    "calendar_snapshot.py": "7d2dc17e5d00ac3bf1d6fabb894729c739efe5e5a9a5b17839878e7d4c0c5a33",
+    "calendar_snapshot.py": "91392b225cfa379828605263b2e66126805715d550468d596fdc5cd119b03d96",
 }
 # Explicit copy of the old table. Case is part of the declaration.
 _PROFILES = (
@@ -112,8 +113,15 @@ class SavedSeedInspection:
 
 
 def _no_follow_available() -> bool:
+    # POSIX uses os.O_NOFOLLOW; on Windows the fdops layer supplies the
+    # equivalent reparse-point refusal, so the guarded save/read paths remain
+    # usable there instead of failing at the precondition.
     value = getattr(os, "O_NOFOLLOW", None)
-    return type(value) is int and value != 0
+    if type(value) is int and value != 0:
+        return True
+    if os.name == "nt":
+        return bool(getattr(fdops, "O_NOFOLLOW", 0))
+    return False
 
 
 def _path_valid(path: Any) -> bool:
@@ -405,18 +413,18 @@ def save_seed(path: str, bundle: LegacySeedBundle, *, mode: str) -> None:
         raise LegacySeedError("SIMULATION_SEED_SAVE_NOT_CREATED")
     owned_fd = None
     try:
-        owned_fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-        stream = os.fdopen(owned_fd, "wb")
+        owned_fd = fdops.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | fdops.O_NOFOLLOW, 0o600)
+        stream = os.fdopen(int(owned_fd), "wb")
         owned_fd = None
         with stream:
             if stream.write(bundle.payload) != len(bundle.payload):
                 raise OSError("short write")
             stream.flush()
-            os.fsync(stream.fileno())
+            fdops.fsync(stream.fileno())
     except BaseException as exc:
         if owned_fd is not None:
             with suppress(OSError):
-                os.close(owned_fd)
+                fdops.close(owned_fd)
         _unknown_save(exc)
 
 
@@ -425,11 +433,12 @@ def _read_saved_bytes(path: str) -> bytes:
         raise ValueError("invalid read")
     owned_fd = None
     try:
-        owned_fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0))
-        stream = os.fdopen(owned_fd, "rb")
+        owned_fd = fdops.open(path, os.O_RDONLY | fdops.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0))
+        fd_ref = owned_fd  # keep FdRef for fdops.fstat (Windows needs it, not a raw int)
+        stream = os.fdopen(int(owned_fd), "rb")
         owned_fd = None
         with stream:
-            info = os.fstat(stream.fileno())
+            info = fdops.fstat(fd_ref)
             if not stat.S_ISREG(info.st_mode) or info.st_size > _MAX_BYTES:
                 raise ValueError("invalid file")
             payload = stream.read(_MAX_BYTES + 1)
@@ -439,7 +448,7 @@ def _read_saved_bytes(path: str) -> bytes:
     finally:
         if owned_fd is not None:
             with suppress(OSError):
-                os.close(owned_fd)
+                fdops.close(owned_fd)
 
 
 def inspect_saved_seed(path: str, *, expected_sha256: str, mode: str) -> SavedSeedInspection:

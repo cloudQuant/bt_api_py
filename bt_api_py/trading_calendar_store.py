@@ -49,6 +49,7 @@ from pathlib import Path
 from typing import Any
 
 from bt_api_py.trading_calendar_migration_barrier import check_migration_barrier
+from bt_api_py import _calendar_fdops as fdops
 
 try:
     import fcntl
@@ -1799,30 +1800,30 @@ class TradingCalendarStore:
             self._directory(self.root / name, create=create)
 
     def _read(self, path: Path) -> bytes:
-        if not hasattr(os, "O_NOFOLLOW"):
+        if not hasattr(fdops, "O_NOFOLLOW"):
             raise CalendarStoreError("O_NOFOLLOW required for safe reads")
-        flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0)
-        fd = os.open(path, flags)
+        flags = os.O_RDONLY | fdops.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0)
+        fd = fdops.open(path, flags)
         try:
-            if not stat.S_ISREG(os.fstat(fd).st_mode):
+            if not stat.S_ISREG(fdops.fstat(fd).st_mode):
                 raise CalendarStoreError("store entry is not a regular file")
-            with os.fdopen(fd, "rb", closefd=False) as stream:
+            with os.fdopen(int(fd), "rb", closefd=False) as stream:
                 return stream.read()
         finally:
-            os.close(fd)
+            fdops.close(fd)
 
     def _read_bounded(self, path: Path, limit: int) -> bytes:
         """Read a stable regular file, rejecting symlinks and overlarge inputs."""
-        if not hasattr(os, "O_NOFOLLOW"):
+        if not hasattr(fdops, "O_NOFOLLOW"):
             raise CalendarStoreError("O_NOFOLLOW required for safe reads")
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0))
+        fd = fdops.open(path, os.O_RDONLY | fdops.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0))
         try:
-            before = os.fstat(fd)
+            before = fdops.fstat(fd)
             if not stat.S_ISREG(before.st_mode) or before.st_size > limit:
                 raise CalendarStoreError("policy file invalid or too large")
-            with os.fdopen(fd, "rb", closefd=False) as stream:
+            with os.fdopen(int(fd), "rb", closefd=False) as stream:
                 data = stream.read(limit + 1)
-            after = os.fstat(fd)
+            after = fdops.fstat(fd)
             if (
                 len(data) > limit
                 or len(data) != before.st_size
@@ -1838,18 +1839,18 @@ class TradingCalendarStore:
                 raise CalendarStoreError("policy file changed during read")
             return data
         finally:
-            os.close(fd)
+            fdops.close(fd)
 
     def _write_new(self, path: Path, data: bytes) -> None:
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
-        fd = os.open(path, flags, 0o600)
+        fd = fdops.open(path, flags, 0o600)
         try:
-            with os.fdopen(fd, "wb", closefd=False) as stream:
+            with os.fdopen(int(fd), "wb", closefd=False) as stream:
                 stream.write(data)
                 stream.flush()
-                os.fsync(fd)
+                fdops.fsync(fd)
         finally:
-            os.close(fd)
+            fdops.close(fd)
 
     def _pending_exists(self) -> bool:
         return self._entry_exists(self.root / "PENDING.json")
@@ -1885,13 +1886,15 @@ class TradingCalendarStore:
 
     @contextlib.contextmanager
     def _writer_lock(self, *, check_migration=False):
-        if fcntl is None or not hasattr(os, "O_NOFOLLOW"):
+        # Windows provides no os.O_NOFOLLOW, but fdops supplies the equivalent
+        # reparse-point refusal and fcntl is the msvcrt-backed compat shim.
+        if fcntl is None or not hasattr(fdops, "O_NOFOLLOW"):
             raise CalendarStoreError("POSIX flock and O_NOFOLLOW required")
         self._directory(self.root, create=True)
-        fd = os.open(self.root / ".lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+        fd = fdops.open(self.root / ".lock", os.O_RDWR | os.O_CREAT | fdops.O_NOFOLLOW, 0o600)
         locked = False
         try:
-            if not stat.S_ISREG(os.fstat(fd).st_mode):
+            if not stat.S_ISREG(fdops.fstat(fd).st_mode):
                 raise CalendarStoreError("invalid lock file")
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             locked = True
@@ -1907,18 +1910,18 @@ class TradingCalendarStore:
                 if locked:
                     fcntl.flock(fd, fcntl.LOCK_UN)
             finally:
-                os.close(fd)
+                fdops.close(fd)
 
     @contextlib.contextmanager
     def _readonly_lock(self):
         """Inspect an existing store without creating its lock or layout."""
-        if fcntl is None or not hasattr(os, "O_NOFOLLOW"):
+        if fcntl is None or not hasattr(fdops, "O_NOFOLLOW"):
             raise CalendarStoreError("POSIX flock and O_NOFOLLOW required")
         self._directory(self.root)
-        fd = os.open(self.root / ".lock", os.O_RDONLY | os.O_NOFOLLOW)
+        fd = fdops.open(self.root / ".lock", os.O_RDONLY | fdops.O_NOFOLLOW)
         locked = False
         try:
-            if not stat.S_ISREG(os.fstat(fd).st_mode):
+            if not stat.S_ISREG(fdops.fstat(fd).st_mode):
                 raise CalendarStoreError("invalid lock file")
             fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
             locked = True
@@ -1929,7 +1932,7 @@ class TradingCalendarStore:
                 if locked:
                     fcntl.flock(fd, fcntl.LOCK_UN)
             finally:
-                os.close(fd)
+                fdops.close(fd)
 
     def _review_policy_locked(self) -> ReviewPolicy | None:
         marker_path = self.root / "REVIEW_POLICY_INITIALIZED.json"
@@ -2031,7 +2034,7 @@ class TradingCalendarStore:
             return
         self._directory(path)
         found, count, total = set(), 0, 0
-        with os.scandir(path) as entries:
+        with fdops.scandir(path) as entries:
             for entry in entries:
                 count += 1
                 if count > _POLICY_MAX_RECORDS:
@@ -2110,16 +2113,16 @@ class TradingCalendarStore:
             # An empty old lock file denotes an unmanaged legacy directory. The
             # marker is written first, under the already held lock; a partial
             # write remains a blocking unknown instead of defaulting to auto.
-            fd = os.open(self.root / ".lock", os.O_WRONLY | os.O_NOFOLLOW)
+            fd = fdops.open(self.root / ".lock", os.O_WRONLY | fdops.O_NOFOLLOW)
             try:
-                if not stat.S_ISREG(os.fstat(fd).st_mode) or os.fstat(fd).st_size != 0:
+                if not stat.S_ISREG(fdops.fstat(fd).st_mode) or fdops.fstat(fd).st_size != 0:
                     raise CalendarStoreError("review policy lock marker already present")
-                with os.fdopen(fd, "wb", closefd=False) as stream:
+                with os.fdopen(int(fd), "wb", closefd=False) as stream:
                     stream.write(marker_bytes)
                     stream.flush()
-                    os.fsync(fd)
+                    fdops.fsync(fd)
             finally:
-                os.close(fd)
+                fdops.close(fd)
             self._write_new(
                 self.root / "REVIEW_POLICY_INITIALIZED.json",
                 marker_bytes,
@@ -2695,28 +2698,28 @@ class TradingCalendarStore:
 
         def stable(root_identity: tuple[int, int], lock_identity: tuple[int, int]) -> bool:
             root_entry = self.root.lstat()
-            lock_entry = os.stat(".lock", dir_fd=root_fd, follow_symlinks=False)
+            lock_entry = fdops.stat(".lock", dir_fd=root_fd, follow_symlinks=False)
             return (
                 stat.S_ISDIR(root_entry.st_mode)
-                and identity(root_entry) == root_identity == identity(os.fstat(root_fd))
+                and identity(root_entry) == root_identity == identity(fdops.fstat(root_fd))
                 and stat.S_ISREG(lock_entry.st_mode)
-                and identity(lock_entry) == lock_identity == identity(os.fstat(lock_fd))
+                and identity(lock_entry) == lock_identity == identity(fdops.fstat(lock_fd))
             )
 
         try:
             root_entry = self.root.lstat()
             if not stat.S_ISDIR(root_entry.st_mode):
                 raise CalendarStoreError("invalid store root")
-            root_fd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-            root_identity = identity(os.fstat(root_fd))
+            root_fd = fdops.open(self.root, os.O_RDONLY | fdops.O_DIRECTORY | fdops.O_NOFOLLOW)
+            root_identity = identity(fdops.fstat(root_fd))
             if root_identity != identity(root_entry):
                 raise CalendarStoreError("store root changed")
-            lock_fd = os.open(
+            lock_fd = fdops.open(
                 ".lock",
-                os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                os.O_RDONLY | fdops.O_NOFOLLOW | fdops.O_NONBLOCK,
                 dir_fd=root_fd,
             )
-            lock_info = os.fstat(lock_fd)
+            lock_info = fdops.fstat(lock_fd)
             if not stat.S_ISREG(lock_info.st_mode):
                 raise CalendarStoreError("invalid lock")
             lock_identity = identity(lock_info)
@@ -2755,10 +2758,10 @@ class TradingCalendarStore:
                     if locked:
                         fcntl.flock(lock_fd, fcntl.LOCK_UN)
                 with contextlib.suppress(OSError):
-                    os.close(lock_fd)
+                    fdops.close(lock_fd)
             if root_fd is not None:
                 with contextlib.suppress(OSError):
-                    os.close(root_fd)
+                    fdops.close(root_fd)
 
     def _read_current_with_windows_barrier(self, budget):
         """Read CURRENT under ``msvcrt``'s one-byte shared read lock.
@@ -2795,8 +2798,8 @@ class TradingCalendarStore:
             lock_entry = lock_path.lstat()
             if stat.S_ISLNK(lock_entry.st_mode) or not stat.S_ISREG(lock_entry.st_mode):
                 raise CalendarStoreError("invalid lock")
-            lock_fd = os.open(lock_path, os.O_RDONLY | getattr(os, "O_BINARY", 0))
-            lock_info = os.fstat(lock_fd)
+            lock_fd = fdops.open(lock_path, os.O_RDONLY | getattr(os, "O_BINARY", 0))
+            lock_info = fdops.fstat(lock_fd)
             if (
                 not stat.S_ISREG(lock_info.st_mode)
                 or (lock_info.st_dev, lock_info.st_ino)
@@ -2838,7 +2841,7 @@ class TradingCalendarStore:
                     if locked:
                         msvcrt.locking(lock_fd, msvcrt.LK_UNLCK, _READ_LOCK_RANGE)
                 with contextlib.suppress(OSError):
-                    os.close(lock_fd)
+                    fdops.close(lock_fd)
 
     def _read_windows_bounded(self, path: Path, limit: int | None) -> bytes:
         """Read a stable regular file without POSIX ``O_NOFOLLOW``/``dir_fd``.
@@ -2853,18 +2856,18 @@ class TradingCalendarStore:
             raise CalendarStoreError("store entry is not a regular file")
         if limit is not None and before.st_size > limit:
             raise CalendarStoreError("policy file invalid or too large")
-        fd = os.open(path, os.O_RDONLY | getattr(os, "O_BINARY", 0))
+        fd = fdops.open(path, os.O_RDONLY | getattr(os, "O_BINARY", 0))
         try:
-            opened = os.fstat(fd)
+            opened = fdops.fstat(fd)
             if (
                 not stat.S_ISREG(opened.st_mode)
                 or (opened.st_dev, opened.st_ino)
                 != (before.st_dev, before.st_ino)
             ):
                 raise CalendarStoreError("store entry changed")
-            with os.fdopen(fd, "rb", closefd=False) as stream:
+            with os.fdopen(int(fd), "rb", closefd=False) as stream:
                 data = stream.read() if limit is None else stream.read(limit + 1)
-            after = os.fstat(fd)
+            after = fdops.fstat(fd)
             if (
                 (limit is not None and len(data) > limit)
                 or len(data) != before.st_size
@@ -2886,7 +2889,7 @@ class TradingCalendarStore:
                 raise CalendarStoreError("policy file changed during read")
             return data
         finally:
-            os.close(fd)
+            fdops.close(fd)
 
     def _read_windows(self, path: Path) -> bytes:
         return self._read_windows_bounded(path, None)
@@ -2937,12 +2940,12 @@ class TradingCalendarStore:
             root_stat = self.root.lstat()
             if not stat.S_ISDIR(root_stat.st_mode):
                 raise CalendarStoreError("invalid store root")
-            root_fd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            root_fd = fdops.open(self.root, os.O_RDONLY | fdops.O_DIRECTORY | fdops.O_NOFOLLOW)
             root_identity = (root_stat.st_dev, root_stat.st_ino)
-            if root_identity != (os.fstat(root_fd).st_dev, os.fstat(root_fd).st_ino):
+            if root_identity != (fdops.fstat(root_fd).st_dev, fdops.fstat(root_fd).st_ino):
                 raise CalendarStoreError("store root changed")
-            lock_fd = os.open(".lock", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=root_fd)
-            lock_stat = os.fstat(lock_fd)
+            lock_fd = fdops.open(".lock", os.O_RDONLY | fdops.O_NOFOLLOW | fdops.O_NONBLOCK, dir_fd=root_fd)
+            lock_stat = fdops.fstat(lock_fd)
             if not stat.S_ISREG(lock_stat.st_mode):
                 raise CalendarStoreError("invalid store lock")
             fcntl.flock(lock_fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
@@ -2967,7 +2970,7 @@ class TradingCalendarStore:
                 raise CalendarStoreError("publication changed")
             event = _decode(event_bytes)
             root_after = self.root.lstat()
-            lock_after = os.stat(".lock", dir_fd=root_fd, follow_symlinks=False)
+            lock_after = fdops.stat(".lock", dir_fd=root_fd, follow_symlinks=False)
             if (
                 root_identity != (root_after.st_dev, root_after.st_ino)
                 or (lock_stat.st_dev, lock_stat.st_ino) != (lock_after.st_dev, lock_after.st_ino)
@@ -2982,9 +2985,9 @@ class TradingCalendarStore:
                 if locked:
                     with contextlib.suppress(OSError):
                         fcntl.flock(lock_fd, fcntl.LOCK_UN)
-                os.close(lock_fd)
+                fdops.close(lock_fd)
             if root_fd is not None:
-                os.close(root_fd)
+                fdops.close(root_fd)
 
     def verify_publication(self, publication_id: str) -> str:
         """Observe CURRENT under the writer lock; never clear a fence."""

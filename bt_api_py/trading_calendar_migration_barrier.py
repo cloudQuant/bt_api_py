@@ -7,6 +7,7 @@ older writer which ignores the lock/fence. No lock is acquired here.
 import hashlib
 import json
 import os
+from bt_api_py import _calendar_fdops as fdops
 import re
 import stat
 
@@ -93,16 +94,16 @@ def check_migration_barrier(root, lock_fd):
     """Reject a present/uncertain fence, anchored to the currently held lock."""
     root_fd = runs_fd = head_fd = None
     try:
-        if not all(hasattr(os, name) for name in ("O_NOFOLLOW", "O_DIRECTORY")):
+        if not all(hasattr(fdops, name) for name in ("O_NOFOLLOW", "O_DIRECTORY")):
             raise MigrationBarrierError("safe directory checks unavailable")
-        flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
-        root_fd = os.open(root, flags)
-        root_info = os.fstat(root_fd)
-        lock_info = os.fstat(lock_fd)
+        flags = os.O_RDONLY | fdops.O_DIRECTORY | fdops.O_NOFOLLOW
+        root_fd = fdops.open(root, flags)
+        root_info = fdops.fstat(root_fd)
+        lock_info = fdops.fstat(lock_fd)
 
         def check_root():
-            path_info = os.stat(root, follow_symlinks=False)
-            lock_entry = os.stat(".lock", dir_fd=root_fd, follow_symlinks=False)
+            path_info = fdops.stat(root, follow_symlinks=False)
+            lock_entry = fdops.stat(".lock", dir_fd=root_fd, follow_symlinks=False)
             if (
                 not stat.S_ISDIR(path_info.st_mode)
                 or _identity(path_info) != _identity(root_info)
@@ -112,22 +113,22 @@ def check_migration_barrier(root, lock_fd):
                 raise MigrationBarrierError("store root or lock changed")
 
         def check_runs():
-            entry = os.stat("observation-runs", dir_fd=root_fd, follow_symlinks=False)
+            entry = fdops.stat("observation-runs", dir_fd=root_fd, follow_symlinks=False)
             if (
                 not stat.S_ISDIR(entry.st_mode)
                 or _identity(entry) != _identity(runs_info)
-                or _identity(os.fstat(runs_fd)) != _identity(runs_info)
+                or _identity(fdops.fstat(runs_fd)) != _identity(runs_info)
             ):
                 raise MigrationBarrierError("observation directory changed")
             check_root()
 
         check_root()
         try:
-            runs_info = os.stat("observation-runs", dir_fd=root_fd, follow_symlinks=False)
+            runs_info = fdops.stat("observation-runs", dir_fd=root_fd, follow_symlinks=False)
         except FileNotFoundError:
             check_root()
             try:
-                os.stat("observation-runs", dir_fd=root_fd, follow_symlinks=False)
+                fdops.stat("observation-runs", dir_fd=root_fd, follow_symlinks=False)
             except FileNotFoundError:
                 check_root()
                 return
@@ -135,19 +136,19 @@ def check_migration_barrier(root, lock_fd):
         if (
             not stat.S_ISDIR(runs_info.st_mode)
             or runs_info.st_mode & 0o077
-            or runs_info.st_uid != os.geteuid()
+            or runs_info.st_uid != fdops.geteuid()
         ):
             raise MigrationBarrierError("invalid observation directory")
-        runs_fd = os.open("observation-runs", flags, dir_fd=root_fd)
+        runs_fd = fdops.open("observation-runs", flags, dir_fd=root_fd)
         check_runs()
         head_fingerprint = None
         for name in ("scope-check-migration-pending.json", "scope-check-head.json"):
             try:
-                entry = os.stat(name, dir_fd=runs_fd, follow_symlinks=False)
+                entry = fdops.stat(name, dir_fd=runs_fd, follow_symlinks=False)
             except FileNotFoundError:
                 check_runs()
                 try:
-                    os.stat(name, dir_fd=runs_fd, follow_symlinks=False)
+                    fdops.stat(name, dir_fd=runs_fd, follow_symlinks=False)
                 except FileNotFoundError:
                     continue
                 raise MigrationBarrierError("migration entry appeared") from None
@@ -156,21 +157,21 @@ def check_migration_barrier(root, lock_fd):
             if (
                 not stat.S_ISREG(entry.st_mode)
                 or entry.st_mode & 0o077
-                or entry.st_uid != os.geteuid()
+                or entry.st_uid != fdops.geteuid()
                 or entry.st_nlink != 1
                 or entry.st_size > 65536
             ):
                 raise MigrationBarrierError("invalid migration head")
-            head_fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=runs_fd)
-            before = os.fstat(head_fd)
+            head_fd = fdops.open(name, os.O_RDONLY | fdops.O_NOFOLLOW | fdops.O_NONBLOCK, dir_fd=runs_fd)
+            before = fdops.fstat(head_fd)
             data = bytearray()
             while len(data) <= 65536:
-                part = os.read(head_fd, 65537 - len(data))
+                part = fdops.read(head_fd, 65537 - len(data))
                 if not part:
                     break
                 data.extend(part)
-            after = os.fstat(head_fd)
-            current = os.stat(name, dir_fd=runs_fd, follow_symlinks=False)
+            after = fdops.fstat(head_fd)
+            current = fdops.stat(name, dir_fd=runs_fd, follow_symlinks=False)
             if (
                 _fingerprint(before) != _fingerprint(entry)
                 or _fingerprint(after) != _fingerprint(before)
@@ -183,13 +184,13 @@ def check_migration_barrier(root, lock_fd):
         check_runs()
         # Check the singleton again after reading the head.
         try:
-            os.stat("scope-check-migration-pending.json", dir_fd=runs_fd, follow_symlinks=False)
+            fdops.stat("scope-check-migration-pending.json", dir_fd=runs_fd, follow_symlinks=False)
         except FileNotFoundError:
             check_runs()
         else:
             raise MigrationBarrierError("scope migration pending")
         try:
-            final_head = os.stat("scope-check-head.json", dir_fd=runs_fd, follow_symlinks=False)
+            final_head = fdops.stat("scope-check-head.json", dir_fd=runs_fd, follow_symlinks=False)
         except FileNotFoundError:
             if head_fingerprint is not None:
                 raise MigrationBarrierError("migration head disappeared") from None
@@ -197,11 +198,11 @@ def check_migration_barrier(root, lock_fd):
             if (
                 head_fingerprint is None
                 or _fingerprint(final_head) != head_fingerprint
-                or _fingerprint(os.fstat(head_fd)) != head_fingerprint
+                or _fingerprint(fdops.fstat(head_fd)) != head_fingerprint
             ):
                 raise MigrationBarrierError("migration head changed")
         check_runs()
     finally:
         for fd in (head_fd, runs_fd, root_fd):
             if fd is not None:
-                os.close(fd)
+                fdops.close(fd)

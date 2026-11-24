@@ -1182,6 +1182,19 @@ def _supervisor_supported() -> bool:
     """Check current process prerequisites without starting or modifying a worker."""
     import threading
 
+    if os.name == "nt":
+        # Windows has no killpg/SIGCHLD.  The worker is spawned as a new
+        # process group and terminated with CTRL_BREAK_EVENT, which is the
+        # closest equivalent of the POSIX process-group cleanup.  Only the
+        # common host prerequisites are checked here; cleanup remains
+        # fail-closed in safe_to_signal/_kill_process_group.
+        return (
+            hasattr(signal, "CTRL_BREAK_EVENT")
+            and hasattr(signal, "SIGINT")
+            and signal.getsignal(signal.SIGINT) == signal.default_int_handler
+            and threading.current_thread() is threading.main_thread()
+            and threading.active_count() == 1
+        )
     return (
         os.name == "posix"
         and hasattr(os, "killpg")
@@ -1191,6 +1204,21 @@ def _supervisor_supported() -> bool:
         and threading.current_thread() is threading.main_thread()
         and threading.active_count() == 1
     )
+
+
+def _kill_process_group(child) -> None:
+    """Terminate the dedicated worker group (POSIX killpg / Windows CTRL_BREAK)."""
+    if os.name != "nt":
+        os.killpg(child.pid, signal.SIGKILL)
+        return
+    if child.poll() is not None:
+        raise OSError("worker already reaped")
+    try:
+        os.kill(child.pid, signal.CTRL_BREAK_EVENT)
+        child.wait(timeout=1.0)
+    except Exception:
+        child.kill()
+        child.wait(timeout=1.0)
 
 
 def _supervise_core(args: dict[str, Any]) -> PreviewReport:
@@ -1217,9 +1245,14 @@ def _supervise_core(args: dict[str, Any]) -> PreviewReport:
         interrupted[0] = True
 
     def safe_to_signal(child):
+        group_signal_ok = (
+            signal.getsignal(signal.SIGCHLD) == signal.SIG_DFL
+            if os.name != "nt" and hasattr(signal, "SIGCHLD")
+            else os.name == "nt"
+        )
         return (
             capture_enabled
-            and signal.getsignal(signal.SIGCHLD) == signal.SIG_DFL
+            and group_signal_ok
             and signal.getsignal(signal.SIGINT) is record_interrupt
             and threading.current_thread() is threading.main_thread()
             and threading.active_count() == 1
@@ -1232,7 +1265,7 @@ def _supervise_core(args: dict[str, Any]) -> PreviewReport:
         # this supervisor. Native reapers/SA_NOCLDWAIT remain unsupported.
         if safe_to_signal(child):
             with contextlib.suppress(Exception):
-                os.killpg(child.pid, signal.SIGKILL)
+                _kill_process_group(child)
                 child.wait(timeout=1.0)
         raise KeyboardInterrupt
 
@@ -1255,8 +1288,9 @@ def _supervise_core(args: dict[str, Any]) -> PreviewReport:
                     command,
                     stdin=subprocess.PIPE,
                     stdout=subprocess.PIPE,
-                    stderr=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
                     start_new_session=True,
+                    creationflags=(subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0),
                     shell=False,
                 )
             except Exception:
@@ -1265,6 +1299,7 @@ def _supervise_core(args: dict[str, Any]) -> PreviewReport:
                 # Popen returned a handle, and communicate has not reaped it.
                 stop_for_interrupt(child)
             payload = json.dumps(args, ensure_ascii=True).encode("ascii")
+            import sys as _sys; print("WORKER_PAYLOAD", repr(payload.decode()), file=_sys.stderr, flush=True)
             supplied = False
             while True:
                 if interrupted[0]:
@@ -1273,7 +1308,7 @@ def _supervise_core(args: dict[str, Any]) -> PreviewReport:
                 if remaining <= 0:
                     break
                 try:
-                    output, _ = child.communicate(
+                    output, _err = child.communicate(
                         input=payload if not supplied else None,
                         timeout=min(
                             0.2 if capture_enabled else 0.25 if "product_source" in args else 30.0,
@@ -1293,6 +1328,7 @@ def _supervise_core(args: dict[str, Any]) -> PreviewReport:
                         capture_event[0] = _capture_worker_event(
                             lines[:-1], args["supplement_capture_id"]
                         )
+                    import sys as _sys; print("WORKER_LINES", repr(output.decode(errors="replace")[:4000]), file=_sys.stderr, flush=True)
                     return _parse_worker_result(lines[-1] if lines else b"", child.returncode)
                 except subprocess.TimeoutExpired as exc:
                     supplied = True
@@ -1313,7 +1349,7 @@ def _supervise_core(args: dict[str, Any]) -> PreviewReport:
                                     # Worker is alive, awaiting the supervisor's cleanup.
                                     if not safe_to_signal(child):
                                         raise OSError("unsafe process supervision")
-                                    os.killpg(child.pid, signal.SIGKILL)
+                                    _kill_process_group(child)
                                     child.communicate(timeout=1.0)
                                 except Exception:
                                     return replace(
@@ -1336,11 +1372,11 @@ def _supervise_core(args: dict[str, Any]) -> PreviewReport:
                 # The new session contains only this worker and its descendants.
                 if not safe_to_signal(child):
                     raise OSError("unsafe process supervision")
-                os.killpg(child.pid, signal.SIGKILL)
-                output, _ = child.communicate(timeout=1.0)
+                _kill_process_group(child)
+                output, _err = child.communicate(timeout=1.0)
             except ProcessLookupError:
                 try:
-                    output, _ = child.communicate(timeout=1.0)
+                    output, _err = child.communicate(timeout=1.0)
                 except Exception:
                     return PreviewReport("ERROR", "WORKER_CLEANUP_UNCERTAIN", 23)
             except Exception:
@@ -1425,6 +1461,7 @@ def _supervise_core(args: dict[str, Any]) -> PreviewReport:
     if args.get("supplement_capture_id"):
         if result.reason in {"SUPERVISOR_UNSUPPORTED", "WORKER_START_FAILED"}:
             state, digest = "NOT_ATTEMPTED", None
+            print("DEBUG_CAPTURE", result.reason, state, file=__import__("sys").stderr, flush=True)
         elif result.reason in {
             "BUDGET_EXHAUSTED",
             "WORKER_CLEANUP_UNCERTAIN",

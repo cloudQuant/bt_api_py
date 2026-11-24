@@ -42,10 +42,11 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import fcntl
+from bt_api_py._calendar_compat import fcntl
 import hashlib
 import json
 import os
+from bt_api_py import _calendar_fdops as fdops
 import sys
 
 from bt_api_py import trading_calendar_detail_batch as detail
@@ -244,7 +245,7 @@ def _build_once(*, root, candidate_id, input_data, filesystem, snapshot_factory,
             with contextlib.suppress(OSError):
                 fcntl.flock(lock, fcntl.LOCK_UN)
             with contextlib.suppress(OSError):
-                os.close(lock)
+                fdops.close(lock)
         runs._close(fds)
 
 

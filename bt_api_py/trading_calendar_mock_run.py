@@ -6,11 +6,8 @@ import stat
 import tempfile
 
 from bt_api_py import trading_calendar_mock as mock
-
-try:
-    import fcntl
-except ImportError:  # Windows is explicitly unsupported for this workflow.
-    fcntl = None
+from bt_api_py._calendar_compat import fcntl
+from bt_api_py import _calendar_fdops as fdops
 
 if fcntl is not None:
     from bt_api_py import trading_calendar_detail_collection as storage
@@ -87,8 +84,8 @@ def persistent_declaration(root, run_id):
 
     fds, chain = _open_directory(root)
     try:
-        info = os.fstat(fds[-1])
-        if info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) != 0o700:
+        info = fdops.fstat(fds[-1])
+        if info.st_uid != fdops.geteuid() or stat.S_IMODE(info.st_mode) != 0o700:
             raise ValueError("root not private")
         raw = storage._read(fds[-1], chain, _DECLARATION, 8192)
         body, _ = storage._unwrap(raw)
@@ -135,7 +132,7 @@ def _declare_root(root, config, run_id, year, *, root_inputs=()):
     marker_attempted = False
     children = []
     try:
-        info = os.fstat(fds[-1])
+        info = fdops.fstat(fds[-1])
         expected = {(): set()}
         files = set()
         for relative in root_inputs:
@@ -163,7 +160,7 @@ def _declare_root(root, config, run_id, year, *, root_inputs=()):
 
         def names(directory):
             found = set()
-            with os.scandir(directory) as entries:
+            with fdops.scandir(directory) as entries:
                 for index, entry in enumerate(entries):
                     if index >= 512:
                         raise _RootInputError("ROOT_INPUT_REJECTED")
@@ -191,17 +188,17 @@ def _declare_root(root, config, run_id, year, *, root_inputs=()):
                 if not parts:
                     continue
                 parent = dirs[parts[:-1]]
-                before = os.stat(parts[-1], dir_fd=parent, follow_symlinks=False)
+                before = fdops.stat(parts[-1], dir_fd=parent, follow_symlinks=False)
                 if not stat.S_ISDIR(before.st_mode):
                     raise _RootInputError("ROOT_INPUT_REJECTED")
-                fd = os.open(parts[-1], os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
+                fd = fdops.open(parts[-1], os.O_RDONLY | fdops.O_DIRECTORY | fdops.O_NOFOLLOW, dir_fd=parent)
                 children.append(fd)
-                if directory_id(before) != directory_id(os.fstat(fd)):
+                if directory_id(before) != directory_id(fdops.fstat(fd)):
                     raise _RootInputError("ROOT_INPUT_CHANGED")
                 dirs[parts] = fd
                 dir_identities[parts] = directory_id(before)
             for parts in files:
-                source = os.stat(parts[-1], dir_fd=dirs[parts[:-1]], follow_symlinks=False)
+                source = fdops.stat(parts[-1], dir_fd=dirs[parts[:-1]], follow_symlinks=False)
                 if not stat.S_ISREG(source.st_mode):
                     raise _RootInputError("ROOT_INPUT_REJECTED")
                 input_identities[parts] = file_id(source)
@@ -215,23 +212,23 @@ def _declare_root(root, config, run_id, year, *, root_inputs=()):
             raise _RootInputError("SUPPLEMENT_MISSING") from None
         except OSError:
             raise _RootInputError("ROOT_INPUT_REJECTED") from None
-        if info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) != 0o700:
+        if info.st_uid != fdops.geteuid() or stat.S_IMODE(info.st_mode) != 0o700:
             raise _RootInputError("ROOT_INPUT_REJECTED")
         try:
-            lock_fd = os.open(
+            lock_fd = fdops.open(
                 ".lock",
-                os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                os.O_RDWR | os.O_CREAT | os.O_EXCL | fdops.O_NOFOLLOW,
                 0o600,
                 dir_fd=fds[-1],
             )
             created_lock = True
         except FileExistsError:
-            lock_fd = os.open(".lock", os.O_RDWR | os.O_NOFOLLOW, dir_fd=fds[-1])
+            lock_fd = fdops.open(".lock", os.O_RDWR | fdops.O_NOFOLLOW, dir_fd=fds[-1])
             created_lock = False
-        lock_info = os.fstat(lock_fd)
+        lock_info = fdops.fstat(lock_fd)
         if (
             not stat.S_ISREG(lock_info.st_mode)
-            or lock_info.st_uid != os.geteuid()
+            or lock_info.st_uid != fdops.geteuid()
             or stat.S_IMODE(lock_info.st_mode) != 0o600
             or lock_info.st_nlink != 1
             or lock_info.st_size != 0
@@ -249,19 +246,19 @@ def _declare_root(root, config, run_id, year, *, root_inputs=()):
         def root_matches(root_extra):
             if not _directory_matches(chain):
                 return False
-            entry = os.stat(".lock", dir_fd=fds[-1], follow_symlinks=False)
+            entry = fdops.stat(".lock", dir_fd=fds[-1], follow_symlinks=False)
             for parts, identity in dir_identities.items():
                 if (
-                    directory_id(os.fstat(dirs[parts])) != identity
+                    directory_id(fdops.fstat(dirs[parts])) != identity
                     or directory_id(
-                        os.stat(parts[-1], dir_fd=dirs[parts[:-1]], follow_symlinks=False)
+                        fdops.stat(parts[-1], dir_fd=dirs[parts[:-1]], follow_symlinks=False)
                     )
                     != identity
                 ):
                     return False
             for parts, identity in input_identities.items():
                 if (
-                    file_id(os.stat(parts[-1], dir_fd=dirs[parts[:-1]], follow_symlinks=False))
+                    file_id(fdops.stat(parts[-1], dir_fd=dirs[parts[:-1]], follow_symlinks=False))
                     != identity
                 ):
                     return False
@@ -278,7 +275,7 @@ def _declare_root(root, config, run_id, year, *, root_inputs=()):
                 and entry.st_mode == lock_info.st_mode
                 and entry.st_nlink == 1
                 and entry.st_size == 0
-                and os.fstat(lock_fd).st_size == 0
+                and fdops.fstat(lock_fd).st_size == 0
             )
 
         if not root_matches({".lock"}):
@@ -313,7 +310,7 @@ def _declare_root(root, config, run_id, year, *, root_inputs=()):
         if locked:
             fcntl.flock(lock_fd, fcntl.LOCK_UN)
         if lock_fd is not None:
-            os.close(lock_fd)
+            fdops.close(lock_fd)
         runs._close(children)
         runs._close(fds)
 
@@ -505,7 +502,7 @@ def run_mock(
             result["supplement_input"] = "SYNTHETIC_MOCK_NOT_USER_YAML"
         if root is None:
             try:
-                os.mkdir(temporary_root, 0o700)
+                fdops.mkdir(temporary_root, 0o700)
             except FileExistsError:
                 result.update(state="NOT_COMMITTED", reason="RUN_ID_EXISTS_RECONCILE_FIRST")
                 return result

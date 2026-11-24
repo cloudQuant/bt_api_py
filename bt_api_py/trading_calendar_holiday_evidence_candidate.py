@@ -10,10 +10,11 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import fcntl
+from bt_api_py._calendar_compat import fcntl
 import hashlib
 import json
 import os
+from bt_api_py import _calendar_fdops as fdops
 import stat
 import sys
 from copy import deepcopy
@@ -53,17 +54,17 @@ def _open(root, create):
     try:
         if create:
             with contextlib.suppress(FileExistsError):
-                os.mkdir("holiday-evidence-candidates", 0o700, dir_fd=parent)
-        info = os.stat("holiday-evidence-candidates", dir_fd=parent, follow_symlinks=False)
-        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
+                fdops.mkdir("holiday-evidence-candidates", 0o700, dir_fd=parent)
+        info = fdops.stat("holiday-evidence-candidates", dir_fd=parent, follow_symlinks=False)
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != fdops.geteuid() or info.st_mode & 0o077:
             raise ValueError("invalid directory")
-        fd = os.open(
+        fd = fdops.open(
             "holiday-evidence-candidates",
-            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+            os.O_RDONLY | fdops.O_DIRECTORY | fdops.O_NOFOLLOW,
             dir_fd=parent,
         )
         fds.append(fd)
-        if _identity(os.fstat(fd)) != _identity(info):
+        if _identity(fdops.fstat(fd)) != _identity(info):
             raise ValueError("directory changed")
         chain.append((parent, "holiday-evidence-candidates", fd, _identity(info)))
         if not _directory_matches(chain):
@@ -191,7 +192,7 @@ def build_once(*, root, evidence_id, candidate_id, filesystem, emit):
             with contextlib.suppress(OSError):
                 fcntl.flock(lock, fcntl.LOCK_UN)
             with contextlib.suppress(OSError):
-                os.close(lock)
+                fdops.close(lock)
         runs._close(fds)
 
 

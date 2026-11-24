@@ -15,7 +15,8 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import fcntl
+from bt_api_py._calendar_compat import fcntl
+from bt_api_py import _calendar_fdops as fdops
 import hashlib
 import json
 import math
@@ -93,15 +94,15 @@ def _open_collection(root, create):
     try:
         if create:
             with contextlib.suppress(FileExistsError):
-                os.mkdir("detail-collections", 0o700, dir_fd=parent)
-        info = os.stat("detail-collections", dir_fd=parent, follow_symlinks=False)
-        if not stat.S_ISDIR(info.st_mode) or info.st_mode & 0o077 or info.st_uid != os.geteuid():
+                fdops.mkdir("detail-collections", 0o700, dir_fd=parent)
+        info = fdops.stat("detail-collections", dir_fd=parent, follow_symlinks=False)
+        if not stat.S_ISDIR(info.st_mode) or info.st_mode & 0o077 or info.st_uid != fdops.geteuid():
             raise ValueError("invalid collection directory")
-        fd = os.open(
-            "detail-collections", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent
+        fd = fdops.open(
+            "detail-collections", os.O_RDONLY | fdops.O_DIRECTORY | fdops.O_NOFOLLOW, dir_fd=parent
         )
         fds.append(fd)
-        if _identity(os.fstat(fd)) != _identity(info):
+        if _identity(fdops.fstat(fd)) != _identity(info):
             raise ValueError("directory changed")
         chain.append((parent, "detail-collections", fd, _identity(info)))
         if not _directory_matches(chain):
@@ -116,28 +117,28 @@ def _read(fd, chain, name, limit):
     if not _directory_matches(chain):
         raise ValueError("directory changed")
     try:
-        src = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
+        src = fdops.open(name, os.O_RDONLY | fdops.O_NOFOLLOW | fdops.O_NONBLOCK, dir_fd=fd)
     except FileNotFoundError:
         if not _directory_matches(chain):
             raise ValueError("directory changed") from None
         return None
     try:
-        before = os.fstat(src)
+        before = fdops.fstat(src)
         if (
             not stat.S_ISREG(before.st_mode)
             or before.st_mode & 0o077
-            or before.st_uid != os.geteuid()
+            or before.st_uid != fdops.geteuid()
             or before.st_size > limit
         ):
             raise ValueError("invalid file")
         data = bytearray()
         while len(data) <= limit:
-            part = os.read(src, limit + 1 - len(data))
+            part = fdops.read(src, limit + 1 - len(data))
             if not part:
                 break
             data.extend(part)
-        after = os.fstat(src)
-        entry = os.stat(name, dir_fd=fd, follow_symlinks=False)
+        after = fdops.fstat(src)
+        entry = fdops.stat(name, dir_fd=fd, follow_symlinks=False)
 
         def snapshot(v):
             return (
@@ -159,7 +160,7 @@ def _read(fd, chain, name, limit):
             raise ValueError("file changed")
         return bytes(data)
     finally:
-        os.close(src)
+        fdops.close(src)
 
 
 def _write(fd, chain, name, data, limit):
@@ -168,50 +169,50 @@ def _write(fd, chain, name, data, limit):
     temp, temp_fd, ident, attempted = "", None, None, False
     try:
         temp = f".collection-{uuid.uuid4().hex}.tmp"
-        temp_fd = os.open(
-            temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd
+        temp_fd = fdops.open(
+            temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | fdops.O_NOFOLLOW, 0o600, dir_fd=fd
         )
-        os.fchmod(temp_fd, 0o600)
-        ident = _identity(os.fstat(temp_fd))
+        fdops.fchmod(temp_fd, 0o600)
+        ident = _identity(fdops.fstat(temp_fd))
         written = 0
         while written < len(data):
-            n = os.write(temp_fd, data[written:])
+            n = fdops.write(temp_fd, data[written:])
             if n <= 0:
                 raise OSError("short write")
             written += n
-        os.fsync(temp_fd)
+        fdops.fsync(temp_fd)
         if (
             not _directory_matches(chain)
-            or _identity(os.fstat(temp_fd)) != ident
-            or _identity(os.stat(temp, dir_fd=fd, follow_symlinks=False)) != ident
+            or _identity(fdops.fstat(temp_fd)) != ident
+            or _identity(fdops.stat(temp, dir_fd=fd, follow_symlinks=False)) != ident
         ):
             raise ValueError("directory changed")
         attempted = True
         try:
-            os.link(temp, name, src_dir_fd=fd, dst_dir_fd=fd, follow_symlinks=False)
+            fdops.link(temp, name, src_dir_fd=fd, dst_dir_fd=fd, follow_symlinks=False)
         except FileExistsError:
-            old = os.stat(name, dir_fd=fd, follow_symlinks=False)
+            old = fdops.stat(name, dir_fd=fd, follow_symlinks=False)
             if _identity(old) == ident or not _directory_matches(chain):
                 raise
             attempted = False
             return "NOT_COMMITTED"
         if (
-            _identity(os.stat(name, dir_fd=fd, follow_symlinks=False)) != ident
+            _identity(fdops.stat(name, dir_fd=fd, follow_symlinks=False)) != ident
             or _read(fd, chain, name, limit) != data
-            or _identity(os.stat(name, dir_fd=fd, follow_symlinks=False)) != ident
-            or _identity(os.fstat(temp_fd)) != ident
-            or _identity(os.stat(temp, dir_fd=fd, follow_symlinks=False)) != ident
+            or _identity(fdops.stat(name, dir_fd=fd, follow_symlinks=False)) != ident
+            or _identity(fdops.fstat(temp_fd)) != ident
+            or _identity(fdops.stat(temp, dir_fd=fd, follow_symlinks=False)) != ident
         ):
             raise ValueError("readback mismatch")
         _remove_owned_temp(fd, temp, ident)
         try:
-            os.stat(temp, dir_fd=fd, follow_symlinks=False)
+            fdops.stat(temp, dir_fd=fd, follow_symlinks=False)
         except FileNotFoundError:
             pass
         else:
             raise ValueError("temporary entry changed or remained")
         ident = None
-        os.fsync(fd)
+        fdops.fsync(fd)
         if not _directory_matches(chain):
             raise ValueError("directory changed")
         return "COMMITTED"
@@ -220,30 +221,30 @@ def _write(fd, chain, name, data, limit):
     finally:
         if temp_fd is not None:
             with contextlib.suppress(OSError):
-                os.close(temp_fd)
+                fdops.close(temp_fd)
         if ident is not None:
             _remove_owned_temp(fd, temp, ident)
 
 
 def _lock(fd, chain):
-    lock = os.open(".collection.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600, dir_fd=fd)
+    lock = fdops.open(".collection.lock", os.O_RDWR | os.O_CREAT | fdops.O_NOFOLLOW, 0o600, dir_fd=fd)
     try:
-        info = os.fstat(lock)
-        if not stat.S_ISREG(info.st_mode) or info.st_mode & 0o077 or info.st_uid != os.geteuid():
+        info = fdops.fstat(lock)
+        if not stat.S_ISREG(info.st_mode) or info.st_mode & 0o077 or info.st_uid != fdops.geteuid():
             raise ValueError("invalid lock")
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         _check_lock(fd, chain, lock, _identity(info))
         return lock, _identity(info)
     except BaseException:
-        os.close(lock)
+        fdops.close(lock)
         raise
 
 
 def _check_lock(fd, chain, lock, ident):
     if (
         not _directory_matches(chain)
-        or _identity(os.fstat(lock)) != ident
-        or _identity(os.stat(".collection.lock", dir_fd=fd, follow_symlinks=False)) != ident
+        or _identity(fdops.fstat(lock)) != ident
+        or _identity(fdops.stat(".collection.lock", dir_fd=fd, follow_symlinks=False)) != ident
     ):
         raise ValueError("lock changed")
 
@@ -869,7 +870,7 @@ def collect_once(
             with contextlib.suppress(OSError):
                 fcntl.flock(lock, fcntl.LOCK_UN)
             with contextlib.suppress(OSError):
-                os.close(lock)
+                fdops.close(lock)
         runs._close(fds)
 
 

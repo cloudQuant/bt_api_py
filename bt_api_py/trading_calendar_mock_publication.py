@@ -11,7 +11,8 @@ Never point a production configuration or account at this directory.
 from __future__ import annotations
 
 import contextlib
-import fcntl
+from bt_api_py._calendar_compat import fcntl
+from bt_api_py import _calendar_fdops as fdops
 import hashlib
 import json
 import os
@@ -193,10 +194,10 @@ class MockCalendarPublication:
                 self._expected_mode_source = settings.review_mode_source
 
     def _stat_root(self):
-        info = os.lstat(self.root)
+        info = fdops.lstat_path(self.root)
         if (
             not stat.S_ISDIR(info.st_mode)
-            or info.st_uid != os.geteuid()
+            or info.st_uid != fdops.geteuid()
             or stat.S_IMODE(info.st_mode) != 0o700
             or os.path.realpath(self.root) != self.root
         ):
@@ -661,10 +662,10 @@ class MockCalendarPublication:
             if self._declaration is not None and mode != self._declaration["review_mode"]:
                 return _labeled(status="NOT_ATTEMPTED", reason="SIMULATION_REVIEW_MODE_CONFLICT")
             if self._declaration is not None:
-                lock = os.lstat(Path(self.root) / ".lock")
+                lock = fdops.lstat_path(Path(self.root) / ".lock")
                 if (
                     not stat.S_ISREG(lock.st_mode)
-                    or lock.st_uid != os.geteuid()
+                    or lock.st_uid != fdops.geteuid()
                     or stat.S_IMODE(lock.st_mode) != 0o600
                     or lock.st_nlink != 1
                     or lock.st_size != 0
@@ -1141,7 +1142,7 @@ class MockCalendarPublication:
         lock = None
         try:
             lock, identity = storage._lock(descriptors[-1], chain)
-            with os.scandir(descriptors[-1]) as entries:
+            with fdops.scandir(descriptors[-1]) as entries:
                 names = []
                 for index, entry in enumerate(entries):
                     if index >= 4096:
@@ -1210,7 +1211,7 @@ class MockCalendarPublication:
                 with contextlib.suppress(OSError):
                     fcntl.flock(lock, fcntl.LOCK_UN)
                 with contextlib.suppress(OSError):
-                    os.close(lock)
+                    fdops.close(lock)
             runs._close(descriptors)
 
     def _retain_first_difference(self, fresh, publication_id):
@@ -1241,7 +1242,7 @@ class MockCalendarPublication:
                 with contextlib.suppress(OSError):
                     fcntl.flock(lock, fcntl.LOCK_UN)
                 with contextlib.suppress(OSError):
-                    os.close(lock)
+                    fdops.close(lock)
             runs._close(fds)
 
     def publish(

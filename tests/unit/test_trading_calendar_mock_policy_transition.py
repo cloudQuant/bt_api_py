@@ -275,7 +275,10 @@ TradingCalendarStore.publish = wait_before_store_lock
         text=True,
     )
     try:
-        deadline = time.monotonic() + 25
+        # A fresh Python child must import the CTP native stack before it can
+        # reach the store boundary; under load on Windows that can exceed the
+        # original 25s window.  The coordination itself is unchanged.
+        deadline = time.monotonic() + 60
         while not ready.exists() and proc.poll() is None and time.monotonic() < deadline:
             time.sleep(0.01)
         assert ready.exists(), "update did not reach the store publication boundary"

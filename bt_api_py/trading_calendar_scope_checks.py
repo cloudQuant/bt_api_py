@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+from bt_api_py import _calendar_fdops as fdops
 import uuid
 from dataclasses import asdict
 from datetime import datetime
@@ -127,9 +128,9 @@ def _scan_names(fd, chain, *, exclude_batch_id, allow_long_scan):
 
     if not runs._directory_matches(chain):
         raise ValueError("scope directory unavailable")
-    before = fingerprint(os.fstat(fd))
+    before = fingerprint(fdops.fstat(fd))
     names = []
-    with os.scandir(fd) as directory:
+    with fdops.scandir(fd) as directory:
         for count, entry in enumerate(directory, 1):
             if count > 10000 and not allow_long_scan:
                 raise ValueError("scope directory scan limit")
@@ -140,7 +141,7 @@ def _scan_names(fd, chain, *, exclude_batch_id, allow_long_scan):
                 if len(names) > _LIMIT:
                     raise ValueError("scope history limit")
     names.sort()
-    after = fingerprint(os.fstat(fd))
+    after = fingerprint(fdops.fstat(fd))
     if before != after or not runs._directory_matches(chain):
         raise ValueError("scope directory changed during scan")
     return names, after
@@ -262,27 +263,27 @@ def _replace_head(fd, chain, expected, body):
     temp = f".scope-check-head-{uuid.uuid4().hex}.tmp"
     out = None
     try:
-        out = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd)
+        out = fdops.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | fdops.O_NOFOLLOW, 0o600, dir_fd=fd)
         offset = 0
         while offset < len(data):
-            count = os.write(out, data[offset:])
+            count = fdops.write(out, data[offset:])
             if count <= 0:
                 raise OSError("short scope head write")
             offset += count
-        os.fsync(out)
-        os.close(out)
+        fdops.fsync(out)
+        fdops.close(out)
         out = None
         if _read(fd, chain, _HEAD) != expected:
             raise ValueError("scope head raced")
         os.replace(temp, _HEAD, src_dir_fd=fd, dst_dir_fd=fd)
-        os.fsync(fd)
+        fdops.fsync(fd)
         if _read(fd, chain, _HEAD) != storage._unwrap(data):
             raise ValueError("scope head unknown")
     finally:
         if out is not None:
-            os.close(out)
+            fdops.close(out)
         with contextlib.suppress(FileNotFoundError):
-            os.unlink(temp, dir_fd=fd)
+            fdops.unlink(temp, dir_fd=fd)
 
 
 def reconcile(*, operator, batch_id):
@@ -321,7 +322,7 @@ def reconcile(*, operator, batch_id):
                         intent, _ = mixed_publication._batch_intent(operator.root, batch_id)
                         if operator.run_id not in {intent["run_id"], intent["original_run_id"]}:
                             raise ValueError("scope run identity mismatch")
-                        os.fsync(fd)
+                        fdops.fsync(fd)
                         return {
                             **result,
                             "status": "VISIBLE_UNAUTHENTICATED",
@@ -498,29 +499,29 @@ def record(*, operator, batch_id, evidence_sha256):
                 temp = f".scope-check-head-{uuid.uuid4().hex}.tmp"
                 out = None
                 try:
-                    out = os.open(
-                        temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd
+                    out = fdops.open(
+                        temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | fdops.O_NOFOLLOW, 0o600, dir_fd=fd
                     )
                     offset = 0
                     while offset < len(new_head):
-                        count = os.write(out, new_head[offset:])
+                        count = fdops.write(out, new_head[offset:])
                         if count <= 0:
                             raise OSError("short scope head write")
                         offset += count
-                    os.fsync(out)
-                    os.close(out)
+                    fdops.fsync(out)
+                    fdops.close(out)
                     out = None
                     if _read(fd, chain, _HEAD) != head:
                         raise ValueError("scope head raced")
                     os.replace(temp, _HEAD, src_dir_fd=fd, dst_dir_fd=fd)
-                    os.fsync(fd)
+                    fdops.fsync(fd)
                     if _read(fd, chain, _HEAD) != storage._unwrap(new_head):
                         raise ValueError("scope head unknown")
                 finally:
                     if out is not None:
-                        os.close(out)
+                        fdops.close(out)
                     with contextlib.suppress(FileNotFoundError):
-                        os.unlink(temp, dir_fd=fd)
+                        fdops.unlink(temp, dir_fd=fd)
                 records, _ = _load_locked(root, fd, chain)
                 return {
                     **_result(
