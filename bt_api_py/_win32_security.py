@@ -105,6 +105,7 @@ _FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000
 _FILE_FLAG_BACKUP_SEMANTICS = 0x02000000
 _GENERIC_READ = 0x80000000
 _FILE_SHARE_READ = 0x00000001
+_FILE_SHARE_WRITE = 0x00000002
 _FILE_SHARE_DELETE = 0x00000004
 _OPEN_EXISTING = 3
 _INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
@@ -203,11 +204,15 @@ def is_reparse_point(path: str | os.PathLike[str]) -> bool:
 
 
 def _create_file(path: str, *, directory: bool = False, create_new: bool = False,
-                 share_delete: bool = True) -> _wt.HANDLE:
+                 share_delete: bool = True, share_write: bool = False) -> _wt.HANDLE:
     flags = _FILE_FLAG_OPEN_REPARSE_POINT
     if directory:
         flags |= _FILE_FLAG_BACKUP_SEMANTICS
-    share = _FILE_SHARE_READ | (_FILE_SHARE_DELETE if share_delete else 0)
+    share = (
+        _FILE_SHARE_READ
+        | (_FILE_SHARE_WRITE if share_write else 0)
+        | (_FILE_SHARE_DELETE if share_delete else 0)
+    )
     disposition = 1 if create_new else _OPEN_EXISTING
     handle = _kernel32.CreateFileW(path, _GENERIC_READ, share, None, disposition, flags, None)
     if not handle or handle == _INVALID_HANDLE_VALUE:
@@ -215,12 +220,58 @@ def _create_file(path: str, *, directory: bool = False, create_new: bool = False
     return handle
 
 
-def open_nofollow(path: str | os.PathLike[str], *, share_delete: bool = True) -> tuple[int, _wt.HANDLE]:
+def open_identity_handle(path: str | os.PathLike[str], *, directory: bool = False) -> _wt.HANDLE:
+    """Open a read/identity Win32 handle without following reparse points or blocking writers.
+
+    The returned handle permits concurrent readers, writers, and renames so
+    SQLite WAL access is unimpeded while ``handle_stamp`` and path re-checks
+    detect swap/replacement (Windows parity with holding an ``O_NOFOLLOW`` fd).
+    """
+    if not WINDOWS or _kernel32 is None:
+        raise Win32SecurityUnavailable("NOFOLLOW_UNAVAILABLE")
+    p = os.fspath(path)
+    attrs = _kernel32.GetFileAttributesW(p)
+    if attrs == 0xFFFFFFFF or (attrs & _FILE_ATTRIBUTE_REPARSE_POINT):
+        raise Win32SecurityUnavailable("NOFOLLOW_REPARSE")
+    handle = _create_file(p, directory=directory, share_delete=True, share_write=True)
+    try:
+        info = _ByHandleFileInformation()
+        if not _kernel32.GetFileInformationByHandle(handle, ctypes.byref(info)):
+            raise Win32SecurityUnavailable("STAMP_UNAVAILABLE")
+        if info.dwFileAttributes & _FILE_ATTRIBUTE_REPARSE_POINT:
+            raise Win32SecurityUnavailable("NOFOLLOW_REPARSE")
+        is_dir = bool(info.dwFileAttributes & stat.FILE_ATTRIBUTE_DIRECTORY)
+        if directory and not is_dir:
+            raise Win32SecurityUnavailable("NOFOLLOW_NOT_DIR")
+        if not directory and is_dir:
+            raise Win32SecurityUnavailable("NOFOLLOW_NOT_FILE")
+        if _final_path(handle) != _nt_abs_path(p):
+            raise Win32SecurityUnavailable("FILE_REDIRECTED")
+        return handle
+    except Exception:
+        _kernel32.CloseHandle(handle)
+        raise
+
+
+def close_handle(handle: _wt.HANDLE) -> None:
+    """Close a native Win32 handle returned by :func:`open_identity_handle`."""
+    if not WINDOWS or _kernel32 is None:
+        raise Win32SecurityUnavailable("HANDLE_UNAVAILABLE")
+    if not _kernel32.CloseHandle(handle):
+        raise Win32SecurityUnavailable("HANDLE_CLOSE_FAILED")
+
+
+def open_nofollow(
+    path: str | os.PathLike[str], *, share_delete: bool = True, share_write: bool = True
+) -> tuple[int, _wt.HANDLE]:
     """Open a regular file without following its final reparse point.
 
     Returns ``(crt_fd, native_handle)`` on Windows (both refer to the same
     underlying handle; ``os.close(fd)`` releases it).  Raises closed on a
-    reparse point, a directory, or any API failure.
+    reparse point, a directory, or any API failure.  ``share_write=True``
+    matches POSIX ``open(O_RDONLY)`` (which does not fail with a sharing
+    violation when an owner holds the file open ``O_RDWR``; concurrent writes
+    are still detected by the caller's before/after handle-stamp check).
     """
     if not WINDOWS or _kernel32 is None or _msvcrt is None:
         raise Win32SecurityUnavailable("NOFOLLOW_UNAVAILABLE")
@@ -228,7 +279,7 @@ def open_nofollow(path: str | os.PathLike[str], *, share_delete: bool = True) ->
     attrs = _kernel32.GetFileAttributesW(p)
     if attrs == 0xFFFFFFFF or (attrs & _FILE_ATTRIBUTE_REPARSE_POINT):
         raise Win32SecurityUnavailable("NOFOLLOW_REPARSE")
-    handle = _create_file(p, share_delete=share_delete)
+    handle = _create_file(p, share_delete=share_delete, share_write=share_write)
     try:
         info = _ByHandleFileInformation()
         if not _kernel32.GetFileInformationByHandle(handle, ctypes.byref(info)):
@@ -442,10 +493,12 @@ def _nt_abs_path(path: str) -> str:
     return "\\\\?\\" + abs_path
 
 
-def read_bounded_windows(path: str | os.PathLike[str], limit: int, *, protected: bool) -> bytes:
-    """Windows parity of monitor_service_config.read_bounded.
+def read_bounded_windows_with_stamp(
+    path: str | os.PathLike[str], limit: int, *, protected: bool
+) -> tuple[bytes, tuple]:
+    """Windows parity of ``read_bounded`` / ``_protected_bytes`` returning ``(data, stamp)``.
 
-    Preserves every invariant of the POSIX original:
+    Preserves every invariant of the POSIX originals:
       * no-follow on the final component (reparse points refused);
       * all parent components checked for reparse points (symlink/junction);
       * handle canonical path equals the requested path (no redirection);
@@ -530,12 +583,18 @@ def read_bounded_windows(path: str | os.PathLike[str], limit: int, *, protected:
                 raise Win32SecurityUnavailable("FILE_CHANGED")
         finally:
             os.close(check_fd)
-        return bytes(data)
+        return bytes(data), after
     finally:
         if fd is not None:
             os.close(fd)
         elif handle is not None:
             _kernel32.CloseHandle(handle)
+
+
+def read_bounded_windows(path: str | os.PathLike[str], limit: int, *, protected: bool) -> bytes:
+    """Windows parity of monitor_service_config.read_bounded."""
+    data, _stamp = read_bounded_windows_with_stamp(path, limit, protected=protected)
+    return data
 
 
 __all__ = [
@@ -544,11 +603,14 @@ __all__ = [
     "sleep_inclusive_clock_ns",
     "is_reparse_point",
     "open_nofollow",
+    "open_identity_handle",
+    "close_handle",
     "handle_stamp",
     "inspect_owner",
     "current_user_sid",
     "has_privileges_available",
     "ensure_directory_chain",
     "read_bounded_windows",
+    "read_bounded_windows_with_stamp",
     "OwnerInfo",
 ]

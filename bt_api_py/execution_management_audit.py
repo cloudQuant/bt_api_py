@@ -125,39 +125,88 @@ class ExecutionManagementReadAudit:
         self._closed = False
         self._root_fd = None
         self._file_fd = None
+        self._root_handle = None
+        self._file_handle = None
         self._fd_open_pending = False
         self._fd_close_uncertain = False
         self._sql_open_pending = False
         self._active_connection = None
         self._connection_thread = None
+        self._is_windows = os.name == 'nt'
+        if self._is_windows:
+            from bt_api_py._win32_security import has_privileges_available
+
+            platform_ok = has_privileges_available()
+        else:
+            platform_ok = hasattr(os, 'geteuid') and hasattr(os, 'O_NOFOLLOW')
         if (type(max_attempts) is not int or not 1 <= max_attempts <= _MAX_ATTEMPTS
-                or not hasattr(os, 'geteuid') or not hasattr(os, 'O_NOFOLLOW')
+                or not platform_ok
                 or not isinstance(root, (str, Path)) or not Path(root).is_absolute()):
             _error('INVALID_AUDIT_CONFIGURATION')
         self._max_attempts = max_attempts
         try:
             supplied = Path(root)
-            if supplied.is_symlink():
-                _error('INVALID_AUDIT_CONFIGURATION')
-            self._root = supplied.resolve(strict=True)
-            directory_flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, 'O_DIRECTORY', 0)
-            self._fd_open_pending = True
-            self._root_fd = os.open(str(self._root), directory_flags)
-            self._fd_open_pending = False
-            self._check_root()
-            created = False
-            try:
+            if self._is_windows:
+                from bt_api_py._win32_security import (
+                    Win32SecurityUnavailable,
+                    _set_owner_only_acl,
+                    is_reparse_point,
+                    open_identity_handle,
+                )
+
+                try:
+                    if is_reparse_point(supplied):
+                        _error('INVALID_AUDIT_CONFIGURATION')
+                except Win32SecurityUnavailable:
+                    _error('INVALID_AUDIT_CONFIGURATION')
+                self._root = supplied.resolve(strict=True)
                 self._fd_open_pending = True
-                self._file_fd = os.open(_FILE, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-                                        0o600, dir_fd=self._root_fd)
+                self._root_handle = open_identity_handle(self._root, directory=True)
                 self._fd_open_pending = False
-                created = True
-            except FileExistsError:
-                self._fd_open_pending = False
+                self._check_root()
+                self._path = self._root / _FILE
+                created = False
+                try:
+                    if self._path.exists() and is_reparse_point(self._path):
+                        _error('AUDIT_UNAVAILABLE')
+                except Win32SecurityUnavailable:
+                    _error('AUDIT_UNAVAILABLE')
+                try:
+                    create_fd = os.open(
+                        str(self._path), os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o600
+                    )
+                    try:
+                        _set_owner_only_acl(self._path)
+                    finally:
+                        os.close(create_fd)
+                    created = True
+                except FileExistsError:
+                    created = False
                 self._fd_open_pending = True
-                self._file_fd = os.open(_FILE, os.O_RDWR | os.O_NOFOLLOW, dir_fd=self._root_fd)
+                self._file_handle = open_identity_handle(self._path, directory=False)
                 self._fd_open_pending = False
-            self._path = self._root / _FILE
+            else:
+                if supplied.is_symlink():
+                    _error('INVALID_AUDIT_CONFIGURATION')
+                self._root = supplied.resolve(strict=True)
+                directory_flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, 'O_DIRECTORY', 0)
+                self._fd_open_pending = True
+                self._root_fd = os.open(str(self._root), directory_flags)
+                self._fd_open_pending = False
+                self._check_root()
+                created = False
+                try:
+                    self._fd_open_pending = True
+                    self._file_fd = os.open(_FILE, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                                            0o600, dir_fd=self._root_fd)
+                    self._fd_open_pending = False
+                    created = True
+                except FileExistsError:
+                    self._fd_open_pending = False
+                    self._fd_open_pending = True
+                    self._file_fd = os.open(_FILE, os.O_RDWR | os.O_NOFOLLOW, dir_fd=self._root_fd)
+                    self._fd_open_pending = False
+                self._path = self._root / _FILE
             self._check_files()
             with self._connect() as connection:
                 if created:
@@ -175,6 +224,13 @@ class ExecutionManagementReadAudit:
                         if connection.in_transaction:
                             connection.execute('ROLLBACK')
                         raise
+                    if self._is_windows:
+                        from bt_api_py._win32_security import _set_owner_only_acl
+
+                        for suffix in ('-wal', '-shm'):
+                            side = self._root / (_FILE + suffix)
+                            if side.exists():
+                                _set_owner_only_acl(side)
                 self._check_schema(connection)
                 if connection.execute('PRAGMA quick_check').fetchone()[0] != 'ok':
                     _error('AUDIT_UNAVAILABLE')
@@ -191,6 +247,35 @@ class ExecutionManagementReadAudit:
             raise ExecutionManagementAuditError('AUDIT_UNAVAILABLE') from None
 
     def _check_root(self) -> None:
+        if self._is_windows:
+            from bt_api_py._win32_security import (
+                Win32SecurityUnavailable,
+                close_handle,
+                handle_stamp,
+                inspect_owner,
+                is_reparse_point,
+                open_identity_handle,
+            )
+
+            try:
+                if self._root_handle is None or is_reparse_point(self._root):
+                    _error('AUDIT_UNAVAILABLE')
+                held = handle_stamp(self._root_handle)
+                owner = inspect_owner(self._root)
+                check_h = open_identity_handle(self._root, directory=True)
+                try:
+                    current = handle_stamp(check_h)
+                finally:
+                    close_handle(check_h)
+                if (not stat.S_ISDIR(held[2]) or not stat.S_ISDIR(current[2])
+                        or not owner.is_current_user or owner.others_writable
+                        or held[:2] != current[:2]):
+                    _error('AUDIT_UNAVAILABLE')
+            except ExecutionManagementAuditError:
+                raise
+            except (Win32SecurityUnavailable, OSError, ValueError):
+                _error('AUDIT_UNAVAILABLE')
+            return
         held = os.fstat(self._root_fd)
         current = os.stat(self._root, follow_symlinks=False)
         if (not stat.S_ISDIR(held.st_mode) or not stat.S_ISDIR(current.st_mode)
@@ -200,6 +285,47 @@ class ExecutionManagementReadAudit:
 
     def _check_files(self) -> None:
         self._check_root()
+        if self._is_windows:
+            from bt_api_py._win32_security import (
+                Win32SecurityUnavailable,
+                close_handle,
+                handle_stamp,
+                inspect_owner,
+                is_reparse_point,
+                open_identity_handle,
+            )
+
+            try:
+                if self._file_handle is None or is_reparse_point(self._path):
+                    _error('AUDIT_UNAVAILABLE')
+                held = handle_stamp(self._file_handle)
+                owner = inspect_owner(self._path)
+                check_h = open_identity_handle(self._path, directory=False)
+                try:
+                    actual = handle_stamp(check_h)
+                finally:
+                    close_handle(check_h)
+                if (not stat.S_ISREG(held[2]) or not stat.S_ISREG(actual[2])
+                        or not owner.is_current_user or owner.others_writable
+                        or held[4] != 1 or actual[4] != 1
+                        or held[:2] != actual[:2]):
+                    _error('AUDIT_UNAVAILABLE')
+                for name in (_FILE + '-wal', _FILE + '-shm'):
+                    side = self._root / name
+                    if not side.exists():
+                        continue
+                    if is_reparse_point(side):
+                        _error('AUDIT_UNAVAILABLE')
+                    info = side.stat(follow_symlinks=False)
+                    side_owner = inspect_owner(side)
+                    if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+                            or not side_owner.is_current_user or side_owner.others_writable):
+                        _error('AUDIT_UNAVAILABLE')
+            except ExecutionManagementAuditError:
+                raise
+            except (Win32SecurityUnavailable, OSError, ValueError):
+                _error('AUDIT_UNAVAILABLE')
+            return
         held = os.fstat(self._file_fd)
         actual = os.stat(_FILE, dir_fd=self._root_fd, follow_symlinks=False)
         if (not stat.S_ISREG(held.st_mode) or not stat.S_ISREG(actual.st_mode)
@@ -277,6 +403,16 @@ class ExecutionManagementReadAudit:
                     setattr(self, name, None)
                     os.close(fd)
                     self._fd_close_uncertain = False
+            if self._is_windows:
+                from bt_api_py._win32_security import close_handle
+
+                for name in ('_file_handle', '_root_handle'):
+                    handle = getattr(self, name)
+                    if handle is not None:
+                        self._fd_close_uncertain = True
+                        setattr(self, name, None)
+                        close_handle(handle)
+                        self._fd_close_uncertain = False
             self._closed = True
 
     def disclose_after_audit(self, *, identity: ManagementReadIdentity, query_id: str,

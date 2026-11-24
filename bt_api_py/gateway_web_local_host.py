@@ -50,7 +50,19 @@ def _file_stamp(st):
 def _protected_bytes(path: str | Path, limit: int = 131072) -> tuple[bytes, tuple]:
     """Read a regular, owner-only file without following any path symlink."""
     path = Path(path)
-    if os.name != 'posix' or not path.is_absolute() or '..' in path.parts:
+    if not path.is_absolute() or '..' in path.parts:
+        raise ValueError('PROTECTED_FILE_UNAVAILABLE')
+    if os.name == 'nt':
+        from bt_api_py._win32_security import (
+            Win32SecurityUnavailable,
+            read_bounded_windows_with_stamp,
+        )
+
+        try:
+            return read_bounded_windows_with_stamp(path, limit, protected=True)
+        except (Win32SecurityUnavailable, OSError, ValueError):
+            raise ValueError('PROTECTED_FILE_UNAVAILABLE') from None
+    if os.name != 'posix':
         raise ValueError('PROTECTED_FILE_UNAVAILABLE')
     fd = os.open('/', os.O_RDONLY | os.O_DIRECTORY)
     try:

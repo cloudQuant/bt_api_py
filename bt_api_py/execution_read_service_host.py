@@ -187,7 +187,7 @@ def _directory(path):
         raise ReadServiceError('INVALID_STORAGE')
 
 
-def _check_existing(config):
+def _check_existing(config, *, borrowed=None):
     """Reject an old/mismatched existing host before its constructor can migrate."""
     root = config.journal_root
     account_hash = hashlib.sha256(config.local_scope.account_key.encode()).hexdigest()
@@ -196,7 +196,30 @@ def _check_existing(config):
     if not marker.exists():
         # The host rejects orphaned or unrecognized entries before creating anything.
         return
-    data = json.loads(read_bounded(marker, 4096, protected=True))
+    if os.name == "nt" and borrowed is not None:
+        # On Windows, AccountJournalHost holds a mandatory byte-range lock on
+        # marker via its own _owner_fd, which rejects os.read() on a second
+        # handle even in the same process. Verify the marker's path/reparse/
+        # owner/ACL/link-count directly and read the manifest via the already
+        # verified borrowed owner handle.
+        from bt_api_py._win32_security import (
+            Win32SecurityUnavailable,
+            inspect_owner,
+            is_reparse_point,
+        )
+
+        try:
+            minfo = marker.stat(follow_symlinks=False)
+            mowner = inspect_owner(marker)
+            if (is_reparse_point(marker) or not stat.S_ISREG(minfo.st_mode)
+                    or not mowner.is_current_user or mowner.others_writable
+                    or minfo.st_nlink != 1):
+                raise ValueError
+            data = borrowed._read_manifest()
+        except (OSError, ValueError, Win32SecurityUnavailable):
+            raise ReadServiceError('INVALID_STORAGE') from None
+    else:
+        data = json.loads(read_bounded(marker, 4096, protected=True))
     if (type(data) is not dict or data.get('storage_id') != config.storage_id
             or data.get('account') != account_hash or data.get('database') != database.name):
         raise ReadServiceError('INVALID_STORAGE')
@@ -308,7 +331,7 @@ class ReadServiceHost:
             borrowed = self._borrowed_journal() if self._borrowed_from is not None else None
             _directory(config.journal_root)
             _directory(config.audit_root)
-            _check_existing(config)
+            _check_existing(config, borrowed=borrowed)
             public, secret, client_key = _keys(config)
             self.journal = borrowed if borrowed is not None else AccountJournalHost(
                 root=str(config.journal_root), scope=config.local_scope, storage_id=config.storage_id)
