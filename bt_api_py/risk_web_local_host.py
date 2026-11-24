@@ -141,6 +141,26 @@ def loopback_origin(origin: object) -> tuple[str, int]:
     return "127.0.0.1", port
 
 
+def _risk_runtime_usable(runtime: Any) -> bool:
+    """Return True only when the operator runtime is running, healthy, and peer-proven."""
+    try:
+        state = runtime.status()
+    except Exception:
+        return False
+    if state.state != "running" or not state.thread_alive or not state.healthy:
+        return False
+    remaining = getattr(state, "min_socket_message_ids_remaining", None)
+    if type(remaining) is int and remaining <= 32:
+        return False
+    active_bindings = [b for b in state.bindings if b.active]
+    if not active_bindings:
+        return False
+    return all(
+        b.authenticated_peer is not None and b.server_key_fingerprint is not None
+        for b in active_bindings
+    )
+
+
 def build_admin_caller(
     runtime: Any,
     *,
@@ -150,6 +170,7 @@ def build_admin_caller(
     service_id: str,
     instance_id: str,
     peer: WireIdentity,
+    runtime_resolver: Callable[[], Any] | None = None,
 ) -> Callable[[str, dict, float], Mapping]:
     """The Web adapter's admin caller over one operator registration; it never resends.
 
@@ -199,8 +220,9 @@ def build_admin_caller(
             raise RiskAdminCallError("NOT_SENT", "INVALID_ARGUMENTS")
         if os.getpid() != pid:
             raise RiskAdminCallError("NOT_SENT", "WRONG_PROCESS")
+        active_runtime = runtime_resolver() if runtime_resolver is not None else runtime
         try:
-            bound = runtime.call_bound(
+            bound = active_runtime.call_bound(
                 RISK_ADMIN_MOUNT,
                 operation,
                 arguments,
@@ -264,9 +286,11 @@ class LocalRiskWebHost:
         raw, self._config_stamp = _protected_bytes(self._path)
         self._config_digest = hashlib.sha256(raw).digest()
         self._lock = threading.Lock()
+        self._reconnect_lock = threading.Lock()
         self._sessions: dict[bytes, tuple[str, float]] = {}
         self._closed = False
         self._invalidated = False
+        self._started = False
         try:
             config = _fields(
                 json.loads(raw.decode("utf-8"), object_pairs_hook=_unique_object), _CONFIG_FIELDS
@@ -362,7 +386,7 @@ class LocalRiskWebHost:
                     raise ValueError("INVALID_PEER")
                 return peer
 
-            self._runtime = ThreadedServiceClientRuntime(
+            self._runtime_factory = lambda: ThreadedServiceClientRuntime(
                 lambda: ServiceClientRuntime(
                     client_config,
                     identity=identity,
@@ -374,6 +398,7 @@ class LocalRiskWebHost:
                 ),
                 require_unregister_ack=True,
             )
+            self._runtime = self._runtime_factory()
             self._identity = identity
             self._operations = frozenset(operations)
             self._token_hash = item["login_token_sha256"]
@@ -385,6 +410,7 @@ class LocalRiskWebHost:
                 service_id=service_id,
                 instance_id=item["instance_id"],
                 peer=peer,
+                runtime_resolver=self._ensure_runtime,
             )
             self.origin = config["origin"].rstrip("/")
             self.app = create_app(
@@ -416,6 +442,7 @@ class LocalRiskWebHost:
                 raise ValueError("RISK_ADMIN_UNAVAILABLE")
             if not self._current():
                 raise ValueError("CONFIG_CHANGED")
+            self._started = True
         except Exception:
             try:
                 self.close()
@@ -424,18 +451,58 @@ class LocalRiskWebHost:
             raise RuntimeError("RISK_ADMIN_UNAVAILABLE") from None
         return self
 
+    def _ensure_runtime(self) -> Any:
+        current = self._runtime
+        if _risk_runtime_usable(current) or not self._started or self._closed:
+            return current
+        with self._reconnect_lock:
+            current = self._runtime
+            if _risk_runtime_usable(current) or not self._started or not self._current():
+                return current
+            # Cleanly unregister and close the retired/unhealthy runtime before
+            # creating a fresh CURVE registration; fail closed on uncertain cleanup.
+            try:
+                st = current.status()
+                if st.state == "closed" and not st.thread_alive:
+                    closed = st
+                else:
+                    closed = current.close(timeout_seconds=10)
+            except Exception:
+                return current
+            if closed.thread_alive or closed.cleanup_failures or closed.unregister_uncertainties:
+                return current
+            new_runtime = self._runtime_factory()
+            try:
+                started = new_runtime.start(timeout_seconds=10)
+                if not started.healthy or not _risk_runtime_usable(new_runtime) or not self._current():
+                    try:
+                        new_runtime.close(timeout_seconds=10)
+                    except Exception:
+                        pass
+                    return current
+            except Exception:
+                try:
+                    new_runtime.close(timeout_seconds=10)
+                except Exception:
+                    pass
+                return current
+            self._runtime = new_runtime
+            return new_runtime
+
     def close(self) -> None:
         """Close this host's own registration; the Risk service keeps running unchanged."""
         self._closed = True
+        self._started = False
         with self._lock:
             self._sessions.clear()
-        try:
-            result = self._runtime.close(timeout_seconds=10)
-            failed = bool(
-                result.thread_alive or result.cleanup_failures or result.unregister_uncertainties
-            )
-        except Exception:
-            failed = True
+        with self._reconnect_lock:
+            try:
+                result = self._runtime.close(timeout_seconds=10)
+                failed = bool(
+                    result.thread_alive or result.cleanup_failures or result.unregister_uncertainties
+                )
+            except Exception:
+                failed = True
         if failed:
             raise RuntimeError("RISK_WEB_CLEANUP_UNCERTAIN")
 

@@ -221,3 +221,222 @@ def test_execution_read_check_existing_with_borrowed_locked_owner_on_windows():
             _check_existing(bad_cfg, borrowed=host)
     finally:
         host.close()
+
+
+def test_local_gateway_and_risk_web_hosts_reregister_after_socket_retirement(monkeypatch):
+    """Simulate ZmqServiceClient retiring Socket #1: service.renew stays alive
+    (healthy=True) while authenticated_peer becomes None. Both LocalGatewayWebHost
+    and LocalRiskWebHost must cleanly close and re-register a fresh runtime, and
+    must fail closed when close reports uncertain cleanup."""
+    import base64
+    import hashlib
+    import zmq
+
+    from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
+    from bt_api_py import gateway_web_local_host as gw_mod
+    from bt_api_py import risk_web_local_host as risk_mod
+    from bt_api_py.service_runtime_thread import BindingSnapshot, RuntimeSnapshot
+
+    srv_pub, _srv_sec = zmq.curve_keypair()
+    cli_pub, cli_sec = zmq.curve_keypair()
+    tok = "a" * 64
+    tok_hash = hashlib.sha256(tok.encode("ascii")).hexdigest()
+    root = _make_private_dir()
+
+    # --- 1) LocalGatewayWebHost ---
+    gw_identity = WireIdentity(WireRole.APPLICATION_CLIENT, "op-gw", "alice")
+    gw_peer = WireIdentity(WireRole.SERVICE, "gw-svc-p", "gw-svc")
+    gw_scope = WireScope("domain", account_ref="acct-1")
+    created_gw = []
+
+    class FakeGwRuntime:
+        def __init__(self, _factory):
+            self.idx = len(created_gw)
+            self.state = "new"
+            self.thread_alive = True
+            self.healthy = True
+            self.peer_ok = True
+            self.close_uncertain = False
+            self.closed_calls = 0
+            created_gw.append(self)
+
+        def status(self):
+            b = BindingSnapshot(
+                registration_id=f"reg-{self.idx}",
+                service_epoch="ep-1",
+                active=True,
+                mount="application.direct_write",
+                service_id="gw-svc",
+                instance_id="gw-1",
+                scope_ref="scope-1",
+                scope=gw_scope,
+                operations=frozenset({"direct.control.identity", "direct.control.list"}),
+                required=True,
+                authenticated_peer=gw_peer if self.peer_ok else None,
+                server_key_fingerprint="b" * 64 if self.peer_ok else None,
+            )
+            return RuntimeSnapshot(
+                self.state, self.thread_alive, self.healthy, None, (b,), 0,
+                1 if self.close_uncertain else 0, gw_identity, f"run-{self.idx}",
+            )
+
+        def start(self, *, timeout_seconds=10):
+            self.state = "running"
+            return self.status()
+
+        def close(self, *, timeout_seconds=10):
+            self.closed_calls += 1
+            self.state = "closed"
+            self.thread_alive = False
+            return RuntimeSnapshot(
+                "closed", False, False, None, (), 0,
+                1 if self.close_uncertain else 0, gw_identity,
+            )
+
+    monkeypatch.setattr(gw_mod, "ThreadedServiceClientRuntime", FakeGwRuntime)
+    gw_cfg = _write_protected(
+        root / "gw_web.json",
+        json.dumps({
+            "schema_version": 1,
+            "origin": "http://127.0.0.1:8791",
+            "receipt_key_base64": base64.b64encode(b"k" * 32).decode("ascii"),
+            "receipt_key_id": "k1",
+            "operators": [{
+                "principal_ref": "op-gw",
+                "actor_ref": "alice",
+                "login_token_sha256": tok_hash,
+                "scope_id": "desk",
+                "scope_ref": "scope-1",
+                "execution_domain_ref": "domain",
+                "account_ref": "acct-1",
+                "strategy_ref": None,
+                "service_id": "gw-svc",
+                "service_principal_ref": "gw-svc-p",
+                "instance_id": "gw-1",
+                "endpoint": "tcp://127.0.0.1:59991",
+                "server_public_key": srv_pub.decode("ascii"),
+                "client_public_key": cli_pub.decode("ascii"),
+                "client_secret_key": cli_sec.decode("ascii"),
+                "operations": ["direct.control.identity", "direct.control.list"],
+            }],
+        }).encode("utf-8"),
+    )
+    gw_host = gw_mod.LocalGatewayWebHost(gw_cfg).start()
+    try:
+        op = gw_host._operators[0]
+        session = SimpleNamespace(principal_ref="op-gw", actor_ref="alice")
+        rt0 = gw_host._resolve_runtime(session, op.web_scope)
+        assert rt0 is created_gw[0] and len(created_gw) == 1
+
+        # Simulate retired socket: healthy=True, state="running", but authenticated_peer=None.
+        rt0.peer_ok = False
+        rt1 = gw_host._resolve_runtime(session, op.web_scope)
+        assert rt1 is created_gw[1]
+        assert rt0.closed_calls == 1
+        assert rt1.status().bindings[0].authenticated_peer == gw_peer
+
+        # Uncertain cleanup must fail closed without creating a replacement runtime.
+        rt1.peer_ok = False
+        rt1.close_uncertain = True
+        rt_still = gw_host._resolve_runtime(session, op.web_scope)
+        assert rt_still is rt1 and len(created_gw) == 2
+        rt1.close_uncertain = False
+    finally:
+        gw_host.close()
+
+    # --- 2) LocalRiskWebHost ---
+    risk_identity = WireIdentity(WireRole.APPLICATION_CLIENT, "op-risk", "risk-actor")
+    risk_peer = WireIdentity(WireRole.SERVICE, "risk-svc-p", "risk-svc")
+    risk_scope = WireScope("domain", account_ref="acct-1")
+    created_risk = []
+
+    class FakeRiskRuntime:
+        def __init__(self, _factory, *, require_unregister_ack=False):
+            self.idx = len(created_risk)
+            self.require_unregister_ack = require_unregister_ack
+            self.state = "new"
+            self.thread_alive = True
+            self.healthy = True
+            self.peer_ok = True
+            self.close_uncertain = False
+            self.closed_calls = 0
+            created_risk.append(self)
+
+        def status(self):
+            b = BindingSnapshot(
+                registration_id=f"rreg-{self.idx}",
+                service_epoch="ep-1",
+                active=True,
+                mount=risk_mod.RISK_ADMIN_MOUNT,
+                service_id="risk-svc",
+                instance_id="risk-1",
+                scope_ref="risk-scope",
+                scope=risk_scope,
+                operations=frozenset({"risk.admin.status"}),
+                required=True,
+                authenticated_peer=risk_peer if self.peer_ok else None,
+                server_key_fingerprint="c" * 64 if self.peer_ok else None,
+            )
+            return RuntimeSnapshot(
+                self.state, self.thread_alive, self.healthy, None, (b,), 0,
+                1 if self.close_uncertain else 0, risk_identity, f"rrun-{self.idx}",
+            )
+
+        def start(self, *, timeout_seconds=10):
+            self.state = "running"
+            return self.status()
+
+        def call_bound(self, *args, **kwargs):
+            return None
+
+        def close(self, *, timeout_seconds=10):
+            self.closed_calls += 1
+            self.state = "closed"
+            self.thread_alive = False
+            return RuntimeSnapshot(
+                "closed", False, False, None, (), 0,
+                1 if self.close_uncertain else 0, risk_identity,
+            )
+
+    monkeypatch.setattr(risk_mod, "ThreadedServiceClientRuntime", FakeRiskRuntime)
+    risk_cfg = _write_protected(
+        root / "risk_web.json",
+        json.dumps({
+            "schema_version": 1,
+            "origin": "http://127.0.0.1:8792",
+            "operator": {
+                "principal_ref": "op-risk",
+                "actor_ref": "risk-actor",
+                "login_token_sha256": tok_hash,
+                "execution_domain_ref": "domain",
+                "account_ref": "acct-1",
+                "scope_ref": "risk-scope",
+                "service_id": "risk-svc",
+                "service_principal_ref": "risk-svc-p",
+                "instance_id": "risk-1",
+                "endpoint": "tcp://127.0.0.1:59992",
+                "server_public_key": srv_pub.decode("ascii"),
+                "client_public_key": cli_pub.decode("ascii"),
+                "client_secret_key": cli_sec.decode("ascii"),
+                "operations": ["risk.admin.status"],
+            },
+        }).encode("utf-8"),
+    )
+    risk_host = risk_mod.LocalRiskWebHost(risk_cfg).start()
+    try:
+        rt0 = risk_host._ensure_runtime()
+        assert rt0 is created_risk[0] and len(created_risk) == 1
+
+        rt0.peer_ok = False
+        rt1 = risk_host._ensure_runtime()
+        assert rt1 is created_risk[1]
+        assert rt0.closed_calls == 1
+        assert rt1.status().bindings[0].authenticated_peer == risk_peer
+
+        rt1.peer_ok = False
+        rt1.close_uncertain = True
+        rt_still = risk_host._ensure_runtime()
+        assert rt_still is rt1 and len(created_risk) == 2
+        rt1.close_uncertain = False
+    finally:
+        risk_host.close()

@@ -119,13 +119,35 @@ def _secret_key(value):
         raise ValueError('CONFIG_INVALID') from None
 
 
-@dataclass(frozen=True)
+@dataclass
 class _Operator:
     token_hash: str = field(repr=False)
     identity: WireIdentity
     scope: WireScope
     web_scope: object
     runtime: ThreadedServiceClientRuntime = field(repr=False)
+    runtime_factory: object = field(repr=False)
+    reconnect_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+
+
+def _runtime_usable(runtime: ThreadedServiceClientRuntime) -> bool:
+    """Return True only when the runtime is running, healthy, and peer-proven."""
+    try:
+        state = runtime.status()
+    except Exception:
+        return False
+    if state.state != 'running' or not state.thread_alive or not state.healthy:
+        return False
+    remaining = getattr(state, 'min_socket_message_ids_remaining', None)
+    if type(remaining) is int and remaining <= 32:
+        return False
+    active_bindings = [b for b in state.bindings if b.active]
+    if not active_bindings:
+        return False
+    return all(
+        b.authenticated_peer is not None and b.server_key_fingerprint is not None
+        for b in active_bindings
+    )
 
 
 class LocalGatewayWebHost:
@@ -147,6 +169,7 @@ class LocalGatewayWebHost:
         self._operators = []
         self._closed = False
         self._invalidated = False
+        self._started = False
         try:
             config = json.loads(raw.decode('utf-8'), object_pairs_hook=_unique_object)
             _fields(config, ('schema_version', 'origin', 'receipt_key_base64', 'receipt_key_id', 'operators'))
@@ -201,10 +224,19 @@ class LocalGatewayWebHost:
                         'endpoints': {'rpc_connect': item['endpoint']}, 'security_profile_ref': 'operator-key'}}},
                 })
                 factory = ZmqTransportFactory({'operator-key': ClientCurveKeys(server_key, public_key, secret_key)})
-                runtime = ThreadedServiceClientRuntime(lambda c=client_config, i=identity, s=scope, p=peer, f=factory, o=requested:
-                    ServiceClientRuntime(c, identity=i, scope_resolver=lambda _: s, peer_resolver=lambda _: p,
-                                         transport_factory=f, requested_operations=o))
-                self._operators.append(_Operator(item['login_token_sha256'], identity, scope, web_scope, runtime))
+                runtime_factory = (
+                    lambda c=client_config, i=identity, s=scope, p=peer, f=factory, o=requested:
+                    ThreadedServiceClientRuntime(
+                        lambda c=c, i=i, s=s, p=p, f=f, o=o: ServiceClientRuntime(
+                            c, identity=i, scope_resolver=lambda _: s, peer_resolver=lambda _: p,
+                            transport_factory=f, requested_operations=o,
+                        )
+                    )
+                )
+                runtime = runtime_factory()
+                self._operators.append(
+                    _Operator(item['login_token_sha256'], identity, scope, web_scope, runtime, runtime_factory)
+                )
             self.origin = config['origin']
             self.app = create_app(origin=self.origin, authenticate=self._authenticate,
                 resolve_runtime=self._resolve_runtime, static_dir=static_dir,
@@ -235,6 +267,7 @@ class LocalGatewayWebHost:
                     raise ValueError('GATEWAY_UNAVAILABLE')
             if not self._current():
                 raise ValueError('CONFIG_CHANGED')
+            self._started = True
         except Exception:
             self.close()
             raise RuntimeError('GATEWAY_UNAVAILABLE') from None
@@ -242,16 +275,18 @@ class LocalGatewayWebHost:
 
     def close(self):
         self._closed = True
+        self._started = False
         with self._lock:
             self._sessions.clear()
         failed = False
         for operator in self._operators:
-            try:
-                result = operator.runtime.close(timeout_seconds=10)
-                if result.thread_alive or result.cleanup_failures or result.unregister_uncertainties:
+            with operator.reconnect_lock:
+                try:
+                    result = operator.runtime.close(timeout_seconds=10)
+                    if result.thread_alive or result.cleanup_failures or result.unregister_uncertainties:
+                        failed = True
+                except Exception:
                     failed = True
-            except Exception:
-                failed = True
         if failed:
             raise RuntimeError('GATEWAY_CLEANUP_UNCERTAIN')
 
@@ -268,6 +303,44 @@ class LocalGatewayWebHost:
         return AuthenticatedWebSession(operator.identity.principal_ref, operator.identity.actor_ref,
                                        csrf, (operator.web_scope,))
 
+    def _ensure_operator_runtime(self, operator: _Operator) -> ThreadedServiceClientRuntime:
+        current = operator.runtime
+        if _runtime_usable(current) or not self._started or self._closed:
+            return current
+        with operator.reconnect_lock:
+            current = operator.runtime
+            if _runtime_usable(current) or not self._started or not self._current():
+                return current
+            # Cleanly unregister and retire the dead/socket-retired runtime before
+            # creating a fresh CURVE registration; fail closed if cleanup is uncertain.
+            try:
+                st = current.status()
+                if st.state == 'closed' and not st.thread_alive:
+                    closed = st
+                else:
+                    closed = current.close(timeout_seconds=10)
+            except Exception:
+                return current
+            if closed.thread_alive or closed.cleanup_failures or closed.unregister_uncertainties:
+                return current
+            new_runtime = operator.runtime_factory()
+            try:
+                started = new_runtime.start(timeout_seconds=10)
+                if not started.healthy or not _runtime_usable(new_runtime) or not self._current():
+                    try:
+                        new_runtime.close(timeout_seconds=10)
+                    except Exception:
+                        pass
+                    return current
+            except Exception:
+                try:
+                    new_runtime.close(timeout_seconds=10)
+                except Exception:
+                    pass
+                return current
+            operator.runtime = new_runtime
+            return new_runtime
+
     def _resolve_runtime(self, session, scope):
         if not self._current():
             raise ValueError('AUTHENTICATION_REQUIRED')
@@ -275,7 +348,7 @@ class LocalGatewayWebHost:
                    and operator.identity.actor_ref == session.actor_ref and operator.web_scope == scope]
         if len(matches) != 1:
             raise ValueError('GATEWAY_SCOPE_UNAVAILABLE')
-        return matches[0].runtime
+        return self._ensure_operator_runtime(matches[0])
 
     def _install_login(self):
         from fastapi import Request
