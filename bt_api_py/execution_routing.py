@@ -2080,6 +2080,7 @@ class ExecutionOrderRouter:
                 and reply.request_sha256 == record.request_sha256
                 and reply.parent_ref == request["spec"]["parent_ref"]
                 and reply.code is None
+                and reply.execution_state in (None, "REJECTED")
             ):
                 return ExecutionRoutingStatus(
                     routed=True,
@@ -2088,6 +2089,7 @@ class ExecutionOrderRouter:
                     request_sha256=record.request_sha256,
                     parent_ref=reply.parent_ref,
                     configuration_id=record.configuration_id,
+                    execution_state=reply.execution_state,
                     cancel_outcome=cancel_outcome,
                     cancel_code=cancel_code,
                 )

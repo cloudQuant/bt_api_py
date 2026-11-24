@@ -55,6 +55,12 @@ class RiskParentPort:
         with self._reserved_lock:
             return type(parent_ref) is str and parent_ref in self._reserved
 
+    def record_reserved_parent(self, parent_ref: object) -> None:
+        """Record an authoritatively confirmed RESERVED parent in this process."""
+        if type(parent_ref) is str and parent_ref:
+            with self._reserved_lock:
+                self._reserved.add(parent_ref)
+
     def available(self) -> bool:
         try:
             return self._client.available() is True
@@ -121,6 +127,8 @@ class RiskParentPort:
             return {"status": "ACCEPTED", "code": None}
         if result.outcome == "ANSWERED" and result.parent_outcome == "DENIED":
             return {"status": "REJECTED", "code": result.code or "risk_parent_denied"}
+        if result.outcome == "NOT_SENT":
+            return {"status": "REJECTED", "code": result.code or "risk_parent_not_sent"}
         return {"status": "UNKNOWN", "code": result.code or "risk_parent_unavailable"}
 
     def reserve_child(self, payload: Mapping) -> Mapping:

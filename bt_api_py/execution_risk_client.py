@@ -37,7 +37,26 @@ from bt_api_py.service_runtime import (
     ServiceRuntimeRequestNotSentError,
     ZmqTransportFactory,
 )
-from bt_api_py.service_runtime_thread import ThreadedServiceClientRuntime
+from bt_api_py.service_runtime_thread import ThreadedRuntimeError, ThreadedServiceClientRuntime
+
+_PRE_SEND_THREADED_CODES = frozenset({
+    "NOT_READY",
+    "QUEUE_FULL",
+    "TIMEOUT_BEFORE_START",
+    "CLOSED_BEFORE_START",
+    "INVALID_ARGUMENTS",
+    "WRONG_PROCESS",
+    "OWNER_THREAD_REENTRY",
+})
+_REGISTRY_REFUSAL_CODES = frozenset({
+    "CAPABILITY_UNAVAILABLE",
+    "CLOSED",
+    "DENIED",
+    "NOT_REGISTERED",
+    "POLICY_REQUIREMENT_UNMET",
+    "SCOPE_DENIED",
+    "STALE_EPOCH",
+})
 
 UPSTREAM_RISK_ORDER_MOUNT = "upstream.risk_order"
 
@@ -266,11 +285,11 @@ class ExecutionRiskServiceClient:
 
     def _rpc(
         self, operation: str, arguments: dict[str, Any], timeout_seconds: float
-    ) -> tuple[dict[str, Any] | None, str | None]:
+    ) -> tuple[dict[str, Any] | None, str | None, bool]:
         try:
             reg_id, epoch = self._registration(operation)
         except Exception:
-            return None, "ROUTE_UNAVAILABLE"
+            return None, "ROUTE_UNAVAILABLE", True
         try:
             raw = self._runtime.call(
                 UPSTREAM_RISK_ORDER_MOUNT,
@@ -282,18 +301,41 @@ class ExecutionRiskServiceClient:
             )
             detached = _detach_wire(raw)
             if type(detached) is not dict:
-                return None, "INVALID_REPLY"
-            return detached, None
+                return None, "INVALID_REPLY", False
+            try:
+                if self._registration(operation) != (reg_id, epoch):
+                    return None, "INVALID_REPLY", False
+            except Exception:
+                return None, "INVALID_REPLY", False
+            return detached, None, False
         except ServiceRuntimeRequestNotSentError as exc:
-            return None, getattr(exc, "code", None) or "NOT_SENT"
+            return None, getattr(exc, "code", None) or "NOT_SENT", True
+        except ThreadedRuntimeError as exc:
+            code = getattr(exc, "code", None) or "UNKNOWN"
+            return None, code, code in _PRE_SEND_THREADED_CODES
         except ServiceRuntimeError as exc:
-            return None, getattr(exc, "service_reply_code", None) or getattr(exc, "code", None) or "UNKNOWN"
+            reply_code = getattr(exc, "service_reply_code", None)
+            err_code = reply_code or getattr(exc, "code", None) or "UNKNOWN"
+            if (
+                type(reply_code) is str
+                and reply_code == getattr(exc, "code", None)
+                and reply_code in _REGISTRY_REFUSAL_CODES
+            ):
+                try:
+                    unchanged = self._registration(operation) == (reg_id, epoch)
+                except Exception:
+                    unchanged = False
+                if unchanged:
+                    return None, reply_code, True
+            return None, err_code, False
         except Exception:
-            return None, "UNKNOWN"
+            return None, "UNKNOWN", False
 
-    def _parse_parent_reply(self, raw: dict[str, Any] | None, err: str | None) -> RiskParentCallResult:
+    def _parse_parent_reply(
+        self, raw: dict[str, Any] | None, err: str | None, *, not_sent: bool = False
+    ) -> RiskParentCallResult:
         if raw is None:
-            return RiskParentCallResult("UNKNOWN", code=err)
+            return RiskParentCallResult("NOT_SENT" if not_sent else "UNKNOWN", code=err)
         try:
             if (
                 raw.get("schema") != RISK_SERVICE_SCHEMA
@@ -326,24 +368,42 @@ class ExecutionRiskServiceClient:
     ) -> RiskParentCallResult:
         if type(parent) is not RiskParentView or not _timeout(timeout_seconds):
             return RiskParentCallResult("NOT_SENT", code="INVALID_REQUEST")
-        raw, err = self._rpc("risk.parent.reserve", {"parent": parent.to_mapping()}, timeout_seconds)
-        return self._parse_parent_reply(raw, err)
+        raw, err, not_sent = self._rpc("risk.parent.reserve", {"parent": parent.to_mapping()}, timeout_seconds)
+        return self._parse_parent_reply(raw, err, not_sent=not_sent)
 
     def parent_release(
         self, parent_ref: str, *, timeout_seconds: float = 15.0
     ) -> RiskParentCallResult:
         if not _ref(parent_ref) or not _timeout(timeout_seconds):
             return RiskParentCallResult("NOT_SENT", code="INVALID_REQUEST")
-        raw, err = self._rpc("risk.parent.release", {"parent_ref": parent_ref}, timeout_seconds)
-        return self._parse_parent_reply(raw, err)
+        raw, err, not_sent = self._rpc("risk.parent.release", {"parent_ref": parent_ref}, timeout_seconds)
+        return self._parse_parent_reply(raw, err, not_sent=not_sent)
 
     def parent_status(
         self, parent_ref: str, *, timeout_seconds: float = 15.0
     ) -> RiskParentCallResult:
         if not _ref(parent_ref) or not _timeout(timeout_seconds):
             return RiskParentCallResult("NOT_SENT", code="INVALID_REQUEST")
-        raw, err = self._rpc("risk.parent.status", {"parent_ref": parent_ref}, timeout_seconds)
-        return self._parse_parent_reply(raw, err)
+        raw, err, not_sent = self._rpc("risk.parent.status", {"parent_ref": parent_ref}, timeout_seconds)
+        return self._parse_parent_reply(raw, err, not_sent=not_sent)
+
+    def order_status(
+        self, request_key: str, *, timeout_seconds: float = 15.0
+    ) -> RiskOrderResult:
+        if not _ref(request_key) or not _timeout(timeout_seconds):
+            return RiskOrderResult("unknown", "UNKNOWN")
+        raw, err, _not_sent = self._rpc("risk.order.status", {"request_key": request_key}, timeout_seconds)
+        if raw is None:
+            return RiskOrderResult(
+                request_key, "UNKNOWN", code=err if err in RISK_REFUSAL_CODES else None
+            )
+        try:
+            parsed = RiskOrderResult.from_mapping(raw)
+            if parsed.request_key != request_key:
+                return RiskOrderResult(request_key, "UNKNOWN")
+            return parsed
+        except Exception:
+            return RiskOrderResult(request_key, "UNKNOWN")
 
     def child_reserve(
         self,
@@ -378,7 +438,7 @@ class ExecutionRiskServiceClient:
         except Exception:
             return RiskOrderResult(key, "DENIED", code="risk_request_invalid")
 
-        raw, err = self._rpc(
+        raw, err, not_sent = self._rpc(
             "risk.order.reserve.v2",
             {
                 "request_key": child_view.request_key,
@@ -389,6 +449,10 @@ class ExecutionRiskServiceClient:
             timeout_seconds,
         )
         if raw is None:
+            if not_sent:
+                return RiskOrderResult(
+                    key, "DENIED", code=err if err in RISK_REFUSAL_CODES else None
+                )
             return RiskOrderResult(
                 key, "UNKNOWN", code=err if err in RISK_REFUSAL_CODES else None
             )
@@ -421,7 +485,7 @@ class ExecutionRiskServiceClient:
                 "DENIED",
                 code="risk_request_invalid",
             )
-        raw, err = self._rpc(
+        raw, err, _not_sent = self._rpc(
             "risk.order.dispatch.v2",
             {
                 "request_key": request_key,

@@ -40,6 +40,8 @@ from bt_api_py.risk_parent_port import RiskParentPort
 from bt_api_py.service_runtime import ClientCurveKeys
 
 _CLOSE_OFFSETS = frozenset({"close", "close_today", "close_yesterday"})
+_UNKNOWN_RECONCILE_INTERVAL_SECONDS = 5.0
+_UNKNOWN_NOT_FOUND_GRACE_NS = 30_000_000_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -177,6 +179,7 @@ class ExecutionParentDispatcher:
         self._client = ExecutionRiskServiceClient(client_cfg)
         self._risk_port = RiskParentPort(self._client, route=dispatch_config.route)
         self._next_poll = 0.0
+        self._next_reconcile = 0.0
         self._started = False
 
     def start(self, *, timeout_seconds: float = 15.0) -> None:
@@ -336,6 +339,45 @@ class ExecutionParentDispatcher:
 
         if risk_state != "ACCEPTED" or gateway_state != "PENDING":
             return
+
+        if not self._risk_port._parent_reserved(parent_id):
+            parent_status = self._client.parent_status(parent_id)
+            if parent_status.outcome == "ANSWERED" and parent_status.parent_outcome == "RESERVED":
+                self._risk_port.record_reserved_parent(parent_id)
+            elif parent_status.outcome == "ANSWERED" and parent_status.parent_outcome in (
+                "DENIED",
+                "RELEASED",
+            ):
+                now_ns = self._journal.intake_now_ns()
+                receipt = {
+                    "stage": "parent_status_recheck",
+                    "status": "REJECTED",
+                    "code": parent_status.code or f"risk_parent_{parent_status.parent_outcome.lower()}",
+                }
+                with self._journal.intake_scope(nonblocking=False) as store:
+                    with store._lock:
+                        with SqliteExecutionStore._transaction(store) as cursor:
+                            cursor.execute(
+                                "UPDATE execution_parent_records "
+                                "SET gateway_state='REJECTED', gateway_receipt_json=?, updated_at_ns=? "
+                                "WHERE scope_key=? AND parent_id=? AND gateway_state='PENDING'",
+                                (
+                                    canonical_json(receipt),
+                                    now_ns,
+                                    self._parent_scope_key,
+                                    parent_id,
+                                ),
+                            )
+                self._emit_log(
+                    "EXECUTION_PARENT_RECONCILED",
+                    parent_id=parent_id,
+                    gateway_state="REJECTED",
+                    source_outcome=parent_status.parent_outcome,
+                    code=receipt["code"],
+                )
+                return
+            else:
+                return
 
         child_id = f"{parent_id}:c0"
         try:
@@ -499,6 +541,211 @@ class ExecutionParentDispatcher:
                 symbol=child_view.instrument.native_symbol,
             )
 
+    def _fetch_unknown_parents(self) -> list[dict[str, Any]]:
+        try:
+            with self._journal.intake_scope(nonblocking=True) as store:
+                if not store._lock.acquire(blocking=False):
+                    return []
+                try:
+                    with SqliteExecutionStore._read_transaction(store) as cursor:
+                        rows = cursor.execute(
+                            "SELECT parent_id, risk_state, gateway_state, gateway_receipt_json, updated_at_ns "
+                            "FROM execution_parent_records "
+                            "WHERE scope_key=? AND cancel_state='NONE' "
+                            "AND ((risk_state='UNKNOWN' AND gateway_state='PENDING') "
+                            "OR (risk_state='ACCEPTED' AND gateway_state='UNKNOWN')) "
+                            "ORDER BY created_at_ns ASC LIMIT 16",
+                            (self._parent_scope_key,),
+                        ).fetchall()
+                        return [dict(row) for row in rows]
+                finally:
+                    store._lock.release()
+        except Exception:
+            return []
+
+    def _reconcile_parent_risk_cas(
+        self, parent_id: str, *, risk_state: str, receipt: dict[str, Any]
+    ) -> bool:
+        now_ns = self._journal.intake_now_ns()
+        with self._journal.intake_scope(nonblocking=False) as store:
+            with store._lock:
+                with SqliteExecutionStore._transaction(store) as cursor:
+                    cur = cursor.execute(
+                        "UPDATE execution_parent_records "
+                        "SET risk_state=?, risk_receipt_json=?, updated_at_ns=? "
+                        "WHERE scope_key=? AND parent_id=? "
+                        "AND risk_state='UNKNOWN' AND gateway_state='PENDING' AND cancel_state='NONE'",
+                        (
+                            risk_state,
+                            canonical_json(receipt),
+                            now_ns,
+                            self._parent_scope_key,
+                            parent_id,
+                        ),
+                    )
+                    return cur.rowcount > 0
+
+    def _reconcile_child_reserve_rejected_cas(
+        self, parent_id: str, child_id: str, *, receipt: dict[str, Any]
+    ) -> bool:
+        now_ns = self._journal.intake_now_ns()
+        with self._journal.intake_scope(nonblocking=False) as store:
+            with store._lock:
+                with SqliteExecutionStore._transaction(store) as cursor:
+                    child = cursor.execute(
+                        "SELECT state FROM execution_parent_children "
+                        "WHERE scope_key=? AND parent_id=? AND child_id=?",
+                        (self._parent_scope_key, parent_id, child_id),
+                    ).fetchone()
+                    if child is None or child["state"] != "UNKNOWN":
+                        return False
+                    cur = cursor.execute(
+                        "UPDATE execution_parent_records "
+                        "SET gateway_state='REJECTED', gateway_receipt_json=?, updated_at_ns=? "
+                        "WHERE scope_key=? AND parent_id=? "
+                        "AND risk_state='ACCEPTED' AND gateway_state='UNKNOWN' AND cancel_state='NONE'",
+                        (
+                            canonical_json(receipt),
+                            now_ns,
+                            self._parent_scope_key,
+                            parent_id,
+                        ),
+                    )
+                    if cur.rowcount <= 0:
+                        return False
+                    cursor.execute(
+                        "UPDATE execution_parent_children SET state='TERMINAL', updated_at_ns=? "
+                        "WHERE scope_key=? AND parent_id=? AND child_id=? AND state='UNKNOWN'",
+                        (now_ns, self._parent_scope_key, parent_id, child_id),
+                    )
+                    return True
+
+    def _reconcile_unknown_parents(self) -> int:
+        rows = self._fetch_unknown_parents()
+        if not rows:
+            return 0
+        reconciled = 0
+        now_ns = self._journal.intake_now_ns()
+        for row in rows:
+            parent_id = str(row["parent_id"])
+            risk_state = str(row["risk_state"])
+            gateway_state = str(row["gateway_state"])
+            updated_at_ns = int(row["updated_at_ns"])
+            try:
+                if risk_state == "UNKNOWN" and gateway_state == "PENDING":
+                    res = self._client.parent_status(parent_id)
+                    if res.outcome != "ANSWERED":
+                        continue
+                    if res.parent_outcome in ("DENIED", "RELEASED"):
+                        receipt = {
+                            "status": "REJECTED",
+                            "code": res.code or f"risk_parent_{res.parent_outcome.lower()}_reconciled",
+                            "reconciled_from": res.parent_outcome,
+                        }
+                        if self._reconcile_parent_risk_cas(
+                            parent_id, risk_state="REJECTED", receipt=receipt
+                        ):
+                            reconciled += 1
+                            self._emit_log(
+                                "EXECUTION_PARENT_RECONCILED",
+                                parent_id=parent_id,
+                                risk_state="REJECTED",
+                                source_outcome=res.parent_outcome,
+                                code=receipt["code"],
+                            )
+                    elif res.parent_outcome == "RESERVED":
+                        self._risk_port.record_reserved_parent(parent_id)
+                        receipt = {"status": "ACCEPTED", "code": None, "reconciled_from": "RESERVED"}
+                        if self._reconcile_parent_risk_cas(
+                            parent_id, risk_state="ACCEPTED", receipt=receipt
+                        ):
+                            reconciled += 1
+                            self._emit_log(
+                                "EXECUTION_PARENT_RECONCILED",
+                                parent_id=parent_id,
+                                risk_state="ACCEPTED",
+                                source_outcome="RESERVED",
+                            )
+                    elif (
+                        res.parent_outcome == "NOT_FOUND"
+                        and now_ns - updated_at_ns >= _UNKNOWN_NOT_FOUND_GRACE_NS
+                    ):
+                        receipt = {
+                            "status": "REJECTED",
+                            "code": "risk_parent_not_found_reconciled",
+                            "reconciled_from": "NOT_FOUND",
+                        }
+                        if self._reconcile_parent_risk_cas(
+                            parent_id, risk_state="REJECTED", receipt=receipt
+                        ):
+                            reconciled += 1
+                            self._emit_log(
+                                "EXECUTION_PARENT_RECONCILED",
+                                parent_id=parent_id,
+                                risk_state="REJECTED",
+                                source_outcome="NOT_FOUND",
+                                code=receipt["code"],
+                            )
+                elif risk_state == "ACCEPTED" and gateway_state == "UNKNOWN":
+                    try:
+                        gw_receipt = json.loads(row.get("gateway_receipt_json") or "{}")
+                    except Exception:
+                        gw_receipt = {}
+                    if type(gw_receipt) is not dict or gw_receipt.get("stage") != "reserve_child":
+                        continue
+                    child_id = f"{parent_id}:c0"
+                    digest = hashlib.sha256(f"{parent_id}:{child_id}".encode("utf-8")).hexdigest()[:24]
+                    request_key = f"exec-child-{digest}"
+                    res = self._client.order_status(request_key)
+                    if res.outcome in ("DENIED", "RELEASED", "EXPIRED"):
+                        receipt = {
+                            "stage": "reserve_child",
+                            "status": "REJECTED",
+                            "code": res.code or f"risk_child_{res.outcome.lower()}_reconciled",
+                            "reconciled_from": res.outcome,
+                        }
+                        if self._reconcile_child_reserve_rejected_cas(
+                            parent_id, child_id, receipt=receipt
+                        ):
+                            reconciled += 1
+                            self._emit_log(
+                                "EXECUTION_CHILD_RECONCILED",
+                                parent_id=parent_id,
+                                child_id=child_id,
+                                gateway_state="REJECTED",
+                                source_outcome=res.outcome,
+                                code=receipt["code"],
+                            )
+                    elif (
+                        res.outcome == "NOT_FOUND"
+                        and now_ns - updated_at_ns >= _UNKNOWN_NOT_FOUND_GRACE_NS
+                    ):
+                        receipt = {
+                            "stage": "reserve_child",
+                            "status": "REJECTED",
+                            "code": "risk_child_not_found_reconciled",
+                            "reconciled_from": "NOT_FOUND",
+                        }
+                        if self._reconcile_child_reserve_rejected_cas(
+                            parent_id, child_id, receipt=receipt
+                        ):
+                            reconciled += 1
+                            self._emit_log(
+                                "EXECUTION_CHILD_RECONCILED",
+                                parent_id=parent_id,
+                                child_id=child_id,
+                                gateway_state="REJECTED",
+                                source_outcome="NOT_FOUND",
+                                code=receipt["code"],
+                            )
+            except Exception as exc:
+                self._emit_log(
+                    "EXECUTION_RECONCILE_STEP_ERROR",
+                    parent_id=parent_id,
+                    error=type(exc).__name__,
+                )
+        return reconciled
+
     def step(self) -> int:
         """Process pending parents if Risk is connected; returns count processed."""
         if not self._started:
@@ -509,8 +756,11 @@ class ExecutionParentDispatcher:
         self._next_poll = now + self._config.poll_interval_seconds
         if not self._risk_port.available():
             return 0
-        rows = self._fetch_pending_parents()
         processed = 0
+        if now >= self._next_reconcile:
+            self._next_reconcile = now + _UNKNOWN_RECONCILE_INTERVAL_SECONDS
+            processed += self._reconcile_unknown_parents()
+        rows = self._fetch_pending_parents()
         for row in rows:
             try:
                 self._process_parent(row)

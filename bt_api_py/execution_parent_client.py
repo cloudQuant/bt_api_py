@@ -33,6 +33,7 @@ class ExecutionParentObservation:
     request_sha256: str
     parent_ref: str | None = None
     code: str | None = None
+    execution_state: str | None = None
 
 
 class ExecutionParentClient:
@@ -144,6 +145,11 @@ class ExecutionParentClient:
                             request_id=request_id, request_sha256=digest)
             if order_type == 'limit' and raw == received:
                 return ExecutionParentObservation('LOCAL_RECEIVED', request_id, digest, parent_ref)
+            if (order_type == 'limit' and operation == QUERY
+                    and raw == dict(received, execution_state='REJECTED')):
+                return ExecutionParentObservation(
+                    'LOCAL_RECEIVED', request_id, digest, parent_ref, execution_state='REJECTED'
+                )
             if order_type != 'limit' and raw == rejected:
                 return ExecutionParentObservation('LOCAL_REJECTED', request_id, digest, code='UNSUPPORTED_ORDER_TYPE')
         except Exception:
