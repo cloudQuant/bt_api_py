@@ -2210,6 +2210,7 @@ def build_ctp_gateway_trading_profile(
                     if financial_source is not None:
                         financial_source.invalidate()
                     controller.invalidate()
+                    read_lane_since[0] = None
                     if read_model is not None:
                         # A read begun before the pause never completes after it (I63-E146): its
                         # answers belong to a link that was interrupted in between.
@@ -2260,6 +2261,11 @@ def build_ctp_gateway_trading_profile(
                 # and reports a lane that stays busy (an unanswered query) itself.
                 settlement_lane_since = [None]
                 settlement_lane_wait = 5.0
+                # Wait briefly for CTP's 1 req/s query lane cooldown to clear
+                # before starting a multi-query account read so lane spacing
+                # does not consume the account read's timeout budget.
+                read_lane_since = [None]
+                read_lane_wait = 1.5
                 # (read model token, account read request) of the read model's
                 # outstanding request/response account read (I63-E130).
                 model_read = [None]
@@ -2384,11 +2390,21 @@ def build_ctp_gateway_trading_profile(
                     now = time.monotonic()
                     cut_due = (cut_source is not None and not cut_outstanding
                                and cut_source.due(now))
+                    read_lane_blocked = False
                     if strategy_ledger is not None and (strategy_ledger.read_pending or (
                             not settlement_held and not query_outstanding
                             and not cut_outstanding and model_read[0] is None
                             and not (cut_due and next_choice == 'cut'))):
-                        strategy_ledger.maintain()
+                        if strategy_ledger.read_pending or session.query_lane_ready() or (
+                            read_lane_since[0] is not None
+                            and now - read_lane_since[0] >= read_lane_wait
+                        ):
+                            read_lane_since[0] = None
+                            strategy_ledger.maintain()
+                        else:
+                            read_lane_blocked = True
+                            if read_lane_since[0] is None:
+                                read_lane_since[0] = now
                     now = time.monotonic()
                     idle = (not settlement_held and not query_outstanding and not cut_outstanding
                             and not account_read_outstanding())
@@ -2402,37 +2418,57 @@ def build_ctp_gateway_trading_profile(
                     selected = next((choices[(start + offset) % len(choices)]
                                      for offset in range(len(choices))
                                      if due[choices[(start + offset) % len(choices)]]), None)
-                    if selected is not None:
-                        next_choice = choices[(choices.index(selected) + 1) % len(choices)]
                     if selected == 'read':
-                        state["account_read_active"] = True
-                        token = read_model.begin_refresh()
-                        try:
-                            request = session.begin_read_account(
-                                generation=generation,
-                                timeout=account_read_settings.request_timeout_seconds,
-                            )
-                        except Exception as error:
-                            next_read = (
-                                time.monotonic() + account_read_settings.refresh_interval_seconds
-                            )
-                            read_model.fail_refresh(token)
-                            read_failure_is_recoverable(error, before)
+                        if session.query_lane_ready() or (
+                            read_lane_since[0] is not None
+                            and now - read_lane_since[0] >= read_lane_wait
+                        ):
+                            read_lane_since[0] = None
+                            next_choice = choices[(choices.index(selected) + 1) % len(choices)]
+                            state["account_read_active"] = True
+                            token = read_model.begin_refresh()
+                            try:
+                                request = session.begin_read_account(
+                                    generation=generation,
+                                    timeout=account_read_settings.request_timeout_seconds,
+                                )
+                            except Exception as error:
+                                next_read = (
+                                    time.monotonic() + account_read_settings.refresh_interval_seconds
+                                )
+                                read_model.fail_refresh(token)
+                                read_failure_is_recoverable(error, before)
+                            else:
+                                model_read[0] = (token, request)
+                                # Sends the first query at once when the lane allows.
+                                poll_model_read()
+                            state["account_read_active"] = False
                         else:
-                            model_read[0] = (token, request)
-                            # Sends the first query at once when the lane allows.
-                            poll_model_read()
-                        state["account_read_active"] = False
+                            read_lane_blocked = True
+                            if read_lane_since[0] is None:
+                                read_lane_since[0] = now
                     elif selected == 'returns':
+                        next_choice = choices[(choices.index(selected) + 1) % len(choices)]
                         returns.start_query()
                     elif selected == 'cut':
+                        next_choice = choices[(choices.index(selected) + 1) % len(choices)]
                         cut_source.begin()
+                    elif not read_lane_blocked:
+                        read_lane_since[0] = None
                     instrument_block = holder.get("instrument_block")
                     if instrument_block is not None:
                         instrument_block.maintain()
                     drain_observer = holder.get("drain_observer")
                     if drain_observer is not None:
                         drain_observer.maintain()
+                    query_active = (
+                        account_read_outstanding()
+                        or (returns is not None and returns.query_pending())
+                        or (cut_source is not None and cut_source.pending())
+                        or settlement_lane_since[0] is not None
+                        or read_lane_since[0] is not None
+                    )
+                    return 0.1 if query_active else None
 
                 def maintain():
                     nonlocal last_confirmed_generation
@@ -2454,7 +2490,7 @@ def build_ctp_gateway_trading_profile(
                             last_confirmed_generation = current
                             return
                         before = current
-                        maintain_tick(before)
+                        next_hint = maintain_tick(before)
                         status, current = connection_sample()
                         if status != "ready" or current > before:
                             pause_for_reconnect()
@@ -2473,6 +2509,7 @@ def build_ctp_gateway_trading_profile(
                                 pause_for_reconnect()
                                 return
                         last_confirmed_generation = current
+                        return next_hint
                     except Exception as error:
                         retry = False
                         if _connection_transition_error(

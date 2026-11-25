@@ -10,11 +10,20 @@ Synthetic CTP profile (fake session and provider, real owner thread and
 journal); no native account is contacted.
 """
 
+import os
 import threading
 import time
 from dataclasses import replace
 
+import pytest
 from bt_api_base.market_protocol import MarketInstrumentKey
+
+
+@pytest.fixture(autouse=True)
+def _protect_win32_tmp_path(tmp_path):
+    if os.name == "nt":
+        from bt_api_py._win32_security import _set_owner_only_acl
+        _set_owner_only_acl(tmp_path)
 
 import bt_api_py.ctp_gateway_return_maintenance as return_module
 from bt_api_py import ctp_gateway_trading as module
@@ -95,5 +104,146 @@ def test_a_lane_that_stays_busy_no_longer_defers_the_settlement_after_a_bound(
         # Not before the 5 s bound; afterwards the held queries resume as well.
         assert ran_at - started >= 4.9
         _wait(lambda: any(what == "return_query" for what, _ in seen()))
+    finally:
+        resources.close()
+
+
+def test_owner_maintain_fast_poll_hint_accelerates_in_flight_queries(tmp_path):
+    from bt_api_py.gateway_direct_owner import GatewayDirectOwner, GatewayDirectOwnerResources
+    from tests.test_iter63_gateway_direct_owner import Harness
+
+    harness = Harness(tmp_path)
+    calls: list[float] = []
+    done = threading.Event()
+
+    def maintain():
+        calls.append(time.monotonic())
+        if len(calls) < 4:
+            return 0.02
+        done.set()
+        return None
+
+    def factory():
+        base = harness.factory()
+        return replace(base, maintain=maintain, maintenance_interval_seconds=2.0)
+
+    owner = GatewayDirectOwner(
+        factory,
+        queue_size=4,
+        max_queue_wait_seconds=2.0,
+        busy_timeout_seconds=2.0,
+    )
+    assert owner.start(5.0)
+    try:
+        t0 = time.monotonic()
+        assert done.wait(1.5), f"expected 4 fast-polled maintain ticks, got {len(calls)}"
+        elapsed = time.monotonic() - t0
+        assert elapsed < 1.0, f"fast-poll hint should avoid 2.0s sleeps (elapsed={elapsed:.3f}s)"
+        # After returning None, owner falls back to the normal 2.0s maintenance interval.
+        count_after_done = len(calls)
+        time.sleep(0.25)
+        assert len(calls) == count_after_done
+    finally:
+        assert owner.close(5.0) is True
+
+
+def test_account_read_waits_for_free_lane_and_polls_fast_while_pending(tmp_path, monkeypatch):
+    from datetime import UTC, datetime
+
+    from bt_api_base.account_protocol import AccountObservation
+    from tests.integration.test_iter63_gateway_direct_service import CLIENT_A
+    from tests.test_iter63_ctp_gateway_trading import _read_profile, _resources
+
+    _, settings, config, authority, grants, read = _read_profile(tmp_path, monkeypatch)
+    if os.name == "nt":
+        from bt_api_py._win32_security import _set_owner_only_acl
+        _set_owner_only_acl(read.observation_identity_path)
+    # 1.0s normal maintenance interval (matches SimNow production) while 3-poll read completes fast.
+    settings = replace(
+        settings,
+        write_enabled=True,
+        maintenance_interval_seconds=1.0,
+        settlement_refresh_seconds=25.0,
+    )
+    read = replace(
+        read,
+        refresh_interval_seconds=5.0,
+        max_staleness_seconds=20.0,
+        request_timeout_seconds=8.0,
+    )
+
+    lane = {"ready": False}
+    begins: list[float] = []
+    polls = {"count": 0}
+    completed = threading.Event()
+
+    monkeypatch.setattr(FakeSession, "query_lane_ready", lambda self: lane["ready"])
+    monkeypatch.setattr(module.GatewaySettlementController, "tick", lambda self: self.status)
+
+    def read_account(session, *, generation, timeout):
+        stamp = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+        return AccountObservation(
+            session.key,
+            f"obs-{polls['count']}",
+            read.required_coverage,
+            (),
+            (),
+            None,
+            stamp,
+            stamp,
+            "multi_query",
+            True,
+            True,
+            (),
+            True,
+        )
+
+    original_begin = FakeSession.begin_read_account
+    original_poll = FakeSession.poll_read_account
+
+    def tracked_begin(self, *, generation, timeout):
+        begins.append(time.monotonic())
+        return original_begin(self, generation=generation, timeout=timeout)
+
+    def three_step_poll(self, request):
+        polls["count"] += 1
+        if polls["count"] < 3:
+            return None
+        obs = original_poll(self, request)
+        completed.set()
+        return obs
+
+    monkeypatch.setattr(FakeSession, "read_account", read_account, raising=False)
+    monkeypatch.setattr(FakeSession, "begin_read_account", tracked_begin)
+    monkeypatch.setattr(FakeSession, "poll_read_account", three_step_poll)
+
+    profile = build_ctp_gateway_trading_profile(
+        config,
+        authority,
+        tmp_path / "read-lane-registry.sqlite",
+        profile_ref="read-lane",
+        settings=settings,
+        grants=grants,
+        request_feed_factory=lambda: None,
+        market_stream_factory=lambda *_: None,
+        assert_admitted=lambda _: True,
+        return_settings=module.CtpGatewayReturnSettings(read.observation_instruments),
+        account_read_settings=read,
+        account_read_principals=frozenset({CLIENT_A.principal_ref}),
+    )
+    resources = _resources(profile, authority, cleanup_on_error=True)
+    try:
+        # While lane is busy, begin_read_account must wait instead of burning its timeout budget.
+        time.sleep(0.35)
+        assert begins == []
+
+        t_free = time.monotonic()
+        lane["ready"] = True
+        assert completed.wait(1.5), f"expected 3-step read fast completion, begins={begins} polls={polls}"
+        elapsed = time.monotonic() - t_free
+        assert len(begins) >= 1
+        assert polls["count"] >= 3
+        # With 0.1s fast-poll hint, 3 polls finish well under 1.2s (would take >2.0s at 1.0s interval).
+        assert elapsed < 1.2, f"expected fast multi-step account read, got {elapsed:.3f}s"
     finally:
         resources.close()

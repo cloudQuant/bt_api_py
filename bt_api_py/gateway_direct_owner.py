@@ -878,8 +878,15 @@ class GatewayDirectOwner:
                     if type(task) is _Task:
                         key = _command_key(task.command)
             if task is None:
+                next_delay = float(resources.maintenance_interval_seconds)
                 try:
-                    resources.maintain()
+                    hint = resources.maintain()
+                    if (
+                        type(hint) in (int, float)
+                        and math.isfinite(hint)
+                        and 0.001 <= float(hint) < next_delay
+                    ):
+                        next_delay = float(hint)
                 except BaseException as error:
                     # The owner stops here for good. The status carries only the category, so
                     # the log names what failed: the finite code when the error has one, else
@@ -904,9 +911,7 @@ class GatewayDirectOwner:
                 finally:
                     with self._condition:
                         self._active_since = None
-                    next_maintenance = time.monotonic() + float(
-                        resources.maintenance_interval_seconds
-                    )
+                    next_maintenance = time.monotonic() + next_delay
                 continue
             if type(task) is _ServiceTask:
                 if expired:
