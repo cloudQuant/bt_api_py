@@ -56,7 +56,7 @@ def _key(symbol):
         "ctp", "CFFEX", "simnow", "future", symbol, symbol), "tick")
 
 
-def _gateway(root, rpc, market, server_keys, client_keys, journal_id, issuer_id, events, controls, blocked_start=None, blocked_poll=None, blocked_stop=None):
+def _gateway(root, rpc, market, server_keys, client_keys, journal_id, issuer_id, events, controls, blocked_start=None, blocked_poll=None, blocked_stop=None, blocked_return_poll=None):
     """Runs the actual profile and CTP Python providers in the spawned process."""
     root = Path(root)
     deployment = None
@@ -65,6 +65,7 @@ def _gateway(root, rpc, market, server_keys, client_keys, journal_id, issuer_id,
         sys.path.insert(0, str(ctp_tests))
         from test_iter62_settlement_readback_on_write import _NativeApi, _login
         from test_market_provider import _SyntheticMdClient
+        from tests.integration.test_iter63_ctp_gateway_return_maintenance import _relogin_same_spi
         from bt_api_ctp.ctp.client import TraderClient, CtpNativeStopReceipt
         from bt_api_ctp.feeds import live_ctp_feed
         from bt_api_ctp.feeds.live_ctp_feed import CtpMarketStream, CtpRequestDataFuture
@@ -623,6 +624,45 @@ def _gateway(root, rpc, market, server_keys, client_keys, journal_id, issuer_id,
         natives, feeds, streams, stops, settled, return_owners = [], [], [], [], [], []
         from bt_api_py.ctp_gateway_return_maintenance import CtpGatewayReturnMaintenance
         original_return_init = CtpGatewayReturnMaintenance.__init__
+        original_return_poll = CtpGatewayReturnMaintenance.poll
+
+        def gated_return_poll(self):
+            if blocked_return_poll is not None:
+                (armed, entered, callback_injected, owner_verified,
+                 td_fault_done, poll_completed) = blocked_return_poll
+                if armed.is_set():
+                    armed.clear()
+                    entered.set()
+                    if not callback_injected.wait(8):
+                        raise TimeoutError("synthetic TD callback was not injected")
+
+                    def snapshot(point):
+                        is_owner = threading.current_thread() is self._owner_thread
+                        buffer_status = self._session.return_buffer.status()
+                        state = self.status()
+                        return ("td_return_poll_snapshot", point, is_owner,
+                                buffer_status.record_count, self._provider.session_generation(),
+                                self._generation, state["status"], state["reservation_open"])
+
+                    before_disconnect = snapshot("callback_queued_before_td_disconnect")
+                    events.put(before_disconnect)
+                    owner_verified.set()
+                    if not td_fault_done.wait(8):
+                        raise TimeoutError("synthetic TD relogin was not completed")
+                    before_poll = snapshot("after_td_relogin_before_original_poll")
+                    result = None
+                    try:
+                        result = original_return_poll(self)
+                    finally:
+                        after_poll = snapshot("after_original_poll")
+                        events.put(("td_return_poll_trace", before_disconnect,
+                                    before_poll, after_poll))
+                        poll_completed.set()
+                    return result
+            return original_return_poll(self)
+
+        CtpGatewayReturnMaintenance.poll = gated_return_poll
+
         def trace_return_init(self, *args, **kwargs):
             original_return_init(self, *args, **kwargs)
             return_owners.append(self)
@@ -807,6 +847,29 @@ def _gateway(root, rpc, market, server_keys, client_keys, journal_id, issuer_id,
                     {} if not return_owners else return_owners[0].status(),
                     bool(md is not None and md.last_stop_receipt is not None
                         and md.last_stop_receipt.complete and md.last_stop_receipt.native_released)))
+            if action == "td_stale_return_inject":
+                from types import SimpleNamespace
+                from tests.integration.test_iter63_ctp_gateway_return_ingestion import _order
+
+                trader = natives[0].client
+                spi, api = trader._spi, trader._api
+                stale_order = _order(TradingDay="20261106", ExchangeID="CFFEX",
+                    InstrumentID="IF2612", OrderRef="000000000101", OrderSysID="stale-synthetic")
+                spi.OnRtnOrder(SimpleNamespace(**stale_order))
+                events.put(("td_stale_return_injected", trader._spi is spi, trader._api is api))
+                blocked_return_poll[2].set()
+            if action == "td_disconnect_relogin":
+                native = natives[0]
+                trader = native.client
+                spi, api = trader._spi, trader._api
+                before = trader.connection_generation
+                spi.OnFrontDisconnected(0x1001)
+                disconnected_ready = trader.get_session_state()["read_only_ready"]
+                _relogin_same_spi(native, "20261106", 20)
+                events.put(("td_reconnected", before, trader.connection_generation,
+                    trader._spi is spi, trader._api is api, disconnected_ready,
+                    trader.get_session_state()["read_only_ready"], time.monotonic_ns()))
+                blocked_return_poll[4].set()
             if action == "md_disconnect":
                 old_md = FakeMd.instances[-1]
                 recovery_phase_enabled[0] = True
@@ -915,6 +978,7 @@ def _gateway(root, rpc, market, server_keys, client_keys, journal_id, issuer_id,
             events.put(("cleanup_error", traceback.format_exc()))
         finally:
             GatewayMarketHub.maintain = original_hub_maintain
+            CtpGatewayReturnMaintenance.poll = original_return_poll
             GatewayOwnerMarketProvider.begin_subscribe = original_gateway_begin_subscribe
             GatewayOwnerMarketProvider.source_epoch_reset_required = original_gateway_reset_required
             GatewayOwnerMarketProvider.poll = original_gateway_poll
@@ -1453,3 +1517,161 @@ def test_blocked_native_md_start_retains_one_acquisition(tmp_path):
         assert child.exitcode == 0 and not any(item[0] in {"error", "cleanup_error"} for item in remaining), remaining
         assert ("closed", 1) in remaining, remaining
         assert session is None or close_result == ("closed", False)
+
+
+def test_spawned_ctp_td_relogin_fences_stale_return_write_without_md(tmp_path):
+    """The same TD SPI can relogin, while its old callback stays uncommitted."""
+    _secure_tmp_path(tmp_path)
+    (tmp_path / "guard").mkdir()
+    (tmp_path / "flow").mkdir(mode=0o700)
+    journal = GatewayDirectCommandJournal.create(
+        tmp_path / "orders.sqlite", SCOPE, generation="provisioned"
+    )
+    issuer = DurableOrderCorrelationIssuer(tmp_path / "identity.sqlite")
+    issuer_id = issuer.issuer_id
+    issuer.close()
+    rpc, market = _free_endpoint(), _free_endpoint()
+    server_keys = zmq.curve_keypair()
+    client_keys = (zmq.curve_keypair(), zmq.curve_keypair(), zmq.curve_keypair())
+    ctx = multiprocessing.get_context("spawn")
+    events, controls = ctx.Queue(), ctx.Queue()
+    blocked_return_poll = tuple(ctx.Event() for _ in range(6))
+    child = ctx.Process(
+        target=_gateway,
+        args=(str(tmp_path), rpc, market, server_keys, client_keys, journal.journal_id,
+              issuer_id, events, controls, None, None, None, blocked_return_poll),
+    )
+    child.start()
+    session = None
+    try:
+        ready = events.get(timeout=20)
+        assert ready == ("ready", child.pid) and child.pid != os.getpid(), ready
+        session = _session(CLIENT_A, client_keys[0], server_keys[0], rpc, market,
+                           journal.journal_id, "IF2612", tmp_path)
+        session.start(timeout_seconds=10)
+        initial_account = _until(lambda: session.account_client.refresh(timeout_seconds=5))
+        initial_observation_id = initial_account.observation.observation_id
+
+        def returns_ready_without_market():
+            controls.put("stats")
+            stats = events.get(timeout=5)
+            assert stats[0] == "stats" and stats[1] == 1 and stats[2] == 1, stats
+            assert stats[3:6] == (0, 0, ()), stats
+            status = stats[11]
+            return stats if status == {"status": "HEALTHY", "reservation_open": True} else None
+
+        _until(returns_ready_without_market, timeout=12)
+        before_progress = session.execution_stream_client.progress(timeout_seconds=5)
+        assert before_progress.outcome == "OBSERVED" and before_progress.progress is not None
+        baseline_progress = before_progress.progress
+        assert baseline_progress.offered_sequence == 0, baseline_progress
+
+        (armed, poll_entered, callback_injected, owner_verified,
+         td_fault_done, poll_completed) = blocked_return_poll
+        armed.set()
+        assert poll_entered.wait(5), "return maintenance did not enter the gated poll"
+        td_started = time.monotonic()
+        controls.put("td_stale_return_inject")
+        injected = events.get(timeout=5)
+        assert injected == ("td_stale_return_injected", True, True), injected
+        before_td = events.get(timeout=5)
+        assert before_td[0:2] == (
+            "td_return_poll_snapshot", "callback_queued_before_td_disconnect"
+        ), before_td
+        assert before_td[2] is True, before_td
+        assert before_td[3] == 1, before_td
+        assert before_td[4] == before_td[5], before_td
+        assert before_td[6:8] == ("HEALTHY", True), before_td
+        assert owner_verified.wait(5), "return-buffer status was not captured on its owner thread"
+
+        controls.put("td_disconnect_relogin")
+        td = events.get(timeout=5)
+        assert td[0] == "td_reconnected", td
+        assert td[2] > td[1] and td[3:5] == (True, True), td
+        assert td[5:7] == (False, True), td
+        assert poll_completed.wait(5), "return poll did not finish after TD relogin"
+        poll_trace = events.get(timeout=5)
+        assert poll_trace[0] == "td_return_poll_trace", poll_trace
+        before_disconnect, before_poll, after_poll = poll_trace[1:]
+        assert before_disconnect == before_td, poll_trace
+        assert before_poll[0:2] == (
+            "td_return_poll_snapshot", "after_td_relogin_before_original_poll"
+        ), poll_trace
+        assert after_poll[0:2] == ("td_return_poll_snapshot", "after_original_poll"), poll_trace
+        assert all(
+            snapshot[2] is True for snapshot in (before_disconnect, before_poll, after_poll)
+        ), poll_trace
+        assert all(
+            snapshot[3] == 1 for snapshot in (before_disconnect, before_poll, after_poll)
+        ), poll_trace
+        assert before_poll[4] > before_disconnect[4], poll_trace
+        assert after_poll[4] == after_poll[5] == before_poll[4], poll_trace
+        assert after_poll[6:8] == ("SOURCE_STALE", False), poll_trace
+
+        controls.put("stats")
+        after_poll_stats = events.get(timeout=5)
+        assert after_poll_stats[11]["status"] in {"SOURCE_STALE", "SESSION_CHANGED"}, after_poll_stats
+        assert after_poll_stats[11]["reservation_open"] is False, after_poll_stats
+
+        def refreshed_account():
+            candidate = session.account_client.refresh(timeout_seconds=2)
+            return candidate if candidate.observation.observation_id != initial_observation_id else None
+
+        recovered_account = _until(refreshed_account, timeout=12)
+        assert recovered_account.observation.observation_id != initial_observation_id
+
+        stale_payload = _order(key="td-stale-return-fence", symbol="IF2612", account=SCOPE)
+        stale_payload.update(exchange_id="CFFEX", offset="open", time_in_force="GFD",
+                             quantity_unit="contracts")
+        denied = session.command_client.reserve(
+            OrderRequest.from_dict(stale_payload), timeout_seconds=8
+        )
+        assert (denied.outcome, denied.code) == ("REQUEST_DENIED", "ADMISSION_DENIED"), denied
+        absent = session.command_client.status("td-stale-return-fence", timeout_seconds=5)
+        assert (absent.outcome, absent.code) == ("REQUEST_DENIED", "NOT_FOUND"), absent
+
+        after_progress = session.execution_stream_client.progress(timeout_seconds=5)
+        assert after_progress.outcome == "OBSERVED" and after_progress.progress is not None
+        assert (after_progress.progress.epoch, after_progress.progress.offered_sequence) == (
+            baseline_progress.epoch, baseline_progress.offered_sequence
+        ), (baseline_progress, after_progress.progress)
+        no_events = session.execution_stream_client.read_after(timeout_seconds=5)
+        assert no_events.outcome == "OBSERVED" and no_events.page is not None
+        assert no_events.page.events == (), no_events.page
+
+        controls.put("stats")
+        after_stats = events.get(timeout=5)
+        assert after_stats[:6] == ("stats", 1, 1, 0, 0, ()), after_stats
+        assert after_stats[7:9] == (0, 0), after_stats
+        assert after_stats[11]["status"] in {"SOURCE_STALE", "SESSION_CHANGED"}, after_stats
+        assert after_stats[11]["reservation_open"] is False, after_stats
+        elapsed = time.monotonic() - td_started
+        print(("synthetic_td_relogin_stale_return", td[2] - td[1],
+               after_poll_stats[11]["status"], after_poll[3], baseline_progress.offered_sequence,
+               after_progress.progress.offered_sequence, after_stats[3:5], round(elapsed, 3)))
+    finally:
+        for event in blocked_return_poll[2:]:
+            event.set()
+        close_result = None
+        try:
+            if session is not None:
+                closed = session.close(timeout_seconds=10)
+                close_result = (closed.state, closed.thread_alive, closed.owner_cleanup_uncertainties)
+        finally:
+            controls.put("stop")
+            child.join(15)
+            if child.is_alive():
+                child.terminate()
+                child.join(5)
+                pytest.fail("synthetic TD-only Gateway process failed bounded shutdown")
+        remaining = []
+        while True:
+            try:
+                remaining.append(events.get_nowait())
+            except queue.Empty:
+                break
+        assert child.exitcode == 0 and not any(
+            item[0] in {"error", "cleanup_error"} for item in remaining
+        ), remaining
+        assert ("closed", 1) in remaining, remaining
+        assert close_result == ("closed", False, 0), close_result
