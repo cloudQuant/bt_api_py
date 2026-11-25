@@ -5,9 +5,16 @@ from types import SimpleNamespace
 import pytest
 
 from bt_api_py.risk_service_gateway import GatewayControlAdapter
+from tests.unit._iter64_control_binding_fake import (
+    CONTROL_FINGERPRINT,
+    BoundControlRuntimeMixin,
+    control_route,
+    seed_cause_binding,
+    seed_operation_binding,
+)
 
 
-class FakeRuntime:
+class FakeRuntime(BoundControlRuntimeMixin):
     def __init__(self, replies):
         self.replies = list(replies)
         self.calls = []
@@ -30,9 +37,22 @@ class FakeRuntime:
 
 def adapter(replies):
     runtime = FakeRuntime(replies)
-    return GatewayControlAdapter(runtime, mount="direct", service_id="gateway",
-                                 instance_id="instance", scope_ref="scope",
-                                 account_ref="account", timeout_seconds=1), runtime
+    control = GatewayControlAdapter(
+        runtime,
+        mount="direct",
+        service_id="gateway",
+        instance_id="instance",
+        scope_ref="scope",
+        account_ref="account",
+        timeout_seconds=1,
+        route=control_route(
+            "account", scope_ref="scope", service_id="gateway", instance_id="instance"
+        ),
+        server_key_fingerprint=CONTROL_FINGERPRINT,
+    )
+    seed_cause_binding(control, "cause")
+    seed_operation_binding(control, "op")
+    return control, runtime
 
 
 def apply(value):

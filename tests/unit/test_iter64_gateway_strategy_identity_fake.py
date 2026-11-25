@@ -9,7 +9,7 @@ from types import MethodType, SimpleNamespace
 
 import pytest
 
-from tests.unit.test_iter64_strategy_cancel_gateway_fake import call, setup
+from tests.unit.test_iter64_strategy_cancel_gateway_fake import OwnedGuard, call, setup
 
 
 def strategy_binding(monkeypatch, *, account=False):
@@ -196,7 +196,8 @@ def test_real_control_rejects_old_cause_before_reconcile_or_claim(monkeypatch, s
                                   generation='generation', _max_records=100, _transaction=transaction,
                                   _bump=lambda _: None)
         control = object.__new__(GatewayDirectControl)
-        control._journal, control._generation, control._claims, control._guard = journal, 'generation', {}, object()
+        control._journal, control._generation, control._claims = journal, 'generation', {}
+        control._guard = OwnedGuard()
         binding._journal, binding._control = journal, control
         monkeypatch.setattr(GatewayDirectControl, '_owned', lambda _: None)
         monkeypatch.setattr(direct_control_module, '_terminal_observation', lambda *_: None)
@@ -278,7 +279,9 @@ def test_create_stops_without_dispatch_when_binding_changes(monkeypatch, change,
     assert bool(control.causes) is (phase == 'after_commit')
 
 
-@pytest.mark.parametrize('change', ['generation', 'control_generation', 'owner', 'guard', 'grant'])
+@pytest.mark.parametrize('change', [
+    'generation', 'control_generation', 'owner', 'guard', 'live_guard', 'grant'
+])
 def test_create_rechecks_binding_before_target_dispatch(monkeypatch, change):
     binding, control, context = strategy_binding(monkeypatch)
 
@@ -291,6 +294,8 @@ def test_create_rechecks_binding_before_target_dispatch(monkeypatch, change):
             binding._owner = object()
         elif change == 'guard':
             control._guard = object()
+        elif change == 'live_guard':
+            control._guard.owned = False
         else:
             binding._control_grants.clear()
 
@@ -302,7 +307,9 @@ def test_create_rechecks_binding_before_target_dispatch(monkeypatch, change):
     assert control.frozen['op'][0]['state'] == 'UNKNOWN'
 
 
-@pytest.mark.parametrize('change', ['generation', 'control_generation', 'journal', 'control', 'grant', 'ownership'])
+@pytest.mark.parametrize('change', [
+    'generation', 'control_generation', 'journal', 'control', 'grant', 'ownership', 'live_guard'
+])
 def test_strategy_status_never_returns_data_after_binding_changes(monkeypatch, change):
     binding, control, context = strategy_binding(monkeypatch)
     call(binding, context, 'cancel_scope', operation_id='op', limit=1, strategy='strategy-a',
@@ -321,8 +328,10 @@ def test_strategy_status_never_returns_data_after_binding_changes(monkeypatch, c
             binding._control = object()
         elif change == 'grant':
             binding._control_grants.clear()
-        else:
+        elif change == 'ownership':
             control._owned = lambda: (_ for _ in ()).throw(RuntimeError('synthetic secret'))
+        else:
+            control._guard.owned = False
         return result
 
     control.cancel_scope_status = changed
@@ -366,10 +375,20 @@ def test_identity_rechecks_grant_after_owner_check(monkeypatch):
     assert call(binding, context, 'identity', strategy='strategy-a') == {'status': 'UNKNOWN', 'cause_id': ''}
 
 
-def test_account_status_remains_available_without_strategy_or_expected_journal(monkeypatch):
+def test_risk_account_status_requires_and_accepts_current_identity(monkeypatch):
     binding, _, context = strategy_binding(monkeypatch, account=True)
-    assert call(binding, context, 'cancel_scope', operation_id='op', limit=1)['status'] == 'OBSERVED'
-    result = call(binding, context, 'cancel_scope_status', operation_id='op', after='', limit=1)
+    identity = call(binding, context, 'identity')
+    assert call(binding, context, 'cancel_scope', operation_id='op', limit=1)['code'] == 'INVALID_REQUEST'
+    expected = {
+        'expected_journal_id': identity['journal_id'],
+        'expected_generation': identity['journal_generation'],
+    }
+    assert call(binding, context, 'cancel_scope', operation_id='op', limit=1,
+                **expected)['status'] == 'OBSERVED'
+    assert call(binding, context, 'cancel_scope_status', operation_id='op', after='',
+                limit=1)['code'] == 'INVALID_REQUEST'
+    result = call(binding, context, 'cancel_scope_status', operation_id='op', after='',
+                  limit=1, **expected)
     assert result['status'] == 'OBSERVED' and result['scope_kind'] == 'account'
 
 

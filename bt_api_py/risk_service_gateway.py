@@ -48,6 +48,7 @@ from bt_api_py.gateway_execution_stream_client import _detach_wire
 from bt_api_py.gateway_execution_stream_client import _epoch as _wire_epoch
 from bt_api_py.gateway_execution_stream_client import _sequence as _wire_sequence
 from bt_api_py.service_runtime_cleanup import runtime_cleanup_confirmed
+from bt_api_py.service_runtime_thread import BoundCallObservation, BoundCallResult, BoundCallRoute
 
 _STATES = frozenset({"RESERVED", "DISPATCHING", "SENT", "NOT_SENT", "UNKNOWN", "RELEASED", "EXPIRED"})
 _DELEGATE_OUTCOMES = frozenset(
@@ -56,6 +57,7 @@ _DELEGATE_OUTCOMES = frozenset(
 _ACTOR_OPEN_STATES = frozenset({"DISPATCHING", "SENT", "UNKNOWN"})
 CONTROL_OPERATIONS = frozenset(
     {
+        "direct.control.identity",
         "direct.control.apply",
         "direct.control.status",
         "direct.control.list",
@@ -63,6 +65,7 @@ CONTROL_OPERATIONS = frozenset(
         "direct.control.cancel_scope_status",
     }
 )
+_CONTROL_BINDING_CAPACITY = 8192
 _CANCEL_SCOPE_LIMIT = 256
 _OBSERVER_LIMIT = 256
 # Observer refusals that mean the reading position is no longer valid: replay from 0.
@@ -1000,6 +1003,13 @@ def _valid_cancel_reply(raw: object, operation_id: str, scope_kind: str, scope_v
             and issued <= sum(counts.values()))
 
 
+@dataclass(frozen=True)
+class _ControlBindingProof:
+    binding: Any
+    observation: BoundCallObservation
+    token: object
+
+
 class GatewayControlAdapter:
     """``GatewayControlPort`` over the Risk control principal's threaded runtime.
 
@@ -1019,46 +1029,132 @@ class GatewayControlAdapter:
         scope_ref: str,
         account_ref: str,
         timeout_seconds: float,
+        route: BoundCallRoute | None = None,
+        server_key_fingerprint: str | None = None,
     ) -> None:
         self._runtime = runtime
         self._mount, self._service_id = mount, service_id
         self._instance_id, self._scope_ref, self._account = instance_id, scope_ref, account_ref
         self._timeout = float(timeout_seconds)
-        self._journal_id: str | None = None
+        self._route = None if route is None else BoundCallRoute(**vars(route))
+        self._server_key_fingerprint = server_key_fingerprint
+        self._cause_bindings: dict[str, _ControlBindingProof] = {}
+        self._operation_bindings: dict[str, _ControlBindingProof] = {}
         self.last_cancel_status: dict[str, Mapping] = {}
 
-    def _registered(self, operation: str) -> bool:
-        try:
-            snapshot = self._runtime.status()
-            return snapshot.state == "running" and snapshot.healthy is True and any(
-                b.active is True
-                and b.mount == self._mount
-                and b.service_id == self._service_id
-                and b.instance_id == self._instance_id
-                and b.scope_ref == self._scope_ref
-                and type(b.operations) is frozenset
-                and operation in b.operations
-                for b in snapshot.bindings
-            )
-        except Exception:
-            return False
+    def _capture_binding(self) -> tuple[_ControlBindingProof | None, Any]:
+        from bt_api_risk.pretrade import ControlIntentBinding, ControlReply
 
-    def _call(self, operation: str, arguments: dict) -> tuple[Mapping | None, Any]:
-        from bt_api_risk.pretrade import ControlReply
-
-        if not self._registered(operation):
+        route = self._route
+        fingerprint = self._server_key_fingerprint
+        if (type(route) is not BoundCallRoute
+                or route.scope.account_ref != self._account
+                or route.scope_ref != self._scope_ref
+                or route.service_id != self._service_id
+                or route.instance_id != self._instance_id
+                or type(fingerprint) is not str
+                or re.fullmatch(r"[0-9a-f]{64}", fingerprint) is None):
             return None, ControlReply("TRANSPORT_NOT_STARTED", code="ROUTE_UNAVAILABLE")
         try:
-            raw = _detach_wire(
-                self._runtime.call(
+            result = self._runtime.call_bound(
+                self._mount,
+                "direct.control.identity",
+                {},
+                route=route,
+                timeout_seconds=self._timeout,
+                expected_server_key_fingerprint=fingerprint,
+            )
+        except Exception as error:
+            outcome, code = runtime_failure(error, "direct.control.identity")
+            return None, ControlReply(outcome, code=_code(code))
+        try:
+            if type(result) is not BoundCallResult or result._binding_token is None:
+                raise ValueError
+            before, after = result.before, result.after
+            if (type(before) is not BoundCallObservation or type(after) is not BoundCallObservation
+                    or before != after or before.identity != route.identity or before.scope != route.scope
+                    or before.peer != route.peer or before.mount != self._mount
+                    or before.service_id != self._service_id or before.instance_id != self._instance_id
+                    or before.scope_ref != self._scope_ref or before.fingerprint != fingerprint
+                    or before.operation != "direct.control.identity" or before.active is not True
+                    or before.required is not True):
+                raise ValueError
+            raw = _detach_wire(result.result)
+            if (type(raw) is not dict or set(raw) != {
+                    "status", "schema_version", "account_scope", "journal_id", "journal_generation"}
+                    or raw["status"] != "OBSERVED" or raw["schema_version"] != 1
+                    or raw["account_scope"] != self._account or not _ref(raw["journal_id"])
+                    or not _ref(raw["journal_generation"])):
+                raise ValueError
+            binding = ControlIntentBinding(
+                schema_version=1,
+                account_scope=self._account,
+                journal_id=raw["journal_id"],
+                owner_generation=raw["journal_generation"],
+                mount=before.mount,
+                service_id=before.service_id,
+                instance_id=before.instance_id,
+                scope_ref=before.scope_ref,
+                registration_id=before.registration_id,
+                service_epoch=before.service_epoch,
+                peer_principal_ref=before.peer.principal_ref,
+                peer_actor_ref=before.peer.actor_ref,
+                server_key_fingerprint=before.fingerprint,
+                operations=before.operations,
+            )
+            return _ControlBindingProof(binding, before, result._binding_token), None
+        except Exception:
+            return None, ControlReply("UNKNOWN", code="INVALID_OR_UNAVAILABLE_REPLY")
+
+    def capture_intent_binding(self) -> Any:
+        """Observe the current route/generation; this grants no retry permission."""
+        proof, _error = self._capture_binding()
+        return None if proof is None else proof.binding
+
+    def _binding_for(self, key: object, *, operation: bool) -> tuple[_ControlBindingProof | None, Any]:
+        from bt_api_risk.pretrade import ControlReply
+
+        if not _ref(key):
+            return None, ControlReply("REQUEST_DENIED", code="INVALID_REQUEST")
+        bindings = self._operation_bindings if operation else self._cause_bindings
+        proof = bindings.get(key)
+        if proof is not None:
+            return proof, None
+        if len(bindings) >= _CONTROL_BINDING_CAPACITY:
+            return None, ControlReply("TRANSPORT_NOT_STARTED", code="ROUTE_UNAVAILABLE")
+        proof, error = self._capture_binding()
+        if proof is None:
+            return None, error
+        bindings[key] = proof
+        return proof, None
+
+    def _call(
+        self, operation: str, arguments: dict, proof: _ControlBindingProof
+    ) -> tuple[Mapping | None, Any]:
+        from bt_api_risk.pretrade import ControlReply
+
+        binding = proof.binding
+        wire_arguments = dict(
+            arguments,
+            expected_journal_id=binding.journal_id,
+            expected_generation=binding.owner_generation,
+        )
+        try:
+            result = self._runtime.call_bound(
                     self._mount,
                     operation,
-                    arguments,
-                    account_ref=self._account,
-                    scope_ref=self._scope_ref,
+                    wire_arguments,
+                    route=self._route,
                     timeout_seconds=self._timeout,
-                )
+                    expected_binding=proof.observation,
+                    _expected_token=proof.token,
+                    expected_server_key_fingerprint=self._server_key_fingerprint,
             )
+            expected = replace(proof.observation, operation=operation)
+            if (type(result) is not BoundCallResult
+                    or result.before != expected or result.after != expected):
+                raise ValueError
+            raw = _detach_wire(result.result)
         except Exception as error:
             outcome, code = runtime_failure(error, operation)
             return None, ControlReply(outcome, code=_code(code))
@@ -1083,8 +1179,11 @@ class GatewayControlAdapter:
         extra = self._scope_arguments(scope_kind, scope_value)
         if extra is None:
             return ControlReply("REQUEST_DENIED", code="RISK_CONTROL_SCOPE_UNSUPPORTED")
+        proof, error = self._binding_for(cause_id, operation=False)
+        if error is not None:
+            return error
         raw, error = self._call(
-            "direct.control.apply", {"cause_id": cause_id, "mode": mode, **extra}
+            "direct.control.apply", {"cause_id": cause_id, "mode": mode, **extra}, proof
         )
         if error is not None:
             return error
@@ -1111,7 +1210,10 @@ class GatewayControlAdapter:
     def status(self, *, cause_id: str) -> Any:
         from bt_api_risk.pretrade import ControlReply
 
-        raw, error = self._call("direct.control.status", {"cause_id": cause_id})
+        proof = self._cause_bindings.get(cause_id) if _ref(cause_id) else None
+        if proof is None:
+            return ControlReply("UNKNOWN", code="CONTROL_INTENT_BINDING_REQUIRED")
+        raw, error = self._call("direct.control.status", {"cause_id": cause_id}, proof)
         if error is not None:
             return error
         try:
@@ -1144,9 +1246,13 @@ class GatewayControlAdapter:
         if extra is None:
             return ControlReply("REQUEST_DENIED", code="RISK_CONTROL_SCOPE_UNSUPPORTED")
         self.last_cancel_status.pop(operation_id, None)
+        proof, error = self._binding_for(operation_id, operation=True)
+        if error is not None:
+            return error
         raw, error = self._call(
             "direct.control.cancel_scope",
             {"operation_id": operation_id, "limit": _CANCEL_SCOPE_LIMIT, **extra},
+            proof,
         )
         if error is not None:
             return error
@@ -1166,9 +1272,13 @@ class GatewayControlAdapter:
         if (type(after) is not str or (after and not _ref(after))
                 or type(limit) is not int or not 1 <= limit <= _CANCEL_SCOPE_LIMIT):
             return None
+        proof = self._operation_bindings.get(operation_id)
+        if proof is None:
+            return None
         raw, error = self._call(
             "direct.control.cancel_scope_status",
             {"operation_id": operation_id, "after": after, "limit": limit},
+            proof,
         )
         try:
             if error is not None or not _valid_cancel_status(raw, operation_id, after, limit):

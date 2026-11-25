@@ -24,6 +24,21 @@ class ImmediateResult:
             raise GatewayOwnerServiceCallError('SYNTHETIC_FAILURE') from error
 
 
+class OwnedGuard:
+    def __init__(self, generation='generation'):
+        self.account_key_digest = hashlib.sha256(b'account').hexdigest()
+        self.generation = generation
+        self.owned = True
+
+    def assert_owned(self):
+        if not self.owned:
+            raise RuntimeError('synthetic ownership lost')
+
+    def acquire(self):
+        self.assert_owned()
+        return self.generation
+
+
 class Control:
     def __init__(self):
         self.order_strategies = {'r-a': 'strategy-a', 'r-b': 'strategy-b'}
@@ -104,7 +119,7 @@ def setup(monkeypatch, *, strategies=frozenset({'strategy-a'}), account=True, st
                                        generation='generation')
     control._journal = binding._journal
     control._generation = 'generation'
-    control._guard = object()
+    control._guard = OwnedGuard()
     binding._cancel_journal = object()
     binding._owner = SimpleNamespace(supports_cancel=True, _cancel_dispatcher=object(),
                                      submit_service_call=lambda fn: ImmediateResult(fn))
@@ -242,7 +257,7 @@ def test_handler_and_real_control_freeze_only_authorized_strategy_in_memory(monk
                                   _max_records=100, _transaction=transaction, _bump=lambda _: None)
         control = object.__new__(GatewayDirectControl)
         control._journal, control._generation, control._claims = journal, 'generation', {}
-        control._guard = object()
+        control._guard = OwnedGuard()
         binding._journal, binding._control = journal, control
         monkeypatch.setattr(GatewayDirectControl, '_owned', lambda _: None)
         monkeypatch.setattr(direct_control_module, '_terminal_observation', lambda *_: None)

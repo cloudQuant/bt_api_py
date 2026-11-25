@@ -61,6 +61,7 @@ ACCOUNT_ONLY = WireScope(DOMAIN, account_ref=ACCOUNT)
 SDK_ROOT = Path(__file__).resolve().parents[2]
 CONTROL_OPS = frozenset(
     {
+        "direct.control.identity",
         "direct.control.apply",
         "direct.control.status",
         "direct.control.list",

@@ -5,11 +5,17 @@ from types import SimpleNamespace
 
 import pytest
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
+from bt_api_risk.pretrade.ports import CallerIdentity
 
 from bt_api_py.risk_service_component import RiskOrderService
 from bt_api_py.risk_service_config import RiskPrincipal
 from bt_api_py.risk_service_gateway import GatewayControlAdapter
-from bt_api_risk.pretrade.ports import CallerIdentity
+from tests.unit._iter64_control_binding_fake import (
+    CONTROL_FINGERPRINT,
+    BoundControlRuntimeMixin,
+    control_route,
+    seed_operation_binding,
+)
 
 pytest_plugins = ["tests.unit.test_iter64_gateway_risk_control_port"]
 
@@ -35,7 +41,7 @@ def observed(targets=(), **overrides):
     return result
 
 
-class Runtime:
+class Runtime(BoundControlRuntimeMixin):
     def __init__(self, replies):
         self.replies, self.calls = list(replies), []
 
@@ -56,9 +62,20 @@ class Runtime:
 
 def adapter(replies):
     runtime = Runtime(replies)
-    control = GatewayControlAdapter(runtime, mount="app", service_id="gateway",
-                                    instance_id="gateway-a", scope_ref="scope-a",
-                                    account_ref="account-a", timeout_seconds=5)
+    control = GatewayControlAdapter(
+        runtime,
+        mount="app",
+        service_id="gateway",
+        instance_id="gateway-a",
+        scope_ref="scope-a",
+        account_ref="account-a",
+        timeout_seconds=5,
+        route=control_route(
+            "account-a", scope_ref="scope-a", service_id="gateway", instance_id="gateway-a"
+        ),
+        server_key_fingerprint=CONTROL_FINGERPRINT,
+    )
+    seed_operation_binding(control, OP)
     return control, runtime
 
 
@@ -189,15 +206,32 @@ def test_actual_gateway_first_page_contract_with_temporary_owner_and_journal(por
     assert issued["ok"] and issued["result"]["status"] == "OBSERVED"
 
     class RegistryRuntime(Runtime):
-        def call(self, mount, operation, arguments, **kwargs):
+        def _control_identity_reply(self, route):
+            result = port.raw_call("risk-acct", "direct.control.identity", {})
+            assert result["ok"]
+            return result["result"]
+
+        def _bound_control_call(self, mount, operation, arguments, **kwargs):
             self.calls.append((operation, arguments))
-            result = port.call("risk-acct", operation, arguments)
+            result = port.raw_call("risk-acct", operation, arguments)
             assert result["ok"]
             return result["result"]
 
     runtime = RegistryRuntime([])
-    control = GatewayControlAdapter(runtime, mount="app", service_id="gateway", instance_id="gateway-a",
-                                    scope_ref="scope-a", account_ref="account-a", timeout_seconds=5)
+    control = GatewayControlAdapter(
+        runtime,
+        mount="app",
+        service_id="gateway",
+        instance_id="gateway-a",
+        scope_ref="scope-a",
+        account_ref="account",
+        timeout_seconds=5,
+        route=control_route(
+            "account", scope_ref="scope-a", service_id="gateway", instance_id="gateway-a"
+        ),
+        server_key_fingerprint=CONTROL_FINGERPRINT,
+    )
+    seed_operation_binding(control, OP)
     result = control.cancel_scope_status(OP)
     assert result["status"] == "OBSERVED" and result["operation_id"] == OP
     assert len(result["targets"]) == 1 and result["counts"]["SENT"] == 1

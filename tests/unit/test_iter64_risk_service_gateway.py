@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
 from bt_api_base.direct_write_protocol import DirectExecutionEventKind, DirectOrderStatus
-from bt_api_base.gateway_execution_stream_protocol import GatewayExecutionObservation, GatewayExecutionStreamEvent
+from bt_api_base.gateway_execution_stream_protocol import (
+    GatewayExecutionObservation,
+    GatewayExecutionStreamEvent,
+)
 from bt_api_base.market_protocol import MarketInstrumentKey, MarketSubscriptionKey
-from bt_api_base.service_protocol import WireIdentity, WireRole
+from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 
 from bt_api_py.gateway_account_observer_client import GatewayAccountObservedEvent
 from bt_api_py.risk_service_config import RiskInstrumentBinding
@@ -25,11 +29,34 @@ from bt_api_py.risk_service_gateway import (
     price_fact_from_market_event,
     strategy_financials_from_reply,
 )
+from bt_api_py.service_runtime_thread import (
+    BoundCallObservation,
+    BoundCallResult,
+    BoundCallRoute,
+)
 
 ACCOUNT = "account-a"
 RB = MarketInstrumentKey("ctp", "SHFE", "simnow", "future", "rb", "rb")
 RISK = WireIdentity(WireRole.SERVICE, "risk-principal", "risk-actor")
 EPOCH = "e" * 64
+CONTROL_FINGERPRINT = "f" * 64
+CONTROL_OPERATIONS = frozenset(
+    {
+        "direct.control.identity",
+        "direct.control.apply",
+        "direct.control.status",
+        "direct.control.cancel_scope",
+        "direct.control.cancel_scope_status",
+    }
+)
+CONTROL_ROUTE = BoundCallRoute(
+    WireIdentity(WireRole.APPLICATION_CLIENT, "risk-control", "risk-control-actor"),
+    WireScope("test-domain", account_ref=ACCOUNT),
+    "scope-a",
+    "gateway",
+    "gateway-a",
+    WireIdentity(WireRole.SERVICE, "gateway-principal", "gateway"),
+)
 
 
 def obs(state="RESERVED", version=None, digest="d" * 64):
@@ -328,30 +355,133 @@ def test_release_returns_the_verified_terminal_observation_only():
 class Runtime:
     def __init__(self, replies, registered=True):
         self.replies, self.calls, self.registered = list(replies), [], registered
+        self.token = object()
 
-    def status(self):
-        binding = SimpleNamespace(active=True, mount="application.direct_write",
-                                  service_id="gateway", instance_id="gateway-a",
-                                  scope_ref="scope-a", operations=frozenset({
-                                      "direct.control.apply", "direct.control.status",
-                                      "direct.control.cancel_scope",
-                                      "direct.control.cancel_scope_status"}))
-        return SimpleNamespace(state="running", healthy=True,
-                               bindings=[binding] if self.registered else [])
+    def call_bound(self, mount, operation, arguments, **kw):
+        if not self.registered:
+            from bt_api_py.service_runtime import ServiceRuntimeRequestNotSentError
 
-    def call(self, mount, operation, arguments, **kw):
-        self.calls.append((operation, arguments))
-        reply = self.replies.pop(0)
+            raise ServiceRuntimeRequestNotSentError()
+        route = kw["route"]
+        assert route == CONTROL_ROUTE
+        assert kw["expected_server_key_fingerprint"] == CONTROL_FINGERPRINT
+        observation = BoundCallObservation(
+            route.identity,
+            "run-a",
+            route.scope,
+            "registration-a",
+            "service-epoch-a",
+            mount,
+            route.service_id,
+            route.instance_id,
+            route.scope_ref,
+            CONTROL_OPERATIONS,
+            route.peer,
+            CONTROL_FINGERPRINT,
+            100.0,
+            True,
+            True,
+            operation,
+        )
+        if operation == "direct.control.identity":
+            reply = {
+                "status": "OBSERVED",
+                "schema_version": 1,
+                "account_scope": ACCOUNT,
+                "journal_id": "journal-a",
+                "journal_generation": "generation-a",
+            }
+        else:
+            assert kw["expected_binding"] == replace(observation, operation="direct.control.identity")
+            assert kw["_expected_token"] is self.token
+            reply = self.replies.pop(0)
+        self.calls.append((operation, arguments, kw))
         if isinstance(reply, Exception):
             raise reply
-        return reply
+        return BoundCallResult(reply, observation, observation, self.token)
 
 
 def control(replies, registered=True):
     runtime = Runtime(replies, registered)
     return GatewayControlAdapter(runtime, mount="application.direct_write", service_id="gateway",
                                  instance_id="gateway-a", scope_ref="scope-a",
-                                 account_ref=ACCOUNT, timeout_seconds=5), runtime
+                                 account_ref=ACCOUNT, timeout_seconds=5, route=CONTROL_ROUTE,
+                                 server_key_fingerprint=CONTROL_FINGERPRINT), runtime
+
+
+def test_control_binding_capture_is_owner_bound_and_observational():
+    adapter, runtime = control([])
+    binding = adapter.capture_intent_binding()
+    assert binding is not None
+    assert (
+        binding.account_scope,
+        binding.journal_id,
+        binding.owner_generation,
+        binding.registration_id,
+        binding.service_epoch,
+    ) == (ACCOUNT, "journal-a", "generation-a", "registration-a", "service-epoch-a")
+    assert [call[0] for call in runtime.calls] == ["direct.control.identity"]
+
+
+def test_control_apply_and_status_reuse_the_original_owner_binding():
+    adapter, runtime = control(
+        [
+            {"status": "OBSERVED", "cause_id": "c1", "version": 1, "active": True},
+            {"status": "NOT_FOUND", "cause_id": "c1"},
+        ]
+    )
+    applied = adapter.apply(cause_id="c1", mode="STOP_NEW", scope_kind="account", scope_value="")
+    absent = adapter.status(cause_id="c1")
+    assert applied.outcome == "OBSERVED" and absent.outcome == "OBSERVED"
+    assert [call[0] for call in runtime.calls] == [
+        "direct.control.identity", "direct.control.apply", "direct.control.status"]
+    for _operation, arguments, _kwargs in runtime.calls[1:]:
+        assert arguments["expected_journal_id"] == "journal-a"
+        assert arguments["expected_generation"] == "generation-a"
+
+
+def test_control_status_without_the_original_binding_fails_closed():
+    adapter, runtime = control([])
+    reply = adapter.status(cause_id="old-cause")
+    assert reply.outcome == "UNKNOWN" and reply.code == "CONTROL_INTENT_BINDING_REQUIRED"
+    assert runtime.calls == []
+
+
+def test_control_cancel_status_without_the_original_binding_fails_closed():
+    adapter, runtime = control([])
+    assert adapter.cancel_scope_status("old-cancel") is None
+    assert runtime.calls == []
+
+
+def test_control_cancel_and_status_reuse_the_original_owner_binding():
+    counts = dict.fromkeys(("QUEUED", "SENT", "NOT_SENT", "UNKNOWN", "TERMINAL"), 0)
+    adapter, runtime = control(
+        [
+            {
+                "status": "OBSERVED",
+                "operation_id": "cancel-1",
+                "scope_kind": "account",
+                "scope_value": "",
+                "issued": 0,
+                "counts": counts,
+            },
+            {"status": "NOT_FOUND", "operation_id": "cancel-1"},
+        ]
+    )
+    cancelled = adapter.cancel_scope(
+        operation_id="cancel-1", scope_kind="account", scope_value=""
+    )
+    status = adapter.cancel_scope_status("cancel-1")
+    assert cancelled.outcome == "OBSERVED"
+    assert status == {"status": "NOT_FOUND", "operation_id": "cancel-1"}
+    assert [call[0] for call in runtime.calls] == [
+        "direct.control.identity",
+        "direct.control.cancel_scope",
+        "direct.control.cancel_scope_status",
+    ]
+    for _operation, arguments, _kwargs in runtime.calls[1:]:
+        assert arguments["expected_journal_id"] == "journal-a"
+        assert arguments["expected_generation"] == "generation-a"
 
 
 def test_control_apply_instrument_scope_is_refused_locally():

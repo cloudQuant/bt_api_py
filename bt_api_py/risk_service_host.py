@@ -2703,6 +2703,7 @@ class RiskServiceHost:
             GatewayControlAdapter,
             RiskFactsCache,
         )
+        from bt_api_py.service_runtime_thread import BoundCallRoute
 
         config, gateway = self.config, self.config.gateway
         max_age = config.account_snapshot_max_age_seconds
@@ -2745,6 +2746,27 @@ class RiskServiceHost:
         self._check_cleanup_ready()
         self.control_runtime = self._call_lifecycle(self._control_runtime)
         self._check_cleanup_ready()
+        control_identity = self._call_lifecycle(
+            WireIdentity,
+            WireRole.APPLICATION_CLIENT,
+            gateway.control.principal_ref,
+            gateway.control.actor_ref,
+        )
+        self._check_cleanup_ready()
+        control_scope = self._call_lifecycle(
+            WireScope, config.execution_domain_ref, account_ref=config.account_scope
+        )
+        self._check_cleanup_ready()
+        control_route = self._call_lifecycle(
+            BoundCallRoute,
+            control_identity,
+            control_scope,
+            gateway.scope_ref,
+            gateway.service_id,
+            gateway.instance_id,
+            self._peer(),
+        )
+        self._check_cleanup_ready()
         self.control = self._call_lifecycle(GatewayControlAdapter,
             self.control_runtime,
             mount="application.direct_write",
@@ -2753,6 +2775,8 @@ class RiskServiceHost:
             scope_ref=gateway.scope_ref,
             account_ref=config.account_scope,
             timeout_seconds=config.call_timeout_seconds,
+            route=control_route,
+            server_key_fingerprint=hashlib.sha256(gateway.server_public_key).hexdigest(),
         )
         self._check_cleanup_ready()
         try:

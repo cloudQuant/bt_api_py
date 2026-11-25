@@ -140,8 +140,9 @@ def test_authority_installs_the_principal_table_only(tmp_path):
 
 def test_risk_gateway_runtimes_require_explicit_unregister_ack(tmp_path):
     from bt_api_base.service_protocol import WireScope
-    from bt_api_py.risk_service_host import OBSERVER_OPERATIONS
+
     from bt_api_py.risk_service_gateway import CONTROL_OPERATIONS
+    from bt_api_py.risk_service_host import OBSERVER_OPERATIONS
 
     host = RiskServiceHost(load_risk_service_config(setup(tmp_path)))
     scope = WireScope(host.config.execution_domain_ref, account_ref=host.config.account_scope)
@@ -153,6 +154,47 @@ def test_risk_gateway_runtimes_require_explicit_unregister_ack(tmp_path):
     finally:
         observer.close()
         control.close()
+        host.close()
+
+
+def test_engine_control_adapter_pins_the_configured_bound_route(tmp_path):
+    import hashlib
+
+    from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
+
+    from bt_api_py.service_runtime_thread import BoundCallRoute
+
+    setup(tmp_path)
+    host = opened(tmp_path)
+    try:
+        gateway = host.config.gateway
+        route = host.control._route
+        assert type(route) is BoundCallRoute
+        assert route.identity == WireIdentity(
+            WireRole.APPLICATION_CLIENT,
+            gateway.control.principal_ref,
+            gateway.control.actor_ref,
+        )
+        assert route.scope == WireScope(
+            host.config.execution_domain_ref,
+            account_ref=host.config.account_scope,
+        )
+        assert (
+            route.scope_ref,
+            route.service_id,
+            route.instance_id,
+            route.peer,
+        ) == (
+            gateway.scope_ref,
+            gateway.service_id,
+            gateway.instance_id,
+            host._peer(),
+        )
+        assert host.control._server_key_fingerprint == hashlib.sha256(
+            gateway.server_public_key
+        ).hexdigest()
+        assert host.control._runtime is host.control_runtime
+    finally:
         host.close()
 
 

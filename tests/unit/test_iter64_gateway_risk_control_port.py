@@ -39,7 +39,7 @@ from tests.unit.test_service_registry import _next_request, _register
 RB = {'symbol': 'rb2701', 'exchange_id': 'SHFE', 'side': 'buy', 'offset': 'open', 'quantity': '1'}
 HC = dict(RB, symbol='hc2701')
 SCOPE = 'SHFE:rb2701'
-OPERATIONS = frozenset({'direct.control.apply', 'direct.control.status', 'direct.control.list',
+OPERATIONS = frozenset({'direct.control.identity', 'direct.control.apply', 'direct.control.status', 'direct.control.list',
                         'direct.control.cancel_scope', 'direct.control.cancel_scope_status'})
 OPERATOR_OPERATIONS = OPERATIONS | {'direct.control.resume'}
 WRITES = frozenset({'direct.control.apply', 'direct.control.cancel_scope', 'direct.control.resume'})
@@ -111,12 +111,21 @@ def port(tmp_path):
             assert registered['ok'], registered
             records[name] = registered['result']
 
-        def call(name, operation, arguments):
+        def raw_call(name, operation, arguments):
             identity, scope, _ = CALLERS[name]
             return registry.handle(name, _next_request(operation, {
                 'registration_id': records[name]['registration_id'],
                 'service_epoch': records[name]['service_epoch'], 'instance_id': 'gateway-a',
                 'arguments': arguments}, identity=identity, scope=scope))
+
+        def call(name, operation, arguments):
+            if name == 'risk-acct' and operation in {
+                    'direct.control.apply', 'direct.control.status', 'direct.control.cancel_scope',
+                    'direct.control.cancel_scope_status'}:
+                observed = raw_call(name, 'direct.control.identity', {})['result']
+                arguments = dict(arguments, expected_journal_id=observed['journal_id'],
+                                 expected_generation=observed['journal_generation'])
+            return raw_call(name, operation, arguments)
 
         def on_owner(callback):
             return owner.submit_service_call(callback).result(timeout_seconds=2)
@@ -136,7 +145,7 @@ def port(tmp_path):
                          'enable_account_facts_financial', 'enable_actor_stream', 'enable_strategy_origin',
                          'enable_control_cancel'):
                 getattr(h.journal, step)(h.guard)
-        yield SimpleNamespace(call=call, on_owner=on_owner, h=h, control=control, sent=sent,
+        yield SimpleNamespace(call=call, raw_call=raw_call, on_owner=on_owner, h=h, control=control, sent=sent,
                               upgrade=lambda: on_owner(upgrade), calls=calls)
     finally:
         if registry is not None:
@@ -149,6 +158,40 @@ def _cause(port, cause_id):
 
 
 # -- G64-02/G64-03 ------------------------------------------------------------------------------
+
+
+def test_risk_account_control_identity_and_generation_are_mandatory(port):
+    port.upgrade()
+    observed = port.raw_call('risk-acct', 'direct.control.identity', {})['result']
+    assert observed == {
+        'status': 'OBSERVED',
+        'schema_version': 1,
+        'account_scope': 'account',
+        'journal_id': port.h.journal.journal_id,
+        'journal_generation': port.h.journal.generation,
+    }
+    requests = (
+        ('direct.control.apply', {'cause_id': 'generation-bound', 'mode': 'STOP_NEW'}),
+        ('direct.control.status', {'cause_id': 'generation-bound'}),
+        ('direct.control.cancel_scope', {'operation_id': 'generation-bound', 'limit': 1}),
+        ('direct.control.cancel_scope_status', {
+            'operation_id': 'generation-bound', 'after': '', 'limit': 1}),
+    )
+    for operation, request in requests:
+        assert port.raw_call('risk-acct', operation, request)['result'] == {
+            'status': 'REQUEST_REJECTED', 'code': 'INVALID_REQUEST'}
+        assert port.raw_call('risk-acct', operation, dict(
+            request, expected_journal_id=observed['journal_id'],
+            expected_generation='stale-generation'))['result'] == {
+            'status': 'REQUEST_REJECTED', 'code': 'JOURNAL_GENERATION_MISMATCH'}
+        assert port.raw_call('risk-acct', operation, dict(
+            request, expected_journal_id='stale-journal',
+            expected_generation=observed['journal_generation']))['result'] == {
+            'status': 'REQUEST_REJECTED', 'code': 'JOURNAL_ID_MISMATCH'}
+    assert port.on_owner(lambda: port.control.list_causes(
+        scope_kind='account', scope_value='', after='', limit=10)) == ()
+    assert port.calls == []
+
 
 def test_risk_principal_applies_a_contract_stop_new_named_as_risk(port, caplog):
     caplog.set_level(logging.WARNING, logger='bt_api_py.gateway_direct_service')

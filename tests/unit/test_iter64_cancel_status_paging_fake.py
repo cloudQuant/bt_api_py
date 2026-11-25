@@ -4,10 +4,17 @@ from types import SimpleNamespace
 
 import pytest
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
+from bt_api_risk.pretrade.ports import CallerIdentity
+
 from bt_api_py.risk_service_component import RiskOrderService
 from bt_api_py.risk_service_config import RiskPrincipal
 from bt_api_py.risk_service_gateway import GatewayControlAdapter
-from bt_api_risk.pretrade.ports import CallerIdentity
+from tests.unit._iter64_control_binding_fake import (
+    CONTROL_FINGERPRINT,
+    BoundControlRuntimeMixin,
+    control_route,
+    seed_operation_binding,
+)
 
 OP = "cancel-op"
 STATES = ("QUEUED", "SENT", "NOT_SENT", "UNKNOWN", "TERMINAL")
@@ -29,7 +36,7 @@ def page(targets, *, after="", limit=256, remaining=None, **extra):
             "after": after, "limit": limit, "remaining_at_cursor": remaining, **extra}
 
 
-class Runtime:
+class Runtime(BoundControlRuntimeMixin):
     def __init__(self, replies):
         self.replies, self.calls = list(replies), []
 
@@ -48,8 +55,21 @@ class Runtime:
 
 def adapter(*replies):
     runtime = Runtime(replies)
-    return GatewayControlAdapter(runtime, mount="app", service_id="gateway", instance_id="gw",
-        scope_ref="scope", account_ref="acct", timeout_seconds=1), runtime
+    control = GatewayControlAdapter(
+        runtime,
+        mount="app",
+        service_id="gateway",
+        instance_id="gw",
+        scope_ref="scope",
+        account_ref="acct",
+        timeout_seconds=1,
+        route=control_route(
+            "acct", scope_ref="scope", service_id="gateway", instance_id="gw"
+        ),
+        server_key_fingerprint=CONTROL_FINGERPRINT,
+    )
+    seed_operation_binding(control, OP)
+    return control, runtime
 
 
 def test_more_than_256_and_empty_tail_are_independent_read_only_calls():
@@ -149,8 +169,8 @@ def test_service_forwards_page_and_rejects_mismatched_scope():
 
 
 def test_web_through_service_to_gateway_fake():
-    from fastapi.testclient import TestClient
     from bt_api_risk.web.app import API_PREFIX, AuthenticatedRiskSession, create_app
+    from fastapi.testclient import TestClient
 
     expected = page([item(257), item(258)], after="res-0256", limit=2)
     control, runtime = adapter(expected)
@@ -172,8 +192,8 @@ def test_web_through_service_to_gateway_fake():
     page([item(258), item(257)], after="res-0256", limit=2), TimeoutError("private"),
 ])
 def test_web_through_service_handles_invalid_or_unavailable_gateway_page(reply):
-    from fastapi.testclient import TestClient
     from bt_api_risk.web.app import API_PREFIX, AuthenticatedRiskSession, create_app
+    from fastapi.testclient import TestClient
 
     control, runtime = adapter(reply)
     service, context = service_with(control)

@@ -45,6 +45,7 @@ from bt_api_gateway.control_wire import (
     CONTROL_OPERATION_FIELDS,
     CONTROL_OPERATIONS,
     CONTROL_ORIGIN_PREFIXES,
+    CONTROL_RISK_ACCOUNT_GENERATION_OPERATIONS,
     CONTROL_RUNTIME_OPERATIONS,
     CONTROL_WIRE_SCHEMA_VERSION,
     CONTROL_WRITE_OPERATIONS,
@@ -929,6 +930,19 @@ class GatewayDirectServiceBinding:
             if operation in {'direct.control.cancel_scope', 'direct.control.cancel_scope_status'}:
                 fields = fields | {'expected_journal_id', 'expected_generation'}
                 allowed_fields = allowed_fields | {'expected_journal_id', 'expected_generation'}
+        risk_account_generation_binding = (
+            grant.kind == 'risk'
+            and scope.strategy_ref is None
+            and strategy is None
+            and not strategy_argument
+            and operation in CONTROL_RISK_ACCOUNT_GENERATION_OPERATIONS
+        )
+        if risk_account_generation_binding and operation != 'direct.control.identity':
+            # Risk account calls are bound to one identity observation.  Both
+            # comparison values are mandatory; omitting either cannot select a
+            # legacy, unfenced write/read path.
+            fields = fields | {'expected_journal_id', 'expected_generation'}
+            allowed_fields = allowed_fields | {'expected_journal_id', 'expected_generation'}
         # Historical reads are a distinct, explicit contract.  They still
         # require the current account registration and strategy grant, as
         # well as the originally recorded cause generation.  Neither a missing
@@ -980,13 +994,20 @@ class GatewayDirectServiceBinding:
         scoped_identity_binding = strategy_argument and operation in {
             'direct.control.identity', 'direct.control.cancel_scope', 'direct.control.cancel_scope_status'
         }
-        if scoped_identity_binding:
+        owner_generation_binding = scoped_identity_binding or risk_account_generation_binding
+        if owner_generation_binding:
             try:
                 journal = self._journal
                 journal_id = journal.journal_id
                 generation = journal.generation
                 owner = self._owner
                 guard = control._guard
+                owned_check = control._owned
+                owned_binding = (
+                    getattr(owned_check, '__self__', None),
+                    getattr(owned_check, '__func__', owned_check),
+                )
+                account_digest = hashlib.sha256(journal.account_scope.encode('utf-8')).hexdigest()
             except Exception:
                 return _reject('CONTROL_UNAVAILABLE')
             if not _ref(journal_id) or not _ref(generation) or guard is None:
@@ -1043,18 +1064,36 @@ class GatewayDirectServiceBinding:
                     or (strategy is not None and (cause['scope_kind'] != 'strategy' or cause['scope_value'] != strategy))):
                 raise ValueError("SCOPE_DENIED")
 
-        def checked_strategy_binding(recheck):
+        def checked_owner_generation_binding(recheck):
             # The expected id is a comparison value, never authorization. Bind
             # the read to the exact control/journal and the current held owner.
             def check_binding():
+                current_owned = getattr(control, '_owned', None)
+                current_owned_binding = (
+                    getattr(current_owned, '__self__', None),
+                    getattr(current_owned, '__func__', current_owned),
+                )
+                try:
+                    guard.assert_owned()
+                    guard_generation = guard.acquire()
+                except Exception:
+                    raise DirectCommandJournalError('CONTROL_SCOPE_DENIED') from None
+                scope_granted = (
+                    strategy in grant.strategies
+                    if scoped_identity_binding
+                    else grant.kind == 'risk' and strategy is None and grant.account_scope_allowed
+                )
                 if (self._control is not control or self._journal is not journal or self._owner is not owner
                         or getattr(control, '_journal', None) is not journal
                         or getattr(control, '_guard', None) is not guard
                         or getattr(control, '_generation', None) != generation
+                        or current_owned_binding != owned_binding
+                        or getattr(guard, 'account_key_digest', None) != account_digest
+                        or guard_generation != generation
                         or journal.journal_id != journal_id or journal.generation != generation
                         or journal.account_scope != scope.account_ref
                         or self._control_grants.get(context.principal_ref) is not grant
-                        or operation not in grant.operations or strategy not in grant.strategies
+                        or operation not in grant.operations or not scope_granted
                         or not permit.matches_operation(operation) or not permit.matches_context(context)
                         or not permit.matches(arguments)):
                     raise DirectCommandJournalError('CONTROL_SCOPE_DENIED')
@@ -1063,7 +1102,6 @@ class GatewayDirectServiceBinding:
                 if operation != 'direct.control.identity' and expected_generation != generation:
                     raise DirectCommandJournalError('JOURNAL_GENERATION_MISMATCH')
             check_binding()
-            control._owned()
             recheck()
             check_binding()
 
@@ -1071,7 +1109,7 @@ class GatewayDirectServiceBinding:
             # A matching journal can survive an owner restart. The current
             # owner must not reconcile or claim an operation frozen by an
             # earlier generation, even when the request carries current IDs.
-            if (scoped_identity_binding
+            if (owner_generation_binding
                     and (type(cause.get('generation')) is not str
                          or cause['generation'] != expected_generation)):
                 raise DirectCommandJournalError('CONTROL_CAUSE_GENERATION_MISMATCH')
@@ -1079,31 +1117,31 @@ class GatewayDirectServiceBinding:
         def run():
             if operation == 'direct.control.identity':
                 with permit.scope() as recheck:
-                    if scoped_identity_binding:
-                        checked_strategy_binding(recheck)
+                    if owner_generation_binding:
+                        checked_owner_generation_binding(recheck)
                     control._owned()
                     with self._journal._transaction() as db:
                         self._journal._assert_anchor(db)
-                        if scoped_identity_binding:
-                            checked_strategy_binding(recheck)
+                        if owner_generation_binding:
+                            checked_owner_generation_binding(recheck)
                         else:
                             recheck()
                         result = {'status': 'OBSERVED',
                                   'schema_version': CONTROL_WIRE_SCHEMA_VERSION,
                                   'account_scope': self._journal.account_scope,
                                   'journal_id': self._journal.journal_id}
-                        if scoped_identity_binding:
+                        if owner_generation_binding:
                             result['journal_generation'] = generation
-                    if scoped_identity_binding:
-                        checked_strategy_binding(recheck)
+                    if owner_generation_binding:
+                        checked_owner_generation_binding(recheck)
                     return result
             if expected_journal_id is not None and expected_journal_id != self._journal.journal_id:
                 return _reject('JOURNAL_ID_MISMATCH')
-            if scoped_identity_binding and expected_generation != generation:
+            if owner_generation_binding and expected_generation != generation:
                 return _reject('JOURNAL_GENERATION_MISMATCH')
             def checked_commit(recheck):
-                if scoped_identity_binding:
-                    checked_strategy_binding(recheck)
+                if owner_generation_binding:
+                    checked_owner_generation_binding(recheck)
                     return
                 if expected_journal_id is not None and expected_journal_id != self._journal.journal_id:
                     raise DirectCommandJournalError('JOURNAL_ID_MISMATCH')
@@ -1120,14 +1158,14 @@ class GatewayDirectServiceBinding:
                 # at most ``limit`` of the not yet claimed ones, each once by its original identity.
                 # Nothing is blocked. The same operation id again continues with what is left.
                 with permit.scope() as recheck:
-                    if scoped_identity_binding:
-                        checked_strategy_binding(recheck)
+                    if owner_generation_binding:
+                        checked_owner_generation_binding(recheck)
                     row = control.cancel_scope(arguments['operation_id'], scope_kind=requested_scope[0],
                         scope_value=requested_scope[1], origin=operator_ref,
                         before_commit=lambda: checked_commit(recheck))
-                    if scoped_identity_binding:
+                    if owner_generation_binding:
                         checked_cause_generation(row)
-                        checked_strategy_binding(recheck)
+                        checked_owner_generation_binding(recheck)
                 scope_check(row)
                 if row['origin'] != operator_ref:
                     raise ValueError('SCOPE_DENIED')
@@ -1213,8 +1251,12 @@ class GatewayDirectServiceBinding:
                                           'version':cause['version'],'active':bool(cause['active'])}, cause)
             if operation == "direct.control.apply":
                 with permit.scope() as recheck:
+                    if owner_generation_binding:
+                        checked_owner_generation_binding(recheck)
                     cause = control.apply(arguments['cause_id'], arguments['mode'], scope_kind=requested_scope[0],
                         scope_value=requested_scope[1], origin=operator_ref, before_commit=lambda: checked_commit(recheck))
+                    if owner_generation_binding:
+                        checked_owner_generation_binding(recheck)
                 scope_check(cause)
                 audit('apply', cause)
                 return {"status": "OBSERVED", "cause_id": cause['cause_id'], "version": cause['version'], "active": bool(cause['active'])}
@@ -1222,13 +1264,13 @@ class GatewayDirectServiceBinding:
                 return cancel_scope()
             if operation == "direct.control.cancel_scope_status":
                 with permit.scope() as recheck:
-                    if scoped_identity_binding:
-                        checked_strategy_binding(recheck)
+                    if owner_generation_binding:
+                        checked_owner_generation_binding(recheck)
                     found = control.cancel_scope_status(arguments['operation_id'], after=arguments['after'],
                                                         limit=arguments['limit'])
                     checked_commit(recheck)
-                    if scoped_identity_binding:
-                        checked_strategy_binding(recheck)
+                    if owner_generation_binding:
+                        checked_owner_generation_binding(recheck)
                     if history_requested:
                         from bt_api_gateway.direct_control import cancel_scope_cause_id
 
@@ -1263,7 +1305,7 @@ class GatewayDirectServiceBinding:
                         historical_counts = dict(counts)
                         historical_counts['UNKNOWN'] += historical_counts['NOT_SENT']
                         historical_counts['NOT_SENT'] = 0
-                        checked_strategy_binding(recheck)
+                        checked_owner_generation_binding(recheck)
                         return {'status': 'OBSERVED', 'operation_id': arguments['operation_id'],
                                 'scope_kind': 'strategy', 'scope_value': strategy, 'origin': operator_ref,
                                 'targets': historical_page, 'counts': historical_counts, 'after': arguments['after'],
@@ -1294,7 +1336,7 @@ class GatewayDirectServiceBinding:
                     except DirectCommandJournalError as error:
                         if error.code != 'CONTROL_NOT_FOUND':
                             raise
-                        recheck()
+                        checked_commit(recheck)
                         result = {'status':'NOT_FOUND','cause_id':arguments['cause_id']}
                         if operation == 'direct.control.target_status':
                             result['operation_id'] = arguments['operation_id']
@@ -1308,7 +1350,7 @@ class GatewayDirectServiceBinding:
                         target = control.target_status(arguments['cause_id'], arguments['operation_id'])
                         result = ({'status':'NOT_FOUND','cause_id':arguments['cause_id'],'operation_id':arguments['operation_id']}
                                   if target is None else {'status':'OBSERVED','target':target})
-                    recheck()
+                    checked_commit(recheck)
                     return result
             cause = control.get(arguments['cause_id'])
             # D66-08: a Runtime principal releases only the causes it applied
@@ -1376,7 +1418,7 @@ class GatewayDirectServiceBinding:
                 audit('cancel of target ' + arguments['reservation_id'], cause)
             return {"status": "OBSERVED_TERMINAL" if target['state'] == 'OBSERVED_TERMINAL' else "UNKNOWN", "cause_id": arguments['cause_id'], "reservation_id": arguments['reservation_id']}
         try:
-            result = (owner if scoped_identity_binding else self._owner).submit_service_call(run).result(timeout_seconds=1.0)
+            result = (owner if owner_generation_binding else self._owner).submit_service_call(run).result(timeout_seconds=1.0)
             _ensure_reply_fits(context, result)
             return result
         except GatewayOwnerServiceCallError:

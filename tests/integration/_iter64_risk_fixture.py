@@ -59,6 +59,7 @@ SDK_ROOT = Path(__file__).resolve().parents[2]
 WATCHED = ("bt_api_execution", "bt_api_monitor", "bt_api_risk")
 RISK_CONTROL_OPS = frozenset(
     {
+        "direct.control.identity",
         "direct.control.apply",
         "direct.control.status",
         "direct.control.list",

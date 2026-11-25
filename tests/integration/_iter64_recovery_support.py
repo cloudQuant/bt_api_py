@@ -58,6 +58,7 @@ SDK_PYTHONPATH = os.pathsep.join(
 )
 CONTROL_OPS = frozenset(
     {
+        "direct.control.identity",
         "direct.control.apply",
         "direct.control.status",
         "direct.control.list",

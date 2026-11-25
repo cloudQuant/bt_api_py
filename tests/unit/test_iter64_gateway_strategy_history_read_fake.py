@@ -14,7 +14,7 @@ from bt_api_gateway.direct_control import GatewayDirectControl, cancel_scope_cau
 
 from bt_api_py.service_registry import ServiceDispatchAdmission
 from tests.unit.test_iter64_gateway_strategy_identity_fake import strategy_binding
-from tests.unit.test_iter64_strategy_cancel_gateway_fake import call
+from tests.unit.test_iter64_strategy_cancel_gateway_fake import OwnedGuard, call
 
 
 @contextmanager
@@ -57,7 +57,8 @@ def historical_control(monkeypatch, *, stored_generation='old-generation', origi
                                   generation='generation', _max_records=100, _transaction=transaction,
                                   _bump=lambda _: pytest.fail('historical read wrote a revision'))
         control = object.__new__(GatewayDirectControl)
-        control._journal, control._generation, control._claims, control._guard = journal, 'generation', {}, object()
+        control._journal, control._generation, control._claims = journal, 'generation', {}
+        control._guard = OwnedGuard()
         binding._journal, binding._control = journal, control
         monkeypatch.setattr(GatewayDirectControl, '_owned', lambda _: None)
         monkeypatch.setattr(direct_control_module, '_terminal_observation', lambda *_: None)
