@@ -43,6 +43,7 @@ class _SyntheticServiceClientRuntime:
         self.peer = _PEER
         self.remaining = remaining
         self.retire_after_call = False
+        self.fail_start = False
         self.close_uncertain = False
         self.close_calls = 0
         self.calls = []
@@ -102,6 +103,9 @@ class _SyntheticServiceClientRuntime:
 
     def start(self):
         assert self._state == "new"
+        if self.fail_start:
+            self._state = "failed"
+            raise RuntimeError("synthetic transient start timeout")
         self._state = "registered"
         return self.bindings
 
@@ -370,3 +374,141 @@ def test_socket_recovery_requires_strict_unregister_and_bound_targets(monkeypatc
         wrapper.call("application.monitor", _OPERATION, {})
     with pytest.raises(ServiceRuntimeRequestNotSentError):
         wrapper.call_bound("application.monitor", _OPERATION, {})
+
+
+@pytest.mark.parametrize("target_type", [BoundExecutionManagementReadTarget, BoundMonitorQueryTarget])
+def test_transient_replacement_start_failure_retries_cleanly_and_recovers(monkeypatch, target_type):
+    mount = (
+        "application.monitor"
+        if target_type is BoundMonitorQueryTarget
+        else "application.execution_management"
+    )
+    base_factory, created = _install_synthetic_factory(monkeypatch, mount=mount)
+
+    def flaky_factory():
+        rt = base_factory()
+        if rt.index in (1, 2):
+            rt.fail_start = True
+        return rt
+
+    monkeypatch.setattr(ThreadedServiceClientRuntime, "_SOCKET_RECOVERY_RETRY_BASE_SECONDS", 0.01)
+    monkeypatch.setattr(ThreadedServiceClientRuntime, "_SOCKET_RECOVERY_RETRY_MAX_SECONDS", 0.05)
+    wrapper = ThreadedServiceClientRuntime(
+        flaky_factory,
+        require_unregister_ack=True,
+        recover_on_socket_retirement=True,
+    )
+    wrapper.start(timeout_seconds=2)
+    try:
+        original_target = _target(target_type, created[0])
+        created[0].retire_after_call = True
+
+        first = wrapper.call_bound(
+            original_target, _operation(target_type), {"request_id": "before-stall"}, timeout_seconds=2
+        )
+        assert first == {"runtime_index": 0}
+        _wait_until(
+            lambda: len(created) == 4
+            and wrapper.status().state == "running"
+            and wrapper.status().healthy is True
+            and wrapper.status().run_id == "runtime-3",
+            timeout=3.0,
+        )
+
+        # Failed replacements 1 & 2 were each proven cleanly closed before retry.
+        assert created[0].close_calls == 1 and created[0].unregister_uncertainties == 0
+        assert created[1].close_calls == 1 and created[1].unregister_uncertainties == 0
+        assert created[2].close_calls == 1 and created[2].unregister_uncertainties == 0
+        assert created[3].close_calls == 0
+
+        second = wrapper.call_bound(
+            original_target, _operation(target_type), {"request_id": "after-stall"}, timeout_seconds=2
+        )
+        assert second == {"runtime_index": 3}
+    finally:
+        snap = wrapper.close(timeout_seconds=2)
+        assert snap.state == "closed"
+        assert created[3].close_calls == 1
+
+
+def test_failed_replacement_with_uncertain_cleanup_enters_sticky_without_retry(monkeypatch):
+    base_factory, created = _install_synthetic_factory(monkeypatch)
+
+    def uncertain_factory():
+        rt = base_factory()
+        if rt.index == 1:
+            rt.fail_start = True
+            rt.close_uncertain = True
+        return rt
+
+    monkeypatch.setattr(ThreadedServiceClientRuntime, "_SOCKET_RECOVERY_RETRY_BASE_SECONDS", 0.01)
+    wrapper = ThreadedServiceClientRuntime(
+        uncertain_factory,
+        require_unregister_ack=True,
+        recover_on_socket_retirement=True,
+    )
+    sticky_observations = []
+
+    class _StickyObserved(BaseException):
+        pass
+
+    def intercept_sticky(runtime, extension, error):
+        with wrapper._condition:
+            wrapper._cleanup_sticky = True
+            wrapper._sticky_resources = (runtime, extension)
+            wrapper._sticky_errors.append(error)
+            wrapper._stop = True
+            wrapper._state = "close_failed"
+            wrapper._healthy = False
+            wrapper._condition.notify_all()
+        sticky_observations.append(runtime)
+        raise _StickyObserved()
+
+    wrapper._enter_sticky = intercept_sticky
+    wrapper.start(timeout_seconds=2)
+    target = _target(BoundMonitorQueryTarget, created[0])
+    created[0].retire_after_call = True
+
+    assert wrapper.call_bound(target, _OPERATION, {"request_id": "once"}, timeout_seconds=2) == {
+        "runtime_index": 0
+    }
+    _wait_until(lambda: bool(sticky_observations))
+    assert sticky_observations == [created[1]]
+    assert len(created) == 2
+    assert created[0].close_calls == 1
+    assert created[1].close_calls == 1
+    assert wrapper._cleanup_sticky is True
+    assert wrapper._sticky_resources[0] is created[1]
+
+
+def test_close_during_recovery_backoff_exits_cleanly_as_closed(monkeypatch):
+    base_factory, created = _install_synthetic_factory(monkeypatch)
+
+    def failing_factory():
+        rt = base_factory()
+        if rt.index >= 1:
+            rt.fail_start = True
+        return rt
+
+    monkeypatch.setattr(ThreadedServiceClientRuntime, "_SOCKET_RECOVERY_RETRY_BASE_SECONDS", 5.0)
+    monkeypatch.setattr(ThreadedServiceClientRuntime, "_SOCKET_RECOVERY_RETRY_MAX_SECONDS", 5.0)
+    wrapper = ThreadedServiceClientRuntime(
+        failing_factory,
+        require_unregister_ack=True,
+        recover_on_socket_retirement=True,
+    )
+    wrapper.start(timeout_seconds=2)
+    target = _target(BoundMonitorQueryTarget, created[0])
+    created[0].retire_after_call = True
+    assert wrapper.call_bound(target, _OPERATION, {"request_id": "once"}, timeout_seconds=2) == {
+        "runtime_index": 0
+    }
+    _wait_until(lambda: len(created) >= 2 and created[1].close_calls == 1)
+
+    t0 = time.monotonic()
+    snap = wrapper.close(timeout_seconds=2)
+    elapsed = time.monotonic() - t0
+    assert elapsed < 1.5
+    assert snap.state == "closed"
+    assert snap.error_code is None
+    assert snap.unregister_uncertainties == 0

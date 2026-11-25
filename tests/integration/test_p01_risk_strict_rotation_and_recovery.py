@@ -474,3 +474,184 @@ def test_retired_strict_socket_unregisters_cleanly_and_reconnects_without_bricki
         assert host.close() is True
         gw.stop.set()
         gw.server.join(timeout=10)
+
+
+def _build_host_with_real_pump(tmp_path, gw, monkeypatch):
+    import bt_api_py.risk_service_gateway as gateway_module
+
+    risk_root = tmp_path / "risk-config"
+    risk_root.mkdir()
+    risk_config = selected_config(risk_root)
+    delegate = replace(
+        risk_config.gateway.delegate,
+        principal_ref=RISK.principal_ref,
+        actor_ref=RISK.actor_ref,
+        public_key=gw.client_public,
+        secret_key=gw.client_secret,
+    )
+    gateway = replace(
+        risk_config.gateway,
+        service_id=SERVICE.actor_ref,
+        principal_ref=SERVICE.principal_ref,
+        instance_id="gateway-a",
+        scope_ref="scope-a",
+        rpc_endpoint=gw.endpoint,
+        server_public_key=gw.server_public,
+        delegate=delegate,
+    )
+    risk_config = replace(
+        risk_config,
+        gateway=gateway,
+        account_scope=ACCOUNT,
+        execution_domain_ref=DOMAIN,
+        call_timeout_seconds=3.0,
+        maintain_seconds=0.1,
+    )
+    seed_v4(risk_config, extension=2)
+    host = RiskServiceHost(risk_config)
+
+    class FakeControlRuntime:
+        def start(self, **_kwargs):
+            binding = SimpleNamespace(
+                active=True,
+                mount="application.direct_write",
+                operations=gateway_module.CONTROL_OPERATIONS,
+            )
+            return SimpleNamespace(state="running", healthy=True, bindings=(binding,))
+
+        def status(self):
+            return SimpleNamespace(state="running", healthy=True)
+
+        def close(self, **_kwargs):
+            return SimpleNamespace(
+                state="closed",
+                thread_alive=False,
+                error_code=None,
+                unregister_uncertainties=0,
+                owner_cleanup_uncertainties=0,
+                unknown_registration_count=0,
+            )
+
+    class FakeService:
+        state = "started"
+
+        def serve_once(self, _timeout):
+            pass
+
+        def close(self):
+            self.state = "closed"
+
+    host._control_runtime = lambda: FakeControlRuntime()
+    host.start_service_host = lambda: setattr(host, "service_host", FakeService())
+    monkeypatch.setattr(host_module, "fault_point_from_environment", lambda *_: None)
+    return host
+
+
+def test_proactive_observer_rotation_before_socket_cap_preserves_verified_continuity(
+    tmp_path, monkeypatch
+):
+    gw = _start_curve_gateway(tmp_path)
+    host = _build_host_with_real_pump(tmp_path, gw, monkeypatch)
+    try:
+        host.start()
+        host.run_once()
+        assert host.pump.verified_epoch is not None
+        assert host.ready() is True
+        assert host.account_facts_observation_status() == "APPLIED"
+        old_observer = host._observer_runtime
+        old_snap = old_observer.status()
+        old_reg = old_snap.bindings[0].registration_id
+        assert old_snap.min_socket_message_ids_remaining is not None
+        assert old_snap.min_socket_message_ids_remaining > 4000
+
+        # Simulate approaching the 4096 per-socket CURVE message-id cap cleanly.
+        monkeypatch.setattr(host, "_OBSERVER_ROTATION_HEADROOM", 4096)
+        host._next["observation"] = 0.0
+        host.run_once()
+
+        assert host._cleanup_uncertain is False
+        new_observer = host._observer_runtime
+        assert new_observer is not None and new_observer is not old_observer
+        new_snap = new_observer.status()
+        assert new_snap.state == "running" and new_snap.healthy is True
+        assert new_snap.bindings[0].registration_id != old_reg
+        assert new_snap.min_socket_message_ids_remaining is not None
+        assert new_snap.min_socket_message_ids_remaining > 4000
+        # Same run_once() tick re-verifies pump continuity and keeps observer epoch valid.
+        assert host.pump.verified_epoch is not None
+        assert host.ready() is True
+        assert host._verified_observer_epoch() is not None
+    finally:
+        assert host.close() is True
+        gw.stop.set()
+        gw.server.join(timeout=10)
+
+
+def test_observer_lost_authenticated_socket_binding_reconnects_and_recovers_verified(
+    tmp_path, monkeypatch
+):
+    gw = _start_curve_gateway(tmp_path)
+    raw_observer_runtimes: list[ServiceClientRuntime] = []
+    original_construct = RiskServiceHost._construct_risk_raw_runtime
+
+    def capture_raw(self, factory, *args, **kwargs):
+        rt = original_construct(self, factory, *args, **kwargs)
+        req = kwargs.get("requested_operations") or {}
+        if req == {"upstream.account": OBSERVER_OPERATIONS}:
+            raw_observer_runtimes.append(rt)
+        return rt
+
+    monkeypatch.setattr(RiskServiceHost, "_construct_risk_raw_runtime", capture_raw)
+    host = _build_host_with_real_pump(tmp_path, gw, monkeypatch)
+    try:
+        host.start()
+        host.run_once()
+        assert host.pump.verified_epoch is not None
+        assert host.ready() is True
+        assert len(raw_observer_runtimes) == 1
+        old_observer = host._observer_runtime
+        old_reg = old_observer.status().bindings[0].registration_id
+
+        # Retire the observer's underlying non-strict ZMQ socket (exact soak 09:05:16 failure:
+        # socket silently rolls over, state stays "running", call_bound fails BOUND_ROUTE_UNAVAILABLE).
+        raw_obs = raw_observer_runtimes[0]
+        retired = threading.Event()
+        original_call = ServiceClientRuntime.call
+
+        def retire_then_call(rt, *args, **kwargs):
+            if rt is raw_obs and not retired.is_set():
+                retired.set()
+                transport = next(iter(rt._transports.values()))
+                transport._transport._retire_socket()
+            return original_call(rt, *args, **kwargs)
+
+        monkeypatch.setattr(ServiceClientRuntime, "call", retire_then_call)
+
+        # One poll triggers BOUND_ROUTE_UNAVAILABLE -> UNVERIFIED while observer stays "running".
+        host.pump.poll()
+        assert retired.is_set()
+        assert host.pump.verified_epoch is None
+        assert host.pump.last_code == "observation_read_failed"
+        degraded_snap = old_observer.status()
+        assert degraded_snap.state == "running"
+        assert degraded_snap.bindings[0].authenticated_peer is None
+
+        # Next run_once() detects lost authenticated binding, replaces observer cleanly,
+        # and replays from 0 to restore VERIFIED continuity in the same tick.
+        host._next["observation"] = 0.0
+        host.run_once()
+
+        assert host._cleanup_uncertain is False
+        new_observer = host._observer_runtime
+        assert new_observer is not None and new_observer is not old_observer
+        new_snap = new_observer.status()
+        assert new_snap.state == "running" and new_snap.healthy is True
+        assert new_snap.bindings[0].registration_id != old_reg
+        assert new_snap.bindings[0].authenticated_peer is not None
+        assert host.pump.verified_epoch is not None
+        assert host.ready() is True
+        assert host._verified_observer_epoch() is not None
+    finally:
+        assert host.close() is True
+        gw.stop.set()
+        gw.server.join(timeout=10)

@@ -1891,6 +1891,8 @@ class RiskServiceHost:
             self.order_cut_status = 'RECOVERY_REQUIRED' if self.account_facts_status == 'RECOVERY_REQUIRED' else 'READY'
 
     _ACCOUNT_FACTS_ROTATION_HEADROOM = 64
+    _ACCOUNT_FACTS_MIN_UNREGISTER_HEADROOM = 8
+    _OBSERVER_ROTATION_HEADROOM = 64
 
     def _verified_observer_epoch(self) -> str | None:
         """Return Gateway's current service_epoch only when observer proves Gateway is reachable."""
@@ -2049,6 +2051,16 @@ class RiskServiceHost:
     def _poll_account_facts(self) -> None:
         if self.account_facts_status not in {'READY', 'APPLIED', 'EMPTY'}:
             return
+        facts_rt = self._account_facts_runtime
+        if facts_rt is not None:
+            from bt_api_py.service_runtime_thread import ThreadedServiceClientRuntime
+            if type(facts_rt) is ThreadedServiceClientRuntime:
+                try:
+                    remaining = facts_rt.status().min_socket_message_ids_remaining
+                except Exception:
+                    remaining = None
+                if type(remaining) is int and remaining <= self._ACCOUNT_FACTS_MIN_UNREGISTER_HEADROOM:
+                    return
         settings = getattr(self.config, 'account_facts_observation', None)
         cut_enabled = bool(settings is not None and getattr(settings, 'order_cut_enabled', False))
         try:
@@ -2431,7 +2443,8 @@ class RiskServiceHost:
         import socket
         from urllib.parse import urlsplit
 
-        endpoint = getattr(getattr(self.config, "gateway", None), "endpoint", None)
+        gateway = getattr(self.config, "gateway", None)
+        endpoint = getattr(gateway, "rpc_endpoint", None) or getattr(gateway, "endpoint", None)
         if not isinstance(endpoint, str) or not endpoint.startswith("tcp://"):
             return True
         parsed = urlsplit(endpoint)
@@ -2446,12 +2459,22 @@ class RiskServiceHost:
             return False
 
     def _reconnect_observer(self) -> None:
-        """Replace a stopped observer only after local cleanup; replay before verifying."""
+        """Replace a stopped, degraded, or near-cap observer only after proven cleanup.
+
+        ``GatewayAccountObserverClient`` pins ``call_bound`` to the CURVE
+        socket binding established during ``service.register``. When the socket
+        approaches the 4096-message cap (or retires after a transient RPC
+        timeout), proactively rotate or replace the observer registration after
+        proven strict unregister cleanup so observation continuity recovers to
+        ``VERIFIED`` via replay-from-zero instead of remaining stuck
+        ``UNVERIFIED``.
+        """
         _require_supported_r04(self.config)
         self._check_owner_identity()
         if self._lifecycle_in_progress:
             _fail("RISK_SERVICE_HOST_LIFECYCLE_IN_PROGRESS")
         from bt_api_py.gateway_account_observer_client import GatewayAccountObserverClient
+        from bt_api_py.service_runtime_thread import BindingSnapshot, ThreadedServiceClientRuntime
 
         runtime = self._observer_runtime
         self._check_global_cleanup_ready(runtime if runtime is not None else self)
@@ -2461,16 +2484,64 @@ class RiskServiceHost:
         self._check_global_cleanup_ready(runtime if runtime is not None else self)
         if now < self._observer_retry_at:
             return
+        proactive_rotate = False
+        binding_auth_lost = False
+        old_epoch: str | None = None
         if runtime is not None:
             try:
-                state = self._call_lifecycle(lambda: runtime.status().state)
+                snap = self._call_lifecycle(runtime.status)
                 self._check_global_cleanup_ready(runtime)
             except Exception:
                 self._retain_if_global_unknown(runtime)
                 return
             self._check_global_cleanup_ready(runtime)
-            if state not in ("failed", "closed", "close_failed", "stopping"):
+            state = getattr(snap, "state", None)
+            bindings = getattr(snap, "bindings", None)
+            remaining = getattr(snap, "min_socket_message_ids_remaining", None)
+            if isinstance(bindings, (tuple, list)):
+                old_epochs = {
+                    getattr(b, "service_epoch", None)
+                    for b in bindings
+                    if getattr(b, "mount", None) == "upstream.account"
+                    and getattr(b, "active", False) is True
+                    and type(getattr(b, "service_epoch", None)) is str
+                    and getattr(b, "service_epoch", None)
+                }
+                if len(old_epochs) == 1:
+                    old_epoch = next(iter(old_epochs))
+            stopped_or_failed = state in ("failed", "closed", "close_failed", "stopping")
+            unhealthy_running = state == "running" and getattr(snap, "healthy", True) is False
+            low_budget = (
+                state == "running"
+                and type(remaining) is int
+                and remaining <= self._OBSERVER_ROTATION_HEADROOM
+            )
+            observer_bindings = (
+                [
+                    b for b in bindings
+                    if type(b) is BindingSnapshot
+                    and b.mount == "upstream.account"
+                    and b.active is True
+                ]
+                if isinstance(bindings, (tuple, list)) else []
+            )
+            binding_auth_lost = (
+                state == "running"
+                and type(remaining) is int
+                and bool(observer_bindings)
+                and any(
+                    b.authenticated_peer is None or b.server_key_fingerprint is None
+                    for b in observer_bindings
+                )
+            )
+            if not (stopped_or_failed or unhealthy_running or low_budget or binding_auth_lost):
                 return
+            proactive_rotate = (
+                low_budget
+                and not stopped_or_failed
+                and not unhealthy_running
+                and not binding_auth_lost
+            )
         self._observer_retry_at = now + max(1.0, self.config.maintain_seconds)
         # The persisted cursor is not trusted during registration replacement.
         try:
@@ -2480,7 +2551,7 @@ class RiskServiceHost:
             raise
         self._check_global_cleanup_ready(runtime if runtime is not None else self)
         if runtime is not None:
-            if not self._gateway_endpoint_listening():
+            if type(runtime) is ThreadedServiceClientRuntime and not self._gateway_endpoint_listening():
                 return
             if not self._close_runtime_once(runtime, self.config.call_timeout_seconds):
                 return
@@ -2519,11 +2590,33 @@ class RiskServiceHost:
             if not isinstance(error, Exception):
                 raise
             return
+        new_epoch: str | None = None
+        new_bindings = getattr(snapshot, "bindings", None)
+        if isinstance(new_bindings, (tuple, list)):
+            new_epochs = {
+                getattr(b, "service_epoch", None)
+                for b in new_bindings
+                if getattr(b, "mount", None) == "upstream.account"
+                and getattr(b, "active", False) is True
+                and type(getattr(b, "service_epoch", None)) is str
+                and getattr(b, "service_epoch", None)
+            }
+            if len(new_epochs) == 1:
+                new_epoch = next(iter(new_epochs))
         self._call_lifecycle(self.pump.replace_observer, observer)
         self._check_global_cleanup_ready(replacement)
-        self._call_lifecycle(self.order_port.invalidate_registrations)
-        self._check_global_cleanup_ready(replacement)
+        if self.order_port is not None and (
+            not proactive_rotate or old_epoch is None or new_epoch != old_epoch
+        ):
+            self._call_lifecycle(self.order_port.invalidate_registrations)
+            self._check_global_cleanup_ready(replacement)
         self._observer_retry_at = 0.0
+        _LOG.info(
+            "Risk observer runtime %s succeeded",
+            "proactive rotation" if proactive_rotate
+            else "binding-loss reconnect" if binding_auth_lost
+            else "reconnect",
+        )
 
     def _start_strategy_financial(self) -> None:
         _require_supported_r04(self.config)

@@ -804,6 +804,9 @@ class ThreadedServiceClientRuntime:
     runtime id and registration id/epoch.
     """
 
+    _SOCKET_RECOVERY_RETRY_BASE_SECONDS = 0.25
+    _SOCKET_RECOVERY_RETRY_MAX_SECONDS = 5.0
+
     def __init__(
         self,
         factory: Callable[[], Any],
@@ -2003,8 +2006,33 @@ class ThreadedServiceClientRuntime:
         except BaseException as cleanup_error:
             self._enter_sticky(runtime, None, cleanup_error)
 
+    def _wait_socket_recovery_backoff(self, attempt: int) -> bool:
+        """Wait before retrying a proven-clean socket recovery; return False on stop."""
+        base = self._SOCKET_RECOVERY_RETRY_BASE_SECONDS
+        cap = self._SOCKET_RECOVERY_RETRY_MAX_SECONDS
+        delay = min(cap, base * (2 ** min(attempt, 5)))
+        deadline = _DEADLINE_CLOCK() + delay
+        with self._condition:
+            self._healthy = False
+            self._reject_pending("NOT_READY")
+            self._condition.notify_all()
+            while not self._stop:
+                remaining = deadline - _DEADLINE_CLOCK()
+                if remaining <= 0:
+                    return True
+                self._condition.wait(min(remaining, threading.TIMEOUT_MAX))
+            return False
+
     def _replace_retired_socket_runtime(self, runtime: Any, extension: Any) -> Any:
-        """Close the retired registration before creating one fresh CURVE runtime."""
+        """Close the retired registration before creating a fresh CURVE runtime.
+
+        When the retired runtime and any failed replacement are both proven
+        cleanly closed (zero cleanup/unregister uncertainties) while the owner
+        is running, retry creation/start with bounded exponential backoff so a
+        transient host stall or downstream pause does not permanently brick
+        read-only Execution/Monitor CURVE clients. Any cleanup uncertainty or
+        policy violation still enters sticky cleanup immediately without retry.
+        """
         from bt_api_py.service_runtime import ServiceClientRuntime
         with self._condition:
             self._healthy = False
@@ -2023,36 +2051,55 @@ class ThreadedServiceClientRuntime:
             )
         self._close_recovery_runtime_once(runtime, extension)
 
-        try:
-            replacement = self._checked_action(None, None, self._factory)
-        except Exception:
-            raise ThreadedRuntimeError("RUNTIME_RECOVERY_FAILED") from None
-        if type(replacement) is not ServiceClientRuntime:
-            self._enter_sticky(
-                replacement, None, ThreadedRuntimeError("CLEANUP_POLICY_UNPROVEN")
-            )
-        if not self._checked_action(
-            replacement, None,
-            lambda: type(replacement._require_unregister_ack) is bool
-            and replacement._require_unregister_ack is True,
-        ):
-            self._enter_sticky(
-                replacement, None, ThreadedRuntimeError("CLEANUP_POLICY_UNPROVEN")
-            )
-        try:
-            self._checked_action(replacement, None, replacement.start)
-            self._capture_recovery_state(replacement, None)
-            if (not self._checked_action(replacement, None, lambda: bool(replacement.healthy))
-                    or self._socket_recovery_required()):
-                raise ThreadedRuntimeError("RUNTIME_RECOVERY_FAILED")
-        except BaseException as error:
-            self._close_failed_replacement_once(replacement, error)
-            if isinstance(error, ThreadedRuntimeError):
-                raise error
-            raise ThreadedRuntimeError("RUNTIME_RECOVERY_FAILED") from None
-        with self._condition:
-            self._runtime_generation += 1
-        return replacement
+        attempt = 0
+        while True:
+            with self._condition:
+                if self._stop:
+                    return None
+                starting = self._state == "starting"
+            try:
+                replacement = self._checked_action(None, None, self._factory)
+            except Exception:
+                if starting or self._cleanup_unknown is not None:
+                    raise ThreadedRuntimeError("RUNTIME_RECOVERY_FAILED") from None
+                if not self._wait_socket_recovery_backoff(attempt):
+                    return None
+                attempt += 1
+                continue
+            if type(replacement) is not ServiceClientRuntime:
+                self._enter_sticky(
+                    replacement, None, ThreadedRuntimeError("CLEANUP_POLICY_UNPROVEN")
+                )
+            if not self._checked_action(
+                replacement, None,
+                lambda: type(replacement._require_unregister_ack) is bool
+                and replacement._require_unregister_ack is True,
+            ):
+                self._enter_sticky(
+                    replacement, None, ThreadedRuntimeError("CLEANUP_POLICY_UNPROVEN")
+                )
+            try:
+                self._checked_action(replacement, None, replacement.start)
+                self._capture_recovery_state(replacement, None)
+                if (not self._checked_action(replacement, None, lambda: bool(replacement.healthy))
+                        or self._socket_recovery_required()):
+                    raise ThreadedRuntimeError("RUNTIME_RECOVERY_FAILED")
+            except BaseException as error:
+                self._close_failed_replacement_once(replacement, error)
+                if not isinstance(error, Exception):
+                    raise
+                if starting:
+                    if isinstance(error, ThreadedRuntimeError):
+                        raise error
+                    raise ThreadedRuntimeError("RUNTIME_RECOVERY_FAILED") from None
+                if not self._wait_socket_recovery_backoff(attempt):
+                    return None
+                attempt += 1
+                continue
+            with self._condition:
+                self._runtime_generation += 1
+                self._condition.notify_all()
+            return replacement
 
     def _socket_recovery_required(self) -> bool:
         if not self._recover_on_socket_retirement:
@@ -2280,6 +2327,8 @@ class ThreadedServiceClientRuntime:
                     retired = runtime
                     runtime = None
                     runtime = self._replace_retired_socket_runtime(retired, extension)
+                    if runtime is None:
+                        return
             else:
                 self._checked_action(runtime, extension, lambda: self._capture(runtime))
             with self._condition:
@@ -2304,6 +2353,8 @@ class ThreadedServiceClientRuntime:
                     retired = runtime
                     runtime = None
                     runtime = self._replace_retired_socket_runtime(retired, extension)
+                    if runtime is None:
+                        break
                     continue
                 try:
                     self._checked_action(runtime, extension, runtime.maintain)
@@ -2314,6 +2365,8 @@ class ThreadedServiceClientRuntime:
                             retired = runtime
                             runtime = None
                             runtime = self._replace_retired_socket_runtime(retired, extension)
+                            if runtime is None:
+                                break
                             continue
                     raise
                 if self._recover_on_socket_retirement:
@@ -2322,6 +2375,8 @@ class ThreadedServiceClientRuntime:
                         retired = runtime
                         runtime = None
                         runtime = self._replace_retired_socket_runtime(retired, extension)
+                        if runtime is None:
+                            break
                         continue
                 else:
                     self._checked_action(runtime, extension, lambda: self._capture(runtime))
