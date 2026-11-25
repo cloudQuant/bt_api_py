@@ -931,7 +931,7 @@ def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceCon
             ),
         )
         interval = _seconds(item["poll_interval_seconds"], maximum=Decimal(3600))
-        timeout = _seconds(item["timeout_seconds"], maximum=Decimal('0.250'))
+        timeout = _seconds(item["timeout_seconds"], maximum=Decimal(5))
         if interval < 1.0 or timeout < 0.001 or pretrade_version != 4 or pretrade_upgrade is not None:
             _fail("RISK_SERVICE_CONFIG_ACCOUNT_FACTS_INVALID")
         page_size = _int(item["page_size"], low=1, high=256)

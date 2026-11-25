@@ -659,3 +659,64 @@ def test_observer_lost_authenticated_socket_binding_reconnects_and_recovers_veri
         assert host.close() is True
         gw.stop.set()
         gw.server.join(timeout=10)
+
+
+def test_transient_account_facts_read_timeout_recovers_strict_runtime_after_backoff(
+    tmp_path, monkeypatch
+):
+    """A single read-only timeout on account.facts.read_after.v2 must latch UNKNOWN
+    with backoff (no immediate retry on the next tick), then after backoff cleanly
+    unregister and recreate the strict runtime once Gateway is confirmed reachable."""
+    from bt_api_py.gateway_account_facts import GatewayAccountFactsObserver
+
+    gw = _start_curve_gateway(tmp_path)
+    host = _build_host(tmp_path, gw, monkeypatch)
+    try:
+        host.start()
+        host.run_once()
+        assert host.account_facts_observation_status() == "APPLIED"
+        old_runtime = host._account_facts_runtime
+        old_reg = old_runtime.status().bindings[0].registration_id
+
+        # Inject a single transient read timeout (> 0.1s) on account.facts.read_after.v2.
+        original_handle = GatewayAccountFactsObserver.handle
+        timed_out_once = [False]
+
+        def slow_once(observer, operation, context, arguments):
+            if operation == "account.facts.read_after.v2" and not timed_out_once[0]:
+                timed_out_once[0] = True
+                time.sleep(0.25)
+            return original_handle(observer, operation, context, arguments)
+
+        monkeypatch.setattr(GatewayAccountFactsObserver, "handle", slow_once)
+        host._next["account_facts"] = 0.0
+        host.run_once()
+        assert timed_out_once[0] is True
+        assert host.account_facts_observation_status() == "UNKNOWN"
+        assert host._account_facts_runtime is old_runtime
+        assert old_runtime.status().state == "running"
+
+        # Immediately before backoff elapses: stays UNKNOWN and does NOT replace yet.
+        host._next["observation"] = 0.0
+        host.run_once()
+        assert host.account_facts_observation_status() == "UNKNOWN"
+        assert host._account_facts_runtime is old_runtime
+
+        # Once backoff elapses and observer confirms Gateway is live: cleanly replaces
+        # strict runtime (authoritative unregister ACK) and resumes polling to EMPTY.
+        host._account_facts_retry_at = 0.0
+        host._next["observation"] = 0.0
+        host.run_once()
+        assert host._cleanup_uncertain is False
+        new_runtime = host._account_facts_runtime
+        assert new_runtime is not None and new_runtime is not old_runtime
+        assert new_runtime.status().bindings[0].registration_id != old_reg
+        assert host.account_facts_observation_status() in {"READY", "EMPTY", "APPLIED"}
+
+        host._next["account_facts"] = 0.0
+        host.run_once()
+        assert host.account_facts_observation_status() == "EMPTY"
+    finally:
+        assert host.close() is True
+        gw.stop.set()
+        gw.server.join(timeout=10)

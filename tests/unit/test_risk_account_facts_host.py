@@ -60,10 +60,13 @@ def test_config_default_and_explicit_bounds(tmp_path):
     raw = document()
     assert parse_risk_service_config(raw, path=tmp_path / 'risk.yaml').account_facts_observation is None
     raw['pretrade'] = {'schema_version': 4}
+    raw['account_facts_observation'] = {'poll_interval_seconds': 1, 'timeout_seconds': '5.0', 'page_size': 256}
+    config = parse_risk_service_config(raw, path=tmp_path / 'risk.yaml')
+    assert config.account_facts_observation == RiskAccountFactsObservation(1.0, 5.0, 256)
     raw['account_facts_observation'] = {'poll_interval_seconds': 1, 'timeout_seconds': '0.250', 'page_size': 256}
     config = parse_risk_service_config(raw, path=tmp_path / 'risk.yaml')
     assert config.account_facts_observation == RiskAccountFactsObservation(1.0, 0.25, 256)
-    for key, value in [('poll_interval_seconds', '0.999'), ('timeout_seconds', '0.251'),
+    for key, value in [('poll_interval_seconds', '0.999'), ('timeout_seconds', '5.001'),
                        ('timeout_seconds', '0.0009'), ('page_size', 0), ('page_size', 257)]:
         bad = document()
         bad['pretrade'] = {'schema_version': 4}

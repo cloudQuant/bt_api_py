@@ -1197,7 +1197,7 @@ class RiskServiceHost:
                 or not 1 <= observation.poll_interval_seconds <= 3600
                 or type(observation.timeout_seconds) not in (int, float)
                 or not math.isfinite(observation.timeout_seconds)
-                or not 0.001 <= observation.timeout_seconds <= 0.250
+                or not 0.001 <= observation.timeout_seconds <= 5.0
                 or type(observation.page_size) is not int or not 1 <= observation.page_size <= 256
                 or cut_invalid
             ):
@@ -2014,6 +2014,34 @@ class RiskServiceHost:
                 needs_replace = True
             elif (
                 state == 'running'
+                and self.account_facts_status == 'UNKNOWN'
+                and self._account_facts_coordinator is not None
+                and not getattr(self.ledger, '_r05_uncertain', False)
+            ):
+                if not allow_failure_replace or observer_epoch is None or now < self._account_facts_retry_at:
+                    return
+                from bt_api_risk.pretrade.ledger import PretradeLedger
+                try:
+                    def _read_r05_progress():
+                        with PretradeLedger.transaction(self.ledger) as txn:
+                            return txn.r05_progress()
+                    progress = self._call_lifecycle(_read_r05_progress)
+                    self._check_global_cleanup_ready(runtime)
+                except Exception:
+                    if getattr(self.ledger, '_r05_uncertain', False):
+                        self._record_cleanup_uncertain(self.ledger, 'ACCOUNT_FACTS_STORAGE_UNKNOWN')
+                    return
+                if getattr(self.ledger, '_r05_uncertain', False):
+                    self._record_cleanup_uncertain(self.ledger, 'ACCOUNT_FACTS_STORAGE_UNKNOWN')
+                    return
+                if progress is not None and progress.get('pending') is not None:
+                    self.account_facts_status = 'RECOVERY_REQUIRED'
+                    if getattr(settings, 'order_cut_enabled', False):
+                        self.order_cut_status = 'RECOVERY_REQUIRED'
+                    return
+                needs_replace = True
+            elif (
+                state == 'running'
                 and getattr(snap, 'healthy', False) is True
                 and observer_epoch is not None
                 and self.account_facts_status in {'READY', 'APPLIED', 'EMPTY'}
@@ -2081,10 +2109,23 @@ class RiskServiceHost:
                     return
         settings = getattr(self.config, 'account_facts_observation', None)
         cut_enabled = bool(settings is not None and getattr(settings, 'order_cut_enabled', False))
+        def _note_unknown_backoff(reason: str, code: object = None) -> None:
+            try:
+                now = self._monotonic()
+                if _finite_poll_value(now):
+                    backoff = now + max(1.0, self.config.maintain_seconds)
+                    if _finite_poll_value(backoff):
+                        self._account_facts_retry_at = max(self._account_facts_retry_at, backoff)
+            except Exception:
+                pass
+            _LOG.warning("Risk account_facts poll transitioned to UNKNOWN (%s code=%s)", reason, code)
+
         try:
             result = self._account_facts_coordinator.poll_once()
             status = result.status if type(result.status) is str else 'UNKNOWN'
             self.account_facts_status = status if status in {'APPLIED', 'EMPTY', 'RECOVERY_REQUIRED'} else 'UNKNOWN'
+            if self.account_facts_status == 'UNKNOWN':
+                _note_unknown_backoff('facts_poll', getattr(result, 'code', None))
             if cut_enabled:
                 steps = 1
                 while (
@@ -2097,6 +2138,9 @@ class RiskServiceHost:
                     self.account_facts_status = (
                         status if status in {'APPLIED', 'EMPTY', 'RECOVERY_REQUIRED'} else 'UNKNOWN'
                     )
+                    if self.account_facts_status == 'UNKNOWN':
+                        _note_unknown_backoff('facts_drain', getattr(result, 'code', None))
+                        break
                     steps += 1
                 if self.account_facts_status in {'APPLIED', 'EMPTY'}:
                     cut_result = self._account_facts_coordinator.poll_order_cut_once()
@@ -2108,6 +2152,12 @@ class RiskServiceHost:
                     self.order_cut_status = cut_status if cut_status in allowed_cut else 'UNKNOWN'
                     if self.order_cut_status == 'RECOVERY_REQUIRED':
                         self.account_facts_status = 'RECOVERY_REQUIRED'
+                    elif (
+                        self.order_cut_status == 'UNKNOWN'
+                        and getattr(self._account_facts_coordinator, '_mode', 'READY') != 'READY'
+                    ):
+                        self.account_facts_status = 'UNKNOWN'
+                        _note_unknown_backoff('order_cut', getattr(cut_result, 'code', None))
                     elif (
                         self.order_cut_status == 'CUT_APPLIED'
                         and type(getattr(cut_result, 'fact_watermark', None)) is int
@@ -2121,6 +2171,9 @@ class RiskServiceHost:
                             self.account_facts_status = (
                                 next_status if next_status in {'APPLIED', 'EMPTY', 'RECOVERY_REQUIRED'} else 'UNKNOWN'
                             )
+                            if self.account_facts_status == 'UNKNOWN':
+                                _note_unknown_backoff('facts_catchup', getattr(next_res, 'code', None))
+                                break
                             catchup += 1
                             if (
                                 self.account_facts_status != 'APPLIED'
@@ -2136,6 +2189,7 @@ class RiskServiceHost:
             self.account_facts_status = 'UNKNOWN'
             if cut_enabled:
                 self.order_cut_status = 'UNKNOWN'
+            _note_unknown_backoff('exception')
         if getattr(self.ledger, '_r05_uncertain', False):
             self._record_cleanup_uncertain(self.ledger, 'ACCOUNT_FACTS_STORAGE_UNKNOWN')
 
