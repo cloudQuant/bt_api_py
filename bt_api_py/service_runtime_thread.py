@@ -815,6 +815,7 @@ class ThreadedServiceClientRuntime:
         recover_on_socket_retirement: bool = False,
         cleanup_unknown: Callable[[], bool] | None = None,
         on_cleanup_sticky: Callable[[ThreadedServiceClientRuntime], None] | None = None,
+        defer_sticky_cleanup_until_close: bool = False,
     ):
         if not callable(factory):
             raise TypeError("factory must be callable")
@@ -837,9 +838,16 @@ class ThreadedServiceClientRuntime:
             and (not callable(cleanup_unknown) or not callable(on_cleanup_sticky))
         ):
             raise ValueError("invalid sticky cleanup policy")
+        if type(defer_sticky_cleanup_until_close) is not bool or (
+            defer_sticky_cleanup_until_close
+            and (cleanup_unknown is None or not require_unregister_ack)
+        ):
+            raise ValueError("invalid deferred sticky cleanup policy")
         self._factory = factory
         self._cleanup_unknown = cleanup_unknown
         self._on_cleanup_sticky = on_cleanup_sticky
+        self._defer_sticky_cleanup_until_close = defer_sticky_cleanup_until_close
+        self._close_requested = False
         self._cleanup_sticky = False
         self._sticky_resources: tuple[Any, Any] | None = None
         self._sticky_errors: list[BaseException] = []
@@ -1452,6 +1460,7 @@ class ThreadedServiceClientRuntime:
                 return self.status()
             if self._cleanup_sticky:
                 raise ThreadedRuntimeError("CLEANUP_FAILED")
+            self._close_requested = True
             self._stop = True
             self._healthy = False
             self._cleanup_retry += 1
@@ -2645,6 +2654,19 @@ class ThreadedServiceClientRuntime:
                 original_error = self._error
                 if self._cleanup_sticky:
                     return
+            if (
+                self._cleanup_unknown is not None
+                and self._defer_sticky_cleanup_until_close
+                and failed
+                and runtime is not None
+                and not creating_extension
+                and original_error == "MAINTENANCE_FAILED"
+            ):
+                with self._condition:
+                    while not self._close_requested and not self._cleanup_sticky:
+                        self._condition.wait(0.05)
+                    if self._cleanup_sticky:
+                        return
             if self._cleanup_unknown is not None:
                 self._run_sticky_cleanup(runtime, extension)
             elif self._recover_on_socket_retirement and runtime is not None:

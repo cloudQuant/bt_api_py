@@ -4793,18 +4793,18 @@ class ServiceClientRuntime:
             self._strict_unregister_binding(binding)
 
     def _ephemeral_unregister_transport_for_retired_strict(
-        self, service_id: str, transport_ref: str
+        self, service_id: str, transport_ref: str, *, allow_disconnected_strict: bool = False
     ) -> Any | None:
-        """Create a one-shot unregister-only transport when a strict socket already retired.
+        """Create a one-shot unregister-only transport when a strict socket cannot send.
 
-        ``strict_single_connection=True`` intentionally refuses opening a second
-        socket on the original client after retirement (for example after a
-        transient RPC timeout). Business RPCs and renewals must still fail on
-        that retired client, but ``service.unregister`` is an idempotent
+        ``strict_single_connection=True`` intentionally sets ``RECONNECT_IVL=-1``
+        and refuses opening a second socket on the original client after
+        retirement or peer restart. Business RPCs and renewals must still fail on
+        that original client, but ``service.unregister`` is an idempotent
         revocation that requires an authenticated server acknowledgment so a
-        transient timeout cannot permanently trap ``require_unregister_ack=True``
-        cleanup. The caller must always close the returned transport immediately
-        without mutating ``self._transports``.
+        transient timeout or Gateway restart cannot permanently trap
+        ``require_unregister_ack=True`` cleanup. The caller must always close the
+        returned transport immediately without mutating ``self._transports``.
         """
         existing = self._transports.get((service_id, transport_ref))
         if type(existing) is not _RequestNotSentAdapter:
@@ -4814,7 +4814,8 @@ class ServiceClientRuntime:
             getattr(client, "_strict_single_connection", False) is not True
             or getattr(client, "_strict_socket_opened", False) is not True
             or (
-                getattr(client, "_socket", None) is not None
+                not allow_disconnected_strict
+                and getattr(client, "_socket", None) is not None
                 and getattr(client, "remaining_socket_message_ids", 1) != 0
             )
             or getattr(client, "_closed", True) is True
@@ -4846,14 +4847,37 @@ class ServiceClientRuntime:
             rpc_kwargs: dict[str, Any] = {"timeout": timeout, "timing": timing}
             if ephemeral_transport is not None:
                 rpc_kwargs["_override_transport"] = ephemeral_transport
-            receipt = self._rpc(
-                service_id,
-                transport_ref,
-                scope,
-                "service.unregister",
-                {"registration_id": registration_id, "service_epoch": epoch},
-                **rpc_kwargs,
-            )
+            try:
+                receipt = self._rpc(
+                    service_id,
+                    transport_ref,
+                    scope,
+                    "service.unregister",
+                    {"registration_id": registration_id, "service_epoch": epoch},
+                    **rpc_kwargs,
+                )
+            except ServiceRuntimeRequestNotSentError:
+                if ephemeral_transport is not None:
+                    raise
+                # A strict_single_connection socket (RECONNECT_IVL=-1) cannot
+                # reconnect after peer restart, so POLLOUT times out with
+                # RequestNotSentError without retiring _socket. Retry the
+                # idempotent unregister once over a fresh one-shot transport.
+                ephemeral_transport = self._ephemeral_unregister_transport_for_retired_strict(
+                    service_id, transport_ref, allow_disconnected_strict=True
+                )
+                if ephemeral_transport is None:
+                    raise
+                receipt = self._rpc(
+                    service_id,
+                    transport_ref,
+                    scope,
+                    "service.unregister",
+                    {"registration_id": registration_id, "service_epoch": epoch},
+                    timeout=timeout,
+                    timing=timing,
+                    _override_transport=ephemeral_transport,
+                )
             if (
                 receipt.get("unregistered") is not True
                 or receipt.get("registration_id") != registration_id

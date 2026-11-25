@@ -49,6 +49,7 @@ class RiskAccountFactsOutcome:
     status: str
     cursor: int | None = None
     code: str | None = None
+    fact_watermark: int | None = None
 
 
 def _exclusive(operation):
@@ -440,8 +441,17 @@ class RiskAccountFactsCoordinator:
             return RiskAccountFactsOutcome('UNKNOWN', before['cursor'], 'ORDER_CUT_APPLY_UNAVAILABLE')
         self._mode = 'READY'
         if header['source_history_has_gap']:
-            return RiskAccountFactsOutcome('CUT_GAP', before['cursor'], 'SOURCE_HISTORY_HAS_GAP')
-        return RiskAccountFactsOutcome('CUT_APPLIED', before['cursor'])
+            return RiskAccountFactsOutcome(
+                'CUT_GAP',
+                before['cursor'],
+                'SOURCE_HISTORY_HAS_GAP',
+                fact_watermark=header.get('fact_watermark'),
+            )
+        return RiskAccountFactsOutcome(
+            'CUT_APPLIED',
+            before['cursor'],
+            fact_watermark=header.get('fact_watermark'),
+        )
 
     @_exclusive
     def recover_pending_once(self):
