@@ -144,6 +144,7 @@ def _bound_receipt_time_valid(received_ns: int, started_ns: int, deadline: float
 
 # Code-owned action lists. Deployments may expose a subset; configuration and
 # remote discovery cannot introduce new actions into a proxy.
+_CONTROL_INTENT_OPERATIONS = frozenset({"direct.control.intent.apply"})
 PORT_OPERATIONS = MappingProxyType(
     {
         "service.calendar_read": frozenset({"calendar.query.v1", "calendar.windows.v1", "calendar.monitor.windows.v1"}),
@@ -172,6 +173,7 @@ PORT_OPERATIONS = MappingProxyType(
              "direct.control.apply", "direct.control.resume", "direct.control.identity", "direct.control.status", "direct.control.targets", "direct.control.list", "direct.control.drain_target", "direct.control.reconcile",
              "direct.control.resume_status", "direct.control.target_status",
              "direct.control.cancel_scope", "direct.control.cancel_scope_status",
+             *_CONTROL_INTENT_OPERATIONS,
              "direct.events.read_after", "direct.events.progress", "direct.events.ack"}
         ),
         "service.market_source": frozenset(
@@ -3479,6 +3481,7 @@ class ServiceClientRuntime:
                  "direct.control.identity", "direct.control.status", "direct.control.targets", "direct.control.list", "direct.control.drain_target", "direct.control.reconcile"}
                 | {"direct.control.resume_status", "direct.control.target_status"}
                 | {"direct.control.cancel_scope", "direct.control.cancel_scope_status"}
+                | _CONTROL_INTENT_OPERATIONS
             )
         elif port == "service.market_source":
             # New asynchronous bootstrap operations require explicit opt-in.
