@@ -72,13 +72,17 @@ def test_gateway_and_control_configs_propagate_call_timeout_seconds(tmp_path):
     gw_small = _gateway_client_config(small, "upstream.account").to_public_dict()
     ctrl_small = _control_client_config(small, ["application.direct_write"]).to_public_dict()
     assert gw_small["communication"]["profiles"]["gateway-client"]["options"]["request_timeout_ms"] == 2000
+    assert gw_small["clients"]["gateway"]["settings"]["options"]["request_timeout_ms"] == 2000
     assert ctrl_small["communication"]["profiles"]["gateway"]["options"]["request_timeout_ms"] == 2000
+    assert ctrl_small["clients"]["gateway"]["settings"]["options"]["request_timeout_ms"] == 2000
 
     large = replace(base, call_timeout_seconds=7.5)
     gw_large = _gateway_client_config(large, "upstream.account").to_public_dict()
     ctrl_large = _control_client_config(large, ["application.direct_write"]).to_public_dict()
     assert gw_large["communication"]["profiles"]["gateway-client"]["options"]["request_timeout_ms"] == 7500
+    assert gw_large["clients"]["gateway"]["settings"]["options"]["request_timeout_ms"] == 7500
     assert ctrl_large["communication"]["profiles"]["gateway"]["options"]["request_timeout_ms"] == 7500
+    assert ctrl_large["clients"]["gateway"]["settings"]["options"]["request_timeout_ms"] == 7500
 
 
 def test_wait_for_cleanup_updates_ready_file_to_cleanup_uncertain(tmp_path):

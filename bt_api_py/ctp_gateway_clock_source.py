@@ -177,9 +177,21 @@ class CtpGatewayCalibratedClockSource:
             raw, source_mono = raw
         elif internal:
             raise CtpGatewayCalibratedClockError("CLOCK_SOURCE_UNAVAILABLE")
-        if (tick_requested and self._refresher is not None
-                and self._refresher.is_current(current_anchor) is not True):
-            raise CtpGatewayCalibratedClockError("CLOCK_CALIBRATION_UNAVAILABLE")
+        def _anchor_still_trusted(event_lower_ns: int | None) -> bool:
+            if self._refresher is None or current_anchor is None:
+                return True
+            if self._refresher.is_current(current_anchor) is True:
+                return True
+            if event_lower_ns is None:
+                return False
+            from bt_api_py.gateway_server_clock_refresh import GatewayServerClockSnapshot
+            latest = self._refresher.current()
+            if (type(latest) is not GatewayServerClockSnapshot
+                    or latest.pid != os.getpid()
+                    or self._refresher.is_current(latest) is not True):
+                return False
+            return self._refresher.previous_for_event(latest, event_lower_ns) is current_anchor
+
         if (type(before) is not int or type(after) is not int or before <= 0 or after < before
                 or type(raw) is not dict or type(raw.get("age_ns")) is not int
                 or type(raw.get("remaining_ns")) is not int or raw["age_ns"] < 0):
@@ -189,6 +201,8 @@ class CtpGatewayCalibratedClockSource:
         # instant. The v1 login path still only exposes a conservative bound.
         event_lower = (source_mono if tick_requested else before) - raw["age_ns"]
         event_upper = (source_mono if tick_requested else after) - raw["age_ns"]
+        if tick_requested and not _anchor_still_trusted(event_lower):
+            raise CtpGatewayCalibratedClockError("CLOCK_CALIBRATION_UNAVAILABLE")
         if (anchor.anchor_monotonic_ns > event_lower
                 and tick_requested and self._refresher is not None
                 and current_anchor is not None):
@@ -245,7 +259,6 @@ class CtpGatewayCalibratedClockSource:
             "sample_age_ns": after - evidence.measured_monotonic_ns,
             "remaining_ns": evidence.valid_until_monotonic_ns - after,
         }
-        if (tick_requested and self._refresher is not None
-                and self._refresher.is_current(current_anchor) is not True):
+        if tick_requested and not _anchor_still_trusted(event_lower):
             raise CtpGatewayCalibratedClockError("CLOCK_CALIBRATION_UNAVAILABLE")
         return (result, source_mono) if internal else result

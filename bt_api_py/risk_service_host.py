@@ -697,13 +697,22 @@ def _gateway_client_config(config: RiskServiceConfig, mount: str, *, market: boo
     endpoints = {"rpc_connect": gateway.rpc_endpoint}
     if market:
         endpoints["market_connect"] = gateway.market_endpoint
-    raw["clients"] = {"gateway": {"config_schema_version": 1, "settings": {"bindings": [binding]}}}
+    timeout_ms = _gateway_request_timeout_ms(config)
+    raw["clients"] = {
+        "gateway": {
+            "config_schema_version": 1,
+            "settings": {
+                "bindings": [binding],
+                "options": {"request_timeout_ms": timeout_ms},
+            },
+        }
+    }
     raw["communication"]["profiles"]["gateway-client"] = {
         "backend": "zmq",
         "config_schema_version": 1,
         "endpoints": endpoints,
         "security_profile_ref": _GATEWAY_SECURITY,
-        "options": {"request_timeout_ms": _gateway_request_timeout_ms(config)},
+        "options": {"request_timeout_ms": timeout_ms},
     }
     return parse_service_config(raw)
 
@@ -713,6 +722,7 @@ def _control_client_config(config: RiskServiceConfig, mounts: Sequence[str]):
     from bt_api_py.service_config import parse_client_config
 
     gateway = config.gateway
+    timeout_ms = _gateway_request_timeout_ms(config)
     bindings = [
         {
             "mount": mount,
@@ -729,7 +739,15 @@ def _control_client_config(config: RiskServiceConfig, mounts: Sequence[str]):
             "client_config_schema_version": 1,
             "process_role": "application_client",
             "registration": {"application_ref": gateway.control.actor_ref},
-            "clients": {"gateway": {"config_schema_version": 1, "settings": {"bindings": bindings}}},
+            "clients": {
+                "gateway": {
+                    "config_schema_version": 1,
+                    "settings": {
+                        "bindings": bindings,
+                        "options": {"request_timeout_ms": timeout_ms},
+                    },
+                }
+            },
             "communication": {
                 "config_schema_version": 1,
                 "profiles": {
@@ -738,7 +756,7 @@ def _control_client_config(config: RiskServiceConfig, mounts: Sequence[str]):
                         "config_schema_version": 1,
                         "endpoints": {"rpc_connect": gateway.rpc_endpoint},
                         "security_profile_ref": _GATEWAY_SECURITY,
-                        "options": {"request_timeout_ms": _gateway_request_timeout_ms(config)},
+                        "options": {"request_timeout_ms": timeout_ms},
                     }
                 },
             },
