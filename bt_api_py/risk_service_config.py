@@ -548,6 +548,10 @@ class RiskAccountFactsObservation:
     order_cut_max_age_seconds: float | None = None
     order_cut_timeout_seconds: float | None = None
     order_cut_page_size: int = 256
+    cancel_attempts_enabled: bool = False
+    cancel_attempts_max_age_seconds: float | None = None
+    cancel_attempts_timeout_seconds: float | None = None
+    cancel_attempts_page_size: int = 256
 
 
 @dataclass(frozen=True)
@@ -928,6 +932,10 @@ def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceCon
                 "order_cut_max_age_seconds",
                 "order_cut_timeout_seconds",
                 "order_cut_page_size",
+                "cancel_attempts_enabled",
+                "cancel_attempts_max_age_seconds",
+                "cancel_attempts_timeout_seconds",
+                "cancel_attempts_page_size",
             ),
         )
         interval = _seconds(item["poll_interval_seconds"], maximum=Decimal(3600))
@@ -957,6 +965,32 @@ def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceCon
                     _fail("RISK_SERVICE_CONFIG_ACCOUNT_FACTS_INVALID")
             if "order_cut_page_size" in item:
                 cut_page_size = _int(item["order_cut_page_size"], low=1, high=256)
+        cancel_enabled = item.get("cancel_attempts_enabled", False)
+        if type(cancel_enabled) is not bool or (cancel_enabled and not cut_enabled):
+            _fail("RISK_SERVICE_CONFIG_ACCOUNT_FACTS_INVALID")
+        cancel_max_age = None
+        cancel_timeout = None
+        cancel_page_size = 256
+        if not cancel_enabled:
+            if any(
+                key in item
+                for key in (
+                    "cancel_attempts_max_age_seconds",
+                    "cancel_attempts_timeout_seconds",
+                    "cancel_attempts_page_size",
+                )
+            ):
+                _fail("RISK_SERVICE_CONFIG_ACCOUNT_FACTS_INVALID")
+        else:
+            if "cancel_attempts_max_age_seconds" not in item:
+                _fail("RISK_SERVICE_CONFIG_ACCOUNT_FACTS_INVALID")
+            cancel_max_age = _nanosecond_seconds(item["cancel_attempts_max_age_seconds"], maximum=Decimal(86400))
+            if "cancel_attempts_timeout_seconds" in item:
+                cancel_timeout = _seconds(item["cancel_attempts_timeout_seconds"], maximum=Decimal(5))
+                if cancel_timeout < 0.001:
+                    _fail("RISK_SERVICE_CONFIG_ACCOUNT_FACTS_INVALID")
+            if "cancel_attempts_page_size" in item:
+                cancel_page_size = _int(item["cancel_attempts_page_size"], low=1, high=256)
         facts_observation = RiskAccountFactsObservation(
             interval,
             timeout,
@@ -965,6 +999,10 @@ def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceCon
             order_cut_max_age_seconds=cut_max_age,
             order_cut_timeout_seconds=cut_timeout,
             order_cut_page_size=cut_page_size,
+            cancel_attempts_enabled=cancel_enabled,
+            cancel_attempts_max_age_seconds=cancel_max_age,
+            cancel_attempts_timeout_seconds=cancel_timeout,
+            cancel_attempts_page_size=cancel_page_size,
         )
     service = _mapping(
         top["service"],

@@ -9,11 +9,41 @@ import re
 import threading
 from dataclasses import dataclass
 
+from datetime import date
+
+from bt_api_base.market_protocol import MarketInstrumentKey
 from bt_api_base.service_protocol import WireIdentity, WireRole
 from bt_api_py.gateway_account_observer_client import GatewayAccountObserverClient, GatewayAccountObserverRoute
 from bt_api_py.gateway_delegate_service_client import runtime_failure
 from bt_api_py.gateway_execution_stream_client import _detach_wire, _epoch, _sequence
 from bt_api_py.service_runtime_thread import BoundCallObservation, BoundCallResult, BoundCallRoute, _BoundBindingToken
+
+_GAP_REASONS = frozenset({
+    'FACT_DAY_SOURCE_UNAVAILABLE',
+    'INSTRUMENT_BINDING_UNAVAILABLE',
+    'TRADING_DAY_MISMATCH',
+})
+_KEY_FIELDS = ('provider', 'venue', 'environment', 'product_type', 'instrument_id', 'native_symbol')
+
+
+def _valid_day(value) -> bool:
+    if type(value) is not str or len(value) != 8 or not value.isascii() or not value.isdigit():
+        return False
+    try:
+        date(int(value[:4]), int(value[4:6]), int(value[6:]))
+    except ValueError:
+        return False
+    return True
+
+
+def _valid_inst(value) -> bool:
+    if type(value) is not dict or set(value) != set(_KEY_FIELDS):
+        return False
+    try:
+        MarketInstrumentKey(*(value[f] for f in _KEY_FIELDS))
+    except Exception:
+        return False
+    return all(type(value[f]) is str and bool(value[f]) and value[f] == value[f].strip() for f in _KEY_FIELDS)
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,16 +56,19 @@ class CancelAttemptResult:
 
 
 class GatewayAccountCancelAttemptsClient(GatewayAccountObserverClient):
-    def __init__(self, runtime, *, route: GatewayAccountObserverRoute, peer: WireIdentity, fingerprint: str):
+    def __init__(self, runtime, *, route: GatewayAccountObserverRoute, peer: WireIdentity, fingerprint: str,
+                 allow_qualified: bool = False):
         super().__init__(runtime, route=route)
         if (route.identity.role not in {WireRole.SERVICE, WireRole.APPLICATION_CLIENT}
                 or type(peer) is not WireIdentity or peer.role is not WireRole.SERVICE
                 or peer.delegate_ref is not None or type(fingerprint) is not str
-                or re.fullmatch('[0-9a-f]{64}', fingerprint) is None):
+                or re.fullmatch('[0-9a-f]{64}', fingerprint) is None
+                or type(allow_qualified) is not bool):
             raise ValueError('INVALID_CANCEL_STREAM_ROUTE')
         self._bound_route = BoundCallRoute(route.identity, route.scope, route.scope_ref,
                                            route.service_id, route.instance_id, peer)
         self._expected_fingerprint = fingerprint
+        self._allow_qualified = allow_qualified
         identity, scope = route.identity, route.scope
         self._consumer_ref = 'cancel-attempts:' + hashlib.sha256(json.dumps([
             identity.principal_ref, identity.role.value, identity.actor_ref, scope.execution_domain_ref,
@@ -102,17 +135,27 @@ class GatewayAccountCancelAttemptsClient(GatewayAccountObserverClient):
                 if set(result) != {'status', field} or result['status'] != 'OK' or type(result[field]) is not dict:
                     raise ValueError
                 raw = result[field]
+                allow_qualified = getattr(self, '_allow_qualified', False) is True
                 fields = {'schema_version', 'account_scope', 'consumer_ref', 'epoch', 'offered_sequence',
                           'acknowledged_sequence', 'history_complete', 'overflow'}
                 if field == 'page':
                     fields |= {'events', 'has_more'}
-                if (set(raw) != fields or type(raw['schema_version']) is not int or raw['schema_version'] != 1
+                allowed_fields = fields | ({'journal_id', 'trading_day'} if allow_qualified else set())
+                if (not fields <= set(raw) <= allowed_fields
+                        or type(raw['schema_version']) is not int or raw['schema_version'] != 1
                         or raw['account_scope'] != self._route.scope.account_ref or raw['consumer_ref'] != self._consumer_ref
                         or not _epoch(raw['epoch']) or not _sequence(raw['offered_sequence'])
                         or not _sequence(raw['acknowledged_sequence']) or raw['acknowledged_sequence'] > raw['offered_sequence']
-                        or raw['history_complete'] is not False or type(raw['overflow']) is not bool
+                        or type(raw['history_complete']) is not bool
+                        or (not allow_qualified and raw['history_complete'] is not False)
+                        or type(raw['overflow']) is not bool
                         or (arguments.get('expected_epoch') is not None and raw['epoch'] != arguments['expected_epoch'])):
                     raise ValueError
+                if allow_qualified:
+                    if 'journal_id' in raw and (type(raw['journal_id']) is not str or not raw['journal_id']):
+                        raise ValueError
+                    if 'trading_day' in raw and raw['trading_day'] is not None and not _valid_day(raw['trading_day']):
+                        raise ValueError
                 if field == 'progress':
                     if operation.endswith('.ack') and raw['acknowledged_sequence'] != arguments['sequence']:
                         raise ValueError
@@ -121,16 +164,37 @@ class GatewayAccountCancelAttemptsClient(GatewayAccountObserverClient):
                     raise ValueError
                 previous = arguments['after_sequence']
                 for event in raw['events']:
-                    keys = {'sequence', 'schema_version', 'kind', 'account_scope', 'journal_id', 'attempt_id', 'version', 'state', 'reason'}
-                    if (type(event) is not dict or set(event) != keys
-                            or type(event['schema_version']) is not int or event['schema_version'] != 1
-                            or event['kind'] != 'SOURCE_GAP' or event['reason'] != 'FACT_DAY_SOURCE_UNAVAILABLE'
-                            or event['account_scope'] != raw['account_scope']
-                            or type(event['journal_id']) is not str or not event['journal_id']
-                            or type(event['attempt_id']) is not str or not event['attempt_id']
-                            or (event['state'], event['version']) not in {('DISPATCHING', 2), ('SENT', 3), ('NOT_SENT', 3), ('UNKNOWN', 3)}
-                            or type(event['sequence']) is not int or event['sequence'] != previous + 1
+                    if (type(event) is not dict
+                            or type(event.get('schema_version')) is not int or event['schema_version'] != 1
+                            or event.get('account_scope') != raw['account_scope']
+                            or type(event.get('journal_id')) is not str or not event['journal_id']
+                            or type(event.get('attempt_id')) is not str or not event['attempt_id']
+                            or (event.get('state'), event.get('version')) not in {('DISPATCHING', 2), ('SENT', 3), ('NOT_SENT', 3), ('UNKNOWN', 3)}
+                            or type(event.get('sequence')) is not int or event['sequence'] != previous + 1
                             or event['sequence'] > raw['offered_sequence']):
+                        raise ValueError
+                    kind = event.get('kind')
+                    if kind == 'SOURCE_GAP':
+                        keys = {'sequence', 'schema_version', 'kind', 'account_scope', 'journal_id', 'attempt_id', 'version', 'state', 'reason'}
+                        if set(event) != keys:
+                            raise ValueError
+                        if allow_qualified:
+                            if event['reason'] not in _GAP_REASONS:
+                                raise ValueError
+                        elif event['reason'] != 'FACT_DAY_SOURCE_UNAVAILABLE':
+                            raise ValueError
+                    elif allow_qualified and kind == 'CANCEL_ATTEMPT':
+                        req_keys = {'sequence', 'schema_version', 'kind', 'account_scope', 'journal_id',
+                                    'attempt_id', 'version', 'state', 'trading_day', 'instrument'}
+                        opt_keys = req_keys | {'strategy_scope', 'request_key'}
+                        if (not req_keys <= set(event) <= opt_keys
+                                or not _valid_day(event['trading_day'])
+                                or not _valid_inst(event['instrument'])):
+                            raise ValueError
+                        for opt in ('strategy_scope', 'request_key'):
+                            if opt in event and event[opt] is not None and (type(event[opt]) is not str or not event[opt]):
+                                raise ValueError
+                    else:
                         raise ValueError
                     previous = event['sequence']
                 if (not raw['events'] and raw['has_more']) or (previous < raw['offered_sequence'] and not raw['has_more']):

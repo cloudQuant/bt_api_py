@@ -1309,7 +1309,7 @@ def _validate_component_options(
         elif role == "market_hub":
             fields = {"role", "bounded_read_after"}
         elif role == "trading_owner":
-            fields = {"role", "dispatch_enabled", "cancel_enabled", "bounded_read_after", "control_enabled", "strategy_ledger_enabled", "account_extensions_enabled", "delegation_enabled", "parent_authority_enabled", "parent_acceptance_order_enabled", "parent_original_runs_enabled", "account_facts_financial_enabled", "actor_stream_enabled", "actor_source_v2_enabled", "strategy_origin_enabled", "control_cancel_enabled", "account_fact_recovery_enabled", "account_event_recovery_enabled"}
+            fields = {"role", "dispatch_enabled", "cancel_enabled", "bounded_read_after", "control_enabled", "strategy_ledger_enabled", "account_extensions_enabled", "delegation_enabled", "parent_authority_enabled", "parent_acceptance_order_enabled", "parent_original_runs_enabled", "account_facts_financial_enabled", "actor_stream_enabled", "actor_source_v2_enabled", "strategy_origin_enabled", "control_cancel_enabled", "account_fact_recovery_enabled", "account_event_recovery_enabled", "cancel_attempt_stream_enabled", "cancel_attempt_stream_qualified"}
         else:
             fields = {"role"}
         _check_keys(raw, fields, options_path)
@@ -1409,6 +1409,16 @@ def _validate_component_options(
             if type(enabled) is not bool or (enabled and raw.get('account_fact_recovery_enabled', False) is not True):
                 _fail('INVALID_VALUE', f'{options_path}.account_event_recovery_enabled')
             result['account_event_recovery_enabled'] = enabled
+        if role == 'trading_owner' and 'cancel_attempt_stream_enabled' in raw:
+            enabled = raw['cancel_attempt_stream_enabled']
+            if type(enabled) is not bool or (enabled and raw.get('cancel_enabled', False) is not True):
+                _fail('INVALID_VALUE', f'{options_path}.cancel_attempt_stream_enabled')
+            result['cancel_attempt_stream_enabled'] = enabled
+        if role == 'trading_owner' and 'cancel_attempt_stream_qualified' in raw:
+            enabled = raw['cancel_attempt_stream_qualified']
+            if type(enabled) is not bool or (enabled and raw.get('cancel_attempt_stream_enabled', False) is not True):
+                _fail('INVALID_VALUE', f'{options_path}.cancel_attempt_stream_qualified')
+            result['cancel_attempt_stream_qualified'] = enabled
         if role in {"market_hub", "trading_owner"} and "bounded_read_after" in raw:
             bounded_read_after = raw["bounded_read_after"]
             if type(bounded_read_after) is not bool:

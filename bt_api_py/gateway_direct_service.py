@@ -320,7 +320,7 @@ def validate_service_options(
     options: Mapping[str, object], bind_ports: tuple[str, ...]
 ) -> Mapping[str, object]:
     if (
-        set(options) - {"role", "dispatch_enabled", "cancel_enabled", "bounded_read_after", "control_enabled", "strategy_ledger_enabled", "account_extensions_enabled", "delegation_enabled", "parent_authority_enabled", "parent_acceptance_order_enabled", "parent_original_runs_enabled", "account_facts_financial_enabled", "actor_stream_enabled", "actor_source_v2_enabled", "strategy_origin_enabled", "control_cancel_enabled", "account_fact_recovery_enabled", "account_event_recovery_enabled", "cancel_attempt_stream_enabled"}
+        set(options) - {"role", "dispatch_enabled", "cancel_enabled", "bounded_read_after", "control_enabled", "strategy_ledger_enabled", "account_extensions_enabled", "delegation_enabled", "parent_authority_enabled", "parent_acceptance_order_enabled", "parent_original_runs_enabled", "account_facts_financial_enabled", "actor_stream_enabled", "actor_source_v2_enabled", "strategy_origin_enabled", "control_cancel_enabled", "account_fact_recovery_enabled", "account_event_recovery_enabled", "cancel_attempt_stream_enabled", "cancel_attempt_stream_qualified"}
         or options.get("role") != "trading_owner"
         or type(options.get("dispatch_enabled", False)) is not bool
         or type(options.get("cancel_enabled", False)) is not bool
@@ -342,6 +342,8 @@ def validate_service_options(
         or type(options.get('account_fact_recovery_enabled', False)) is not bool
         or type(options.get('account_event_recovery_enabled', False)) is not bool
         or type(options.get('cancel_attempt_stream_enabled', False)) is not bool
+        or type(options.get('cancel_attempt_stream_qualified', False)) is not bool
+        or (options.get('cancel_attempt_stream_qualified', False) and not options.get('cancel_attempt_stream_enabled', False))
         or (options.get('cancel_attempt_stream_enabled', False) and not options.get('cancel_enabled', False))
         or (options.get('cancel_attempt_stream_enabled', False) and 'service.account_read' not in bind_ports)
         or (options.get('account_event_recovery_enabled', False) and not options.get('account_fact_recovery_enabled', False))
@@ -399,6 +401,8 @@ def validate_service_options(
         result['account_event_recovery_enabled'] = options['account_event_recovery_enabled']
     if 'cancel_attempt_stream_enabled' in options:
         result['cancel_attempt_stream_enabled'] = options['cancel_attempt_stream_enabled']
+    if 'cancel_attempt_stream_qualified' in options:
+        result['cancel_attempt_stream_qualified'] = options['cancel_attempt_stream_qualified']
     if "service.market_source" in bind_ports:
         result["bounded_read_after"] = options.get("bounded_read_after", False)
     return result

@@ -22,6 +22,7 @@ from functools import wraps
 from bt_api_base.service_protocol import WireRole
 from bt_api_risk.pretrade.ledger import PretradeLedger
 
+from bt_api_py.gateway_account_cancel_attempts_client import GatewayAccountCancelAttemptsClient
 from bt_api_py.gateway_account_facts_client import (
     GatewayAccountFactIssuedPage,
     GatewayAccountFactProgress,
@@ -72,7 +73,9 @@ class RiskAccountFactsCoordinator:
 
     def __init__(self, client, ledger, *, limit=256, timeout_seconds=5.0,
                  order_cut_client=None, cut_max_age_seconds=60.0,
-                 cut_limit=256, cut_timeout_seconds=None, now_ns=time.time_ns):
+                 cut_limit=256, cut_timeout_seconds=None, now_ns=time.time_ns,
+                 cancel_attempts_client=None, cancel_max_age_seconds=60.0,
+                 cancel_limit=256, cancel_timeout_seconds=None):
         if (type(client) is not GatewayAccountFactsClient or type(client._runtime) is not ThreadedServiceClientRuntime
                 or type(client._bound_route) is not BoundCallRoute
                 or client._bound_route.peer.role is not WireRole.SERVICE
@@ -104,12 +107,39 @@ class RiskAccountFactsCoordinator:
                     or not 0 < cut_timeout <= threading.TIMEOUT_MAX
                     or not callable(now_ns)):
                 raise ValueError('R05_FACTS_COORDINATOR_INVALID')
+        cancel_timeout = timeout_seconds if cancel_timeout_seconds is None else cancel_timeout_seconds
+        if cancel_attempts_client is not None:
+            if (order_cut_client is None
+                    or type(cancel_attempts_client) is not GatewayAccountCancelAttemptsClient
+                    or cancel_attempts_client._runtime is not client._runtime
+                    or cancel_attempts_client._bound_route != client._bound_route
+                    or cancel_attempts_client._expected_fingerprint != client._expected_fingerprint
+                    or getattr(cancel_attempts_client, '_allow_qualified', False) is not True
+                    or getattr(ledger, '_r04_cov_enabled', False) is not True
+                    or type(cancel_max_age_seconds) not in (int, float)
+                    or not math.isfinite(cancel_max_age_seconds) or cancel_max_age_seconds <= 0
+                    or int(cancel_max_age_seconds * 1_000_000_000) < 1
+                    or type(cancel_limit) is not int or not 1 <= cancel_limit <= 256
+                    or type(cancel_timeout) not in (int, float) or not math.isfinite(cancel_timeout)
+                    or not 0 < cancel_timeout <= threading.TIMEOUT_MAX
+                    or not callable(now_ns)):
+                raise ValueError('R05_FACTS_COORDINATOR_INVALID')
         self._client, self._ledger = client, ledger
         self._cut_client = order_cut_client
         self._cut_bound_value = None if order_cut_client is None else copy.deepcopy(order_cut_client._bound_route)
         self._cut_max_age_ns = int(cut_max_age_seconds * 1_000_000_000) if order_cut_client is not None else 0
         self._cut_limit = cut_limit
         self._cut_timeout = float(cut_timeout)
+        self._cancel_client = cancel_attempts_client
+        self._cancel_bound_value = (
+            None if cancel_attempts_client is None else copy.deepcopy(cancel_attempts_client._bound_route)
+        )
+        self._cancel_max_age_ns = (
+            int(cancel_max_age_seconds * 1_000_000_000) if cancel_attempts_client is not None else 0
+        )
+        self._cancel_limit = cancel_limit
+        self._cancel_timeout = float(cancel_timeout)
+        self._cancel_last_has_more = False
         self._now_ns = now_ns
         self._runtime, self._journal, self._fence = client._runtime, ledger._journal, ledger._fence
         self._route, self._bound_route = client._route, client._bound_route
@@ -150,6 +180,15 @@ class RiskAccountFactsCoordinator:
                     or getattr(cc.read, '__func__', None) is not GatewayOrderCutClient.read
                     or getattr(cc.validate_copy_issued, '__func__', None) is not GatewayOrderCutClient.validate_copy_issued
                     or getattr(cc._registration, '__func__', None) is not GatewayAccountObserverClient._registration):
+                raise ValueError('R05_FACTS_BINDING_CHANGED')
+        if self._cancel_client is not None:
+            canc = self._cancel_client
+            if (canc._runtime is not self._runtime
+                    or canc._bound_route != self._cancel_bound_value
+                    or canc._expected_fingerprint != self._fingerprint
+                    or getattr(ledger, '_r04_cov_enabled', False) is not True
+                    or getattr(canc._call, '__func__', None) is not GatewayAccountCancelAttemptsClient._call
+                    or getattr(canc._registration, '__func__', None) is not GatewayAccountObserverClient._registration):
                 raise ValueError('R05_FACTS_BINDING_CHANGED')
         PretradeLedger._check(ledger)
 
@@ -452,6 +491,135 @@ class RiskAccountFactsCoordinator:
             before['cursor'],
             fact_watermark=header.get('fact_watermark'),
         )
+
+    @_exclusive
+    def poll_cancel_attempts_once(self):
+        """Fetch qualified cancel-attempt stream page, commit locally BEFORE ACK, then ACK."""
+        self._check_owner()
+        if self._cancel_client is None:
+            return RiskAccountFactsOutcome('DISABLED')
+        try:
+            self._check()
+        except Exception:
+            self._mode = 'UNKNOWN'
+            return RiskAccountFactsOutcome('UNKNOWN', code='OWNER_UNCERTAIN')
+        if self._mode != 'READY':
+            return RiskAccountFactsOutcome('UNKNOWN', code='RECOVERY_OR_MODE_NOT_READY')
+        try:
+            with PretradeLedger.transaction(self._ledger) as txn:
+                r05_state = txn.r05_progress()
+                r05_binding = txn.r05_source_binding()
+                c_before = txn.r04_cov_cancel_progress()
+        except Exception:
+            self._latch_after_failure()
+            return RiskAccountFactsOutcome('UNKNOWN', code='LOCAL_UNAVAILABLE')
+        if r05_state is None or r05_binding != self._source_binding:
+            return RiskAccountFactsOutcome('NO_FACTS_STATE')
+
+        # If a prior commit left ack_observed < cursor (e.g. crash before ACK), replay & ACK first.
+        if c_before is not None and c_before['ack_observed'] < c_before['cursor']:
+            try:
+                replay_limit = min(self._cancel_limit, c_before['cursor'] - c_before['ack_observed'])
+                replay = self._cancel_client.read_after(
+                    after_sequence=c_before['ack_observed'],
+                    expected_epoch=c_before['epoch'],
+                    limit=replay_limit,
+                    timeout_seconds=self._cancel_timeout,
+                )
+                if replay.outcome != 'OBSERVED' or replay.page is None or replay.binding is None:
+                    return RiskAccountFactsOutcome('UNKNOWN', c_before['cursor'], replay.code or 'CANCEL_REPLAY_UNAVAILABLE')
+                end_seq = c_before['ack_observed'] + len(replay.page['events'])
+                ack_res = self._cancel_client.acknowledge(
+                    end_seq,
+                    expected_epoch=c_before['epoch'],
+                    binding=replay.binding,
+                    timeout_seconds=self._cancel_timeout,
+                )
+                if ack_res.outcome != 'OBSERVED':
+                    return RiskAccountFactsOutcome('UNKNOWN', c_before['cursor'], ack_res.code or 'CANCEL_ACK_UNAVAILABLE')
+                with PretradeLedger.transaction(self._ledger) as txn:
+                    c_before = txn.r04_cov_record_cancel_attempt_ack(
+                        source_binding=dict(self._source_binding),
+                        epoch=c_before['epoch'],
+                        sequence=end_seq,
+                    )
+            except Exception:
+                self._latch_after_failure()
+                return RiskAccountFactsOutcome('UNKNOWN', c_before['cursor'], 'CANCEL_REPLAY_ERROR')
+
+        after = 0 if c_before is None else c_before['cursor']
+        expected_epoch = None if c_before is None else c_before['epoch']
+        try:
+            res = self._cancel_client.read_after(
+                after_sequence=after,
+                expected_epoch=expected_epoch,
+                limit=self._cancel_limit,
+                timeout_seconds=self._cancel_timeout,
+            )
+        except Exception:
+            return RiskAccountFactsOutcome('UNKNOWN', after, 'CANCEL_READ_UNAVAILABLE')
+        if res.outcome != 'OBSERVED' or res.page is None or res.binding is None:
+            return RiskAccountFactsOutcome('UNKNOWN', after, res.code or 'CANCEL_READ_UNAVAILABLE')
+        page = res.page
+        journal_id = page.get('journal_id') or r05_state['gateway_journal_id']
+        trading_day = page.get('trading_day')
+        if trading_day is None:
+            return RiskAccountFactsOutcome('GAP', after, 'TRADING_DAY_UNAVAILABLE')
+        try:
+            observed_at_ns = self._now_ns()
+            if type(observed_at_ns) is not int or observed_at_ns <= 0:
+                raise ValueError('R04_CANCEL_CLOCK_INVALID')
+            with PretradeLedger.transaction(self._ledger) as txn:
+                if txn.r05_source_binding() != self._source_binding:
+                    raise ValueError('R05_FACTS_SOURCE_CHANGED')
+                staged = txn.r04_cov_apply_cancel_attempt_page(
+                    source_binding=dict(self._source_binding),
+                    gateway_account=self._route.scope.account_ref,
+                    gateway_journal_id=journal_id,
+                    epoch=page['epoch'],
+                    consumer_ref=page['consumer_ref'],
+                    trading_day=trading_day,
+                    after_sequence=after,
+                    offered_sequence=page['offered_sequence'],
+                    acknowledged_sequence=page['acknowledged_sequence'],
+                    history_complete=page['history_complete'],
+                    overflow=page['overflow'],
+                    has_more=page['has_more'],
+                    events=page['events'],
+                    observed_at_ns=observed_at_ns,
+                    max_age_ns=self._cancel_max_age_ns,
+                )
+        except Exception:
+            self._latch_after_failure()
+            return RiskAccountFactsOutcome('UNKNOWN', after, 'CANCEL_APPLY_UNAVAILABLE')
+
+        self._cancel_last_has_more = bool(page['has_more'])
+        if page['events']:
+            try:
+                ack_res = self._cancel_client.acknowledge(
+                    staged['cursor'],
+                    expected_epoch=page['epoch'],
+                    binding=res.binding,
+                    timeout_seconds=self._cancel_timeout,
+                )
+            except Exception:
+                return RiskAccountFactsOutcome('UNKNOWN', staged['cursor'], 'CANCEL_ACK_UNAVAILABLE')
+            if ack_res.outcome != 'OBSERVED':
+                return RiskAccountFactsOutcome('UNKNOWN', staged['cursor'], ack_res.code or 'CANCEL_ACK_UNAVAILABLE')
+            try:
+                with PretradeLedger.transaction(self._ledger) as txn:
+                    staged = txn.r04_cov_record_cancel_attempt_ack(
+                        source_binding=dict(self._source_binding),
+                        epoch=page['epoch'],
+                        sequence=staged['cursor'],
+                    )
+            except Exception:
+                self._latch_after_failure()
+                return RiskAccountFactsOutcome('UNKNOWN', staged['cursor'], 'CANCEL_ACK_RECORD_UNAVAILABLE')
+
+        if staged['has_gap'] or staged['overflow'] or not staged['history_complete']:
+            return RiskAccountFactsOutcome('GAP', staged['cursor'], 'CANCEL_STREAM_GAP')
+        return RiskAccountFactsOutcome('APPLIED' if page['events'] else 'EMPTY', staged['cursor'])
 
     @_exclusive
     def recover_pending_once(self):

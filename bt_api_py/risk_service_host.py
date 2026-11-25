@@ -79,6 +79,7 @@ OBSERVER_OPERATIONS = frozenset(
     {"account.events.read_after", "account.events.progress", "account.events.ack"}
 )
 ACCOUNT_FACTS_OBSERVATION_OPERATIONS = frozenset({'account.facts.read_after.v2', 'account.facts.ack'})
+from bt_api_py.gateway_account_cancel_attempts import OPERATIONS as ACCOUNT_CANCEL_ATTEMPT_OPERATIONS
 from bt_api_py.gateway_order_cut_codec import OPERATIONS as ACCOUNT_ORDER_CUT_OPERATIONS
 DELEGATE_OPERATIONS = frozenset(
     {
@@ -1189,6 +1190,36 @@ class RiskServiceHost:
                     )
                 )
             )
+            cancel_enabled = getattr(observation, 'cancel_attempts_enabled', False)
+            cancel_max_age = getattr(observation, 'cancel_attempts_max_age_seconds', None)
+            cancel_timeout = getattr(observation, 'cancel_attempts_timeout_seconds', None)
+            cancel_page_size = getattr(observation, 'cancel_attempts_page_size', 256)
+            cancel_invalid = (
+                type(cancel_enabled) is not bool
+                or (cancel_enabled and not cut_enabled)
+                or (
+                    not cancel_enabled
+                    and (cancel_max_age is not None or cancel_timeout is not None or cancel_page_size != 256)
+                )
+                or (
+                    cancel_enabled
+                    and (
+                        type(cancel_max_age) not in (int, float)
+                        or not math.isfinite(cancel_max_age)
+                        or not 0 < cancel_max_age <= 86400
+                        or (
+                            cancel_timeout is not None
+                            and (
+                                type(cancel_timeout) not in (int, float)
+                                or not math.isfinite(cancel_timeout)
+                                or not 0.001 <= cancel_timeout <= 5.0
+                            )
+                        )
+                        or type(cancel_page_size) is not int
+                        or not 1 <= cancel_page_size <= 256
+                    )
+                )
+            )
             if (
                 type(observation) is not RiskAccountFactsObservation
                 or version != 4 or upgrade is not None
@@ -1200,6 +1231,7 @@ class RiskServiceHost:
                 or not 0.001 <= observation.timeout_seconds <= 5.0
                 or type(observation.page_size) is not int or not 1 <= observation.page_size <= 256
                 or cut_invalid
+                or cancel_invalid
             ):
                 raise RiskServiceStartError('RISK_SERVICE_CONFIG_ACCOUNT_FACTS_INVALID')
         _require_supported_r04(config)
@@ -1244,6 +1276,7 @@ class RiskServiceHost:
         self._account_facts_retry_at = 0.0
         self.account_facts_status = 'DISABLED'
         self.order_cut_status = 'DISABLED'
+        self.cancel_attempts_status = 'DISABLED'
         self._delegate_cleanup_unresolved: list[Any] = []
         self._next: dict[str, float] = {}
         self.stop_event = threading.Event()
@@ -1604,6 +1637,13 @@ class RiskServiceHost:
                         if error.code == 'R05_OBSERVATION_COMMIT_UNCERTAIN':
                             raise
                         _fail('RISK_SERVICE_ACCOUNT_FACTS_V2_REQUIRED')
+                    if getattr(config.account_facts_observation, 'cancel_attempts_enabled', False):
+                        try:
+                            self.ledger.enable_r04_coverage()
+                        except RiskOrderJournalError as error:
+                            if error.code == 'R05_OBSERVATION_COMMIT_UNCERTAIN':
+                                raise
+                            _fail('RISK_SERVICE_R04_COVERAGE_REQUIRED')
             except RiskOrderJournalError as error:
                 if error.code in ("PRETRADE_INIT_COMMIT_UNCERTAIN", "PRETRADE_MIGRATION_COMMIT_UNCERTAIN",
                                   'R05_OBSERVATION_COMMIT_UNCERTAIN'):
@@ -1843,8 +1883,12 @@ class RiskServiceHost:
             _fail('RISK_SERVICE_ACCOUNT_FACTS_UNAVAILABLE')
 
         cut_enabled = bool(getattr(settings, 'order_cut_enabled', False))
-        operations = (ACCOUNT_FACTS_OBSERVATION_OPERATIONS | ACCOUNT_ORDER_CUT_OPERATIONS
-                      if cut_enabled else ACCOUNT_FACTS_OBSERVATION_OPERATIONS)
+        cancel_enabled = bool(getattr(settings, 'cancel_attempts_enabled', False))
+        operations = ACCOUNT_FACTS_OBSERVATION_OPERATIONS
+        if cut_enabled:
+            operations = operations | ACCOUNT_ORDER_CUT_OPERATIONS
+        if cancel_enabled:
+            operations = operations | ACCOUNT_CANCEL_ATTEMPT_OPERATIONS
         runtime = self._call_lifecycle(self._service_runtime, 'upstream.account', route.scope,
             operations, strict_connection=True)
         self._runtimes.append(runtime)
@@ -1858,6 +1902,8 @@ class RiskServiceHost:
                 _fail('RISK_SERVICE_ACCOUNT_FACTS_GRANT_REQUIRED')
             if cut_enabled and not self._call_lifecycle(_granted, snapshot, 'upstream.account', ACCOUNT_ORDER_CUT_OPERATIONS):
                 _fail('RISK_SERVICE_ORDER_CUT_GRANT_REQUIRED')
+            if cancel_enabled and not self._call_lifecycle(_granted, snapshot, 'upstream.account', ACCOUNT_CANCEL_ATTEMPT_OPERATIONS):
+                _fail('RISK_SERVICE_CANCEL_ATTEMPTS_GRANT_REQUIRED')
             fingerprint = hashlib.sha256(self.config.gateway.server_public_key).hexdigest()
             client = self._call_lifecycle(GatewayAccountFactsClient, runtime, route=route, peer=self._peer(),
                 fingerprint=fingerprint)
@@ -1878,6 +1924,17 @@ class RiskServiceHost:
                     peer,
                 )
                 cut_client = self._call_lifecycle(GatewayOrderCutClient, runtime, route=cut_route, fingerprint=fingerprint)
+                cancel_client = None
+                if cancel_enabled:
+                    from bt_api_py.gateway_account_cancel_attempts_client import GatewayAccountCancelAttemptsClient
+                    cancel_client = self._call_lifecycle(
+                        GatewayAccountCancelAttemptsClient,
+                        runtime,
+                        route=route,
+                        peer=peer,
+                        fingerprint=fingerprint,
+                        allow_qualified=True,
+                    )
                 coordinator = self._call_lifecycle(
                     RiskAccountFactsCoordinator,
                     client,
@@ -1889,6 +1946,15 @@ class RiskServiceHost:
                     cut_limit=settings.order_cut_page_size,
                     cut_timeout_seconds=settings.order_cut_timeout_seconds or settings.timeout_seconds,
                     now_ns=self._now_ns,
+                    cancel_attempts_client=cancel_client,
+                    cancel_max_age_seconds=(
+                        settings.cancel_attempts_max_age_seconds if cancel_enabled else 60.0
+                    ),
+                    cancel_limit=settings.cancel_attempts_page_size if cancel_enabled else 256,
+                    cancel_timeout_seconds=(
+                        (settings.cancel_attempts_timeout_seconds or settings.timeout_seconds)
+                        if cancel_enabled else None
+                    ),
                 )
             else:
                 coordinator = self._call_lifecycle(RiskAccountFactsCoordinator, client, self.ledger,
@@ -1907,6 +1973,8 @@ class RiskServiceHost:
         self.account_facts_status = 'RECOVERY_REQUIRED' if state is not None and state['pending'] is not None else 'READY'
         if cut_enabled:
             self.order_cut_status = 'RECOVERY_REQUIRED' if self.account_facts_status == 'RECOVERY_REQUIRED' else 'READY'
+        if cancel_enabled:
+            self.cancel_attempts_status = 'RECOVERY_REQUIRED' if self.account_facts_status == 'RECOVERY_REQUIRED' else 'READY'
 
     _ACCOUNT_FACTS_ROTATION_HEADROOM = 64
     _ACCOUNT_FACTS_MIN_UNREGISTER_HEADROOM = 8
@@ -2109,6 +2177,7 @@ class RiskServiceHost:
                     return
         settings = getattr(self.config, 'account_facts_observation', None)
         cut_enabled = bool(settings is not None and getattr(settings, 'order_cut_enabled', False))
+        cancel_enabled = bool(settings is not None and getattr(settings, 'cancel_attempts_enabled', False))
         def _note_unknown_backoff(reason: str, code: object = None) -> None:
             try:
                 now = self._monotonic()
@@ -2181,14 +2250,33 @@ class RiskServiceHost:
                                 or not getattr(self._account_facts_coordinator, '_last_has_more', False)
                             ):
                                 break
+                    if cancel_enabled and self.order_cut_status == 'CUT_APPLIED':
+                        cancel_steps = 0
+                        while cancel_steps < 64:
+                            c_res = self._account_facts_coordinator.poll_cancel_attempts_once()
+                            c_status = c_res.status if type(c_res.status) is str else 'UNKNOWN'
+                            allowed_cancel = {'APPLIED', 'EMPTY', 'GAP', 'NO_FACTS_STATE', 'DISABLED'}
+                            self.cancel_attempts_status = c_status if c_status in allowed_cancel else 'UNKNOWN'
+                            cancel_steps += 1
+                            if (
+                                self.cancel_attempts_status != 'APPLIED'
+                                or not getattr(self._account_facts_coordinator, '_cancel_last_has_more', False)
+                            ):
+                                break
                 elif self.account_facts_status == 'RECOVERY_REQUIRED':
                     self.order_cut_status = 'RECOVERY_REQUIRED'
+                    if cancel_enabled:
+                        self.cancel_attempts_status = 'RECOVERY_REQUIRED'
                 else:
                     self.order_cut_status = 'UNKNOWN'
+                    if cancel_enabled:
+                        self.cancel_attempts_status = 'UNKNOWN'
         except Exception:
             self.account_facts_status = 'UNKNOWN'
             if cut_enabled:
                 self.order_cut_status = 'UNKNOWN'
+            if cancel_enabled:
+                self.cancel_attempts_status = 'UNKNOWN'
             _note_unknown_backoff('exception')
         if getattr(self.ledger, '_r05_uncertain', False):
             self._record_cleanup_uncertain(self.ledger, 'ACCOUNT_FACTS_STORAGE_UNKNOWN')
@@ -2206,6 +2294,14 @@ class RiskServiceHost:
         return status if status in {
             'DISABLED', 'READY', 'CUT_APPLIED', 'CUT_GAP',
             'CUT_UNAVAILABLE', 'RECOVERY_REQUIRED', 'NO_FACTS_STATE', 'UNKNOWN',
+        } else 'UNKNOWN'
+
+    def cancel_attempts_observation_status(self) -> str:
+        """Return only the local bounded cancel-attempts consumer state."""
+        self._check_owner_identity()
+        status = self.cancel_attempts_status
+        return status if status in {
+            'DISABLED', 'READY', 'APPLIED', 'EMPTY', 'GAP', 'NO_FACTS_STATE', 'RECOVERY_REQUIRED', 'UNKNOWN',
         } else 'UNKNOWN'
 
     def _connect_delegate(self, route: Any) -> _DelegateHandle:

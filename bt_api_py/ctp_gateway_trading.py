@@ -450,6 +450,7 @@ def _validate_config(
         account_fact_recovery_enabled = normalized_options.get('account_fact_recovery_enabled', False)
         account_event_recovery_enabled = normalized_options.get('account_event_recovery_enabled', False)
         cancel_attempt_stream_enabled = normalized_options.get('cancel_attempt_stream_enabled', False)
+        cancel_attempt_stream_qualified = normalized_options.get('cancel_attempt_stream_qualified', False)
         expected_options = {
             "role": "trading_owner",
             "dispatch_enabled": True,
@@ -485,6 +486,8 @@ def _validate_config(
             expected_options['account_event_recovery_enabled'] = account_event_recovery_enabled
         if 'cancel_attempt_stream_enabled' in normalized_options:
             expected_options['cancel_attempt_stream_enabled'] = cancel_attempt_stream_enabled
+        if 'cancel_attempt_stream_qualified' in normalized_options:
+            expected_options['cancel_attempt_stream_qualified'] = cancel_attempt_stream_qualified
         if market_settings is not None:
             expected_options["bounded_read_after"] = bounded
         market_principals = (
@@ -534,6 +537,7 @@ def _validate_config(
             or type(account_fact_recovery_enabled) is not bool or (account_fact_recovery_enabled and not (control_cancel_enabled and facts_financial_enabled))
             or type(account_event_recovery_enabled) is not bool or (account_event_recovery_enabled and not account_fact_recovery_enabled)
             or type(cancel_attempt_stream_enabled) is not bool or (cancel_attempt_stream_enabled and not (cancel_enabled and extensions_enabled and read_settings is not None))
+            or type(cancel_attempt_stream_qualified) is not bool or (cancel_attempt_stream_qualified and not cancel_attempt_stream_enabled)
             or type(bounded) is not bool
             or normalized_options != expected_options
             or not _ref(instance)
@@ -1325,6 +1329,7 @@ def build_ctp_gateway_trading_profile(
     account_fact_recovery_enabled = config.components["gateway"]["settings"]["options"].get('account_fact_recovery_enabled', False)
     account_event_recovery_enabled = config.components["gateway"]["settings"]["options"].get('account_event_recovery_enabled', False)
     cancel_attempt_stream_enabled = config.components["gateway"]["settings"]["options"].get('cancel_attempt_stream_enabled', False)
+    cancel_attempt_stream_qualified = config.components["gateway"]["settings"]["options"].get('cancel_attempt_stream_qualified', False)
     if upgrade_cancel_attempt_stream and not cancel_attempt_stream_enabled:
         raise CtpGatewayTradingError('INVALID_CANCEL_STREAM_CONFIGURATION')
     if settings.risk_v2_binding_enabled and (
@@ -1476,6 +1481,8 @@ def build_ctp_gateway_trading_profile(
             expected_options['account_event_recovery_enabled'] = account_event_recovery_enabled
         if 'cancel_attempt_stream_enabled' in normalized_options:
             expected_options['cancel_attempt_stream_enabled'] = cancel_attempt_stream_enabled
+        if 'cancel_attempt_stream_qualified' in normalized_options:
+            expected_options['cancel_attempt_stream_qualified'] = cancel_attempt_stream_qualified
         if market_settings is not None:
             normalized_options.setdefault("bounded_read_after", False)
             expected_options["bounded_read_after"] = config.components["gateway"]["settings"][
@@ -1650,6 +1657,8 @@ def build_ctp_gateway_trading_profile(
                     journal_options["risk_v2_binding_enabled"] = True
                 if cancel_attempt_stream_enabled and not upgrade_cancel_attempt_stream:
                     journal_options['cancel_attempt_stream_enabled'] = True
+                    if cancel_attempt_stream_qualified:
+                        journal_options['cancel_attempt_stream_qualified'] = True
                 target_version = 19 if account_event_recovery_enabled else 18 if account_fact_recovery_enabled else 17 if control_cancel_enabled else 16 if strategy_origin_enabled else 15 if actor_stream_enabled else 14 if facts_financial_enabled else 13 if parent_enabled else 12 if extensions_enabled else 11 if ledger_enabled else 10 if control_enabled else 9
                 candidates = [target_version]
                 if target_version == 19 and upgrade_account_event_recovery_from_v18:
@@ -1748,6 +1757,8 @@ def build_ctp_gateway_trading_profile(
                     journal.enable_account_event_recovery(guard)
                 if upgrade_cancel_attempt_stream:
                     journal.enable_cancel_attempt_stream(guard)
+                    if cancel_attempt_stream_qualified:
+                        journal._cancel_attempt_stream_qualified = True
                 if acceptance_enabled and not journal._parent_acceptance_order_enabled:
                     raise CtpGatewayTradingError('PARENT_ACCEPTANCE_EXTENSION_REQUIRED')
                 if control_release_audit_enabled and not journal._control_release_audit:

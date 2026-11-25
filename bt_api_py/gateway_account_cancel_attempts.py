@@ -71,18 +71,21 @@ class GatewayAccountCancelAttempts:
                     db = stack.enter_context(self.journal._transaction())
                     check()
                     common = (db, self.account_scope, context.principal_ref, consumer, owner)
+                    qualified = getattr(self.journal, '_cancel_attempt_stream_qualified', False) is True
                     if operation.endswith('.read_after'):
                         page = stream.read_after(*common, **arguments,
-                            result_fits=lambda p: context.result_fits({'status': 'OK', 'page': p}))
+                            result_fits=lambda p: context.result_fits({'status': 'OK', 'page': p}),
+                            **({'qualified': True} if qualified else {}))
                         result = {'status': 'OK', 'page': page}
                         self.journal._bump(db)
                     elif operation.endswith('.ack'):
                         progress = stream.acknowledge(*common, **arguments,
-                            result_fits=lambda p: context.result_fits({'status': 'OK', 'progress': p}))
+                            result_fits=lambda p: context.result_fits({'status': 'OK', 'progress': p}),
+                            **({'qualified': True} if qualified else {}))
                         result = {'status': 'OK', 'progress': progress}
                         self.journal._bump(db)
                     else:
-                        progress = stream.progress(*common)
+                        progress = stream.progress(*common, **({'qualified': True} if qualified else {}))
                         result = {'status': 'OK', 'progress': progress}
                         fits = context.result_fits(result)
                         if type(fits) is not bool:
