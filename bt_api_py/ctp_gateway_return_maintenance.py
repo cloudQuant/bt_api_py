@@ -9,6 +9,7 @@ import time
 from contextlib import contextmanager
 
 from bt_api_ctp.gateway_return_query import CtpGatewayReturnQueryError
+from bt_api_gateway.direct_command_journal import GatewayDirectCommandJournal
 from bt_api_gateway.direct_execution_journal import GatewayDirectExecutionLedger
 
 from bt_api_py.ctp_gateway_return_ingestion import CtpGatewayReturnIngestor
@@ -37,6 +38,15 @@ class CtpGatewayReturnMaintenanceError(RuntimeError):
 
 
 class CtpGatewayReturnMaintenance:
+    # Bounded idle reconcile reuse window (Iteration 73.09): when no callbacks
+    # arrived and the journal's process-local write counter, file fingerprint,
+    # session generation, and ledger cursor are all unchanged after a full
+    # fixed-point reconcile scan, skip repeating the SQLite scan on every 10Hz
+    # owner tick while still forcing a full re-check at least this often.
+    _RECONCILE_FASTPATH_MAX_AGE_SECONDS = 5.0
+    _reconcile_cache = None
+    _reconcile_clock = staticmethod(time.monotonic)
+
     def __init__(self, session, provider, journal, guard, account_key, settings, *, external_classifier=None,
                  observed_order_source=False):
         self._session, self._provider, self._settings = session, provider, settings
@@ -74,6 +84,7 @@ class CtpGatewayReturnMaintenance:
         # no gap, stale source or session change has been seen since.
         self._pair_seen = False
         self._recovery_fence_generation = None
+        self._reconcile_cache = None
         self._rebuild()
 
     def _clear_instrument_status_recovery_fence(self):
@@ -162,6 +173,96 @@ class CtpGatewayReturnMaintenance:
             self._fact_health = {"status": "UNAVAILABLE", "unattributed": None,
                                  "conflict": None, "verified_external": None}
 
+    def _invalidate_reconcile_cache(self):
+        self._reconcile_cache = None
+
+    def _reconcile_fastpath_journal(self):
+        ledger = getattr(self, "_ledger", None)
+        if type(ledger) is not GatewayDirectExecutionLedger:
+            return None
+        if (
+            getattr(ledger.reconcile_pending, "__func__", None)
+            is not GatewayDirectExecutionLedger.reconcile_pending
+            or getattr(ledger.account_fact_health, "__func__", None)
+            is not GatewayDirectExecutionLedger.account_fact_health
+        ):
+            return None
+        journal = getattr(ledger, "_journal", None)
+        if type(journal) is not GatewayDirectCommandJournal:
+            return None
+        if getattr(journal, "_continuity_witness", None) is not None:
+            return None
+        if getattr(self, "_generation", None) is None:
+            return None
+        return journal
+
+    def _try_reuse_idle_reconcile(self, batch):
+        if batch.records or not self._last_poll_ok:
+            return False
+        cache = getattr(self, "_reconcile_cache", None)
+        if cache is None:
+            return False
+        journal = self._reconcile_fastpath_journal()
+        if journal is None:
+            return False
+        (
+            cached_generation,
+            cached_mutation,
+            cached_fingerprint,
+            cached_pending_cursor,
+            cached_at,
+            cached_health,
+        ) = cache
+        if cached_generation != self._generation:
+            return False
+        if getattr(self._ledger, "_pending_cursor", None) != cached_pending_cursor:
+            return False
+        now = self._reconcile_clock()
+        if now < cached_at or (now - cached_at) >= self._RECONCILE_FASTPATH_MAX_AGE_SECONDS:
+            return False
+        if journal.mutation_counter != cached_mutation:
+            return False
+        try:
+            fingerprint = journal._storage_fingerprint()
+        except Exception:
+            return False
+        if fingerprint != cached_fingerprint:
+            return False
+        with self._lock:
+            if self._closing.is_set():
+                return False
+            self._fact_health = dict(cached_health)
+        return True
+
+    def _run_reconcile_and_refresh_fact_status(self):
+        self._invalidate_reconcile_cache()
+        results = self._ledger.reconcile_pending(limit=256)
+        self._refresh_fact_status()
+        journal = self._reconcile_fastpath_journal()
+        if journal is None:
+            return
+        with self._lock:
+            if self._closing.is_set() or self._fact_health.get("status") == "UNAVAILABLE":
+                return
+            health_snapshot = dict(self._fact_health)
+        if (
+            isinstance(results, (tuple, list))
+            and len(results) < 256
+            and all(getattr(item, "disposition", None) == "UNATTRIBUTED" for item in results)
+        ):
+            try:
+                fingerprint = journal._storage_fingerprint()
+            except Exception:
+                return
+            self._reconcile_cache = (
+                self._generation,
+                journal.mutation_counter,
+                fingerprint,
+                getattr(self._ledger, "_pending_cursor", None),
+                self._reconcile_clock(),
+                health_snapshot,
+            )
+
     def create_execution_stream(self, journal, grants, *, execution_domain_ref):
         from bt_api_py.gateway_execution_stream_service import GatewayExecutionStreamService
 
@@ -171,6 +272,7 @@ class CtpGatewayReturnMaintenance:
 
     def begin_close(self):
         self._check_pid()
+        self._invalidate_reconcile_cache()
         self._closing.set()
 
     def pause_for_reconnect(self):
@@ -178,6 +280,7 @@ class CtpGatewayReturnMaintenance:
         self._check_pid()
         if threading.current_thread() is not self._owner_thread:
             raise RuntimeError("OWNER_REQUIRED")
+        self._invalidate_reconcile_cache()
         self._drop_query()
         self._set(False, "SESSION_CHANGED")
         self._clear_instrument_status_recovery_fence()
@@ -217,6 +320,7 @@ class CtpGatewayReturnMaintenance:
             if self._before_rebuild() is not True:
                 raise RuntimeError('ORDER_CUT_CLOSE_UNCONFIRMED')
         # An outstanding query of the previous session is never ingested.
+        self._invalidate_reconcile_cache()
         self._drop_query()
         self._set(False, "SESSION_CHANGED")
         self._clear_instrument_status_recovery_fence()
@@ -303,6 +407,7 @@ class CtpGatewayReturnMaintenance:
                 self._observed_order_source.invalidate()
             batch = buffer.offer(limit=self._settings.callback_batch_limit)
             if batch.records:
+                self._invalidate_reconcile_cache()
                 self._ingestor.ingest_callbacks(
                     batch, assert_current=self._session.assert_return_record_current
                 )
@@ -312,8 +417,8 @@ class CtpGatewayReturnMaintenance:
                 raise CtpGatewayReturnMaintenanceError("OBSERVED_SOURCE_GAP")
             buffer.ack(batch)
             self._stale_seen = False
-            self._ledger.reconcile_pending(limit=256)
-            self._refresh_fact_status()
+            if not self._try_reuse_idle_reconcile(batch):
+                self._run_reconcile_and_refresh_fact_status()
             self._last_poll_ok = True
             status = buffer.status()
             if status.gap:
@@ -336,6 +441,7 @@ class CtpGatewayReturnMaintenance:
                 self._set(True, "HEALTHY")
         except Exception as error:
             self._last_poll_ok = False
+            self._invalidate_reconcile_cache()
             self._clear_fact_status()
             self._clear_instrument_status_recovery_fence()
             self._log_query_failure("callbacks", error)
@@ -413,6 +519,7 @@ class CtpGatewayReturnMaintenance:
             self._query_failed(kind, error)
             return False
         self._request = None
+        self._invalidate_reconcile_cache()
         self._set(False, "QUERY_RUNNING")
         self._clear_fact_status()
         try:
@@ -449,6 +556,7 @@ class CtpGatewayReturnMaintenance:
         )
 
     def _query_failed(self, kind, error):
+        self._invalidate_reconcile_cache()
         self._clear_fact_status()
         self._done.clear()
         self._next_query = time.monotonic() + self._settings.query_interval_seconds
