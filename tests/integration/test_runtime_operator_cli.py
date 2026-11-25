@@ -1,10 +1,12 @@
 """Authenticated loopback of Runtime control with synthetic Gateway resources."""
+import hashlib
 import http.client
 import json
 import queue
 import select
 import signal
 import socket
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -31,6 +33,7 @@ from bt_api_run_contract import (
     ValidatedRuntimeConfig,
 )
 
+from bt_api_py import _win32_security
 from bt_api_py.gateway_direct_owner import GatewayDirectOwner, GatewayDirectOwnerResources
 from bt_api_py.gateway_direct_service import (
     GatewayControlGrant,
@@ -90,6 +93,16 @@ def control_payload(operation, *, unit=None, parameters=None, command_id=None, r
     return {'schema': 'bt_api_run_contract.control/v1', 'operation': operation, 'unit': unit,
             'parameters': parameters or {}, 'command_id': command_id, 'reason': reason,
             'confirm': None, 'all_units': False}
+
+
+def set_owner_only(path, mode=0o600):
+    if _win32_security.WINDOWS:
+        _win32_security._set_owner_only_acl(path)
+        owner = _win32_security.inspect_owner(path)
+        assert owner.is_current_user and not owner.others_writable
+    else:
+        path.chmod(mode)
+    return path
 
 
 def request(port, payload, *, token):
@@ -208,7 +221,7 @@ def test_cli_gateway_control_requires_identity_and_shuts_down(tmp_path):
         def secret(name, data):
             path = tmp_path / name
             path.write_bytes(data)
-            path.chmod(0o600)
+            set_owner_only(path)
             return str(path)
         token = 'synthetic-token-' + 'a' * 32
         tokens = secret('tokens.json', json.dumps({'schema': 'bt_api_py.runtime_subject_tokens.v1',
@@ -282,7 +295,7 @@ def test_cli_monitor_events_with_real_monitor_host(tmp_path):
         token_path = tmp_path / 'tokens.json'
         token_path.write_text(json.dumps({'schema': 'bt_api_py.runtime_subject_tokens.v1',
                                          'tokens': [{'token': token, 'operator': 'alice'}]}))
-        token_path.chmod(0o600)
+        set_owner_only(token_path)
         listener = doc['ingress']
         client = fixture.monitor_fixture.client(listener, keys['events'][0], keys['producer'],
                                                  'producer', 'events.append')
@@ -324,6 +337,369 @@ def test_cli_monitor_events_with_real_monitor_host(tmp_path):
         fixture.monitor_fixture.stop(monitor_process)
 
 
+def test_runtime_cli_event_is_read_by_authenticated_monitor_query_host(tmp_path):
+    import re
+
+    from bt_api_monitor.observation_query import (
+        sign_observation_query_request,
+        verify_observation_query_page,
+    )
+
+    from bt_api_py.service_runtime import (
+        BoundMonitorQueryTarget,
+        ClientCurveKeys,
+        ServiceClientRuntime,
+        ZmqTransportFactory,
+    )
+    from tests.integration import test_runtime_monitor_ingress as monitor_fixture
+    from tests.unit import test_monitor_query_service_host as query_fixture
+
+    event_type = "runtime.command_accepted.v1"
+    monitor_path, monitor_doc, monitor_keys = monitor_fixture._deployment(tmp_path)
+    monitor_process = monitor_fixture.monitor_fixture.start(monitor_path)
+    runtime_process = None
+    runtime_stop_marker = None
+    query_process = None
+    query_stop_marker = None
+    query_lines = None
+    query_client = None
+    try:
+        unit = make_unit(tmp_path, name="alpha")
+        runtime_path = tmp_path / "runtime.json"
+        runtime_home = tmp_path / "runtime-home"
+        port = free_port()
+        runtime_path.write_text(json.dumps({
+            "schema": "bt_api_runtime/v1",
+            "home": str(runtime_home),
+            "api": {"transport": "http_json", "bind": "127.0.0.1", "port": port,
+                    "identity_mechanism": "subject_token"},
+            "operators": [{"name": "alice", "role": "operator", "units": ["alpha"]}],
+            "monitor_events": {"enabled": True},
+            "units": [{
+                "name": "alpha", "kind": "strategy", "dir": unit.strategy_dir,
+                "entry": "run.py", "python": sys.executable, "access": "direct",
+                "heartbeat_interval_s": 1, "start_timeout_s": 10,
+                "stop": {"graceful_timeout_s": 2, "kill_timeout_s": 1},
+            }],
+        }), encoding="utf-8")
+
+        token = "synthetic-token-" + "a" * 32
+        token_path = tmp_path / "tokens.json"
+        token_path.write_text(json.dumps({
+            "schema": "bt_api_py.runtime_subject_tokens.v1",
+            "tokens": [{"token": token, "operator": "alice"}],
+        }), encoding="utf-8")
+        set_owner_only(token_path)
+
+        listener = monitor_doc["ingress"]
+        ingress_config = monitor_fixture.monitor_fixture.client(
+            listener,
+            monitor_keys["events"][0],
+            monitor_keys["producer"],
+            "producer",
+            "events.append",
+        )
+        public_client = parse_service_config(ingress_config._config).to_public_dict()
+        runtime_config_path = tmp_path / "operator.json"
+        runtime_config_path.write_text(json.dumps({
+            "schema": "bt_api_py.runtime_operator.v1",
+            "runtime_config_file": str(runtime_path),
+            "subject_token_file": str(token_path),
+            "gateway": None,
+            "monitor": {
+                "identity": {"principal_ref": "producer", "actor_ref": "producer-service"},
+                "expected_peer": {
+                    "principal_ref": listener["principal_ref"],
+                    "actor_ref": listener["service_id"],
+                },
+                "execution_domain_ref": monitor_doc["scope"]["execution_domain_ref"],
+                "account_ref": monitor_doc["scope"]["account_ref"],
+                "scope_ref": listener["scope_ref"],
+                "run_id": "runtime-query-run",
+                "timeout_seconds": 2,
+                "client_config": public_client,
+                "curve_keys": {
+                    "server_public": str(tmp_path / "events.public"),
+                    "client_public": str(tmp_path / "producer.public"),
+                    "client_secret": str(tmp_path / "producer.secret"),
+                },
+            },
+        }), encoding="utf-8")
+
+        runtime_process = subprocess.Popen(
+            [sys.executable, "-u", "-m", "bt_api_py.runtime_operator_cli", "run",
+             "--config", str(runtime_config_path), "--enable-owner-stop-file"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
+        )
+        assert _wait_startup_line(runtime_process, 20) == f"runtime_control_listening 127.0.0.1 {port}"
+        runtime_marker_line = _wait_startup_line(runtime_process, 10)
+        runtime_marker_match = re.fullmatch(
+            r"runtime_control_stop_file (runtime-[0-9a-f]{32}\.stop)", runtime_marker_line
+        )
+        assert runtime_marker_match is not None, runtime_marker_line
+        runtime_stop_marker = runtime_home / runtime_marker_match.group(1)
+        assert runtime_process.poll() is None
+
+        command_id = str(uuid.uuid4())
+        _, result = request(
+            port,
+            control_payload(
+                "runtime.unit.pause", unit="alpha", command_id=command_id, reason="test"
+            ),
+            token=token,
+        )
+        assert result["status"] == "REJECTED"
+        assert runtime_process.poll() is None
+        assert monitor_process.poll() is None
+
+        # This read selects the exact event identity for the query assertion;
+        # the authenticated query response below is the read-path evidence.
+        expected_event = None
+        deadline = time.monotonic() + 5
+        while expected_event is None and time.monotonic() < deadline:
+            selected_rows = monitor_fixture._rows(tmp_path)
+            if selected_rows:
+                expected_event = selected_rows[0].event
+            else:
+                time.sleep(0.02)
+        assert expected_event is not None
+        runtime_event_kind = event_type[len("runtime."):-len(".v1")]
+        with sqlite3.connect(
+            (runtime_home / "events.sqlite3").resolve().as_uri() + "?mode=ro", uri=True
+        ) as runtime_db:
+            runtime_rows = runtime_db.execute(
+                "SELECT seq, epoch, kind, command_id FROM events "
+                "WHERE kind = ? AND command_id = ?",
+                (runtime_event_kind, command_id),
+            ).fetchall()
+        assert len(runtime_rows) == 1
+        runtime_sequence, runtime_epoch, stored_kind, stored_command_id = runtime_rows[0]
+        assert type(runtime_sequence) is int and runtime_sequence > 0
+        assert stored_kind == runtime_event_kind
+        assert stored_command_id == command_id
+
+        source_event_preimage = json.dumps(
+            [["producer", "producer-service", None], runtime_epoch, runtime_sequence],
+            ensure_ascii=True,
+            separators=(",", ":"),
+        ).encode("ascii")
+        source_event_id = "runtime-event:" + hashlib.sha256(source_event_preimage).hexdigest()
+        runtime_payload = {
+            "schema": "sdk.runtime_observation.v1",
+            "sequence": runtime_sequence,
+            "command_id": command_id,
+        }
+        monitor_event_data = {
+            "producer": {
+                "role": "service",
+                "principal_ref": "producer",
+                "actor_ref": "producer-service",
+                "delegate_ref": None,
+            },
+            "source_event_id": source_event_id,
+            "payload": runtime_payload,
+        }
+        assert expected_event.event_type == f"runtime.{stored_kind}.v1" == event_type
+        outbox_scope = monitor_doc["storage"]["outbox_scope"]
+        assert expected_event.scope == outbox_scope
+        assert dict(expected_event.data) == monitor_event_data
+
+        query_raw = query_fixture._config(tmp_path)
+        query_server_public, query_server_secret = query_raw.pop("_test_keys")
+        query_client_public, query_client_secret = zmq.curve_keypair()
+        hmac_key = bytes(range(32))
+        query_scope = WireScope(
+            monitor_doc["scope"]["execution_domain_ref"],
+            account_ref=monitor_doc["scope"]["account_ref"],
+        )
+        query_raw["scope"] = {
+            "execution_domain_ref": query_scope.execution_domain_ref,
+            "account_ref": query_scope.account_ref,
+        }
+        query_raw["storage"].update({
+            "events_db": str(tmp_path / "data" / "events.sqlite"),
+            "outbox_scope": outbox_scope,
+            "event_types": [event_type],
+        })
+        query_raw["keys"]["client_public_key_file"] = str(tmp_path / "query-client.public")
+        key_files = {
+            "server.public": query_server_public,
+            "server.secret": query_server_secret,
+            "query-client.public": query_client_public,
+        }
+        for name, value in key_files.items():
+            key_path = tmp_path / name
+            key_path.write_bytes(value)
+            query_fixture._set_owner_only(key_path)
+        hmac_path = tmp_path / "observation.hmac.hex"
+        hmac_path.write_text(hmac_key.hex(), encoding="ascii")
+        query_fixture._set_owner_only(hmac_path)
+
+        query_config_path = tmp_path / "monitor-query.json"
+        query_document = query_fixture._write_config(query_config_path, query_raw)
+        query_endpoint = query_document["service_config"]["communication"]["profiles"][
+            "monitor-query-listener"
+        ]["endpoints"]["rpc_bind"]
+        query_process = subprocess.Popen(
+            [sys.executable, "-u", "-m", "bt_api_py.monitor_query_service_host", "run",
+             "--config", str(query_config_path), "--enable-owner-stop-file"],
+            cwd=Path(__file__).resolve().parents[2],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
+        )
+        query_lines = queue.Queue()
+        threading.Thread(
+            target=query_fixture._read_lines,
+            args=(query_process, query_lines),
+            daemon=True,
+        ).start()
+        assert query_fixture._next_line(query_lines, query_process) == "MONITOR_OBSERVATION_QUERY_READY"
+        query_marker_match = re.fullmatch(
+            r"MONITOR_OBSERVATION_QUERY_STOP_FILE (monitor-query-[0-9a-f]{32}\.stop)",
+            query_fixture._next_line(query_lines, query_process),
+        )
+        assert query_marker_match is not None
+        query_stop_marker = query_config_path.with_name(query_marker_match.group(1))
+        assert query_process.poll() is None
+
+        service_identity = WireIdentity(
+            WireRole.SERVICE,
+            query_fixture._SERVICE_PRINCIPAL,
+            query_fixture._SERVICE_ID,
+        )
+        client_identity = WireIdentity(
+            WireRole.APPLICATION_CLIENT,
+            query_fixture._CLIENT_PRINCIPAL,
+            query_fixture._CLIENT_ACTOR,
+        )
+        client_config = parse_client_config(
+            query_fixture._monitor_client_config(query_endpoint)
+        )
+        query_client = ServiceClientRuntime(
+            client_config,
+            identity=client_identity,
+            scope_resolver=lambda _scope_ref: query_scope,
+            peer_resolver=lambda _service_id: service_identity,
+            transport_factory=ZmqTransportFactory({
+                "monitor-query-client-security": ClientCurveKeys(
+                    query_server_public, query_client_public, query_client_secret
+                ),
+            }),
+            requested_operations={"application.monitor": frozenset({"observation.query"})},
+        )
+        receipt = query_client.start()
+        assert receipt.degraded_count == 0
+        binding = receipt.bindings[0]
+        peer_proof = query_client.authenticated_peer_for_binding(binding)
+        assert peer_proof is not None
+        public_query_config = client_config.to_public_dict()
+        client_profile = public_query_config["communication"]["profiles"][
+            "monitor-query-client"
+        ]
+        target = BoundMonitorQueryTarget(
+            mount=binding.mount,
+            port="service.monitor_query",
+            service_id=binding.service_id,
+            instance_id=binding.instance_id,
+            scope_ref=binding.scope_ref,
+            scope=binding.scope,
+            identity=client_identity,
+            runtime_run_id=query_client.run_id,
+            transport_ref=binding.transport_ref,
+            security_profile_ref=client_profile["security_profile_ref"],
+            endpoint=client_profile["endpoints"]["rpc_connect"],
+            expected_peer=peer_proof[0],
+            server_key_fingerprint=peer_proof[1],
+            registration_id=binding.registration_id,
+            service_epoch=binding.service_epoch,
+        )
+        signed_request = sign_observation_query_request(
+            key=hmac_key,
+            principal_ref=query_fixture._CLIENT_PRINCIPAL,
+            scope=query_scope,
+            event_types=(event_type,),
+            epoch=1,
+            cursor=None,
+            page_size=10,
+            request_id=uuid.uuid4().hex,
+            issued_at=time.time(),
+        )
+        page = query_fixture._json_ready(query_client.call_bound(
+            target,
+            "observation.query",
+            signed_request,
+            deadline_monotonic=time.monotonic() + 3,
+        ))
+        assert verify_observation_query_page(
+            page,
+            key=hmac_key,
+            principal_ref=query_fixture._CLIENT_PRINCIPAL,
+            scope=query_scope,
+            event_types=(event_type,),
+            epoch=1,
+        )
+        assert page["state"] == "collected"
+        assert page["event_types"] == [event_type]
+        assert page["scope"]["execution_domain_ref"] == query_scope.execution_domain_ref
+        assert page["scope"]["account_ref"] == query_scope.account_ref
+        matching_events = [
+            event for event in page["events"]
+            if event["event_id"] == expected_event.event_id
+        ]
+        assert len(matching_events) == 1
+        assert matching_events[0]["event_type"] == event_type
+        assert matching_events[0]["data"] == monitor_event_data
+
+        query_client.close()
+        query_client = None
+
+        runtime_stop_marker.write_bytes(b"")
+        set_owner_only(runtime_stop_marker)
+        runtime_output, runtime_error = runtime_process.communicate(timeout=15)
+        assert runtime_process.returncode == 0, (runtime_output, runtime_error)
+        assert "runtime_control_closed" in runtime_output.splitlines()
+        assert token not in runtime_output + runtime_error
+        assert runtime_stop_marker.is_file()
+
+        query_stop_marker.write_bytes(b"")
+        set_owner_only(query_stop_marker)
+        query_process.wait(timeout=10)
+        query_output = query_fixture._drain_output(query_lines)
+        assert "MONITOR_OBSERVATION_QUERY_STOPPED" in query_output
+        assert "MONITOR_OBSERVATION_QUERY_FAILED" not in query_output
+        assert query_process.returncode == 0
+        assert query_stop_marker.is_file()
+
+        monitor_process.stop_marker.write_bytes(b"")
+        set_owner_only(monitor_process.stop_marker)
+        monitor_output, monitor_error = monitor_process.communicate(timeout=15)
+        assert monitor_process.returncode == 0
+        assert "MONITOR_STOPPED" in monitor_output
+        assert monitor_process.stop_marker.is_file()
+    finally:
+        if query_client is not None:
+            query_client.close()
+        if runtime_process is not None and runtime_process.poll() is None:
+            if runtime_stop_marker is not None:
+                runtime_stop_marker.write_bytes(b"")
+                query_fixture._set_owner_only(runtime_stop_marker)
+            else:
+                fallback = getattr(signal, "CTRL_BREAK_EVENT", signal.SIGTERM)
+                runtime_process.send_signal(fallback)
+            runtime_process.wait(timeout=15)
+        if query_process is not None and query_process.poll() is None:
+            query_fixture._stop_query_process(query_process, query_stop_marker)
+            if query_lines is not None:
+                query_fixture._drain_output(query_lines)
+        if monitor_process.poll() is None:
+            monitor_fixture.monitor_fixture.stop(monitor_process)
+
+
 def test_cli_management_only_empty_units(tmp_path):
     port = free_port()
     runtime_path = tmp_path / 'runtime.json'
@@ -336,7 +712,7 @@ def test_cli_management_only_empty_units(tmp_path):
     token_path = tmp_path / 'tokens.json'
     token_path.write_text(json.dumps({'schema': 'bt_api_py.runtime_subject_tokens.v1',
                                      'tokens': [{'token': token, 'operator': 'alice'}]}))
-    token_path.chmod(0o600)
+    set_owner_only(token_path)
     path = tmp_path / 'operator.json'
     path.write_text(json.dumps({'schema': 'bt_api_py.runtime_operator.v1',
         'runtime_config_file': str(runtime_path), 'subject_token_file': str(token_path),

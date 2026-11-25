@@ -24,7 +24,7 @@ class RuntimeMonitorBridgeError(RuntimeError):
     """Finite error without transport or event payload details."""
 
 
-# Deliberately exclude arbitrary text, unit names, IDs, timestamps and reasons.
+# Deliberately exclude arbitrary text, unit names, non-command IDs, timestamps and reasons.
 _INTEGER_FIELDS = frozenset({'generation', 'attempts', 'attempts_in_window', 'max_attempts', 'steps', 'exit_code'})
 _NUMBER_FIELDS = frozenset({'heartbeat_age_s', 'backoff_s', 'remaining_s'})
 _BOOL_FIELDS = frozenset({'clean', 'adopted', 'delivered', 'accepted', 'force', 'kill_confirmed'})
@@ -157,6 +157,10 @@ class RuntimeMonitorBridge:
             if at.tzinfo is None or at.utcoffset() != timezone.utc.utcoffset(at):
                 raise ValueError
             data = {'schema': 'sdk.runtime_observation.v1', 'sequence': event.sequence}
+            if event.command_id is not None:
+                # RuntimeEvent validates this canonical correlation ID; carry it
+                # through the durable Monitor event without exposing arbitrary IDs.
+                data['command_id'] = event.command_id
             details = {}
             for key, value in event.detail.items():
                 if key in _BOOL_FIELDS and type(value) is bool:
