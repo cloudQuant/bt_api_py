@@ -2929,9 +2929,16 @@ def build_ctp_gateway_trading_profile(
                 )
                 from bt_api_py.gateway_owner_market import GatewayOwnerMarketProvider
 
+                def _gateway_market_provider():
+                    current = holder["session"]
+                    retained = getattr(current, "retained_market_provider", None)
+                    if callable(retained):
+                        return retained()
+                    return current.market_provider
+
                 market_proxy = GatewayOwnerMarketProvider(
                     owner,
-                    lambda: holder["session"].market_provider,
+                    _gateway_market_provider,
                     clock_source_getter=lambda: holder.get("clock_source"),
                     call_timeout_seconds=market_settings.call_timeout_seconds,
                     max_handles=1024,
