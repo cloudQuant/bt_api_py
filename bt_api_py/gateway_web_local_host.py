@@ -218,7 +218,7 @@ class LocalGatewayWebHost:
                     'client_config_schema_version': 1, 'process_role': 'application_client',
                     'registration': {'application_ref': identity.actor_ref},
                     'clients': {'gateway': {'config_schema_version': 1, 'settings': {'bindings': bindings,
-                        'options': {'request_timeout_ms': 2000}}}},
+                        'options': {'request_timeout_ms': 5000}}}},
                     'communication': {'config_schema_version': 1, 'profiles': {'gateway': {
                         'backend': 'zmq', 'config_schema_version': 1,
                         'endpoints': {'rpc_connect': item['endpoint']}, 'security_profile_ref': 'operator-key'}}},
@@ -230,7 +230,9 @@ class LocalGatewayWebHost:
                         lambda c=c, i=i, s=s, p=p, f=f, o=o: ServiceClientRuntime(
                             c, identity=i, scope_resolver=lambda _: s, peer_resolver=lambda _: p,
                             transport_factory=f, requested_operations=o,
-                        )
+                            require_unregister_ack=True,
+                        ),
+                        require_unregister_ack=True,
                     )
                 )
                 runtime = runtime_factory()
@@ -240,7 +242,8 @@ class LocalGatewayWebHost:
             self.origin = config['origin']
             self.app = create_app(origin=self.origin, authenticate=self._authenticate,
                 resolve_runtime=self._resolve_runtime, static_dir=static_dir,
-                receipt_key=receipt_key, receipt_key_id=config['receipt_key_id'])
+                receipt_key=receipt_key, receipt_key_id=config['receipt_key_id'],
+                timeout_seconds=4.0)
             self._install_login()
         except Exception:
             raise ValueError('LOCAL_GATEWAY_WEB_CONFIG_INVALID') from None

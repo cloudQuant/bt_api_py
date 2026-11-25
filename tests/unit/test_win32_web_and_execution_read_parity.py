@@ -250,8 +250,9 @@ def test_local_gateway_and_risk_web_hosts_reregister_after_socket_retirement(mon
     created_gw = []
 
     class FakeGwRuntime:
-        def __init__(self, _factory):
+        def __init__(self, _factory, *, require_unregister_ack=False):
             self.idx = len(created_gw)
+            self.require_unregister_ack = require_unregister_ack
             self.state = "new"
             self.thread_alive = True
             self.healthy = True
