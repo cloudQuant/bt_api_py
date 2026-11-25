@@ -169,12 +169,20 @@ class RiskOrderService:
         cancel_status: Callable[..., Mapping | None] | None = None,
         strict_admin_cancel: bool = False,
         parent_v2_execution_enabled: bool = False,
+        order_cut_required: bool = False,
+        order_cut_admission_ready: Callable[[], bool] | None = None,
     ) -> None:
         if not all(_ref(x) for x in (account_scope, route, execution_domain_ref)):
             raise ValueError("RISK_ORDER_SERVICE_INVALID")
         if not isinstance(principals, Mapping) or not callable(instrument_for) or not callable(ready):
             raise ValueError("RISK_ORDER_SERVICE_INVALID")
-        if type(strict_admin_cancel) is not bool or type(parent_v2_execution_enabled) is not bool:
+        if (
+            type(strict_admin_cancel) is not bool
+            or type(parent_v2_execution_enabled) is not bool
+            or type(order_cut_required) is not bool
+            or (order_cut_admission_ready is not None and not callable(order_cut_admission_ready))
+            or (order_cut_required and not callable(order_cut_admission_ready))
+        ):
             raise ValueError("RISK_ORDER_SERVICE_INVALID")
         self._engine, self._ledger = engine, ledger
         self._account, self._route, self._domain = account_scope, route, execution_domain_ref
@@ -189,6 +197,9 @@ class RiskOrderService:
         # Explicitly opt in for Execution parent-bound v2 child writes
         # (risk.order.reserve.v2 / risk.order.dispatch.v2); v1 stays fail-closed.
         self._parent_v2_execution_enabled = parent_v2_execution_enabled
+        # Selected R-05 order-cut mode gates only newly admitted parent/v2 writes.
+        self._order_cut_required = order_cut_required
+        self._order_cut_admission_ready = order_cut_admission_ready
         # Refusal counts since this process started, per represented strategy (risk.status).
         self._refusals: dict[str, Counter] = {}
         # Admin/operator refusals since this process started, per finite code.
@@ -325,6 +336,17 @@ class RiskOrderService:
             return None, None, "risk_request_invalid"
         return view, canonical, None
 
+    def _order_cut_allows_write(self) -> bool:
+        if not self._order_cut_required:
+            return True
+        callback = self._order_cut_admission_ready
+        if not callable(callback):
+            return False
+        try:
+            return callback() is True
+        except Exception:
+            return False
+
     # ------------------------------------------------------------------ dispatch
 
     def _audit_read_rejected(self, caller: Any) -> bool:
@@ -442,7 +464,6 @@ class RiskOrderService:
                 caller,
                 operations=frozenset(caller.operations | {mapped_op}),
             )
-            coordinator = RiskParentChildCoordinator(self._engine)
             (strategy,) = tuple(caller.strategy_refs)
             try:
                 if operation == "risk.order.reserve.v2":
@@ -458,7 +479,10 @@ class RiskOrderService:
                             result = RiskOrderResult(
                                 key, "DENIED", code=refusal or "risk_request_invalid"
                             )
+                        elif not self._order_cut_allows_write():
+                            result = RiskOrderResult(key, "UNKNOWN", code="risk_permit_mismatch")
                         else:
+                            coordinator = RiskParentChildCoordinator(self._engine)
                             if self._note_run is not None:
                                 self._note_run(strategy, caller.run_id)
                             result = coordinator.reserve_child(
@@ -476,7 +500,10 @@ class RiskOrderService:
                         or any(ch not in "0123456789abcdef" for ch in view_digest)
                     ):
                         result = RiskOrderResult(key, "DENIED", code="risk_permit_mismatch")
+                    elif not self._order_cut_allows_write():
+                        result = RiskOrderResult(key, "UNKNOWN", code="risk_permit_mismatch")
                     else:
+                        coordinator = RiskParentChildCoordinator(self._engine)
                         if self._note_run is not None:
                             self._note_run(strategy, caller.run_id)
                         result = coordinator.dispatch_child(
@@ -729,7 +756,11 @@ class RiskOrderService:
                 if (caller.role != "execution" or parent.strategy_ref not in caller.strategy_refs
                     or parent.account_scope != self._account or parent.route != self._route):
                     return _rejected("risk_unauthorized")
-                result = engine.parent_reserve(caller, parent)
+                result = (
+                    engine.parent_reserve(caller, parent)
+                    if self._order_cut_allows_write()
+                    else self._unsupported_parent(parent.parent_ref)
+                )
             else:
                 if set(arguments) != {"parent_ref"} or not _ref(arguments["parent_ref"]):
                     return _rejected("risk_request_invalid")

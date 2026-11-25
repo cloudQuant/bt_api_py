@@ -877,3 +877,215 @@ def test_failed_service_bootstrap_does_not_leave_a_provisional_owner(tmp_path):
     probe = RiskOrderJournal(tmp_path / "probe.sqlite", writer_id="probe")
     with probe.writer_fence(AccountScope("ctp", ACCOUNT, "simnow")):
         pass
+
+
+def test_r05_order_cut_readiness_keeps_gateway_epochs_in_separate_domains():
+    from bt_api_py.risk_service_host import _r05_cut_matches_current_gateway
+
+    progress = {
+        "pending": None,
+        "cursor": 19,
+        "ack_observed": 19,
+        "epoch": "facts-epoch",
+        "gateway_journal_id": "journal-a",
+    }
+    cut = {
+        "journal_id": "journal-a",
+        "owner_generation": "owner-generation-7",
+        "fact_epoch": "facts-epoch",
+        "fact_watermark": 19,
+        "source_binding_ref": "binding-digest",
+        "cut_ref": "cut-digest",
+        "query_manifest_digest": "query-manifest",
+        "query_complete": True,
+        "receipt_complete": True,
+        "source_history_has_gap": False,
+    }
+    page = {
+        "registration_id": "facts-registration",
+        "service_epoch": "registry-service-epoch-9",
+        "cut_ref": "cut-digest",
+        "query_manifest_digest": "query-manifest",
+        "header": {
+            "journal_id": "journal-a",
+            "owner_generation": "owner-generation-7",
+            "fact_epoch": "facts-epoch",
+            "fact_watermark": 19,
+            "source_binding_ref": "binding-digest",
+            "source_history_has_gap": False,
+        },
+    }
+    kwargs = {
+        "registration_id": "facts-registration",
+        "service_epoch": "registry-service-epoch-9",
+        "observer_service_epoch": "registry-service-epoch-9",
+        "verified_stream_epoch": "events-stream-epoch-3",
+    }
+
+    # Registry service_epoch, account.events verified epoch, R-05 fact epoch,
+    # and Gateway journal owner_generation are deliberately distinct values.
+    assert _r05_cut_matches_current_gateway(progress, cut, page, True, **kwargs)
+    assert not _r05_cut_matches_current_gateway(progress, cut, page, False, **kwargs)
+
+    incomplete = {**cut, "query_complete": False}
+    assert not _r05_cut_matches_current_gateway(progress, incomplete, page, True, **kwargs)
+    stale_ack = {**progress, "ack_observed": 18}
+    assert not _r05_cut_matches_current_gateway(stale_ack, cut, page, True, **kwargs)
+    stale_owner = {**page, "header": {**page["header"], "owner_generation": "owner-generation-6"}}
+    assert not _r05_cut_matches_current_gateway(progress, cut, stale_owner, True, **kwargs)
+    stale_watermark = {**page, "header": {**page["header"], "fact_watermark": 20}}
+    assert not _r05_cut_matches_current_gateway(progress, cut, stale_watermark, True, **kwargs)
+    stale_service = {**page, "service_epoch": "registry-service-epoch-8"}
+    assert not _r05_cut_matches_current_gateway(progress, cut, stale_service, True, **kwargs)
+    assert not _r05_cut_matches_current_gateway(
+        progress, cut, page, True, **{**kwargs, "observer_service_epoch": "registry-service-epoch-8"}
+    )
+
+
+def test_selected_r05_gate_blocks_only_new_parent_and_v2_writes():
+    from bt_api_base.risk_service_protocol import RiskParentView
+    from bt_api_risk.pretrade import RiskOrderLookup, RiskOrderLookupKind
+
+    from bt_api_py.service_registry import (
+        PrincipalGrant,
+        ResourceGrant,
+        ServiceCapability,
+        ServiceRegistry,
+    )
+    from tests.unit.test_service_registry import _next_request, _register
+
+    operations = frozenset({
+        "risk.parent.reserve", "risk.parent.release", "risk.parent.status",
+        "risk.order.reserve.v2", "risk.order.dispatch.v2",
+        "risk.order.reserve", "risk.order.dispatch", "risk.order.release", "risk.order.status",
+    })
+    principal = RiskPrincipal(
+        "exec-1", "execution", "exec-actor", frozenset({"strategy-a"}), operations, b"x" * 40
+    )
+    identity = WireIdentity(WireRole.SERVICE, "exec-1", "exec-actor")
+    scope = WireScope(DOMAIN, account_ref=ACCOUNT, strategy_ref="strategy-a", run_id="exec-run")
+    scope_template = WireScope(DOMAIN, account_ref=ACCOUNT, strategy_ref="strategy-a")
+    v2_writes = frozenset({"risk.order.reserve.v2", "risk.order.dispatch.v2"})
+    capability = ServiceCapability("risk-a", "service.risk_order", operations, v2_writes)
+    grant = ResourceGrant("risk-a", "service.risk_order", "scope-a", scope_template, operations)
+    gate_calls = []
+    note_runs = []
+    parent_calls = []
+
+    def parent_reply(operation, parent_ref):
+        parent_calls.append(operation)
+        return SimpleNamespace(
+            parent_ref=parent_ref, outcome="UNKNOWN", state=None, code="risk_parent_unavailable",
+            total_quantity=None, allocated_quantity=None, unallocated_quantity=None, policy_version=None,
+        )
+
+    def lookup_order(*_args, **_kwargs):
+        from bt_api_base.risk_service_protocol import RiskOrderResult
+
+        return RiskOrderLookup(
+            RiskOrderLookupKind.RESULT,
+            RiskOrderResult("status-key", "UNKNOWN", code="risk_permit_mismatch"),
+        )
+
+    engine = SimpleNamespace(
+        parent_release=lambda _caller, ref: parent_reply("release", ref),
+        parent_status=lambda _caller, ref: parent_reply("status", ref),
+        lookup_order=lookup_order,
+    )
+    service = RiskOrderService(
+        engine, object(), account_scope=ACCOUNT, route=ROUTE, execution_domain_ref=DOMAIN,
+        principals={"exec-1": principal},
+        instrument_for=lambda venue, native: RB if (venue, native) == ("SHFE", "rb") else None,
+        ready=lambda: True, note_run=lambda strategy, run: note_runs.append((strategy, run)),
+        parent_v2_execution_enabled=True, order_cut_required=True,
+        order_cut_admission_ready=lambda: gate_calls.append("check") and False,
+    )
+    registry = ServiceRegistry(
+        ":memory:", service_id="risk-service", capabilities=(capability,),
+        grants={"exec-1": (PrincipalGrant(identity, (grant,)),)},
+        policy_version="p", requirements_version="r",
+        enable_risk_v2_dispatch_admission=True,
+        enable_risk_parent_execution_writes=True,
+    )
+    handler_errors = []
+    try:
+        for operation in operations:
+            def handle(context, arguments, op=operation):
+                try:
+                    return service.handle(op, context=context, arguments=arguments)
+                except BaseException as error:
+                    handler_errors.append((op, type(error).__name__, str(error)))
+                    raise
+
+            registry.register_handler(
+                "risk-a", operation, handle,
+            )
+        registered = _register(
+            registry, principal="exec-1", identity=identity, scope=scope,
+            key="r05-gate", client_session_id="r05-gate-session", operations=tuple(sorted(operations)),
+            instance_id="risk-a", port="service.risk_order", scope_ref="scope-a",
+        )
+        assert registered["ok"], registered
+        registration = registered["result"]
+
+        def registry_call(operation, arguments):
+            return registry.handle("exec-1", _next_request(operation, {
+                "registration_id": registration["registration_id"],
+                "service_epoch": registration["service_epoch"],
+                "instance_id": "risk-a",
+                "arguments": arguments,
+            }, identity=identity, scope=scope))
+
+        blocked_reserve = registry_call("risk.order.reserve.v2", {
+            "request_key": "cut-blocked", "payload": payload("cut-blocked"),
+            "parent_ref": "parent-a", "child_id": "child-a",
+        })
+        blocked_dispatch = registry_call("risk.order.dispatch.v2", {
+            "request_key": "cut-blocked", "permit_id": "permit-a",
+            "reservation_id": "reservation-a", "view_digest": "ab" * 32,
+        })
+        assert blocked_reserve["ok"] and blocked_dispatch["ok"], (
+            blocked_reserve, blocked_dispatch, handler_errors
+        )
+        for result in (blocked_reserve["result"], blocked_dispatch["result"]):
+            assert (result["outcome"], result["code"]) == ("UNKNOWN", "risk_permit_mismatch")
+            assert result["permit_id"] is None and result["reservation_id"] is None
+
+        parent = RiskParentView(
+            account_scope=ACCOUNT, route=ROUTE, strategy_ref="strategy-a", parent_ref="parent-a",
+            instrument=RB, side="BUY", offset="OPEN", position_side="NET",
+            total_quantity=Decimal("2"), quantity_unit="lots", limit_price=Decimal("10"),
+            created_trading_day=DAY, valid_until_trading_day=DAY,
+        )
+        blocked_parent = service.handle(
+            "risk.parent.reserve", context=ctx("exec-1", role=WireRole.SERVICE, actor="exec-actor", run="exec-run"),
+            arguments={"parent": parent.to_mapping()},
+        )
+        assert (blocked_parent["outcome"], blocked_parent["code"]) == (
+            "UNKNOWN", "risk_parent_unavailable"
+        )
+        assert blocked_parent["parent_ref"] == "parent-a" and blocked_parent["state"] is None
+        assert len(gate_calls) == 3 and note_runs == [] and parent_calls == []
+
+        # Existing cancel/status/release semantics do not consult R-05 write readiness.
+        context = ctx("exec-1", role=WireRole.SERVICE, actor="exec-actor", run="exec-run")
+        for operation in ("risk.parent.release", "risk.parent.status"):
+            answer = service.handle(operation, context=context, arguments={"parent_ref": "parent-a"})
+            assert (answer["outcome"], answer["code"]) == (
+                "UNKNOWN", "risk_parent_unavailable"
+            )
+        old_release = service.handle("risk.order.release", context=context, arguments={
+            "request_key": "legacy-key", "permit_id": "legacy-permit",
+        })
+        old_status = service.handle("risk.order.status", context=context, arguments={
+            "request_key": "status-key",
+        })
+        assert (old_release["outcome"], old_release["code"]) == (
+            "UNKNOWN", "risk_permit_mismatch"
+        )
+        assert (old_status["outcome"], old_status["code"]) == (
+            "UNKNOWN", "risk_permit_mismatch"
+        )
+        assert len(gate_calls) == 3 and parent_calls == ["release", "status"]
+    finally:
+        registry.close()

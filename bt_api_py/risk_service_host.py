@@ -1144,6 +1144,99 @@ def _granted(snapshot: Any, mount: str, operations: frozenset[str]) -> bool:
     )
 
 
+def _r05_cut_has_current_coverage(progress: Any, cut: Any, coverage_verified: Any) -> bool:
+    """Check the local R-05 applied/cursor/ACK proof without inventing a Gateway epoch."""
+    if not isinstance(progress, Mapping) or not isinstance(cut, Mapping) or coverage_verified is not True:
+        return False
+    cursor = progress.get("cursor")
+    acknowledged = progress.get("ack_observed")
+    watermark = cut.get("fact_watermark")
+    return (
+        progress.get("pending") is None
+        and type(cursor) is int
+        and type(acknowledged) is int
+        and cursor == acknowledged
+        and type(watermark) is int
+        and watermark >= 0
+        and cursor >= watermark
+        and acknowledged >= watermark
+        and type(progress.get("epoch")) is str
+        and bool(progress.get("epoch"))
+        and progress.get("epoch") == cut.get("fact_epoch")
+        and type(progress.get("gateway_journal_id")) is str
+        and bool(progress.get("gateway_journal_id"))
+        and progress.get("gateway_journal_id") == cut.get("journal_id")
+        and cut.get("query_complete") is True
+        and cut.get("receipt_complete") is True
+        and cut.get("source_history_has_gap") is False
+        and type(cut.get("owner_generation")) is str
+        and bool(cut.get("owner_generation"))
+        and type(cut.get("cut_ref")) is str
+        and bool(cut.get("cut_ref"))
+        and type(cut.get("query_manifest_digest")) is str
+        and bool(cut.get("query_manifest_digest"))
+        and type(cut.get("source_binding_ref")) is str
+        and bool(cut.get("source_binding_ref"))
+    )
+
+
+def _r05_cut_matches_current_gateway(
+    progress: Any,
+    cut: Any,
+    current_page: Any,
+    coverage_verified: Any,
+    *,
+    registration_id: Any,
+    service_epoch: Any,
+    observer_service_epoch: Any,
+    verified_stream_epoch: Any,
+) -> bool:
+    """Bind persisted R-05 coverage to the current Gateway registration and cut.
+
+    These are distinct domains: service_epoch binds the active Registry session,
+    verified_stream_epoch is ObservationPump's account.events cursor proof, and
+    owner_generation is the Gateway journal owner recorded in the order cut.
+    Equality is only checked within the matching domain.
+    """
+    if not _r05_cut_has_current_coverage(progress, cut, coverage_verified):
+        return False
+    if not isinstance(current_page, Mapping):
+        return False
+    header = current_page.get("header")
+    if not isinstance(header, Mapping):
+        return False
+    if (
+        type(registration_id) is not str
+        or not registration_id
+        or type(service_epoch) is not str
+        or not service_epoch
+        or type(observer_service_epoch) is not str
+        or not observer_service_epoch
+        or observer_service_epoch != service_epoch
+        or type(verified_stream_epoch) is not str
+        or not verified_stream_epoch
+        or type(header.get("fact_watermark")) is not int
+        or header.get("fact_watermark") < 0
+    ):
+        return False
+    return (
+        current_page.get("registration_id") == registration_id
+        and current_page.get("service_epoch") == service_epoch
+        and current_page.get("cut_ref") == cut.get("cut_ref")
+        and current_page.get("query_manifest_digest") == cut.get("query_manifest_digest")
+        and header.get("journal_id") == cut.get("journal_id")
+        and header.get("owner_generation") == cut.get("owner_generation")
+        and header.get("fact_epoch") == cut.get("fact_epoch")
+        and header.get("fact_watermark") == cut.get("fact_watermark")
+        and header.get("source_binding_ref") == cut.get("source_binding_ref")
+        and header.get("source_history_has_gap") is False
+        and progress.get("gateway_journal_id") == header.get("journal_id")
+        and progress.get("epoch") == header.get("fact_epoch")
+        and progress.get("cursor") >= header.get("fact_watermark")
+        and progress.get("ack_observed") >= header.get("fact_watermark")
+    )
+
+
 class RiskServiceHost:
     """Owns storage, engine, Gateway runtimes and the Risk ServiceHost on one thread."""
 
@@ -1980,11 +2073,24 @@ class RiskServiceHost:
     _ACCOUNT_FACTS_MIN_UNREGISTER_HEADROOM = 8
     _OBSERVER_ROTATION_HEADROOM = 64
 
-    def _verified_observer_epoch(self) -> str | None:
-        """Return Gateway's current service_epoch only when observer proves Gateway is reachable."""
-        if self.pump is None:
+    def _verified_observer_stream_epoch(self) -> str | None:
+        """Return only the verified account.events cursor epoch from ObservationPump."""
+        pump = self.pump
+        if pump is None:
             return None
-        if hasattr(self.pump, 'verified_epoch') and self.pump.verified_epoch is None:
+        try:
+            epoch = pump.verified_epoch
+        except Exception:
+            return None
+        return epoch if type(epoch) is str and epoch else None
+
+    def _verified_observer_service_epoch(self) -> str | None:
+        """Return the observer's active Registry service_epoch after stream verification.
+
+        This Registry epoch is a separate value from ObservationPump's account.events
+        verified epoch and from the Gateway order-journal owner_generation.
+        """
+        if self._verified_observer_stream_epoch() is None:
             return None
         observer_rt = self._observer_runtime
         if observer_rt is None:
@@ -2009,6 +2115,14 @@ class RiskServiceHost:
         epoch = next(iter(epochs))
         return epoch if type(epoch) is str and epoch else None
 
+    def _verified_observer_epoch(self) -> str | None:
+        """Compatibility name for historical callers; this returns service_epoch.
+
+        New code names the Registry service epoch explicitly so it is not confused
+        with ObservationPump.verified_epoch or a Gateway journal owner_generation.
+        """
+        return self._verified_observer_service_epoch()
+
     def _maintain_account_facts_runtime(
         self, now: float, *, allow_failure_replace: bool = True
     ) -> None:
@@ -2030,11 +2144,11 @@ class RiskServiceHost:
         if runtime is None and self._account_facts_coordinator is not None:
             return
         self._check_global_cleanup_ready(runtime if runtime is not None else self)
-        observer_epoch = self._verified_observer_epoch()
+        observer_service_epoch = self._verified_observer_service_epoch()
         needs_replace = False
         proactive_rotate = False
         if runtime is None:
-            if not allow_failure_replace or observer_epoch is None or now < self._account_facts_retry_at:
+            if not allow_failure_replace or observer_service_epoch is None or now < self._account_facts_retry_at:
                 return
             needs_replace = True
         else:
@@ -2053,21 +2167,21 @@ class RiskServiceHost:
                 and type(getattr(binding, 'service_epoch', None)) is str
                 and getattr(binding, 'service_epoch', None)
             }
-            facts_epoch = next(iter(facts_epochs)) if len(facts_epochs) == 1 else None
+            facts_service_epoch = next(iter(facts_epochs)) if len(facts_epochs) == 1 else None
             remaining = getattr(snap, 'min_socket_message_ids_remaining', None)
             if state in ('failed', 'closed', 'close_failed', 'stopping'):
                 if self.account_facts_status in {'READY', 'APPLIED', 'EMPTY'}:
                     self.account_facts_status = 'UNKNOWN'
                     if getattr(settings, 'order_cut_enabled', False):
                         self.order_cut_status = 'UNKNOWN'
-                if not allow_failure_replace or observer_epoch is None or now < self._account_facts_retry_at:
+                if not allow_failure_replace or observer_service_epoch is None or now < self._account_facts_retry_at:
                     return
                 needs_replace = True
             elif (
                 allow_failure_replace
-                and observer_epoch is not None
-                and facts_epoch is not None
-                and facts_epoch != observer_epoch
+                and observer_service_epoch is not None
+                and facts_service_epoch is not None
+                and facts_service_epoch != observer_service_epoch
             ):
                 if now < self._account_facts_retry_at:
                     return
@@ -2077,7 +2191,7 @@ class RiskServiceHost:
                 and remaining == 0
                 and self.account_facts_status not in {'READY', 'APPLIED', 'EMPTY'}
             ):
-                if not allow_failure_replace or observer_epoch is None or now < self._account_facts_retry_at:
+                if not allow_failure_replace or observer_service_epoch is None or now < self._account_facts_retry_at:
                     return
                 needs_replace = True
             elif (
@@ -2086,7 +2200,7 @@ class RiskServiceHost:
                 and self._account_facts_coordinator is not None
                 and not getattr(self.ledger, '_r05_uncertain', False)
             ):
-                if not allow_failure_replace or observer_epoch is None or now < self._account_facts_retry_at:
+                if not allow_failure_replace or observer_service_epoch is None or now < self._account_facts_retry_at:
                     return
                 from bt_api_risk.pretrade.ledger import PretradeLedger
                 try:
@@ -2111,7 +2225,7 @@ class RiskServiceHost:
             elif (
                 state == 'running'
                 and getattr(snap, 'healthy', False) is True
-                and observer_epoch is not None
+                and observer_service_epoch is not None
                 and self.account_facts_status in {'READY', 'APPLIED', 'EMPTY'}
                 and self._account_facts_coordinator is not None
             ):
@@ -2161,6 +2275,212 @@ class RiskServiceHost:
             "proactive rotation" if proactive_rotate else "reconnect",
             self.account_facts_status,
         )
+
+    def _active_account_binding(
+        self, runtime: Any, required_operations: frozenset[str]
+    ) -> Any | None:
+        """Return one healthy, exact active upstream.account binding or None."""
+        if runtime is None or self._observer_route is None:
+            return None
+        try:
+            snapshot = self._call_lifecycle(runtime.status)
+            self._check_global_cleanup_ready(runtime)
+        except Exception:
+            self._retain_if_global_unknown(runtime)
+            return None
+        if (
+            getattr(snapshot, "state", None) != "running"
+            or getattr(snapshot, "healthy", False) is not True
+            or getattr(snapshot, "thread_alive", False) is not True
+            or getattr(snapshot, "cleanup_failures", None) != 0
+            or getattr(snapshot, "unregister_uncertainties", None) != 0
+            or getattr(snapshot, "owner_cleanup_uncertainties", None) != 0
+            or getattr(snapshot, "unknown_registration_count", None) != 0
+            or getattr(snapshot, "strict_unregister_ack", None) is not True
+        ):
+            return None
+        bindings = getattr(snapshot, "bindings", None)
+        if type(bindings) is not tuple:
+            return None
+        active = tuple(
+            binding for binding in bindings
+            if getattr(binding, "mount", None) == "upstream.account"
+            and getattr(binding, "active", None) is True
+        )
+        if len(active) != 1:
+            return None
+        binding = active[0]
+        route = self._observer_route
+        try:
+            expected_peer = self._peer()
+            expected_fingerprint = hashlib.sha256(self.config.gateway.server_public_key).hexdigest()
+        except Exception:
+            return None
+        operations = getattr(binding, "operations", None)
+        if (
+            getattr(binding, "required", None) is not True
+            or type(getattr(binding, "registration_id", None)) is not str
+            or not binding.registration_id
+            or type(getattr(binding, "service_epoch", None)) is not str
+            or not binding.service_epoch
+            or getattr(binding, "service_id", None) != route.service_id
+            or getattr(binding, "instance_id", None) != route.instance_id
+            or getattr(binding, "scope_ref", None) != route.scope_ref
+            or getattr(binding, "scope", None) != route.scope
+            or getattr(binding, "authenticated_peer", None) != expected_peer
+            or getattr(binding, "server_key_fingerprint", None) != expected_fingerprint
+            or type(operations) is not frozenset
+            or not required_operations <= operations
+        ):
+            return None
+        return binding
+
+    def _read_r05_order_cut_state(self, now_ns: int) -> tuple[Any, Any, Any]:
+        from bt_api_risk.pretrade.ledger import PretradeLedger
+
+        def read_state():
+            with PretradeLedger.transaction(self.ledger) as txn:
+                return (
+                    txn.r05_progress(),
+                    txn.r05_latest_order_cut_summary(),
+                    txn.r05_order_cut_coverage_verified(now_ns=now_ns),
+                )
+
+        return self._call_lifecycle(read_state)
+
+    def _order_cut_admission_ready(self) -> bool:
+        """Check current applied/ACKed R-05 coverage for the three gated writes."""
+        settings = getattr(self.config, "account_facts_observation", None)
+        if settings is None or getattr(settings, "order_cut_enabled", False) is not True:
+            return True
+
+        def unavailable() -> bool:
+            if self.order_cut_status == "CUT_APPLIED":
+                self.order_cut_status = "UNKNOWN"
+            return False
+
+        try:
+            # ready() remains only the Service RPC readiness predicate. Trading
+            # admission adds the current cut and complete applied/ACKed coverage.
+            if not self.ready():
+                return unavailable()
+            if (
+                self.account_facts_status not in {"APPLIED", "EMPTY"}
+                or self.order_cut_status != "CUT_APPLIED"
+                or self._account_facts_runtime is None
+                or self._account_facts_coordinator is None
+            ):
+                return unavailable()
+
+            from bt_api_py.gateway_order_cut_client import (
+                GatewayOrderCutClient,
+                GatewayOrderCutCopyResult,
+                GatewayOrderCutResult,
+            )
+            from bt_api_py.risk_account_facts_coordinator import RiskAccountFactsCoordinator
+
+            coordinator = self._account_facts_coordinator
+            if (
+                type(coordinator) is not RiskAccountFactsCoordinator
+                or getattr(coordinator, "_mode", None) != "READY"
+                or type(getattr(coordinator, "_cut_client", None)) is not GatewayOrderCutClient
+            ):
+                return unavailable()
+            self._call_lifecycle(coordinator._check)
+            cut_client = coordinator._cut_client
+
+            stream_epoch_before = self._verified_observer_stream_epoch()
+            observer_binding_before = self._active_account_binding(
+                self._observer_runtime, OBSERVER_OPERATIONS
+            )
+            facts_binding_before = self._active_account_binding(
+                self._account_facts_runtime,
+                ACCOUNT_FACTS_OBSERVATION_OPERATIONS | ACCOUNT_ORDER_CUT_OPERATIONS,
+            )
+            if (
+                stream_epoch_before is None
+                or observer_binding_before is None
+                or facts_binding_before is None
+                or observer_binding_before.service_epoch != facts_binding_before.service_epoch
+            ):
+                return unavailable()
+
+            runtime_snapshot = self._call_lifecycle(self._account_facts_runtime.status)
+            remaining = getattr(runtime_snapshot, "min_socket_message_ids_remaining", None)
+            # current() makes one call and validate_copy_issued() performs two
+            # independent authenticated rechecks; preserve unregister headroom.
+            if (
+                type(remaining) is not int
+                or remaining < self._ACCOUNT_FACTS_MIN_UNREGISTER_HEADROOM + 3
+            ):
+                return unavailable()
+
+            now_ns = self._call_lifecycle(self._now_ns)
+            if type(now_ns) is not int or now_ns <= 0:
+                return unavailable()
+            progress_before, cut_before, coverage_before = self._read_r05_order_cut_state(now_ns)
+            if not _r05_cut_has_current_coverage(progress_before, cut_before, coverage_before):
+                return unavailable()
+
+            timeout = (
+                getattr(settings, "order_cut_timeout_seconds", None)
+                or settings.timeout_seconds
+            )
+            issued = self._call_lifecycle(cut_client.current, timeout_seconds=timeout)
+            if (
+                type(issued) is not GatewayOrderCutResult
+                or issued.outcome != "OBSERVED"
+                or issued.code is not None
+            ):
+                return unavailable()
+            copied = self._call_lifecycle(
+                cut_client.validate_copy_issued, issued, timeout_seconds=timeout
+            )
+            if (
+                type(copied) is not GatewayOrderCutCopyResult
+                or copied.outcome != "OBSERVED"
+                or copied.code is not None
+            ):
+                return unavailable()
+
+            now_after = self._call_lifecycle(self._now_ns)
+            if type(now_after) is not int or now_after <= 0:
+                return unavailable()
+            progress_after, cut_after, coverage_after = self._read_r05_order_cut_state(now_after)
+            stream_epoch_after = self._verified_observer_stream_epoch()
+            observer_binding_after = self._active_account_binding(
+                self._observer_runtime, OBSERVER_OPERATIONS
+            )
+            facts_binding_after = self._active_account_binding(
+                self._account_facts_runtime,
+                ACCOUNT_FACTS_OBSERVATION_OPERATIONS | ACCOUNT_ORDER_CUT_OPERATIONS,
+            )
+            self._call_lifecycle(coordinator._check)
+            self._check_cleanup_ready()
+            if (
+                stream_epoch_after != stream_epoch_before
+                or observer_binding_after != observer_binding_before
+                or facts_binding_after != facts_binding_before
+                or progress_after != progress_before
+                or cut_after != cut_before
+                or getattr(coordinator, "_mode", None) != "READY"
+            ):
+                return unavailable()
+            matches = _r05_cut_matches_current_gateway(
+                progress_after,
+                cut_after,
+                copied.page,
+                coverage_after,
+                registration_id=facts_binding_after.registration_id,
+                service_epoch=facts_binding_after.service_epoch,
+                observer_service_epoch=observer_binding_after.service_epoch,
+                verified_stream_epoch=stream_epoch_after,
+            )
+            return matches if matches else unavailable()
+        except Exception:
+            if getattr(self.ledger, "_r05_uncertain", False):
+                self._record_cleanup_uncertain(self.ledger, "ACCOUNT_FACTS_STORAGE_UNKNOWN")
+            return unavailable()
 
     def _poll_account_facts(self) -> None:
         if self.account_facts_status not in {'READY', 'APPLIED', 'EMPTY'}:
@@ -2271,6 +2591,23 @@ class RiskServiceHost:
                     self.order_cut_status = 'UNKNOWN'
                     if cancel_enabled:
                         self.cancel_attempts_status = 'UNKNOWN'
+                if self.order_cut_status == 'CUT_APPLIED':
+                    try:
+                        applied_at_ns = self._call_lifecycle(self._now_ns)
+                        progress, cut, coverage = self._read_r05_order_cut_state(applied_at_ns)
+                        locally_applied = (
+                            type(applied_at_ns) is int
+                            and applied_at_ns > 0
+                            and type(getattr(cut_result, 'fact_watermark', None)) is int
+                            and cut is not None
+                            and cut.get('fact_watermark') == cut_result.fact_watermark
+                            and _r05_cut_has_current_coverage(progress, cut, coverage)
+                        )
+                    except Exception:
+                        locally_applied = False
+                    if not locally_applied:
+                        self.order_cut_status = 'UNKNOWN'
+                        _note_unknown_backoff('order_cut_applied_coverage')
         except Exception:
             self.account_facts_status = 'UNKNOWN'
             if cut_enabled:
@@ -2923,6 +3260,10 @@ class RiskServiceHost:
             cancel_status=self.control.cancel_scope_status,
             strict_admin_cancel=config.strict_admin_cancel,
             parent_v2_execution_enabled=parent_v2_enabled,
+            order_cut_required=bool(
+                getattr(getattr(config, "account_facts_observation", None), "order_cut_enabled", False)
+            ),
+            order_cut_admission_ready=self._order_cut_admission_ready,
         )
         self._check_cleanup_ready()
         component = self.component
