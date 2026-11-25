@@ -570,20 +570,79 @@ def _stop_on_terminate(_signum, _frame):
     raise SystemExit(0)
 
 
+def _run_local_with_stop_file(app, *, origin: str, stop_file: Path) -> None:
+    """Serve on 127.0.0.1 and stop cooperatively when the protected empty marker appears."""
+    from urllib.parse import urlsplit
+    import uvicorn
+    from bt_api_py._owner_stop_file import marker_requested
+
+    parsed = urlsplit(origin) if type(origin) is str else None
+    try:
+        port = parsed.port if parsed is not None else None
+    except ValueError:
+        port = None
+    if (
+        parsed is None
+        or parsed.scheme != "http"
+        or parsed.hostname != "127.0.0.1"
+        or port is None
+        or parsed.username
+        or parsed.password
+        or parsed.path not in ("", "/")
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError("LOOPBACK_ORIGIN_REQUIRED")
+    server = uvicorn.Server(
+        uvicorn.Config(
+            app, host="127.0.0.1", port=port, proxy_headers=False, server_header=False
+        )
+    )
+    done = threading.Event()
+
+    def _watch() -> None:
+        while not done.wait(0.1):
+            if marker_requested(stop_file):
+                server.should_exit = True
+                return
+
+    watcher = threading.Thread(target=_watch, name="risk-web-stop-watcher", daemon=True)
+    watcher.start()
+    try:
+        server.run()
+    finally:
+        done.set()
+        watcher.join(timeout=1.0)
+
+
 def main(argv: list[str] | None = None) -> None:
     """``python -m bt_api_py.risk_web_local_host --config <absolute owner-only JSON>``."""
     from bt_api_risk.web.app import run_local
 
     parser = argparse.ArgumentParser(description="Local Risk service operator Web API host")
     parser.add_argument("--config", required=True, help="Absolute path to owner-only local JSON")
+    parser.add_argument(
+        "--enable-owner-stop-file",
+        action="store_true",
+        help="allow local cooperative shutdown with a protected empty marker beside the configuration",
+    )
     args = parser.parse_args(argv)
     signal.signal(signal.SIGTERM, _stop_on_terminate)
     host = LocalRiskWebHost(args.config)
     try:
         host.start()
-        run_local(host.app, origin=host.origin)
+        if args.enable_owner_stop_file:
+            from bt_api_py._owner_stop_file import new_marker
+
+            stop_file = new_marker(Path(args.config).resolve().parent, "risk-web")
+            print("RISK_WEB_STOP_FILE " + stop_file.name, flush=True)
+            _run_local_with_stop_file(host.app, origin=host.origin, stop_file=stop_file)
+        else:
+            run_local(host.app, origin=host.origin)
     finally:
         host.close()
+    if args.enable_owner_stop_file:
+        print("RISK_WEB_STOPPED", flush=True)
 
 
 if __name__ == "__main__":

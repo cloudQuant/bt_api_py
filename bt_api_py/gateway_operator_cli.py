@@ -175,6 +175,11 @@ def main(argv: list[str] | None = None) -> int:
              "timestamp; without it only warnings and errors appear, so confirmations "
              "such as a ready ledger baseline or a matching account comparison are not shown",
     )
+    parser.add_argument(
+        "--enable-owner-stop-file",
+        action="store_true",
+        help="allow local cooperative shutdown with a protected empty marker beside the configuration",
+    )
     args = parser.parse_args(argv)
     if args.log_level is not None:
         _configure_logging(args.log_level)
@@ -278,12 +283,21 @@ def main(argv: list[str] | None = None) -> int:
             )
             exit_code = 1
 
+        owner_stop_file: Path | None = None
+        if args.enable_owner_stop_file:
+            from bt_api_py._owner_stop_file import marker_requested, new_marker
+
+            owner_stop_file = new_marker(Path(args.config).resolve().parent, "gateway")
+            print("GATEWAY_SERVICE_STOP_FILE " + owner_stop_file.name, flush=True)
+        else:
+            marker_requested = None
+
         last_reported: object = None
         while True:
             status = application.status
             report = _plain(status)
             if report != last_reported:
-                print(json.dumps(report, sort_keys=True))
+                print(json.dumps(report, sort_keys=True), flush=True)
                 last_reported = report
             state = status.get("state")
             cleanup = status.get("cleanup")
@@ -301,9 +315,16 @@ def main(argv: list[str] | None = None) -> int:
                     and run.get("state") in ("COMPLETE", "INCOMPLETE", "UNAVAILABLE")):
                 # The pass has ended: report it once and stop like an ordinary stop.
                 cancel_only_reported = True
-                print(json.dumps({"cancel_only": _plain(run)}, sort_keys=True))
+                print(json.dumps({"cancel_only": _plain(run)}, sort_keys=True), flush=True)
                 if run.get("state") != "COMPLETE":
                     exit_code = 3
+                stop_requested.set()
+            if (
+                owner_stop_file is not None
+                and marker_requested is not None
+                and marker_requested(owner_stop_file)
+            ):
+                owner_stop_file = None
                 stop_requested.set()
             if stop_requested.wait(0.1):
                 stop_requested.clear()
@@ -341,6 +362,8 @@ def main(argv: list[str] | None = None) -> int:
                     exit_code = 1
         if exit_code == 0 and application.status.get("state") != "closed":
             exit_code = 1
+        if exit_code == 0 and args.enable_owner_stop_file:
+            print("GATEWAY_SERVICE_STOPPED", flush=True)
     finally:
         for sig, handler in previous_handlers.items():
             signal.signal(sig, handler)

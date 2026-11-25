@@ -443,18 +443,64 @@ def _stop_on_terminate(_signum, _frame):
     raise SystemExit(0)
 
 
-def main():
+def _run_local_with_stop_file(app, *, origin: str, stop_file: Path) -> None:
+    """Serve on loopback and stop cooperatively when the protected empty marker appears."""
+    from urllib.parse import urlsplit
+    import uvicorn
+    from bt_api_gateway.web.app import _local_origin
+    from bt_api_py._owner_stop_file import marker_requested
+
+    _local_origin(origin)
+    parsed = urlsplit(origin)
+    if parsed.scheme != 'http' or parsed.port is None:
+        raise ValueError('LOCAL_HTTP_PORT_REQUIRED')
+    bind_host = '127.0.0.1' if parsed.hostname == 'localhost' else parsed.hostname
+    server = uvicorn.Server(
+        uvicorn.Config(app, host=bind_host, port=parsed.port, proxy_headers=False)
+    )
+    done = threading.Event()
+
+    def _watch() -> None:
+        while not done.wait(0.1):
+            if marker_requested(stop_file):
+                server.should_exit = True
+                return
+
+    watcher = threading.Thread(target=_watch, name='gateway-web-stop-watcher', daemon=True)
+    watcher.start()
+    try:
+        server.run()
+    finally:
+        done.set()
+        watcher.join(timeout=1.0)
+
+
+def main(argv=None):
     from bt_api_gateway.web.app import bundled_static_dir, run_local
     parser = argparse.ArgumentParser(description='Local Gateway web operator host')
     parser.add_argument('--config', required=True, help='Absolute path to owner-only local JSON')
-    args = parser.parse_args()
+    parser.add_argument(
+        '--enable-owner-stop-file',
+        action='store_true',
+        help='allow local cooperative shutdown with a protected empty marker beside the configuration',
+    )
+    args = parser.parse_args(argv)
     signal.signal(signal.SIGTERM, _stop_on_terminate)
     host = LocalGatewayWebHost(args.config, static_dir=bundled_static_dir())
     try:
         host.start()
-        run_local(host.app, origin=host.origin)
+        if args.enable_owner_stop_file:
+            from bt_api_py._owner_stop_file import new_marker
+
+            stop_file = new_marker(Path(args.config).resolve().parent, 'gateway-web')
+            print('GATEWAY_WEB_STOP_FILE ' + stop_file.name, flush=True)
+            _run_local_with_stop_file(host.app, origin=host.origin, stop_file=stop_file)
+        else:
+            run_local(host.app, origin=host.origin)
     finally:
         host.close()
+    if args.enable_owner_stop_file:
+        print('GATEWAY_WEB_STOPPED', flush=True)
 
 
 if __name__ == '__main__':
