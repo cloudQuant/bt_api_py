@@ -38,7 +38,20 @@ from bt_api_base.gateway_direct_protocol import (
     gateway_payload_digest,
     validate_gateway_native_identity,
 )
-from bt_api_base.service_protocol import WireRole
+from bt_api_base.service_protocol import WireIdentity, WireRole
+from bt_api_gateway.control_intent_history import (
+    GatewayControlIntentHistory,
+    GatewayControlIntentOrigin,
+    GatewayControlIntentSpec,
+)
+from bt_api_gateway.control_intent_wire import (
+    CONTROL_INTENT_APPLY_OPERATION,
+    CONTROL_INTENT_OPERATION_FIELDS,
+    CONTROL_INTENT_OPERATIONS,
+    CONTROL_INTENT_PUBLIC_ERROR_MAP,
+    CONTROL_INTENT_WIRE_SCHEMA_VERSION,
+    CONTROL_INTENT_WRITE_OPERATIONS,
+)
 from bt_api_gateway.control_wire import (
     CONTROL_GRANT_KINDS,
     CONTROL_MODES,
@@ -71,6 +84,7 @@ from bt_api_py.gateway_order_contract import (
 from bt_api_py.service_registry import (
     ServiceCallContext,
     ServiceDispatchAdmission,
+    ServiceDispatchAdmissionError,
     ServiceResultTooLargeError,
 )
 
@@ -202,6 +216,62 @@ def execution_events_requested_operations(
 
 def _ref(value: object) -> bool:
     return type(value) is str and bool(value) and value == value.strip() and len(value) <= 256
+
+
+def _audit_ref(value: object) -> bool:
+    """Return whether a wire reference is safe to reproduce in audit logs."""
+
+    return _ref(value) and value.isprintable()
+
+
+def _sha256_digest(value: object) -> bool:
+    return (
+        type(value) is str
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+_CONTROL_INTENT_REQUIRED_LEGACY_OPERATIONS = frozenset(
+    {
+        "direct.control.identity",
+        "direct.control.apply",
+        "direct.control.status",
+        "direct.control.cancel_scope",
+        "direct.control.cancel_scope_status",
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
+class GatewayControlIntentRoute:
+    """Trusted static half of the Risk-to-Gateway intent binding.
+
+    Dynamic registration facts always come from the active Registry admission;
+    the mount, authenticated Gateway peer and server-key fingerprint come from
+    the local composition and are never accepted from request arguments.
+    """
+
+    mount: str
+    service_id: str
+    instance_id: str
+    scope_ref: str
+    peer: WireIdentity
+    server_key_fingerprint: str
+
+    def __post_init__(self) -> None:
+        if (
+            self.mount != "application.direct_write"
+            or not _ref(self.service_id)
+            or not _ref(self.instance_id)
+            or not _ref(self.scope_ref)
+            or type(self.peer) is not WireIdentity
+            or self.peer.role is not WireRole.SERVICE
+            or self.peer.delegate_ref is not None
+            or self.peer.actor_ref != self.service_id
+            or not _sha256_digest(self.server_key_fingerprint)
+        ):
+            raise ValueError("INVALID_CONTROL_INTENT_ROUTE")
 
 
 def _cancel_ref(value: object) -> bool:
@@ -583,6 +653,7 @@ class GatewayDirectServiceBinding:
         cancel_enabled: bool = False,
         control: object | None = None,
         control_grants: Mapping[str, GatewayControlGrant] | None = None,
+        control_intent_route: GatewayControlIntentRoute | None = None,
         # The trusted host wall clock used only for a Runtime proof's absolute
         # ``expires_at`` (a configured calendar time, not a journal TTL).
         control_clock: Callable[[], float] | None = None,
@@ -677,12 +748,38 @@ class GatewayDirectServiceBinding:
                 raise ValueError("INVALID_CONTROL_GRANTS")
         elif control_grants is not None:
             raise ValueError("INVALID_CONTROL_BINDING")
+        intent_history_enabled = bool(
+            getattr(journal, "_control_intent_history_enabled", False)
+        )
+        if control_intent_route is not None:
+            if (
+                type(control_intent_route) is not GatewayControlIntentRoute
+                or control is None
+                or owner is None
+                or not intent_history_enabled
+                or not control_grants
+                or any(
+                    grant.kind != "risk"
+                    or not grant.account_scope_allowed
+                    or not _CONTROL_INTENT_REQUIRED_LEGACY_OPERATIONS.issubset(
+                        grant.operations
+                    )
+                    for grant in control_grants.values()
+                )
+            ):
+                raise ValueError("INVALID_CONTROL_INTENT_BINDING")
+        elif intent_history_enabled and control is not None:
+            # Enabling the journal extension makes every direct control write
+            # require a private permit. Refuse a half-composed service that
+            # would still advertise only the legacy writers.
+            raise ValueError("INVALID_CONTROL_INTENT_BINDING")
         if control_clock is not None and not callable(control_clock):
             raise TypeError("INVALID_CONTROL_CLOCK")
         # A Runtime proof's expiry is an absolute calendar time from the
         # trusted host. The journal clock is monotonic and cannot compare it.
         self._control_clock = control_clock or time.time
         self._control = control
+        self._control_intent_route = control_intent_route
         # The installed control grants are read on the owner thread while a
         # proof refresh (D66-08 continuation) may replace one runtime grant's
         # proof object.  Both paths go through this lock so the object-identity
@@ -707,6 +804,7 @@ class GatewayDirectServiceBinding:
             | (EVENT_OPERATIONS if execution_stream is not None else frozenset())
             | (CANCEL_OPERATIONS if cancel_enabled else frozenset())
             | (CONTROL_OPERATIONS if control is not None else frozenset())
+            | (CONTROL_INTENT_OPERATIONS if control_intent_route is not None else frozenset())
             | (STRATEGY_POSITION_OPERATIONS if owner is not None and journal._schema_version >= 11 else frozenset())
             | (INSTRUMENT_STATUS_OPERATIONS if instrument_status_service is not None else frozenset())
             | (STRATEGY_FINANCIAL_OPERATIONS if owner is not None and journal._schema_version >= 14 and strategy_financial_enabled else frozenset())
@@ -816,6 +914,8 @@ class GatewayDirectServiceBinding:
             finally:
                 if type(admission) is ServiceDispatchAdmission:
                     admission.close()
+        if operation == CONTROL_INTENT_APPLY_OPERATION:
+            return self._handle_control_intent(context=context, arguments=arguments)
         if operation in CONTROL_OPERATIONS:
             return self._handle_control(operation, context=context, arguments=arguments)
         if operation in EVENT_OPERATIONS:
@@ -865,6 +965,253 @@ class GatewayDirectServiceBinding:
         finally:
             if not transferred[0]:
                 finalize_once()
+
+    def _handle_control_intent(self, *, context, arguments):
+        """Apply one same-generation Risk intent through the Gateway owner.
+
+        The wire carries comparison digests only. Registry facts and the
+        authenticated Gateway peer are reconstructed locally, while the
+        private history permit never leaves the owner thread.
+        """
+
+        from bt_api_py.gateway_direct_owner import GatewayOwnerServiceCallError
+
+        if (
+            self._control is None
+            or self._control_intent_route is None
+            or self._owner is None
+            or type(context) is not ServiceCallContext
+            or not isinstance(arguments, Mapping)
+        ):
+            return _reject("CONTROL_INTENT_UNAVAILABLE")
+        admission = context.dispatch_admission
+        if type(admission) is not ServiceDispatchAdmission:
+            return _reject("ADMISSION_DENIED")
+        try:
+            route = self._control_intent_route
+            journal = self._journal
+            control = self._control
+            owner = self._owner
+            identity, scope = context.identity, context.scope
+            grant = self._control_grants.get(context.principal_ref)
+            fields = CONTROL_INTENT_OPERATION_FIELDS[CONTROL_INTENT_APPLY_OPERATION]
+            if (
+                set(arguments) != fields
+                or type(arguments.get("schema_version")) is not int
+                or arguments["schema_version"] != CONTROL_INTENT_WIRE_SCHEMA_VERSION
+                or not _audit_ref(arguments.get("cause_id"))
+                or type(arguments.get("mode")) is not str
+                or arguments["mode"] not in CONTROL_MODES
+                or arguments.get("scope_kind") != "account"
+                or arguments.get("scope_value") != ""
+                or (
+                    arguments.get("latch_id") is not None
+                    and not _ref(arguments.get("latch_id"))
+                )
+                or not _sha256_digest(arguments.get("request_digest"))
+                or not _sha256_digest(arguments.get("binding_digest"))
+                or not _ref(arguments.get("expected_journal_id"))
+                or not _ref(arguments.get("expected_generation"))
+            ):
+                return _reject("INVALID_REQUEST")
+            if (
+                identity.role is not WireRole.APPLICATION_CLIENT
+                or identity.principal_ref != context.principal_ref
+                or identity.delegate_ref is not None
+                or grant is None
+                or grant.kind != "risk"
+                or identity.actor_ref != grant.actor_ref
+                or not grant.account_scope_allowed
+                or not _CONTROL_INTENT_REQUIRED_LEGACY_OPERATIONS.issubset(
+                    grant.operations
+                )
+                or scope.account_ref != journal.account_scope
+                or scope.account_refs
+                or scope.strategy_ref is not None
+                or scope.run_id is not None
+                or scope.manual_book_ref is not None
+                or scope.portfolio_ref is not None
+                or scope.group_id is not None
+                or scope.leg_id is not None
+            ):
+                return _reject("SCOPE_DENIED")
+            if arguments["mode"] not in grant.modes:
+                return _reject("SCOPE_DENIED")
+            if arguments["mode"] == "DRAIN" and (
+                self._cancel_journal is None or owner.supports_cancel is not True
+            ):
+                return _reject("CONTROL_INTENT_UNAVAILABLE")
+            if arguments["expected_journal_id"] != journal.journal_id:
+                return _reject("JOURNAL_ID_MISMATCH")
+            if arguments["expected_generation"] != journal.generation:
+                return _reject("JOURNAL_GENERATION_MISMATCH")
+            if (
+                not admission.matches_operation(CONTROL_INTENT_APPLY_OPERATION)
+                or not admission.matches_context(context)
+                or not admission.matches(arguments)
+                or context.service_epoch != admission.service_epoch
+            ):
+                return _reject("ADMISSION_DENIED")
+            _ensure_reply_fits(
+                context, {"status": "UNKNOWN", "cause_id": arguments["cause_id"]}
+            )
+            _ensure_reply_fits(
+                context,
+                {
+                    "status": "OBSERVED",
+                    "cause_id": arguments["cause_id"],
+                    "version": 2**63 - 1,
+                    "active": True,
+                },
+            )
+            control_origin = CONTROL_ORIGIN_PREFIXES["risk"] + hashlib.sha256(
+                json.dumps(
+                    [context.principal_ref, identity.actor_ref], separators=(",", ":")
+                ).encode()
+            ).hexdigest()
+
+            def current_origin():
+                if (
+                    self._control is not control
+                    or self._control_intent_route is not route
+                    or self._journal is not journal
+                    or self._owner is not owner
+                    or self._control_grants.get(context.principal_ref) is not grant
+                    or getattr(control, "_journal", None) is not journal
+                    or getattr(control, "_generation", None) != journal.generation
+                    or not getattr(journal, "_control_intent_history_enabled", False)
+                    or arguments["expected_journal_id"] != journal.journal_id
+                    or arguments["expected_generation"] != journal.generation
+                ):
+                    raise ServiceDispatchAdmissionError("SCOPE_DENIED")
+                observed = admission.observe_gateway_control_intent_registration()
+                if (
+                    observed.service_id != route.service_id
+                    or observed.instance_id != route.instance_id
+                    or observed.port != "service.direct_write"
+                    or observed.scope_ref != route.scope_ref
+                    or observed.principal_ref != context.principal_ref
+                    or observed.identity != identity
+                    or observed.scope != scope
+                    or observed.write_operations != CONTROL_INTENT_WRITE_OPERATIONS
+                    or not (
+                        _CONTROL_INTENT_REQUIRED_LEGACY_OPERATIONS
+                        | CONTROL_INTENT_OPERATIONS
+                    ).issubset(observed.operations)
+                ):
+                    raise ServiceDispatchAdmissionError("SCOPE_DENIED")
+                origin = GatewayControlIntentOrigin(
+                    schema_version=1,
+                    account_scope=journal.account_scope,
+                    journal_id=journal.journal_id,
+                    owner_generation=journal.generation,
+                    mount=route.mount,
+                    service_id=observed.service_id,
+                    instance_id=observed.instance_id,
+                    scope_ref=observed.scope_ref,
+                    registration_id=observed.registration_id,
+                    service_epoch=observed.service_epoch,
+                    peer_principal_ref=route.peer.principal_ref,
+                    peer_actor_ref=route.peer.actor_ref,
+                    server_key_fingerprint=route.server_key_fingerprint,
+                    operations=observed.operations,
+                )
+                if origin.digest != arguments["binding_digest"]:
+                    raise DirectCommandJournalError(
+                        "CONTROL_INTENT_BINDING_MISMATCH"
+                    )
+                return observed, origin
+
+            def checked_registration(recheck, expected_observation, expected_origin):
+                recheck()
+                observed, origin = current_origin()
+                if observed != expected_observation or origin != expected_origin:
+                    raise ServiceDispatchAdmissionError("SCOPE_DENIED")
+
+            def run():
+                prepared = False
+                try:
+                    history = GatewayControlIntentHistory(journal, control._guard)
+                    with admission.scope() as recheck:
+                        observed, origin = current_origin()
+                        spec = GatewayControlIntentSpec(
+                            schema_version=1,
+                            intent_kind="control",
+                            intent_id=arguments["cause_id"],
+                            request_digest=arguments["request_digest"],
+                            binding=origin,
+                            mode=arguments["mode"],
+                            request_source=None,
+                            latch_id=arguments["latch_id"],
+                            wait_cause_id=None,
+                            scope_kind="account",
+                            scope_value="",
+                            control_origin=control_origin,
+                        )
+                        receipt = history.prepare(
+                            spec,
+                            before_commit=lambda: checked_registration(
+                                recheck, observed, origin
+                            ),
+                        )
+                    prepared = True
+                    with admission.scope() as recheck:
+                        current_observation, current_binding = current_origin()
+                        if (
+                            current_observation != observed
+                            or current_binding != origin
+                        ):
+                            raise ServiceDispatchAdmissionError("SCOPE_DENIED")
+                        intent_permit = history.permit(spec, receipt.proof_id)
+                        cause = control.apply(
+                            arguments["cause_id"],
+                            arguments["mode"],
+                            scope_kind="account",
+                            scope_value="",
+                            origin=control_origin,
+                            intent_permit=intent_permit,
+                            before_commit=lambda: checked_registration(
+                                recheck, observed, origin
+                            ),
+                        )
+                    _LOG.warning(
+                        "Risk control intent apply: cause %s (%s, account scope) "
+                        "version %s by principal %s actor %s registration %s",
+                        cause["cause_id"],
+                        cause["mode"],
+                        cause["version"],
+                        context.principal_ref,
+                        identity.actor_ref,
+                        context.registration_id,
+                    )
+                    return {
+                        "status": "OBSERVED",
+                        "cause_id": cause["cause_id"],
+                        "version": cause["version"],
+                        "active": bool(cause["active"]),
+                    }
+                except ServiceDispatchAdmissionError as error:
+                    if prepared:
+                        raise
+                    return _reject(
+                        "SCOPE_DENIED"
+                        if error.code in {"DENIED", "SCOPE_DENIED"}
+                        else "ADMISSION_DENIED"
+                    )
+                except DirectCommandJournalError as error:
+                    public_code = CONTROL_INTENT_PUBLIC_ERROR_MAP.get(error.code)
+                    if public_code is None:
+                        raise
+                    return _reject(public_code)
+
+            try:
+                result = owner.submit_service_call(run).result(timeout_seconds=1.0)
+                _ensure_reply_fits(context, result)
+                return result
+            except GatewayOwnerServiceCallError:
+                return {"status": "UNKNOWN", "cause_id": arguments["cause_id"]}
+        finally:
+            admission.close()
 
     def _handle_control(self, operation, *, context, arguments):
         from bt_api_py.gateway_direct_owner import GatewayOwnerServiceCallError

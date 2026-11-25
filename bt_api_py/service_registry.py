@@ -1207,6 +1207,29 @@ class _DispatchAdmissionBinding:
     execution_parent_replay: object | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class ServiceDispatchRegistrationObservation:
+    """Current Registry facts for one active owner-bound admission scope.
+
+    This value is an authenticated local observation, not a transferable
+    grant. The control-intent owner uses it only while the issuing admission
+    keeps the Registry snapshot active and rechecks it immediately before a
+    local journal commit.
+    """
+
+    service_id: str
+    instance_id: str
+    port: str
+    scope_ref: str
+    registration_id: str
+    service_epoch: str
+    principal_ref: str
+    identity: WireIdentity
+    scope: WireScope
+    operations: frozenset[str]
+    write_operations: frozenset[str]
+
+
 class ServiceDispatchAdmission:
     """One Registry-issued, argument-bound delayed dispatch authorization.
 
@@ -1549,6 +1572,119 @@ class ServiceDispatchAdmission:
     def scope(self):
         """Enter on the single owner thread; serial reentry remains permitted."""
         return self._scope(creation=False)
+
+    def observe_gateway_control_intent_registration(
+        self,
+    ) -> ServiceDispatchRegistrationObservation:
+        """Observe the exact current Risk intent registration inside ``scope``.
+
+        The observation is deliberately unavailable for every other operation
+        and outside the active owner-thread Registry snapshot. The legacy
+        control writes remain binding vocabulary only: this route requires the
+        sole registered write operation to be the additive intent operation.
+        """
+
+        operation = "direct.control.intent.apply"
+        required_operations = frozenset(
+            {
+                "direct.control.identity",
+                "direct.control.apply",
+                "direct.control.status",
+                "direct.control.cancel_scope",
+                "direct.control.cancel_scope_status",
+                operation,
+            }
+        )
+        binding, registry = self._binding, self._registry
+        with self._state_lock:
+            if (
+                os.getpid() != binding.pid
+                or binding.operation != operation
+                or binding.identity.role is not WireRole.APPLICATION_CLIENT
+                or binding.identity.delegate_ref is not None
+                or self._closed
+                or not self._busy
+                or self._active_marker is None
+                or self._owner_thread is not threading.current_thread()
+            ):
+                raise ServiceDispatchAdmissionError("ADMISSION_CLOSED")
+            marker = self._active_marker
+        if (
+            not registry._lock._is_owned()
+            or registry._db is None
+            or not registry._db.in_transaction
+            or registry._dispatch_admissions.get(self) is not binding
+        ):
+            raise ServiceDispatchAdmissionError("ADMISSION_CLOSED")
+        try:
+            code = registry._direct_dispatch_admission_error(
+                binding.registration_id,
+                binding.service_epoch,
+                binding.instance_id,
+                binding.principal,
+                binding.identity,
+                binding.scope,
+                operation,
+            )
+            if code is not None:
+                raise ServiceDispatchAdmissionError(code)
+            row = registry._db.execute(
+                "SELECT * FROM sessions WHERE registration_id=? AND principal=? "
+                "AND service_epoch=?",
+                (binding.registration_id, binding.principal, binding.service_epoch),
+            ).fetchone()
+            if row is None:
+                raise ValueError
+            operations = frozenset(json.loads(row["operations_json"]))
+            write_operations = frozenset(json.loads(row["write_operations_json"]))
+            if (
+                row["instance_id"] != binding.instance_id
+                or row["port"] != "service.direct_write"
+                or registry._stored_identity(row["identity_json"]) != binding.identity
+                or registry._stored_scope(row["scope_json"]) != binding.scope
+                or not required_operations.issubset(operations)
+                or write_operations != frozenset({operation})
+                or not registry._current_resource_allows_all(
+                    binding.principal,
+                    binding.identity,
+                    instance_id=binding.instance_id,
+                    port=row["port"],
+                    scope_ref=row["scope_ref"],
+                    scope=binding.scope,
+                    operations=operations,
+                )
+                or any(
+                    (binding.instance_id, registered_operation) not in registry._handlers
+                    for registered_operation in operations
+                )
+            ):
+                raise ValueError
+            observation = ServiceDispatchRegistrationObservation(
+                service_id=registry.service_id,
+                instance_id=binding.instance_id,
+                port=row["port"],
+                scope_ref=row["scope_ref"],
+                registration_id=binding.registration_id,
+                service_epoch=binding.service_epoch,
+                principal_ref=binding.principal,
+                identity=binding.identity,
+                scope=binding.scope,
+                operations=operations,
+                write_operations=write_operations,
+            )
+        except ServiceDispatchAdmissionError:
+            raise
+        except Exception:
+            raise ServiceDispatchAdmissionError("SCOPE_DENIED") from None
+        with self._state_lock:
+            if (
+                self._closed
+                or not self._busy
+                or self._active_marker is not marker
+                or self._owner_thread is not threading.current_thread()
+            ):
+                raise ServiceDispatchAdmissionError("ADMISSION_CLOSED")
+        return observation
 
     def check_gateway_parent_readiness(self) -> None:
         """Check the fixed parent v2 operation set in this SOURCE admission's snapshot.
