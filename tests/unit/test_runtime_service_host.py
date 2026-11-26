@@ -7,13 +7,27 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
-from bt_api_run_contract import (AccessMode, ApiConfig, GatewayConfig, IdentityState, MonitorEventsConfig,
-    OperatorConfig, OperatorRole, RestartConfig, StopConfig, UnitConfig, UnitKind, ValidatedRuntimeConfig)
+from bt_api_run_contract import (
+    AccessMode,
+    ApiConfig,
+    GatewayConfig,
+    IdentityState,
+    MonitorEventsConfig,
+    OperatorConfig,
+    OperatorRole,
+    RestartConfig,
+    StopConfig,
+    UnitConfig,
+    UnitKind,
+    ValidatedRuntimeConfig,
+)
 from bt_api_runtime.control_auth import OperatorIdentity, SingleOperatorAuthenticator
 from bt_api_runtime.control_http import ControlTransportError
 from bt_api_runtime.events import EventStore
 from bt_api_runtime.supervision import IdentityRead, SystemClock, UnitIdentity
+
+import bt_api_py.runtime_operator_cli as operator_cli
+import bt_api_py.runtime_operator_config as operator_config_module
 import bt_api_py.runtime_service_host as module
 
 
@@ -509,3 +523,156 @@ def test_enable_stop_file_opt_in_is_validated_and_stored(tmp_path, monkeypatch):
     assert _host_with_stop_file(tmp_path, monkeypatch, enable_stop_file=True)._enable_stop_file is True
     with pytest.raises(ValueError, match='INVALID_RUNTIME_HOST_BINDINGS'):
         _host_with_stop_file(tmp_path, monkeypatch, enable_stop_file=1)
+
+
+@pytest.mark.parametrize('gateway,monitor', [(True, False), (False, True)])
+def test_normal_mode_still_requires_configured_bridges(tmp_path, gateway, monitor):
+    unit = make_unit(tmp_path, name='alpha',
+                     access=AccessMode.GATEWAY if gateway else AccessMode.DIRECT)
+    config = replace(make_config(tmp_path, unit),
+                     monitor_events=MonitorEventsConfig(enabled=monitor))
+    store = EventStore(config.home, SystemClock())
+    auth = SingleOperatorAuthenticator(OperatorIdentity('alice', OperatorRole.OPERATOR, ('*',)))
+    try:
+        with pytest.raises(ValueError, match='INVALID_RUNTIME_HOST_BINDINGS'):
+            module.RuntimeServiceHost(
+                config, authenticator=auth, gateway_bridge=None, event_store=store,
+                monitor_bridge=None, unit_strategies={'alpha': 'one'} if gateway else {},
+            )
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize('override', [
+    {'gateway_bridge': object()},
+    {'monitor_bridge': object()},
+    {'enable_stop_file': True},
+    {'recover_runs': True},
+    {'recover_in_flight': True},
+])
+def test_observe_only_host_rejects_bridges_and_write_channels(tmp_path, override):
+    unit = make_unit(tmp_path, name='alpha', access=AccessMode.GATEWAY)
+    config = replace(make_config(tmp_path, unit), monitor_events=MonitorEventsConfig(enabled=True))
+    store = EventStore(config.home, SystemClock())
+    auth = SingleOperatorAuthenticator(OperatorIdentity('alice', OperatorRole.OPERATOR, ('*',)))
+    arguments = {
+        'authenticator': auth,
+        'gateway_bridge': None,
+        'monitor_bridge': None,
+        'event_store': store,
+        'unit_strategies': {'alpha': 'one'},
+        'enable_stop_file': False,
+        'recover_runs': False,
+        'recover_in_flight': False,
+        'observe_only': True,
+    }
+    arguments.update(override)
+    try:
+        with pytest.raises(ValueError, match='INVALID_RUNTIME_HOST_BINDINGS'):
+            module.RuntimeServiceHost(config, **arguments)
+    finally:
+        store.close()
+
+
+def test_cli_observe_only_skips_bridge_and_key_loading_and_serves_viewer(
+    tmp_path, monkeypatch, capsys,
+):
+    unit = make_unit(tmp_path, name='alpha', access=AccessMode.GATEWAY)
+    runtime = replace(make_config(tmp_path, unit), monitor_events=MonitorEventsConfig(enabled=True))
+    config = SimpleNamespace(
+        runtime=runtime,
+        unit_strategies={'alpha': 'one'},
+        token_file=object(),
+        gateway=object(),
+        monitor=object(),
+    )
+    auth = SingleOperatorAuthenticator(OperatorIdentity('alice', OperatorRole.OPERATOR, ('*',)))
+    calls = {'build_bridges': 0, 'key_loader': 0}
+
+    def forbidden_builder(*args, **kwargs):
+        calls['build_bridges'] += 1
+        raise AssertionError('observe-only must not construct Gateway or Monitor bridges')
+
+    def forbidden_key_loader(*args, **kwargs):
+        calls['key_loader'] += 1
+        raise AssertionError('observe-only must not load CURVE keys')
+
+    monkeypatch.setattr(operator_cli, 'load_authenticator', lambda _config: auth)
+    monkeypatch.setattr(operator_cli, 'build_bridges', forbidden_builder)
+    monkeypatch.setattr(operator_config_module, '_load_keys', forbidden_key_loader)
+    observed = {}
+
+    def inspect_service_then_close(host, requested, stop_directory):
+        observed['host'] = host
+        assert stop_directory is None
+        assert host.state == 'running'
+        assert host.observe_only is True
+        assert host._enable_stop_file is False
+        assert host._recover_runs is False
+        assert host._recover_in_flight is False
+        assert host.gateway_bridge is None and host.monitor_bridge is None
+        assert host._gateway_started is False and host._monitor_started is False
+        assert host._relay.enabled is False and host._relay.port is None
+        assert host._poll_thread is None and host.telemetry_status == 'disabled'
+
+        listed = host._service.dispatch('runtime.units.list')
+        assert listed.status == 'OK' and listed.data['role'] == 'viewer'
+        status = host._service.dispatch('runtime.unit.status', unit_name='alpha')
+        gateway_status = status.data['unit']['gateway']
+        assert gateway_status['available'] is False
+        assert gateway_status['code'] == 'gateway_control_port_unavailable'
+        denied = host._service.dispatch(
+            'runtime.unit.start', unit_name='alpha', command_id='observe-only-start-denied',
+            reason='observe-only must reject writes',
+        )
+        assert denied.status == 'REJECTED' and denied.code == 'not_authorized'
+        assert not Path(host._supervisor.store.runs_dir).exists()
+
+        pause = host._mux.pause(unit, strategy_uuid='one')
+        assert pause.status == 'REJECTED' and pause.code == 'gateway_control_port_unavailable'
+        resume = host._mux.resume(unit, strategy_uuid='one')
+        assert resume.status == 'REJECTED' and resume.code == 'gateway_control_port_unavailable'
+        drain = host._mux.drain(unit, strategy_uuid='one')
+        assert drain.accepted is False and drain.code == 'gateway_control_port_unavailable'
+        host.close()
+
+    monkeypatch.setattr(operator_cli, '_wait_close', inspect_service_then_close)
+    assert operator_cli._run(config, observe_only=True) == 0
+    assert calls == {'build_bridges': 0, 'key_loader': 0}
+    output = capsys.readouterr().out
+    assert 'runtime_control_mode observe_only' in output
+    assert f'runtime_control_listening 127.0.0.1 {runtime.api.port}' in output
+    assert 'runtime_control_closed' in output
+    assert observed['host'].event_store.relay is None
+
+
+def test_cli_normal_mode_still_builds_bridges_and_keeps_operator_role(
+    tmp_path, monkeypatch, capsys,
+):
+    unit = make_unit(tmp_path, name='alpha')
+    runtime = make_config(tmp_path, unit)
+    config = SimpleNamespace(runtime=runtime, unit_strategies={}, token_file=object())
+    auth = SingleOperatorAuthenticator(OperatorIdentity('alice', OperatorRole.OPERATOR, ('*',)))
+    built = []
+    monkeypatch.setattr(operator_cli, 'load_authenticator', lambda _config: auth)
+
+    def build(config_arg, event_store):
+        built.append((config_arg, event_store))
+        return None, None
+
+    monkeypatch.setattr(operator_cli, 'build_bridges', build)
+
+    def inspect_service_then_close(host, requested, stop_directory):
+        assert host.observe_only is False
+        assert host._recover_runs is True and host._recover_in_flight is True
+        listed = host._service.dispatch('runtime.units.list')
+        assert listed.status == 'OK' and listed.data['role'] == 'operator'
+        host.close()
+
+    monkeypatch.setattr(operator_cli, '_wait_close', inspect_service_then_close)
+    assert operator_cli._run(config) == 0
+    assert len(built) == 1 and built[0][0] is config
+    output = capsys.readouterr().out
+    assert 'runtime_control_mode observe_only' not in output
+    assert f'runtime_control_listening 127.0.0.1 {runtime.api.port}' in output
+    assert 'runtime_control_closed' in output

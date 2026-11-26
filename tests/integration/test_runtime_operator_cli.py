@@ -12,6 +12,7 @@ import sys
 import threading
 import time
 import uuid
+from contextlib import suppress
 from pathlib import Path
 
 import zmq
@@ -276,6 +277,273 @@ def test_observe_only_preserves_existing_run_and_in_flight_command(tmp_path):
     try:
         assert database.ledger.get(pending_command).state == 'PENDING'
         assert database.ledger.get(claimed_command).state == 'CLAIMED'
+        assert database.ledger.get(denied_command) is None
+    finally:
+        database.close()
+
+
+def test_observe_only_gateway_monitor_subprocess_is_read_only_and_owner_stoppable(tmp_path):
+    """Observe-only ignores unusable bridge keys and preserves runtime records."""
+    from tests.integration import test_monitor_service_process as monitor_fixture
+
+    unit = make_unit(tmp_path, name='alpha', access=AccessMode.GATEWAY)
+    runtime_home = tmp_path / 'runtime-home'
+    run_path = runtime_home / 'runs' / 'alpha.json'
+    run_path.parent.mkdir(parents=True)
+    run_bytes = json.dumps(RunRecord(
+        schema=RUN_SCHEMA,
+        unit_name='alpha',
+        strategy_uuid='11111111-1111-4111-8111-111111111111',
+        run_id='33333333-3333-4333-8333-333333333333',
+        process=None,
+        spawned=False,
+        adopted=False,
+        started_at_utc='2026-11-26T05:00:00+00:00',
+        started_monotonic=1.0,
+        os_boot_id=None,
+        stdout_path=str(runtime_home / 'logs' / 'alpha.stdout.log'),
+        stderr_path=str(runtime_home / 'logs' / 'alpha.stderr.log'),
+        state=UnitState.STARTING,
+        updated_at_utc='2026-11-26T05:00:00+00:00',
+    ).to_mapping(), sort_keys=True, separators=(',', ':')).encode('utf-8')
+    run_path.write_bytes(run_bytes)
+
+    commands_path = runtime_home / 'commands.json'
+    commands_bytes = json.dumps({
+        'schema': 'bt_api_runtime.commands/v1',
+        'commands': [],
+    }, sort_keys=True, separators=(',', ':')).encode('utf-8')
+    commands_path.write_bytes(commands_bytes)
+    state_path = runtime_home / 'runtime_state.json'
+    state_path.write_bytes(json.dumps({
+        'schema': 'bt_api_runtime.runtime/v1',
+        'instance_id': 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        'pid': 1,
+        'os_boot_id': 'synthetic-boot',
+        'started_at_utc': '2026-11-25T00:00:00+00:00',
+    }, sort_keys=True, separators=(',', ':')).encode('utf-8'))
+    units_path = runtime_home / 'units.json'
+    units_path.write_bytes(json.dumps({
+        'schema': 'bt_api_runtime.units/v1',
+        'units': [],
+    }, sort_keys=True, separators=(',', ':')).encode('utf-8'))
+
+    port = free_port()
+    strategy = str(uuid.uuid4())
+    runtime_path = tmp_path / 'runtime.json'
+    runtime_bytes = json.dumps({
+        'schema': 'bt_api_runtime/v1',
+        'home': str(runtime_home),
+        'api': {
+            'transport': 'http_json',
+            'bind': '127.0.0.1',
+            'port': port,
+            'identity_mechanism': 'subject_token',
+        },
+        'operators': [{'name': 'alice', 'role': 'operator', 'units': ['alpha']}],
+        'monitor_events': {'enabled': True},
+        'units': [{
+            'name': 'alpha',
+            'kind': 'strategy',
+            'dir': unit.strategy_dir,
+            'entry': 'run.py',
+            'python': sys.executable,
+            'access': 'gateway',
+            'heartbeat_interval_s': 1,
+            'start_timeout_s': 10,
+            'stop': {'graceful_timeout_s': 2, 'kill_timeout_s': 1, 'drain_timeout_s': 1},
+            'gateway': {'account_dir': str(tmp_path / 'gateway-alpha')},
+        }],
+    }).encode('utf-8')
+    runtime_path.write_bytes(runtime_bytes)
+
+    token = 'synthetic-token-' + 'r' * 32
+    token_path = tmp_path / 'tokens.json'
+    token_bytes = json.dumps({
+        'schema': 'bt_api_py.runtime_subject_tokens.v1',
+        'tokens': [{'token': token, 'operator': 'alice'}],
+    }).encode('utf-8')
+    token_path.write_bytes(token_bytes)
+    set_owner_only(token_path)
+
+    client_identity = WireIdentity(WireRole.APPLICATION_CLIENT, 'runtime-principal', 'runtime-app')
+    gateway_peer = WireIdentity(WireRole.SERVICE, 'gateway-principal', 'gateway-service')
+    gateway_route = RuntimeGatewayControlRoute(
+        'gateway-service', 'gateway-instance', 'gateway-scope',
+        WireScope('synthetic-domain', account_ref='synthetic-account', strategy_ref=strategy),
+    )
+    gateway_client = _client('tcp://127.0.0.1:1', client_identity, gateway_route)
+
+    monitor_listener = {
+        'principal_ref': 'monitor-principal',
+        'service_id': 'monitor-service',
+        'instance_id': 'monitor-instance',
+        'scope_ref': 'monitor-scope',
+        'rpc_bind': 'tcp://127.0.0.1:1',
+    }
+    monitor_server_key, _ = zmq.curve_keypair()
+    monitor_client_keys = zmq.curve_keypair()
+    monitor_runtime_client = monitor_fixture.client(
+        monitor_listener, monitor_server_key, monitor_client_keys, 'producer', 'events.append')
+    monitor_client_config = parse_service_config(monitor_runtime_client._config).to_public_dict()
+
+    missing_keys = {
+        'gateway_server_public': tmp_path / 'absent-gateway-server.public',
+        'gateway_client_public': tmp_path / 'absent-gateway-client.public',
+        'gateway_client_secret': tmp_path / 'absent-gateway-client.secret',
+        'monitor_server_public': tmp_path / 'absent-monitor-server.public',
+        'monitor_client_public': tmp_path / 'absent-monitor-client.public',
+        'monitor_client_secret': tmp_path / 'absent-monitor-client.secret',
+    }
+    assert all(not path.exists() for path in missing_keys.values())
+
+    config_path = tmp_path / 'operator.json'
+    config_bytes = json.dumps({
+        'schema': 'bt_api_py.runtime_operator.v1',
+        'runtime_config_file': str(runtime_path),
+        'subject_token_file': str(token_path),
+        'gateway': {
+            'identity': {'principal_ref': client_identity.principal_ref,
+                         'actor_ref': client_identity.actor_ref},
+            'expected_peer': {'principal_ref': gateway_peer.principal_ref,
+                              'actor_ref': gateway_peer.actor_ref},
+            'timeout_seconds': 2,
+            'routes': [{
+                'unit': 'alpha',
+                'strategy_uuid': strategy,
+                'route': {
+                    'service_id': gateway_route.service_id,
+                    'instance_id': gateway_route.instance_id,
+                    'scope_ref': gateway_route.scope_ref,
+                    'execution_domain_ref': 'synthetic-domain',
+                    'account_ref': 'synthetic-account',
+                },
+                'client_config': gateway_client.to_public_dict(),
+                'client_config_fingerprint': gateway_client.fingerprint(),
+                'curve_keys': {
+                    'server_public': str(missing_keys['gateway_server_public']),
+                    'client_public': str(missing_keys['gateway_client_public']),
+                    'client_secret': str(missing_keys['gateway_client_secret']),
+                },
+                'delegation': {
+                    'delegation_id': 'synthetic-delegation',
+                    'operator_ref': 'alice',
+                    'expires_at': time.time() + 120,
+                    'revoked': False,
+                },
+            }],
+        },
+        'monitor': {
+            'identity': {'principal_ref': 'producer', 'actor_ref': 'producer-service'},
+            'expected_peer': {'principal_ref': monitor_listener['principal_ref'],
+                              'actor_ref': monitor_listener['service_id']},
+            'execution_domain_ref': 'synthetic-domain',
+            'account_ref': 'synthetic-account',
+            'scope_ref': monitor_listener['scope_ref'],
+            'run_id': 'runtime-run',
+            'timeout_seconds': 2,
+            'client_config': monitor_client_config,
+            'curve_keys': {
+                'server_public': str(missing_keys['monitor_server_public']),
+                'client_public': str(missing_keys['monitor_client_public']),
+                'client_secret': str(missing_keys['monitor_client_secret']),
+            },
+        },
+    }).encode('utf-8')
+    config_path.write_bytes(config_bytes)
+
+    preserved_files = {
+        path: path.read_bytes()
+        for path in (runtime_path, config_path, token_path, commands_path, run_path,
+                     state_path, units_path)
+    }
+    denied_command = str(uuid.uuid4())
+    process = subprocess.Popen(
+        [sys.executable, '-u', '-m', 'bt_api_py.runtime_operator_cli', 'run',
+         '--config', str(config_path), '--observe-only', '--enable-owner-stop-file'],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    stop_marker = None
+    try:
+        assert _wait_startup_line(process, 20) == 'runtime_control_mode observe_only'
+        assert _wait_startup_line(process, 10) == f'runtime_control_listening 127.0.0.1 {port}'
+        marker_line = _wait_startup_line(process, 10)
+        prefix = 'runtime_control_stop_file '
+        assert marker_line.startswith(prefix), marker_line
+        marker_name = marker_line[len(prefix):]
+        assert '/' not in marker_name and '\\' not in marker_name
+        stop_marker = runtime_home / marker_name
+
+        _, listed = request(port, control_payload('runtime.units.list'), token=token)
+        assert listed['status'] == 'OK' and listed['role'] == 'viewer'
+        _, status = request(port, control_payload('runtime.unit.status', unit='alpha'), token=token)
+        assert status['status'] == 'OK'
+        assert status['unit']['gateway']['available'] is False
+        assert status['unit']['gateway']['code'] == 'gateway_control_port_unavailable'
+        _, denied = request(
+            port,
+            control_payload(
+                'runtime.unit.start', unit='alpha', command_id=denied_command,
+                reason='observe-only owner-stop integration',
+            ),
+            token=token,
+        )
+        assert denied['status'] == 'REJECTED' and denied['code'] == 'not_authorized'
+
+        stop_marker.write_bytes(b'')
+        set_owner_only(stop_marker)
+        out, err = process.communicate(timeout=15)
+        assert process.returncode == 0, (out, err)
+        assert 'runtime_control_closed' in out
+        assert token not in out + err
+    finally:
+        if process.poll() is not None:
+            process.communicate(timeout=5)
+        else:
+            if stop_marker is None:
+                deadline = time.monotonic() + 5
+                while stop_marker is None and process.poll() is None and time.monotonic() < deadline:
+                    markers = tuple(runtime_home.glob('runtime-*.stop'))
+                    if markers:
+                        stop_marker = markers[0]
+                    else:
+                        time.sleep(0.05)
+            cleanup_mode = 'owner_stop_marker'
+            try:
+                if stop_marker is None:
+                    cleanup_mode = 'forced_reap'
+                else:
+                    stop_marker.write_bytes(b'')
+                    set_owner_only(stop_marker)
+                    try:
+                        cleanup_out, cleanup_err = process.communicate(timeout=15)
+                    except subprocess.TimeoutExpired:
+                        cleanup_mode = 'forced_reap'
+            except OSError:
+                cleanup_mode = 'forced_reap'
+            if cleanup_mode == 'forced_reap':
+                with suppress(OSError):
+                    process.kill()
+                try:
+                    cleanup_out, cleanup_err = process.communicate(timeout=5)
+                except subprocess.TimeoutExpired as error:
+                    raise AssertionError('observe-only CLI child could not be reaped') from error
+            if cleanup_mode != 'owner_stop_marker':
+                print(
+                    'observe-only CLI test cleanup: '
+                    f'mode={cleanup_mode} exit={process.returncode} '
+                    f'stdout_present={bool(cleanup_out)} stderr_present={bool(cleanup_err)}'
+                )
+
+    changed_files = tuple(path.name for path, data in preserved_files.items()
+                          if path.read_bytes() != data)
+    assert not changed_files, changed_files
+    assert not (runtime_home / 'runtime.lock').exists()
+    assert all(not path.exists() for path in missing_keys.values())
+    database = ControlDatabase(runtime_home, SystemClock())
+    try:
         assert database.ledger.get(denied_command) is None
     finally:
         database.close()

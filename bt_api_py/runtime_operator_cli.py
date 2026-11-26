@@ -13,8 +13,6 @@ import sys
 import threading
 from pathlib import Path
 
-from bt_api_run_contract import OperatorRole
-from bt_api_runtime.control_auth import AuthResult, OperatorIdentity
 from bt_api_runtime.control_http import ControlTransportError
 from bt_api_runtime.events import EventStore
 from bt_api_runtime.supervision import SystemClock
@@ -27,26 +25,6 @@ _CLEANUP_COMPONENTS = frozenset({
     'http_dispatch', 'http_listener', 'telemetry_owner', 'service', 'database',
     'supervisor', 'relay', 'monitor', 'gateway',
 })
-
-
-class _ViewerOnlyAuthenticator:
-    """Preserve authentication while removing every write-capable role."""
-
-    mode = 'trusted_mapping_viewer_only'
-
-    def __init__(self, delegate):
-        self._delegate = delegate
-
-    def authenticate(self, credential):
-        result = self._delegate.authenticate(credential)
-        if not result.authenticated:
-            return result
-        identity = result.identity
-        return AuthResult(
-            OperatorIdentity(identity.name, OperatorRole.VIEWER, tuple(identity.units)),
-            'authenticated',
-            {'identity_mode': self.mode},
-        )
 
 
 def _emit(message, *, error=False):
@@ -133,17 +111,19 @@ def _run(config, *, enable_stop_file=False, enable_owner_stop_file=False,
     startup_failed = False
     try:
         auth = load_authenticator(config)
-        if observe_only:
-            auth = _ViewerOnlyAuthenticator(auth)
         store = EventStore(config.runtime.home, SystemClock())
         if not store.available:
             raise RuntimeError('EVENT_STORE_UNAVAILABLE')
-        gateway, monitor = build_bridges(config, store)
+        if observe_only:
+            gateway = monitor = None
+        else:
+            gateway, monitor = build_bridges(config, store)
         host = RuntimeServiceHost(config.runtime, authenticator=auth, gateway_bridge=gateway,
             event_store=store, monitor_bridge=monitor, unit_strategies=config.unit_strategies,
             enable_stop_file=enable_stop_file,
             recover_runs=not observe_only,
-            recover_in_flight=not observe_only)
+            recover_in_flight=not observe_only,
+            observe_only=observe_only)
         try:
             host.start()
         except Exception as error:
