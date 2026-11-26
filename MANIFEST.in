@@ -1,13 +1,13 @@
-# 运行时配置文件
+# Runtime configuration files
 include bt_api_py/configs/exchange-bundles.toml
 recursive-include bt_api_py/configs *.pkl *.yaml
 
-# 包内合成交易日历种子（SYNTHETIC_MOCK，非交易所事实）
+# Packaged synthetic calendar seeds (SYNTHETIC_MOCK, not venue facts)
 recursive-include bt_api_py/trading_calendar_seed *.json
 
 # README
 include README.md
 
-# 构建产物不能进入 sdist 或 wheel
+# Build artifacts must not enter the sdist or wheel
 global-exclude __pycache__
 global-exclude *.py[cod]
