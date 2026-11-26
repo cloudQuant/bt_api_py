@@ -1194,6 +1194,73 @@ def _r05_cut_has_current_coverage(progress: Any, cut: Any, coverage_verified: An
     )
 
 
+def gateway_server_key_fingerprint(public_key: bytes) -> str:
+    """Return canonical sha256 digest of a Gateway CURVE server public key."""
+    if type(public_key) is not bytes or not public_key:
+        raise ValueError("GATEWAY_SERVER_KEY_INVALID")
+    return "sha256:" + hashlib.sha256(public_key).hexdigest()
+
+
+def gateway_generation_reference(
+    *,
+    journal_id: str,
+    owner_generation: str,
+    service_id: str,
+    instance_id: str,
+    server_key_fingerprint: str,
+) -> str:
+    """Canonical sha256 digest binding a verified Gateway generation and peer identity."""
+    fields = (journal_id, owner_generation, service_id, instance_id, server_key_fingerprint)
+    if any(type(item) is not str or not item for item in fields):
+        raise ValueError("GATEWAY_GENERATION_REFERENCE_INVALID")
+    payload = json.dumps(
+        {
+            "schema": "bt_api_py.gateway_generation_reference/v1",
+            "journal_id": journal_id,
+            "owner_generation": owner_generation,
+            "service_id": service_id,
+            "instance_id": instance_id,
+            "server_key_fingerprint": server_key_fingerprint,
+        },
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("ascii")
+    return "sha256:" + hashlib.sha256(payload).hexdigest()
+
+
+def _r05_observation_reference(
+    *,
+    gateway_reference: str,
+    cut_ref: str,
+    fact_epoch: str,
+    fact_watermark: int,
+    service_epoch: str,
+    registration_id: str,
+    verified_stream_epoch: str,
+    query_manifest_digest: str,
+    source_binding_ref: str,
+) -> str:
+    payload = json.dumps(
+        {
+            "schema": "bt_api_py.r05_observation_reference/v1",
+            "gateway_reference": gateway_reference,
+            "cut_ref": cut_ref,
+            "fact_epoch": fact_epoch,
+            "fact_watermark": fact_watermark,
+            "service_epoch": service_epoch,
+            "registration_id": registration_id,
+            "verified_stream_epoch": verified_stream_epoch,
+            "query_manifest_digest": query_manifest_digest,
+            "source_binding_ref": source_binding_ref,
+        },
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("ascii")
+    return "sha256:" + hashlib.sha256(payload).hexdigest()
+
+
 def _r05_cut_matches_current_gateway(
     progress: Any,
     cut: Any,
@@ -2404,15 +2471,31 @@ class RiskServiceHost:
         """
         return self._check_order_cut_admission(degrade_on_failure=False)
 
+    def _observe_order_cut_admission_proof(self) -> tuple[bool, str | None, str | None]:
+        """Return ``(ready, gateway_reference, observation_reference)`` from one verified check."""
+        return self._check_order_cut_admission_with_proof(degrade_on_failure=False)
+
     def _check_order_cut_admission(self, *, degrade_on_failure: bool) -> bool:
         settings = getattr(self.config, "account_facts_observation", None)
         if settings is None or getattr(settings, "order_cut_enabled", False) is not True:
             return True
+        ready, _gw_ref, _obs_ref = self._check_order_cut_admission_with_proof(
+            degrade_on_failure=degrade_on_failure,
+            include_proof=False,
+        )
+        return ready
 
-        def unavailable() -> bool:
+    def _check_order_cut_admission_with_proof(
+        self, *, degrade_on_failure: bool, include_proof: bool = True
+    ) -> tuple[bool, str | None, str | None]:
+        settings = getattr(self.config, "account_facts_observation", None)
+        if settings is None or getattr(settings, "order_cut_enabled", False) is not True:
+            return (False, None, None)
+
+        def unavailable() -> tuple[bool, str | None, str | None]:
             if degrade_on_failure and self.order_cut_status == "CUT_APPLIED":
                 self.order_cut_status = "UNKNOWN"
-            return False
+            return (False, None, None)
 
         try:
             # ready() remains only the Service RPC readiness predicate. Trading
@@ -2531,7 +2614,32 @@ class RiskServiceHost:
                 observer_service_epoch=observer_binding_after.service_epoch,
                 verified_stream_epoch=stream_epoch_after,
             )
-            return matches if matches else unavailable()
+            if not matches:
+                return unavailable()
+            if not include_proof:
+                return (True, None, None)
+            gateway_cfg = getattr(self.config, "gateway", None)
+            gw_ref = gateway_generation_reference(
+                journal_id=cut_after["journal_id"],
+                owner_generation=cut_after["owner_generation"],
+                service_id=gateway_cfg.service_id,
+                instance_id=gateway_cfg.instance_id,
+                server_key_fingerprint=gateway_server_key_fingerprint(
+                    gateway_cfg.server_public_key
+                ),
+            )
+            obs_ref = _r05_observation_reference(
+                gateway_reference=gw_ref,
+                cut_ref=cut_after["cut_ref"],
+                fact_epoch=cut_after["fact_epoch"],
+                fact_watermark=cut_after["fact_watermark"],
+                service_epoch=facts_binding_after.service_epoch,
+                registration_id=facts_binding_after.registration_id,
+                verified_stream_epoch=stream_epoch_after,
+                query_manifest_digest=cut_after["query_manifest_digest"],
+                source_binding_ref=cut_after["source_binding_ref"],
+            )
+            return (True, gw_ref, obs_ref)
         except Exception:
             if degrade_on_failure and getattr(self.ledger, "_r05_uncertain", False):
                 self._record_cleanup_uncertain(self.ledger, "ACCOUNT_FACTS_STORAGE_UNKNOWN")
@@ -3467,6 +3575,7 @@ class RiskServiceHost:
             ),
             order_cut_admission_ready=self._order_cut_admission_ready,
             order_cut_admission_observe=self._observe_order_cut_admission,
+            order_cut_admission_proof=self._observe_order_cut_admission_proof,
         )
         self._check_cleanup_ready()
         component = self.component

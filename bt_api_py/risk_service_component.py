@@ -20,6 +20,7 @@ import hashlib
 import json
 import logging
 import math
+import re
 from collections import Counter
 from collections.abc import Callable, Mapping
 from copy import deepcopy
@@ -58,6 +59,11 @@ _AUDIT_LIMIT = 1000
 # The optional Risk Web adapter rejects replies above this many value nodes.
 # Count the entire result, not only each record; no schema fields are removed.
 _AUDIT_REPLY_NODE_LIMIT = 200_000
+_SHA256_REFERENCE = re.compile(r"sha256:[0-9a-f]{64}\Z")
+
+
+def _valid_sha256_reference(value: object) -> bool:
+    return type(value) is str and _SHA256_REFERENCE.fullmatch(value) is not None
 
 
 def validate_service_options(options: Mapping[str, Any], bind_ports: Any) -> Mapping[str, Any]:
@@ -172,6 +178,7 @@ class RiskOrderService:
         order_cut_required: bool = False,
         order_cut_admission_ready: Callable[[], bool] | None = None,
         order_cut_admission_observe: Callable[[], bool] | None = None,
+        order_cut_admission_proof: Callable[[], tuple[bool, str | None, str | None]] | None = None,
     ) -> None:
         if not all(_ref(x) for x in (account_scope, route, execution_domain_ref)):
             raise ValueError("RISK_ORDER_SERVICE_INVALID")
@@ -183,6 +190,7 @@ class RiskOrderService:
             or type(order_cut_required) is not bool
             or (order_cut_admission_ready is not None and not callable(order_cut_admission_ready))
             or (order_cut_admission_observe is not None and not callable(order_cut_admission_observe))
+            or (order_cut_admission_proof is not None and not callable(order_cut_admission_proof))
             or (order_cut_required and not callable(order_cut_admission_ready))
         ):
             raise ValueError("RISK_ORDER_SERVICE_INVALID")
@@ -203,6 +211,7 @@ class RiskOrderService:
         self._order_cut_required = order_cut_required
         self._order_cut_admission_ready = order_cut_admission_ready
         self._order_cut_admission_observe = order_cut_admission_observe
+        self._order_cut_admission_proof = order_cut_admission_proof
         # Refusal counts since this process started, per represented strategy (risk.status).
         self._refusals: dict[str, Counter] = {}
         # Admin/operator refusals since this process started, per finite code.
@@ -928,9 +937,14 @@ class RiskOrderService:
         }[operation]
         if operation == "risk.admin.status":
             fields = set(arguments)
-            fields_valid = fields in (set(), {"order_cut_admission"})
+            fields_valid = fields in (set(), {"order_cut_admission"}, {"order_cut_admission", "order_cut_proof"})
             if fields_valid and "order_cut_admission" in fields:
                 fields_valid = type(arguments["order_cut_admission"]) is bool
+            if fields_valid and "order_cut_proof" in fields:
+                fields_valid = (
+                    type(arguments["order_cut_proof"]) is bool
+                    and arguments["order_cut_admission"] is True
+                )
         elif operation == "risk.cancel.status":
             fields_valid = expected <= set(arguments) <= expected | {"after", "limit"}
         else:
@@ -945,21 +959,57 @@ class RiskOrderService:
                 if "order_cut_admission" in arguments:
                     checked = False
                     admission_ready = False
-                    if arguments["order_cut_admission"] is True:
-                        callback = self._order_cut_admission_observe
-                        if callable(callback):
+                    proof_requested = arguments.get("order_cut_proof") is True
+                    if proof_requested:
+                        gateway_reference: str | None = None
+                        observation_reference: str | None = None
+                        proof_callback = self._order_cut_admission_proof
+                        if callable(proof_callback):
                             checked = True
                             try:
-                                # This is a sample-time read only. A disabled
-                                # write gate is not an admission proof.
-                                callback_ready = callback() is True
-                                admission_ready = self._order_cut_required is True and callback_ready
+                                proof = proof_callback()
+                                if (
+                                    type(proof) is tuple
+                                    and len(proof) == 3
+                                    and type(proof[0]) is bool
+                                    and (proof[1] is None or _valid_sha256_reference(proof[1]))
+                                    and (proof[2] is None or _valid_sha256_reference(proof[2]))
+                                    and self._order_cut_required is True
+                                ):
+                                    if proof[0] is True:
+                                        if proof[1] is not None and proof[2] is not None:
+                                            admission_ready = True
+                                            gateway_reference = proof[1]
+                                            observation_reference = proof[2]
+                                    else:
+                                        gateway_reference = proof[1]
+                                        observation_reference = proof[2]
                             except Exception:
                                 admission_ready = False
-                    summary["order_cut_admission"] = {
-                        "checked": checked,
-                        "ready": admission_ready,
-                    }
+                                gateway_reference = None
+                                observation_reference = None
+                        summary["order_cut_admission"] = {
+                            "checked": checked,
+                            "ready": admission_ready,
+                            "gateway_reference": gateway_reference,
+                            "observation_reference": observation_reference,
+                        }
+                    else:
+                        if arguments["order_cut_admission"] is True:
+                            callback = self._order_cut_admission_observe
+                            if callable(callback):
+                                checked = True
+                                try:
+                                    # This is a sample-time read only. A disabled
+                                    # write gate is not an admission proof.
+                                    callback_ready = callback() is True
+                                    admission_ready = self._order_cut_required is True and callback_ready
+                                except Exception:
+                                    admission_ready = False
+                        summary["order_cut_admission"] = {
+                            "checked": checked,
+                            "ready": admission_ready,
+                        }
                 # Process-local operator refusal counts; never order data.
                 summary["operator_refusal_counts"] = {
                     code: int(count) for code, count in sorted(self._operator_refusals.items())

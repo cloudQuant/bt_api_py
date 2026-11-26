@@ -298,6 +298,105 @@ def test_r05_admission_headroom_counts_only_wire_current(monkeypatch, remaining,
     assert client.local_copy_checks == (1 if expected_ready else 0)
 
 
+def test_r05_observe_order_cut_admission_proof_returns_gateway_and_observation_digests(monkeypatch):
+    from types import SimpleNamespace
+    import bt_api_py.gateway_order_cut_client as cut_module
+    import bt_api_py.risk_account_facts_coordinator as coordinator_module
+    from bt_api_py.risk_service_host import (
+        gateway_generation_reference,
+        gateway_server_key_fingerprint,
+    )
+
+    class Result:
+        def __init__(self, outcome, code=None):
+            self.outcome = outcome
+            self.code = code
+
+    class CopyResult:
+        def __init__(self, outcome, *, page=None, code=None):
+            self.outcome = outcome
+            self.page = page
+            self.code = code
+
+    class CutClient:
+        def __init__(self, page):
+            self.page = page
+
+        def current(self, **_kwargs):
+            return Result("OBSERVED")
+
+        def validate_copy_issued(self, _result, **_kwargs):
+            return CopyResult("OBSERVED", page=self.page)
+
+    class Coordinator:
+        def __init__(self, client):
+            self._mode = "READY"
+            self._cut_client = client
+
+        def _check(self):
+            return None
+
+    monkeypatch.setattr(cut_module, "GatewayOrderCutClient", CutClient)
+    monkeypatch.setattr(cut_module, "GatewayOrderCutResult", Result)
+    monkeypatch.setattr(cut_module, "GatewayOrderCutCopyResult", CopyResult)
+    monkeypatch.setattr(coordinator_module, "RiskAccountFactsCoordinator", Coordinator)
+
+    progress, cut, page, _kwargs = _r05_current_page_fixture()
+    client = CutClient(page)
+    binding = SimpleNamespace(
+        registration_id="gateway-registration-a",
+        service_epoch="gateway-service-epoch-a",
+    )
+    server_pk = b"G" * 40
+    host = object.__new__(RiskServiceHost)
+    host.config = SimpleNamespace(
+        account_facts_observation=SimpleNamespace(
+            order_cut_enabled=True, order_cut_timeout_seconds=None, timeout_seconds=0.1,
+        ),
+        gateway=SimpleNamespace(
+            service_id="gateway-svc-1",
+            instance_id="gateway-inst-1",
+            server_public_key=server_pk,
+        ),
+    )
+    host.order_cut_status = "CUT_APPLIED"
+    host.account_facts_status = "APPLIED"
+    host._account_facts_runtime = SimpleNamespace(
+        status=lambda: SimpleNamespace(min_socket_message_ids_remaining=20),
+    )
+    host._account_facts_coordinator = Coordinator(client)
+    host._observer_runtime = object()
+    host.ledger = SimpleNamespace(_r05_uncertain=False)
+    host.ready = lambda: True
+    host._now_ns = lambda: 1_050
+    host._call_lifecycle = lambda callback, *args, **kwargs: callback(*args, **kwargs)
+    host._verified_observer_stream_epoch = lambda: "account-events-epoch-a"
+    host._active_account_binding = lambda _runtime, _operations: binding
+    host._read_r05_order_cut_state = lambda _now_ns: (progress, cut, True)
+    host._check_cleanup_ready = lambda: None
+
+    ready, gw_ref, obs_ref = host._observe_order_cut_admission_proof()
+    expected_gw_ref = gateway_generation_reference(
+        journal_id=cut["journal_id"],
+        owner_generation=cut["owner_generation"],
+        service_id="gateway-svc-1",
+        instance_id="gateway-inst-1",
+        server_key_fingerprint=gateway_server_key_fingerprint(server_pk),
+    )
+    assert ready is True
+    assert gw_ref == expected_gw_ref
+    assert type(obs_ref) is str and obs_ref.startswith("sha256:") and len(obs_ref) == 71
+
+    # When order_cut_status is not CUT_APPLIED, proof fails closed without mutating host state.
+    host.order_cut_status = "UNKNOWN"
+    assert host._observe_order_cut_admission_proof() == (False, None, None)
+
+    # When order_cut_enabled is False, proof is NOT available (never fabricates a proof).
+    host.order_cut_status = "CUT_APPLIED"
+    host.config.account_facts_observation.order_cut_enabled = False
+    assert host._observe_order_cut_admission_proof() == (False, None, None)
+
+
 def test_policy_bootstrap_first_unchanged_tightened_and_loosening_refused(tmp_path):
     setup(tmp_path)
     host = opened(tmp_path)

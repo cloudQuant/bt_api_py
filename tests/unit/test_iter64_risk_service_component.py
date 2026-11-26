@@ -290,6 +290,105 @@ def test_admin_status_keeps_unselected_gate_not_ready_after_check():
     assert calls == ["called"]
 
 
+def test_admin_status_order_cut_proof_contract_and_fail_closed():
+    gw_ref = "sha256:" + "a" * 64
+    obs_ref = "sha256:" + "b" * 64
+    proof_calls = []
+
+    class Engine:
+        def status_summary(self):
+            return {"available": True, "policy_version": 7}
+
+        def record_admin_refusal(self, *args, **kwargs):
+            return None
+
+    def make_service(*, order_cut_required=True, proof_cb=None):
+        return RiskOrderService(
+            Engine(), object(), account_scope=ACCOUNT, route=ROUTE,
+            execution_domain_ref=DOMAIN, principals=PRINCIPALS,
+            instrument_for=lambda *_args: None, ready=lambda: True,
+            order_cut_required=order_cut_required,
+            order_cut_admission_ready=(lambda: True) if order_cut_required else None,
+            order_cut_admission_observe=lambda: True,
+            order_cut_admission_proof=proof_cb,
+        )
+
+    service = make_service(
+        order_cut_required=True,
+        proof_cb=lambda: (proof_calls.append("proof") or True, gw_ref, obs_ref),
+    )
+    ctx = operator_ctx()
+    reply = service.handle(
+        "risk.admin.status",
+        context=ctx,
+        arguments={"order_cut_admission": True, "order_cut_proof": True},
+    )
+    assert reply["status"] == "OBSERVED"
+    assert reply["summary"]["order_cut_admission"] == {
+        "checked": True,
+        "ready": True,
+        "gateway_reference": gw_ref,
+        "observation_reference": obs_ref,
+    }
+    assert proof_calls == ["proof"]
+
+    # Proof requested with order_cut_admission=False is refused cleanly.
+    bad = service.handle(
+        "risk.admin.status",
+        context=ctx,
+        arguments={"order_cut_admission": False, "order_cut_proof": True},
+    )
+    assert bad["status"] == "REQUEST_REJECTED"
+    assert bad["code"] == "risk_request_invalid"
+
+    # Unselected gate never returns ready=True or proof references.
+    unselected = make_service(
+        order_cut_required=False,
+        proof_cb=lambda: (True, gw_ref, obs_ref),
+    )
+    unselected_reply = unselected.handle(
+        "risk.admin.status",
+        context=ctx,
+        arguments={"order_cut_admission": True, "order_cut_proof": True},
+    )
+    assert unselected_reply["summary"]["order_cut_admission"] == {
+        "checked": True,
+        "ready": False,
+        "gateway_reference": None,
+        "observation_reference": None,
+    }
+
+    # Missing callback or malformed proof fails closed without leaking exception text.
+    missing = make_service(order_cut_required=True, proof_cb=None)
+    assert missing.handle(
+        "risk.admin.status",
+        context=ctx,
+        arguments={"order_cut_admission": True, "order_cut_proof": True},
+    )["summary"]["order_cut_admission"] == {
+        "checked": False,
+        "ready": False,
+        "gateway_reference": None,
+        "observation_reference": None,
+    }
+
+    def boom():
+        raise RuntimeError("secret-proof-failure")
+
+    failing = make_service(order_cut_required=True, proof_cb=boom)
+    fail_reply = failing.handle(
+        "risk.admin.status",
+        context=ctx,
+        arguments={"order_cut_admission": True, "order_cut_proof": True},
+    )
+    assert fail_reply["summary"]["order_cut_admission"] == {
+        "checked": True,
+        "ready": False,
+        "gateway_reference": None,
+        "observation_reference": None,
+    }
+    assert "secret-proof-failure" not in repr(fail_reply)
+
+
 def test_admin_status_missing_observer_does_not_call_write_callback():
     write_calls = []
     service = _admin_status_service(
