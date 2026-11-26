@@ -53,6 +53,7 @@ CTP___FUTURE = "bt_api_py.ctp_managed_runtime_registration:register_ctp_managed_
 ctp-local-readonly = "bt_api_py.ctp_gateway_local_profile:profile_factory"
 ctp-simnow-trading = "bt_api_py.ctp_gateway_local_profile:simnow_trading_profile_factory"
 ctp-simnow-market-observe = "bt_api_py.ctp_gateway_local_profile:simnow_market_observe_profile_factory"
+ctp-simnow-7x24-market-observe = "bt_api_py.ctp_gateway_local_profile:simnow_7x24_market_observe_profile_factory"
 
 [project.urls]
 Homepage = "https://github.com/cloudQuant/bt_api_py"

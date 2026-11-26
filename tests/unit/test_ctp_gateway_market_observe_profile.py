@@ -15,13 +15,17 @@ from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 
 from bt_api_py.ctp_gateway_local_profile import (
     CtpLocalProfileError,
+    create_simnow_7x24_market_observe_deployment,
     create_simnow_market_observe_deployment,
+    load_simnow_7x24_market_observe_resources,
     load_simnow_market_observe_resources,
+    simnow_7x24_market_observe_profile_factory,
     simnow_market_observe_profile_factory,
 )
 from bt_api_py.service_config import parse_service_config
 
 _PROFILE = "set1_group1_vpn"
+_PROFILE_7X24 = "set2_7x24_4000x"
 _PRINCIPAL = "principal:market-observer"
 _DOMAIN = "paper:market-observer"
 _ACCOUNT = "account:market-observer"
@@ -57,11 +61,11 @@ def _config():
     return parse_service_config(_service_config("tcp://127.0.0.1:50101", "tcp://127.0.0.1:50102"))
 
 
-def _bundle(config=None):
+def _bundle(config=None, *, profile=_PROFILE):
     from bt_api_py.ctp_account_process import ctp_simnow_gateway_refs
 
     config = config or _config()
-    refs = ctp_simnow_gateway_refs(_PROFILE)
+    refs = ctp_simnow_gateway_refs(profile)
     server_public, server_secret = zmq.curve_keypair()
     client_public, _client_secret = zmq.curve_keypair()
     service_identity = WireIdentity(WireRole.SERVICE, "principal:market-service", "actor:market-service")
@@ -173,6 +177,11 @@ def test_market_observe_entrypoint_is_a_market_hub_factory():
         "bt_api_py.ctp_gateway_local_profile:simnow_market_observe_profile_factory")
     assert simnow_market_observe_profile_factory.profile_ref == "ctp-simnow-market-observe"
     assert simnow_market_observe_profile_factory.role == "market_hub"
+    assert group["ctp-simnow-7x24-market-observe"] == (
+        "bt_api_py.ctp_gateway_local_profile:simnow_7x24_market_observe_profile_factory")
+    assert simnow_7x24_market_observe_profile_factory.profile_ref == (
+        "ctp-simnow-7x24-market-observe")
+    assert simnow_7x24_market_observe_profile_factory.role == "market_hub"
 
 
 def test_loader_projects_only_market_acl_and_three_md_credentials(monkeypatch):
@@ -194,10 +203,38 @@ def test_loader_projects_only_market_acl_and_three_md_credentials(monkeypatch):
     assert not hasattr(resources, "account_read_settings")
 
 
-def test_factory_builds_only_lazy_market_source_and_fixed_md_profile(monkeypatch):
-    config, raw, key, _service_identity = _bundle()
+@pytest.mark.parametrize(
+    ("profile", "loader", "deployment_factory", "expected_source", "expected_entitlement", "expected_fronts"),
+    [
+        (
+            _PROFILE,
+            load_simnow_market_observe_resources,
+            create_simnow_market_observe_deployment,
+            "ctp-simnow-profile-set1-group1-vpn-market-v1",
+            "ctp-simnow-profile-set1-group1-vpn-tick-v1",
+            ("tcp://182.254.243.31:30001", "tcp://182.254.243.31:30011"),
+        ),
+        (
+            _PROFILE_7X24,
+            load_simnow_7x24_market_observe_resources,
+            create_simnow_7x24_market_observe_deployment,
+            "ctp-simnow-set2-7x24-market-v1",
+            "ctp-simnow-set2-7x24-quote-v2-v1",
+            ("tcp://182.254.243.31:40001", "tcp://182.254.243.31:40011"),
+        ),
+    ],
+)
+def test_factory_builds_only_lazy_market_source_and_fixed_md_profile(
+    monkeypatch, profile, loader, deployment_factory, expected_source, expected_entitlement,
+    expected_fronts,
+):
+    config, raw, key, _service_identity = _bundle(profile=profile)
     _fake_protected_bundle(monkeypatch, raw)
-    deployment = create_simnow_market_observe_deployment(config)
+    resources = loader(config)
+    assert resources.key_universe == (key,)
+    assert key.source_ref == expected_source
+    assert key.entitlement_ref == expected_entitlement
+    deployment = deployment_factory(config)
 
     assert deployment.gateway_role == "market_hub"
     assert deployment.state == "new"
@@ -237,12 +274,72 @@ def test_factory_builds_only_lazy_market_source_and_fixed_md_profile(monkeypatch
     stream = stream_calls[0]
     assert (stream["broker_id"], stream["user_id"], stream["password"]) == (
         "synthetic-broker", "synthetic-user", "synthetic-password")
-    assert (stream["td_front"], stream["md_front"]) == (
-        "tcp://182.254.243.31:30001", "tcp://182.254.243.31:30011")
-    assert stream["ctp_env_profile"] == "set1_group1_vpn"
+    assert (stream["td_front"], stream["md_front"]) == expected_fronts
+    assert stream["ctp_env_profile"] == profile
+    assert stream["require_ctp_profile"] == profile
     assert stream["auto_detect_fronts"] is False
     assert "app_id" not in stream and "auth_code" not in stream
     assert "untrusted.invalid" not in repr(stream)
+
+
+@pytest.mark.parametrize(
+    ("profile", "creator"),
+    [
+        (_PROFILE, create_simnow_market_observe_deployment),
+        (_PROFILE_7X24, create_simnow_7x24_market_observe_deployment),
+    ],
+)
+def test_market_observe_provider_rejects_a_front_pair_outside_its_static_profile(
+    monkeypatch, profile, creator
+):
+    config, raw, _key, _service_identity = _bundle(profile=profile)
+    _fake_protected_bundle(monkeypatch, raw)
+    deployment = creator(config)
+
+    class FakeProvider:
+        def __init__(self, **_kwargs):
+            raise AssertionError("a mismatched official front pair must not construct a provider")
+
+    class FakeStream:
+        def __init__(self, **_kwargs):
+            raise AssertionError("a mismatched official front pair must not construct a stream")
+
+    provider_module = ModuleType("bt_api_ctp.market_provider")
+    provider_module.CtpQuoteV2MarketProvider = FakeProvider
+    stream_module = ModuleType("bt_api_ctp.feeds.live_ctp_feed")
+    stream_module.CtpMarketStream = FakeStream
+    monkeypatch.setitem(sys.modules, "bt_api_ctp.market_provider", provider_module)
+    monkeypatch.setitem(sys.modules, "bt_api_ctp.feeds.live_ctp_feed", stream_module)
+
+    from bt_api_ctp import ctp_env_selector
+
+    observed = []
+
+    def wrong_pair(name):
+        observed.append(name)
+        return ("tcp://198.51.100.1:1", "tcp://198.51.100.1:2")
+
+    monkeypatch.setattr(ctp_env_selector, "official_simnow_fronts", wrong_pair)
+    with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
+        deployment._market_binding.provider_factory()
+    assert observed == [profile]
+
+
+@pytest.mark.parametrize(
+    ("rejected_profile", "loader"),
+    [
+        (_PROFILE_7X24, load_simnow_market_observe_resources),
+        (_PROFILE, load_simnow_7x24_market_observe_resources),
+    ],
+)
+def test_market_observe_profile_rejects_the_other_profiles_key_references(
+    monkeypatch, rejected_profile, loader
+):
+    config, raw, _key, _service_identity = _bundle(profile=rejected_profile)
+    _fake_protected_bundle(monkeypatch, raw)
+
+    with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
+        loader(config)
 
 
 @pytest.mark.parametrize(

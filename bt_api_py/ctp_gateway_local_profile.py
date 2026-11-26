@@ -63,6 +63,30 @@ _SIMNOW_MARKET_VENUES = frozenset({"SHFE", "DCE", "CZCE", "CFFEX", "INE", "GFEX"
 _SIMNOW_NATIVE_SYMBOL = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
+@dataclass(frozen=True, slots=True)
+class _CtpSimNowMarketObserveProfileSpec:
+    """Trusted, immutable selectors for one standalone SimNow market profile."""
+
+    ctp_profile: str
+    front_pair: tuple[str, str]
+    source_ref: str
+    entitlement_ref: str
+
+
+_SIMNOW_MARKET_OBSERVE_SET1_SPEC = _CtpSimNowMarketObserveProfileSpec(
+    ctp_profile=_SIMNOW_MARKET_OBSERVE_CTP_PROFILE,
+    front_pair=_SIMNOW_MARKET_OBSERVE_FRONT_PAIR,
+    source_ref=_SIMNOW_MARKET_OBSERVE_SOURCE_REF,
+    entitlement_ref=_SIMNOW_MARKET_OBSERVE_ENTITLEMENT_REF,
+)
+_SIMNOW_7X24_MARKET_OBSERVE_SPEC = _CtpSimNowMarketObserveProfileSpec(
+    ctp_profile="set2_7x24_4000x",
+    front_pair=("tcp://182.254.243.31:40001", "tcp://182.254.243.31:40011"),
+    source_ref="ctp-simnow-set2-7x24-market-v1",
+    entitlement_ref="ctp-simnow-set2-7x24-quote-v2-v1",
+)
+
+
 class CtpLocalProfileError(ValueError):
     """Value-free local resource error."""
 
@@ -274,13 +298,15 @@ def _require_simnow_market_observe_config(config) -> None:
         _invalid()
 
 
-def _simnow_market_observe_key(key) -> bool:
+def _simnow_market_observe_key(
+    key, spec: _CtpSimNowMarketObserveProfileSpec = _SIMNOW_MARKET_OBSERVE_SET1_SPEC,
+) -> bool:
     if type(key) is not MarketSubscriptionKey:
         return False
     instrument = key.instrument
     return (
-        key.source_ref == _SIMNOW_MARKET_OBSERVE_SOURCE_REF
-        and key.entitlement_ref == _SIMNOW_MARKET_OBSERVE_ENTITLEMENT_REF
+        key.source_ref == spec.source_ref
+        and key.entitlement_ref == spec.entitlement_ref
         and key.channel == "tick"
         and key.depth is None
         and key.timeframe is None
@@ -295,6 +321,17 @@ def _simnow_market_observe_key(key) -> bool:
 
 def load_simnow_market_observe_resources(config) -> CtpSimNowMarketObserveResources:
     """Load only the protected authority, finite market ACL and three MD credentials."""
+    return _load_simnow_market_observe_resources(config, _SIMNOW_MARKET_OBSERVE_SET1_SPEC)
+
+
+def load_simnow_7x24_market_observe_resources(config) -> CtpSimNowMarketObserveResources:
+    """Load bounded resources while accepting only the 7x24 market-key family."""
+    return _load_simnow_market_observe_resources(config, _SIMNOW_7X24_MARKET_OBSERVE_SPEC)
+
+
+def _load_simnow_market_observe_resources(
+    config, spec: _CtpSimNowMarketObserveProfileSpec,
+) -> CtpSimNowMarketObserveResources:
     try:
         _require_simnow_market_observe_config(config)
         raw = _protected_json(os.environ.get(_RESOURCE_ENV))
@@ -394,7 +431,8 @@ def load_simnow_market_observe_resources(config) -> CtpSimNowMarketObserveResour
                 or type(market["principal_allowed_indices"]) is not dict):
             _invalid()
         keys = tuple(MarketSubscriptionKey.from_dict(item) for item in market["subscriptions"])
-        if (len(set(keys)) != len(keys) or any(not _simnow_market_observe_key(key) for key in keys)):
+        if (len(set(keys)) != len(keys)
+                or any(not _simnow_market_observe_key(key, spec) for key in keys)):
             _invalid()
         allowed_indices = market["principal_allowed_indices"]
         if set(allowed_indices) != market_client_principals:
@@ -426,17 +464,20 @@ def _reject_market_observe_component(component, _instance_id, _options, _scope):
     raise GatewayOperatorDeploymentError("INVALID_DEPLOYMENT_CONFIG")
 
 
-def _simnow_market_observe_provider_factory(resources: CtpSimNowMarketObserveResources):
+def _simnow_market_observe_provider_factory(
+    resources: CtpSimNowMarketObserveResources,
+    spec: _CtpSimNowMarketObserveProfileSpec = _SIMNOW_MARKET_OBSERVE_SET1_SPEC,
+):
     def create_provider():
         from bt_api_ctp.ctp_env_selector import official_simnow_fronts
         from bt_api_ctp.feeds.live_ctp_feed import CtpMarketStream
         from bt_api_ctp.market_provider import CtpQuoteV2MarketProvider
 
         try:
-            fronts = official_simnow_fronts(_SIMNOW_MARKET_OBSERVE_CTP_PROFILE)
+            fronts = official_simnow_fronts(spec.ctp_profile)
         except Exception:
             _invalid()
-        if type(fronts) is not tuple or fronts != _SIMNOW_MARKET_OBSERVE_FRONT_PAIR:
+        if type(fronts) is not tuple or fronts != spec.front_pair:
             _invalid()
         td_front, md_front = fronts
 
@@ -450,8 +491,8 @@ def _simnow_market_observe_provider_factory(resources: CtpSimNowMarketObserveRes
                 password=resources.password,
                 td_front=td_front,
                 md_front=md_front,
-                ctp_env_profile=_SIMNOW_MARKET_OBSERVE_CTP_PROFILE,
-                require_ctp_profile=_SIMNOW_MARKET_OBSERVE_CTP_PROFILE,
+                ctp_env_profile=spec.ctp_profile,
+                require_ctp_profile=spec.ctp_profile,
                 auto_detect_fronts=False,
                 asset_type=key.instrument.product_type.upper(),
                 allow_zero_md_login_response=True,
@@ -459,8 +500,8 @@ def _simnow_market_observe_provider_factory(resources: CtpSimNowMarketObserveRes
 
         return CtpQuoteV2MarketProvider(
             stream_factory=stream_factory,
-            source_ref=_SIMNOW_MARKET_OBSERVE_SOURCE_REF,
-            entitlement_ref=_SIMNOW_MARKET_OBSERVE_ENTITLEMENT_REF,
+            source_ref=spec.source_ref,
+            entitlement_ref=spec.entitlement_ref,
             queue_capacity=4_096,
             connect_timeout_seconds=30.0,
             stop_timeout_seconds=5.0,
@@ -471,13 +512,24 @@ def _simnow_market_observe_provider_factory(resources: CtpSimNowMarketObserveRes
 
 def create_simnow_market_observe_deployment(config):
     """Compose only the market-hub role from the protected market resources."""
-    resources = load_simnow_market_observe_resources(config)
+    return _create_simnow_market_observe_deployment(config, _SIMNOW_MARKET_OBSERVE_SET1_SPEC)
+
+
+def create_simnow_7x24_market_observe_deployment(config):
+    """Compose only the market-hub role for the fixed SimNow 7x24 fronts."""
+    return _create_simnow_market_observe_deployment(config, _SIMNOW_7X24_MARKET_OBSERVE_SPEC)
+
+
+def _create_simnow_market_observe_deployment(
+    config, spec: _CtpSimNowMarketObserveProfileSpec,
+):
+    resources = _load_simnow_market_observe_resources(config, spec)
     from bt_api_py.gateway_operator_market import GatewayMarketBinding
 
     binding = GatewayMarketBinding(
         key_universe=resources.key_universe,
         principal_allowed_keys=resources.principal_allowed_keys,
-        provider_factory=_simnow_market_observe_provider_factory(resources),
+        provider_factory=_simnow_market_observe_provider_factory(resources, spec),
         max_provider_events_per_maintain=32,
     )
     return GatewayOperatorDeployment(
@@ -1518,4 +1570,9 @@ simnow_market_observe_profile_factory = GatewayOperatorProfileFactory(
     "ctp-simnow-market-observe",
     "market_hub",
     create_simnow_market_observe_deployment,
+)
+simnow_7x24_market_observe_profile_factory = GatewayOperatorProfileFactory(
+    "ctp-simnow-7x24-market-observe",
+    "market_hub",
+    create_simnow_7x24_market_observe_deployment,
 )
