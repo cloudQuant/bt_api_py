@@ -29,6 +29,7 @@ from .execution_gateway_source_config import (GatewaySourceClient, StdinSourceCo
 from .monitor_service_config import read_bounded
 
 SCHEMA = 'bt_api_execution.combined_service.v1'
+_OBSERVE_POLL_SECONDS = 0.5
 
 
 class CombinedServiceError(ValueError):
@@ -105,15 +106,21 @@ def load_config(path):
 
 
 class CombinedServiceHost:
-    """Single-use owner; the management listener must release its borrow first."""
-    def __init__(self, config):
-        if type(config) is not CombinedConfig:
+    """Single-use normal or management-only owner.
+
+    Normal mode shares the parent journal with the management listener.
+    Observe-only mode owns an existing journal through that listener and never
+    constructs the parent intake or Gateway source.
+    """
+    def __init__(self, config, *, observe_only=False):
+        if type(config) is not CombinedConfig or type(observe_only) is not bool:
             raise CombinedServiceError('INVALID_CONFIGURATION')
         try:
             _validate_pair(config.parent, config.management, config.gateway_source)
         except Exception:
             raise CombinedServiceError('INVALID_CONFIGURATION') from None
         self.config = config
+        self.observe_only = observe_only
         self.parent = self.management = self.gateway_source = None
         self._owner_pid = self._owner_thread = None
         self.state = 'new'
@@ -124,11 +131,17 @@ class CombinedServiceHost:
         self._owner_pid, self._owner_thread = os.getpid(), threading.current_thread()
         self.state = 'close_uncertain'
         try:
-            self.parent = ParentServiceHost(self.config.parent)
-            self.parent.start()
-            self.management = ReadServiceHost(self.config.management, borrowed_from=self.parent)
+            if self.observe_only:
+                # The management listener owns only an existing journal.  It
+                # must not construct the parent intake, acquire its lease,
+                # start its dispatcher, or connect the Gateway source.
+                self.management = ReadServiceHost(self.config.management, require_existing=True)
+            else:
+                self.parent = ParentServiceHost(self.config.parent)
+                self.parent.start()
+                self.management = ReadServiceHost(self.config.management, borrowed_from=self.parent)
             self.management.start()
-            if self.config.gateway_source is not None:
+            if not self.observe_only and self.config.gateway_source is not None:
                 self.gateway_source = GatewaySourceClient(self.config.gateway_source, self.parent)
                 self.gateway_source.start()
             self.state = 'running'
@@ -140,14 +153,18 @@ class CombinedServiceHost:
             raise CombinedServiceError('START_FAILED') from None
 
     def poll(self):
-        if self.state != 'running' or self.parent is None or self.management is None:
+        if (self.state != 'running' or self.management is None
+                or (not self.observe_only and self.parent is None)):
             raise CombinedServiceError('INVALID_STATE')
-        try:
-            parent = self.parent.poll()
-            if parent not in ('READY', 'UNREADY'):
+        if self.observe_only:
+            parent = 'OBSERVE_ONLY'
+        else:
+            try:
+                parent = self.parent.poll()
+                if parent not in ('READY', 'UNREADY'):
+                    parent = 'UNAVAILABLE'
+            except Exception:
                 parent = 'UNAVAILABLE'
-        except Exception:
-            parent = 'UNAVAILABLE'
         try:
             self.management.poll()
             management = 'READY'
@@ -155,7 +172,9 @@ class CombinedServiceHost:
             management = 'UNAVAILABLE'
         result = {'parent': parent, 'management': management}
         if self.config.gateway_source is not None:
-            result['gateway_source'] = 'UNREADY' if self.gateway_source is None else self.gateway_source.status()
+            result['gateway_source'] = ('OBSERVE_ONLY' if self.observe_only else
+                                        ('UNREADY' if self.gateway_source is None else
+                                         self.gateway_source.status()))
         return result
 
     def observe_source(self, parent_ref, *, request_id, request_sha256):
@@ -192,9 +211,14 @@ def main(argv=None):
         child.add_argument('--config', required=True)
         if command == 'run':
             child.add_argument('--source-control-stdin', action='store_true')
+            child.add_argument('--observe-only', action='store_true',
+                               help='start only the read-only management listener on an existing journal')
             child.add_argument('--enable-owner-stop-file', action='store_true',
                                help='allow local cooperative shutdown with a protected empty marker')
     args = parser.parse_args(argv)
+    if (args.command == 'run' and args.observe_only
+            and args.source_control_stdin):
+        parser.error('--observe-only cannot be combined with --source-control-stdin')
     control = None
     control_requested = args.command == 'run' and args.source_control_stdin
     try:
@@ -218,7 +242,8 @@ def main(argv=None):
             marker = new_marker(Path(args.config).parent, 'execution')
             emit('EXECUTION_COMBINED_STOP_FILE ' + marker.name)
             return marker
-        host, signals, failed = CombinedServiceHost(config), 0, False
+        host, signals, failed = CombinedServiceHost(
+            config, observe_only=args.observe_only), 0, False
         stop_file = None
         def stop_requested():
             return bool(signals) or marker_requested(stop_file)
@@ -230,6 +255,8 @@ def main(argv=None):
             try:
                 host.start()
                 status = host.poll()
+                if args.observe_only:
+                    emit('EXECUTION_COMBINED_CONTROL_MODE observe_only')
                 emit('EXECUTION_COMBINED_PARENT_' + status['parent'])
                 emit('EXECUTION_COMBINED_MANAGEMENT_' + status['management'])
                 if 'gateway_source' in status:
@@ -239,6 +266,9 @@ def main(argv=None):
                     status = host.poll()
                     if stop_requested() or 'UNAVAILABLE' in status.values():
                         break
+                    if args.observe_only:
+                        time.sleep(_OBSERVE_POLL_SECONDS)
+                        continue
                     if control is not None:
                         control.flush()
                         if not control.accepting:

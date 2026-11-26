@@ -533,6 +533,19 @@ For standalone parent listeners, use `python -m bt_api_py.execution_parent_servi
 by `EXECUTION_PARENT_STOP_FILE` beside the parent config, and verify
 `EXECUTION_PARENT_STOPPED` and exit code `0`.
 
+Both Execution entry points have an explicit observation mode. A standalone
+parent config may run with `--observe-only`; it validates the existing current
+journal through the bounded read-only path and starts no parent listener,
+registry, intake lease, dispatcher, or Gateway source. It reports
+`EXECUTION_PARENT_CONTROL_MODE observe_only` and
+`EXECUTION_PARENT_OBSERVER_READY`. The combined CLI accepts `run
+--observe-only`; it starts only the authenticated management-read listener on
+an existing journal and reports the parent and optional Gateway source as
+`OBSERVE_ONLY`. It rejects `--source-control-stdin` in this mode. The combined
+management host and audit/Registry plumbing are not a disk-zero-write promise;
+the labels prove only that the business intake and dispatch paths were not
+started. Neither mode establishes account, order, or provider readiness.
+
 `bt_api_py.execution_read_service_host` provides an independent authenticated
 management listener for three local parent-journal reads. See
 [`execution-read-service.example.json`](examples/services/execution-read-service.example.json).
@@ -1393,6 +1406,15 @@ reads do not observe uncommitted parent rows. A failure to start management can
 occur after first-claim commit and follows the same explicit recovery steps
 above. The tested local CURVE paths establish local receipt/read behavior only,
 not Risk approval, Gateway dispatch or provider execution.
+
+For incident observation, `execution_parent_service_host --observe-only`
+requires the original bootstrap lock, host guard, owner manifest and database,
+and refuses to create a replacement journal. It exposes no network listener.
+`execution_combined_service_host run --observe-only` likewise requires an
+existing journal, but exposes only the four management-read operations and
+never constructs `ParentServiceHost` or `GatewaySourceClient`. Existing parent
+and writer-lease rows remain authoritative; an observation process must not be
+used to clear, retry, or reinterpret `UNKNOWN` or `PENDING` state.
 
 
 ### Explicit service ProductID observations

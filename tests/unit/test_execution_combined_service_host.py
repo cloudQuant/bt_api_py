@@ -4,7 +4,6 @@ import hashlib
 import json
 import os
 import queue
-import select
 import signal
 import socket
 import sqlite3
@@ -217,6 +216,127 @@ def test_default_quarantined_parent_keeps_independent_readiness(tmp_path):
         host.close()
 
 
+def test_observe_only_starts_existing_management_without_parent_intake(tmp_path, monkeypatch):
+    raw, _, _, _ = setup_combined(tmp_path)
+    config = combined.parse_config(raw)
+    calls = []
+
+    class Parent:
+        def __init__(self, _config):
+            raise AssertionError('observe-only constructed the parent intake')
+
+    class Read:
+        def __init__(self, read_config, *, borrowed_from=None, require_existing=False):
+            assert read_config is config.management
+            assert borrowed_from is None and require_existing is True
+            calls.append('management-created')
+
+        def start(self):
+            calls.append('management-started')
+
+        def poll(self):
+            calls.append('management-polled')
+
+        def close(self):
+            calls.append('management-closed')
+
+    monkeypatch.setattr(combined, 'ParentServiceHost', Parent)
+    monkeypatch.setattr(combined, 'ReadServiceHost', Read)
+    host = combined.CombinedServiceHost(config, observe_only=True)
+    host.start()
+    try:
+        assert host.poll() == {'parent': 'OBSERVE_ONLY', 'management': 'READY'}
+        assert host.parent is None and host.gateway_source is None
+    finally:
+        host.close()
+    assert calls == [
+        'management-created', 'management-started', 'management-polled', 'management-closed']
+
+
+def test_observe_only_preserves_existing_journal_rows_and_intake_lease(tmp_path):
+    raw, endpoint, parent_keys, _ = setup_combined(tmp_path)
+    seed(raw)
+    payload = planned_parent()
+    with running_combined(raw):
+        parent_submit_and_query(endpoint, parent_keys, payload)
+
+    database, = Path(raw['parent']['storage']['journal_root']).glob('*.sqlite3')
+
+    def rows():
+        with sqlite3.connect(database.as_uri() + '?mode=ro', uri=True) as db:
+            return {
+                'execution_parent_records': tuple(db.execute(
+                    'SELECT * FROM execution_parent_records')),
+                'execution_writer_leases': tuple(db.execute(
+                    'SELECT * FROM execution_writer_leases ORDER BY scope_key')),
+            }
+
+    before = rows()
+    assert before['execution_parent_records']
+    assert before['execution_writer_leases']
+    host = combined.CombinedServiceHost(combined.parse_config(raw), observe_only=True)
+    host.start()
+    try:
+        assert host.poll() == {'parent': 'OBSERVE_ONLY', 'management': 'READY'}
+        assert host.parent is None and host.gateway_source is None
+    finally:
+        host.close()
+    assert rows() == before
+
+
+def test_observe_only_refuses_to_create_a_missing_journal(tmp_path):
+    raw, _, _, _ = setup_combined(tmp_path)
+    journal_root = Path(raw['parent']['storage']['journal_root'])
+    before = tuple(journal_root.iterdir())
+    host = combined.CombinedServiceHost(combined.parse_config(raw), observe_only=True)
+    with pytest.raises(combined.CombinedServiceError, match='START_FAILED'):
+        host.start()
+    assert host.state == 'closed'
+    assert tuple(journal_root.iterdir()) == before
+
+
+def test_observe_only_rejects_source_control_before_loading_config(monkeypatch):
+    monkeypatch.setattr(combined, 'load_config',
+                        lambda _path: (_ for _ in ()).throw(AssertionError('config loaded')))
+    with pytest.raises(SystemExit) as error:
+        combined.main(['run', '--config', 'not-read.json', '--observe-only',
+                       '--source-control-stdin'])
+    assert error.value.code == 2
+
+
+def test_observe_only_cli_paces_management_checks(monkeypatch, capsys):
+    calls = []
+
+    class Host:
+        def start(self):
+            calls.append('start')
+
+        def poll(self):
+            calls.append('poll')
+            return {'parent': 'OBSERVE_ONLY', 'management': 'READY'}
+
+        def close(self):
+            calls.append('close')
+
+    host = Host()
+    checks = iter((False, False, True))
+    monkeypatch.setattr(combined, 'load_config', lambda _path: object())
+    monkeypatch.setattr(combined, 'CombinedServiceHost',
+                        lambda _config, *, observe_only: host if observe_only else None)
+    monkeypatch.setattr(combined, 'marker_requested', lambda _path: next(checks))
+    monkeypatch.setattr(combined.signal, 'signal', lambda _sig, _handler: None)
+    monkeypatch.setattr(combined.time, 'sleep',
+                        lambda seconds: calls.append(('sleep', seconds)))
+    assert combined.main(['run', '--config', 'not-read.json', '--observe-only']) == 0
+    assert calls == ['start', 'poll', 'poll', ('sleep', 0.5), 'close']
+    assert capsys.readouterr().out.splitlines() == [
+        'EXECUTION_COMBINED_CONTROL_MODE observe_only',
+        'EXECUTION_COMBINED_PARENT_OBSERVE_ONLY',
+        'EXECUTION_COMBINED_MANAGEMENT_READY',
+        'EXECUTION_COMBINED_STOPPED',
+    ]
+
+
 def test_poll_checks_both_listeners_after_parent_failure(tmp_path):
     raw, _, _, _ = setup_combined(tmp_path)
     host = combined.CombinedServiceHost(combined.parse_config(raw))
@@ -257,22 +377,33 @@ def test_partial_start_and_close_failure_keep_original_owner(tmp_path, monkeypat
     assert calls == ['parent-start', 'read-start', 'read-close', 'read-close', 'parent-close']
 
 
+@pytest.mark.skipif(os.name == 'nt', reason='Windows SIGTERM terminates instead of cooperative shutdown')
 def test_cli_validate_and_signal_shutdown(tmp_path):
     raw, _, _, _ = setup_combined(tmp_path)
     seed(raw)
     path = tmp_path / 'combined.json'
     path.write_text(json.dumps(raw), encoding='utf-8'); path.chmod(0o600)
+    _owner_only_fixture_tree(path)
     command = [sys.executable, '-m', 'bt_api_py.execution_combined_service_host']
     validation = subprocess.run([*command, 'validate', '--config', str(path)], capture_output=True, text=True, timeout=10)
     assert validation.returncode == 0 and validation.stdout.strip() == 'EXECUTION_COMBINED_CONFIG_VALID'
     process = subprocess.Popen([*command, 'run', '--config', str(path)], stdout=subprocess.PIPE,
                                stderr=subprocess.PIPE, text=True)
+    ready = queue.Queue()
+
+    def read_ready():
+        for _ in range(2):
+            ready.put(process.stdout.readline().strip())
+
+    reader = threading.Thread(target=read_ready, daemon=True)
+    reader.start()
     try:
-        assert select.select([process.stdout], [], [], 15)[0]
-        assert process.stdout.readline().strip() == 'EXECUTION_COMBINED_PARENT_READY'
-        assert process.stdout.readline().strip() == 'EXECUTION_COMBINED_MANAGEMENT_READY'
+        assert ready.get(timeout=15) == 'EXECUTION_COMBINED_PARENT_READY'
+        assert ready.get(timeout=15) == 'EXECUTION_COMBINED_MANAGEMENT_READY'
         process.send_signal(signal.SIGTERM)
         output, error = process.communicate(timeout=15)
+        reader.join(timeout=5)
+        assert not reader.is_alive()
         assert process.returncode == 0 and output.strip() == 'EXECUTION_COMBINED_STOPPED' and not error
     finally:
         if process.poll() is None:

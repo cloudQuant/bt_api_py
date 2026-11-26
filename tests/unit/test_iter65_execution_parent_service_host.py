@@ -16,7 +16,9 @@ from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_transport_zmq.server import CurveClientCredentials
 from bt_api_transport_zmq.service_v2 import ZmqServiceClient
 from bt_api_py.execution_parent_grant import OPERATIONS, PORT
-from bt_api_py.execution_parent_service_host import ParentServiceError, ParentServiceHost, load_config, parse_config
+from bt_api_py.execution_parent_service_host import (
+    ParentObservationHost, ParentServiceError, ParentServiceHost, load_config, parse_config,
+)
 from tests.unit.test_iter65_fresh_intake_host import KEY
 from tests.unit.test_service_host import _request, _service_config
 
@@ -165,6 +167,119 @@ def test_wrong_server_key_and_unsafe_config_fail_before_start(tmp_path):
     assert not list((tmp_path / 'journal').iterdir())
 
 
+def test_observe_only_requires_existing_and_preserves_journal_rows(tmp_path):
+    raw, _, _ = setup_config(tmp_path)
+    config = parse_config(raw)
+    root = tmp_path / 'journal'
+    observer = ParentObservationHost(config)
+    with pytest.raises(ParentServiceError, match='START_FAILED'):
+        observer.start()
+    assert observer.state == 'closed' and not list(root.iterdir())
+
+    owner = ParentServiceHost(config)
+    owner.start()
+    owner.close()
+    database, = root.glob('*.sqlite3')
+    marker, = root.glob('*.owner')
+
+    def rows():
+        with sqlite3.connect(database.as_uri() + '?mode=ro', uri=True) as db:
+            return (
+                tuple(db.execute('SELECT * FROM execution_writer_leases ORDER BY scope_key')),
+                tuple(db.execute('SELECT * FROM execution_parent_records')),
+            )
+
+    marker_before, rows_before = marker.read_bytes(), rows()
+    observer = ParentObservationHost(config)
+    observer.start()
+    try:
+        assert observer.poll() == 'OBSERVE_ONLY'
+    finally:
+        observer.close()
+    assert observer.state == 'closed'
+    assert marker.read_bytes() == marker_before and rows() == rows_before
+
+
+def test_observe_only_rejects_dangling_owner_manifest(tmp_path):
+    raw, _, _ = setup_config(tmp_path)
+    config = parse_config(raw)
+    owner = ParentServiceHost(config)
+    owner.start()
+    owner.close()
+    marker, = (tmp_path / 'journal').glob('*.owner')
+    marker.unlink()
+    if os.name == 'nt':
+        import subprocess
+
+        target = tmp_path / 'owner-junction-target'
+        target.mkdir()
+        result = subprocess.run(
+            ['cmd', '/c', 'mklink', '/J', os.fspath(marker), os.fspath(target)],
+            capture_output=True,
+        )
+        if result.returncode != 0 or not os.path.lexists(marker):
+            pytest.skip('junction creation unavailable on this host')
+        target.rmdir()
+    else:
+        marker.symlink_to(tmp_path / 'missing-owner-manifest')
+    try:
+        observer = ParentObservationHost(config)
+        with pytest.raises(ParentServiceError, match='START_FAILED'):
+            observer.start()
+        assert observer.state == 'closed'
+    finally:
+        if os.name == 'nt' and os.path.lexists(marker):
+            os.rmdir(marker)
+
+
+def test_observe_only_rejects_directory_in_place_of_host_guard(tmp_path):
+    raw, _, _ = setup_config(tmp_path)
+    config = parse_config(raw)
+    owner = ParentServiceHost(config)
+    owner.start()
+    owner.close()
+    guard = tmp_path / 'journal' / '.execution-journal-host.guard'
+    guard.unlink()
+    guard.mkdir()
+    _private_file(guard)
+    observer = ParentObservationHost(config)
+    with pytest.raises(ParentServiceError, match='START_FAILED'):
+        observer.start()
+    assert observer.state == 'closed'
+
+
+def test_observe_only_cli_paces_storage_checks(monkeypatch, capsys):
+    import bt_api_py.execution_parent_service_host as module
+
+    calls = []
+
+    class Host:
+        def start(self):
+            calls.append('start')
+
+        def poll(self):
+            calls.append('poll')
+            return 'OBSERVE_ONLY'
+
+        def close(self):
+            calls.append('close')
+
+    host = Host()
+    checks = iter((False, True))
+    monkeypatch.setattr(module, 'load_config', lambda _path: object())
+    monkeypatch.setattr(module, 'ParentObservationHost', lambda _config: host)
+    monkeypatch.setattr(module, 'marker_requested', lambda _path: next(checks))
+    monkeypatch.setattr(module.signal, 'signal', lambda _sig, _handler: None)
+    monkeypatch.setattr(module.time, 'sleep', lambda seconds: calls.append(('sleep', seconds)))
+    assert module.main(['--config', 'not-read.json', '--observe-only']) == 0
+    assert calls == ['start', 'poll', ('sleep', 0.5), 'close']
+    assert capsys.readouterr().out.splitlines() == [
+        'EXECUTION_PARENT_CONTROL_MODE observe_only',
+        'EXECUTION_PARENT_OBSERVER_READY',
+        'EXECUTION_PARENT_STOPPED',
+    ]
+
+
 def test_cleanup_failure_keeps_same_host_for_retry(tmp_path):
     raw, _, _ = setup_config(tmp_path)
     parent = ParentServiceHost(parse_config(raw))
@@ -203,7 +318,6 @@ def test_readme_sample_parses():
 
 
 def test_cli_process_reports_unready_and_closes_on_signal(tmp_path):
-    import select
     import signal
     import subprocess
     import sys

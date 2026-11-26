@@ -65,6 +65,18 @@ def _create_owner_stop_marker(path):
             id="combined",
         ),
         pytest.param(
+            "combined_observe_only",
+            (
+                "EXECUTION_COMBINED_CONTROL_MODE observe_only",
+                "EXECUTION_COMBINED_PARENT_OBSERVE_ONLY",
+                "EXECUTION_COMBINED_MANAGEMENT_READY",
+            ),
+            "EXECUTION_COMBINED_STOP_FILE ",
+            r"execution-[0-9a-f]{32}\.stop",
+            "EXECUTION_COMBINED_STOPPED",
+            id="combined-observe-only",
+        ),
+        pytest.param(
             "standalone_parent",
             ("EXECUTION_PARENT_LISTENER_READY",),
             "EXECUTION_PARENT_STOP_FILE ",
@@ -72,24 +84,36 @@ def _create_owner_stop_marker(path):
             "EXECUTION_PARENT_STOPPED",
             id="standalone_parent",
         ),
+        pytest.param(
+            "standalone_parent_observe_only",
+            (
+                "EXECUTION_PARENT_CONTROL_MODE observe_only",
+                "EXECUTION_PARENT_OBSERVER_READY",
+            ),
+            "EXECUTION_PARENT_STOP_FILE ",
+            r"execution-parent-[0-9a-f]{32}\.stop",
+            "EXECUTION_PARENT_STOPPED",
+            id="standalone-parent-observe-only",
+        ),
     ],
 )
 def test_cli_exits_after_protected_owner_stop_marker(
     tmp_path, service_kind, ready_lines, stop_prefix, stop_pattern, stopped_line
 ):
-    if service_kind == "combined":
+    if service_kind in {"combined", "combined_observe_only"}:
         raw, _, _, _ = setup_combined(tmp_path)
         seed(raw)
         payload = raw
         module = "bt_api_py.execution_combined_service_host"
-        command_args = ["run"]
+        command_args = ["run", *(["--observe-only"] if service_kind == "combined_observe_only" else [])]
     else:
         parent_dir = tmp_path / "parent"
         parent_dir.mkdir()
         payload, _, _ = setup_parent(parent_dir)
         seed({"parent": payload})
         module = "bt_api_py.execution_parent_service_host"
-        command_args = []
+        command_args = (["--observe-only"]
+                        if service_kind == "standalone_parent_observe_only" else [])
 
     config_path = tmp_path / f"{service_kind}.json"
     config_path.write_text(json.dumps(payload), encoding="utf-8")

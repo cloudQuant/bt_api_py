@@ -282,12 +282,16 @@ class ReadServiceHost:
 
     Borrowing requires the exact parent owner because a bare account journal
     does not establish the parent strategy binding. Close never closes a borrow.
+    ``require_existing`` prevents a standalone listener from creating a new
+    journal; it does not turn the underlying SQLite owner into a zero-write
+    connection.
     """
-    def __init__(self, config, *, borrowed_from=None):
-        if type(config) is not Config:
+    def __init__(self, config, *, borrowed_from=None, require_existing=False):
+        if type(config) is not Config or type(require_existing) is not bool:
             raise ReadServiceError('INVALID_CONFIGURATION')
         self.config = config
         self._borrowed_from = borrowed_from
+        self._require_existing = require_existing
         self.journal = None
         self.listener = None
         self.state = 'new'
@@ -338,7 +342,8 @@ class ReadServiceHost:
             _check_existing(config, borrowed=borrowed)
             public, secret, client_key = _keys(config)
             self.journal = borrowed if borrowed is not None else AccountJournalHost(
-                root=str(config.journal_root), scope=config.local_scope, storage_id=config.storage_id)
+                root=str(config.journal_root), scope=config.local_scope, storage_id=config.storage_id,
+                require_existing=self._require_existing)
             grant = ExecutionManagementReadGrant(config.instance_id, config.client_identity, config.wire_scope,
                                                   config.revision, config.instruments, config.operations)
             self.listener = ExecutionManagementReadHost(TrustedManagementReadListener(

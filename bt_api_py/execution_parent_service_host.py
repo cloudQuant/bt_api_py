@@ -9,6 +9,7 @@ source and readiness gates remain in force.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -39,6 +40,7 @@ from .service_host import ServiceHost, TrustedServiceAuthority
 from .service_registry import PrincipalGrant, ResourceGrant
 
 SCHEMA = 'bt_api_execution.parent_service.v1'
+_OBSERVE_POLL_SECONDS = 0.5
 
 
 class ParentServiceError(ValueError):
@@ -497,14 +499,94 @@ class ParentServiceHost:
         self.state = 'closed'
 
 
+class ParentObservationHost:
+    """Read-only liveness check for one existing parent journal.
+
+    This host creates no listener, registry, journal owner, intake lease, or
+    dispatcher.  SQLite is opened only by the existing bounded validation path
+    in read-only/query-only mode.  READY therefore means storage observation
+    only and never execution or account readiness.
+    """
+
+    def __init__(self, config):
+        if type(config) is not ParentConfig:
+            raise ParentServiceError('INVALID_CONFIGURATION')
+        self.config = config
+        self.state = 'new'
+
+    def _check(self):
+        _check_paths(self.config)
+        account_hash = hashlib.sha256(self.config.local_scope.account_key.encode()).hexdigest()
+        required = (
+            '.execution-journal-bootstrap.lock',
+            '.execution-journal-host.guard',
+            f'.execution-intake-{account_hash}.owner',
+            f'.execution-journal-{account_hash}.sqlite3',
+        )
+        paths = tuple(self.config.journal_root / name for name in required)
+        if os.name == 'nt':
+            from bt_api_py._win32_security import (
+                Win32SecurityUnavailable,
+                inspect_owner,
+                is_reparse_point,
+            )
+
+            try:
+                for path in paths:
+                    info = path.stat(follow_symlinks=False)
+                    owner = inspect_owner(path)
+                    if (is_reparse_point(path) or not stat.S_ISREG(info.st_mode)
+                            or not owner.is_current_user or owner.others_writable
+                            or info.st_nlink != 1):
+                        raise ValueError
+            except (OSError, ValueError, Win32SecurityUnavailable):
+                raise ParentServiceError('INVALID_STORAGE') from None
+            return
+        try:
+            for path in paths:
+                info = path.stat(follow_symlinks=False)
+                if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
+                        or info.st_mode & 0o077 or info.st_nlink != 1):
+                    raise ValueError
+        except (OSError, ValueError):
+            raise ParentServiceError('INVALID_STORAGE') from None
+
+    def start(self):
+        if self.state != 'new':
+            raise ParentServiceError('INVALID_STATE')
+        self.state = 'close_uncertain'
+        try:
+            self._check()
+            self.state = 'running'
+        except BaseException:
+            self.state = 'closed'
+            raise ParentServiceError('START_FAILED') from None
+
+    def poll(self):
+        if self.state != 'running':
+            raise ParentServiceError('LISTENER_UNAVAILABLE')
+        try:
+            self._check()
+        except Exception:
+            raise ParentServiceError('LISTENER_UNAVAILABLE') from None
+        return 'OBSERVE_ONLY'
+
+    def close(self):
+        if self.state != 'closed':
+            self.state = 'closed'
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', required=True)
+    parser.add_argument('--observe-only', action='store_true',
+                        help='validate an existing journal without starting intake or dispatch')
     parser.add_argument('--enable-owner-stop-file', action='store_true',
                         help='allow local cooperative shutdown with a protected empty marker')
     args = parser.parse_args(argv)
     try:
-        host = ParentServiceHost(load_config(args.config))
+        host = (ParentObservationHost(load_config(args.config)) if args.observe_only
+                else ParentServiceHost(load_config(args.config)))
         signals, failed = 0, False
         def announce_stop_file():
             if not args.enable_owner_stop_file:
@@ -519,11 +601,17 @@ def main(argv=None):
         try:
             try:
                 host.start()
-                print('EXECUTION_PARENT_LISTENER_UNREADY' if not host.host.healthy else
-                      'EXECUTION_PARENT_LISTENER_READY', flush=True)
+                if args.observe_only:
+                    print('EXECUTION_PARENT_CONTROL_MODE observe_only', flush=True)
+                    print('EXECUTION_PARENT_OBSERVER_READY', flush=True)
+                else:
+                    print('EXECUTION_PARENT_LISTENER_UNREADY' if not host.host.healthy else
+                          'EXECUTION_PARENT_LISTENER_READY', flush=True)
                 stop_file = announce_stop_file()
                 while not signals and not marker_requested(stop_file):
                     host.poll()
+                    if args.observe_only:
+                        time.sleep(_OBSERVE_POLL_SECONDS)
             except Exception:
                 failed = True
             finally:
