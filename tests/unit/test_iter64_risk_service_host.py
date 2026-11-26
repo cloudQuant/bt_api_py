@@ -14,6 +14,7 @@ from bt_api_py.risk_service_config import load_risk_service_config
 from bt_api_py.risk_service_host import (
     RiskServiceHost,
     RiskServiceStartError,
+    _r05_cut_matches_current_gateway,
     bootstrap_policy,
     build_authority,
     main,
@@ -72,6 +73,229 @@ def opened(tmp_path):
     host.open_storage()
     host.build_engine()
     return host
+
+
+def _r05_current_page_fixture():
+    progress = {
+        "pending": None,
+        "cursor": 4,
+        "ack_observed": 4,
+        "epoch": "facts-epoch-a",
+        "gateway_journal_id": "journal-a",
+    }
+    cut = {
+        "seq": 3,
+        "cut_ref": "cut-ref-a",
+        "query_manifest_digest": "query-manifest-a",
+        "receipt_manifest_digest": "receipt-manifest-a",
+        "gateway_account": "account-a",
+        "journal_id": "journal-a",
+        "owner_generation": "gateway-generation-a",
+        "fact_epoch": "facts-epoch-a",
+        "fact_watermark": 4,
+        "source_binding_ref": "source-binding-a",
+        "current_session_trading_day": "20261126",
+        "base_sequence": 0,
+        "begin_sequence": 1,
+        "end_sequence": 2,
+        "source_prefix": "source-prefix-a",
+        "query_digest": "query-digest-a",
+        "query_scope": "ctp.futures.account_orders.v1",
+        "query_row_count": 1,
+        "cut_record_digest": "cut-record-a",
+        "query_fact_digests_digest": "query-facts-a",
+        "source_history_has_gap": False,
+        "observed_at_ns": 1_000,
+        "max_age_ns": 100,
+        "query_next_ordinal": 1,
+        "query_complete": True,
+        "receipt_next_sequence": 2,
+        "receipt_complete": True,
+    }
+    header_fields = (
+        "journal_id", "owner_generation", "fact_epoch", "fact_watermark",
+        "current_session_trading_day", "base_sequence", "begin_sequence",
+        "end_sequence", "source_prefix", "query_digest", "query_scope",
+        "query_row_count", "cut_record_digest", "query_fact_digests_digest",
+        "source_binding_ref", "source_history_has_gap",
+    )
+    page = {
+        "schema": "sdk.gateway.order_cut.current/1",
+        "registration_id": "gateway-registration-a",
+        "service_epoch": "gateway-service-epoch-a",
+        "cut_ref": cut["cut_ref"],
+        "query_manifest_digest": cut["query_manifest_digest"],
+        "header": {name: cut[name] for name in header_fields},
+    }
+    kwargs = {
+        "registration_id": "gateway-registration-a",
+        "service_epoch": "gateway-service-epoch-a",
+        "observer_service_epoch": "gateway-service-epoch-a",
+        "verified_stream_epoch": "account-events-epoch-a",
+    }
+    return progress, cut, page, kwargs
+
+
+def test_r05_current_gateway_binding_accepts_same_generation_complete_cut():
+    progress, cut, page, kwargs = _r05_current_page_fixture()
+    assert _r05_cut_matches_current_gateway(progress, cut, page, True, **kwargs)
+
+
+@pytest.mark.parametrize("field,value", [
+    ("current_session_trading_day", "20261125"),
+    ("owner_generation", "gateway-generation-old"),
+    ("query_scope", "ctp.futures.account_orders.other"),
+])
+def test_r05_current_gateway_binding_rejects_day_generation_and_scope_mismatch(field, value):
+    progress, cut, page, kwargs = _r05_current_page_fixture()
+    cut[field] = value
+    assert not _r05_cut_matches_current_gateway(progress, cut, page, True, **kwargs)
+
+
+@pytest.mark.parametrize("field,value", [
+    ("query_complete", False),
+    ("receipt_complete", False),
+    ("source_history_has_gap", True),
+    ("seq", 0),
+])
+def test_r05_current_gateway_binding_rejects_incomplete_gapped_or_noncurrent_cut(field, value):
+    progress, cut, page, kwargs = _r05_current_page_fixture()
+    cut[field] = value
+    if field == "source_history_has_gap":
+        page["header"][field] = value
+    assert not _r05_cut_matches_current_gateway(progress, cut, page, True, **kwargs)
+
+
+def test_r05_current_gateway_binding_rejects_stale_canonical_coverage():
+    progress, cut, page, kwargs = _r05_current_page_fixture()
+    # The canonical Risk ledger verifier supplied False for an expired cut.
+    assert not _r05_cut_matches_current_gateway(progress, cut, page, False, **kwargs)
+
+
+def test_r05_current_gateway_binding_rejects_authenticated_page_mismatch():
+    progress, cut, page, kwargs = _r05_current_page_fixture()
+    page["header"]["current_session_trading_day"] = "20261125"
+    assert not _r05_cut_matches_current_gateway(progress, cut, page, True, **kwargs)
+    progress, cut, page, kwargs = _r05_current_page_fixture()
+    page["query_manifest_digest"] = "other-query-manifest"
+    assert not _r05_cut_matches_current_gateway(progress, cut, page, True, **kwargs)
+
+
+def test_r05_status_observation_preserves_host_state_and_write_check_degrades():
+    from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
+    from bt_api_py.risk_service_component import RiskOrderService
+    from bt_api_py.risk_service_config import RiskPrincipal
+
+    host = object.__new__(RiskServiceHost)
+    host.config = SimpleNamespace(
+        account_facts_observation=SimpleNamespace(order_cut_enabled=True),
+    )
+    host.order_cut_status = "CUT_APPLIED"
+    host.ready = lambda: False
+
+    class Engine:
+        def status_summary(self):
+            return {"available": True}
+
+    principal = RiskPrincipal(
+        "operator", "operator", "desk", frozenset(),
+        frozenset({"risk.admin.status"}), b"x" * 40,
+    )
+    service = RiskOrderService(
+        Engine(), object(), account_scope="account-a", route="CTP___FUTURE",
+        execution_domain_ref="paper:demo", principals={"operator": principal},
+        instrument_for=lambda *_args: None, ready=lambda: True,
+        order_cut_required=True,
+        order_cut_admission_ready=host._order_cut_admission_ready,
+        order_cut_admission_observe=host._observe_order_cut_admission,
+    )
+    context = SimpleNamespace(
+        identity=WireIdentity(WireRole.APPLICATION_CLIENT, "operator", "desk"),
+        scope=WireScope("paper:demo", account_ref="account-a"),
+        principal_ref="operator",
+    )
+
+    before = host.order_cut_status
+    reply = service.handle(
+        "risk.admin.status", context=context,
+        arguments={"order_cut_admission": True},
+    )
+    assert reply["summary"]["order_cut_admission"] == {"checked": True, "ready": False}
+    assert host.order_cut_status == before == "CUT_APPLIED"
+
+    assert service._order_cut_allows_write() is False
+    assert host.order_cut_status == "UNKNOWN"
+
+
+@pytest.mark.parametrize("remaining,expected_ready", [(8, False), (9, True)])
+def test_r05_admission_headroom_counts_only_wire_current(monkeypatch, remaining, expected_ready):
+    import bt_api_py.gateway_order_cut_client as cut_module
+    import bt_api_py.risk_account_facts_coordinator as coordinator_module
+
+    class Result:
+        def __init__(self, outcome, code=None):
+            self.outcome, self.code = outcome, code
+
+    class CopyResult:
+        def __init__(self, outcome, page=None, code=None):
+            self.outcome, self.page, self.code = outcome, page, code
+
+    class CutClient:
+        def __init__(self, page):
+            self.page = page
+            self.wire_current_calls = 0
+            self.local_copy_checks = 0
+
+        def current(self, **_kwargs):
+            self.wire_current_calls += 1
+            return Result("OBSERVED")
+
+        def validate_copy_issued(self, _result, **_kwargs):
+            self.local_copy_checks += 1
+            return CopyResult("OBSERVED", page=self.page)
+
+    class Coordinator:
+        def __init__(self, client):
+            self._mode = "READY"
+            self._cut_client = client
+
+        def _check(self):
+            return None
+
+    monkeypatch.setattr(cut_module, "GatewayOrderCutClient", CutClient)
+    monkeypatch.setattr(cut_module, "GatewayOrderCutResult", Result)
+    monkeypatch.setattr(cut_module, "GatewayOrderCutCopyResult", CopyResult)
+    monkeypatch.setattr(coordinator_module, "RiskAccountFactsCoordinator", Coordinator)
+
+    progress, cut, page, _kwargs = _r05_current_page_fixture()
+    client = CutClient(page)
+    binding = SimpleNamespace(
+        registration_id="gateway-registration-a",
+        service_epoch="gateway-service-epoch-a",
+    )
+    host = object.__new__(RiskServiceHost)
+    host.config = SimpleNamespace(account_facts_observation=SimpleNamespace(
+        order_cut_enabled=True, order_cut_timeout_seconds=None, timeout_seconds=0.1,
+    ))
+    host.order_cut_status = "CUT_APPLIED"
+    host.account_facts_status = "APPLIED"
+    host._account_facts_runtime = SimpleNamespace(
+        status=lambda: SimpleNamespace(min_socket_message_ids_remaining=remaining),
+    )
+    host._account_facts_coordinator = Coordinator(client)
+    host._observer_runtime = object()
+    host.ledger = SimpleNamespace(_r05_uncertain=False)
+    host.ready = lambda: True
+    host._now_ns = lambda: 1_050
+    host._call_lifecycle = lambda callback, *args, **kwargs: callback(*args, **kwargs)
+    host._verified_observer_stream_epoch = lambda: "account-events-epoch-a"
+    host._active_account_binding = lambda _runtime, _operations: binding
+    host._read_r05_order_cut_state = lambda _now_ns: (progress, cut, True)
+    host._check_cleanup_ready = lambda: None
+
+    assert host._order_cut_admission_ready() is expected_ready
+    assert client.wire_current_calls == (1 if expected_ready else 0)
+    assert client.local_copy_checks == (1 if expected_ready else 0)
 
 
 def test_policy_bootstrap_first_unchanged_tightened_and_loosening_refused(tmp_path):

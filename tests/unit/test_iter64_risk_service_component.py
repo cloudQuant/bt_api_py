@@ -194,6 +194,128 @@ def operator_ctx():
     return ctx("operator-1", role=WireRole.APPLICATION_CLIENT, strategy=None)
 
 
+def _admin_status_service(callback=None, *, order_cut_required=False, observation_callback=None):
+    class Engine:
+        def status_summary(self):
+            return {"available": True, "policy_version": 7}
+
+        def record_admin_refusal(self, *args, **kwargs):
+            return None
+
+    if order_cut_required and callback is None:
+        callback = lambda: False
+    return RiskOrderService(
+        Engine(), object(), account_scope=ACCOUNT, route=ROUTE,
+        execution_domain_ref=DOMAIN, principals=PRINCIPALS,
+        instrument_for=lambda *_args: None, ready=lambda: True,
+        order_cut_required=order_cut_required,
+        order_cut_admission_ready=callback,
+        order_cut_admission_observe=observation_callback,
+    )
+
+
+def test_admin_status_order_cut_admission_is_explicit_and_finite():
+    observe_calls, write_calls = [], []
+
+    def observe():
+        observe_calls.append("observed")
+        return True
+
+    def write_ready():
+        write_calls.append("write")
+        return True
+
+    service = _admin_status_service(
+        write_ready, order_cut_required=True, observation_callback=observe,
+    )
+    context = operator_ctx()
+    default = service.handle("risk.admin.status", context=context, arguments={})
+    assert default["status"] == "OBSERVED"
+    assert "order_cut_admission" not in default["summary"]
+    assert observe_calls == [] and write_calls == []
+
+    disabled = service.handle("risk.admin.status", context=context,
+                              arguments={"order_cut_admission": False})
+    assert disabled["summary"]["order_cut_admission"] == {"checked": False, "ready": False}
+    assert observe_calls == [] and write_calls == []
+
+    enabled = service.handle("risk.admin.status", context=context,
+                             arguments={"order_cut_admission": True})
+    assert enabled["summary"]["order_cut_admission"] == {"checked": True, "ready": True}
+    assert observe_calls == ["observed"] and write_calls == []
+    assert service._order_cut_allows_write() is True
+    assert write_calls == ["write"]
+
+
+@pytest.mark.parametrize("callback_result, expected_ready", [(False, False), (True, True)])
+def test_admin_status_order_cut_admission_reports_callback_result(callback_result, expected_ready):
+    calls = []
+
+    def ready():
+        calls.append("called")
+        return callback_result
+
+    service = _admin_status_service(order_cut_required=True, observation_callback=ready)
+    reply = service.handle("risk.admin.status", context=operator_ctx(),
+                           arguments={"order_cut_admission": True})
+    assert reply["summary"]["order_cut_admission"] == {
+        "checked": True, "ready": expected_ready,
+    }
+    assert calls == ["called"]
+
+
+def test_admin_status_order_cut_admission_exception_is_value_free():
+    calls = []
+
+    def ready():
+        calls.append("called")
+        raise RuntimeError("sensitive exception detail")
+
+    service = _admin_status_service(order_cut_required=True, observation_callback=ready)
+    reply = service.handle("risk.admin.status", context=operator_ctx(),
+                           arguments={"order_cut_admission": True})
+    assert reply["summary"]["order_cut_admission"] == {"checked": True, "ready": False}
+    assert "sensitive exception detail" not in repr(reply)
+    assert calls == ["called"]
+
+
+def test_admin_status_keeps_unselected_gate_not_ready_after_check():
+    calls = []
+    service = _admin_status_service(
+        observation_callback=lambda: calls.append("called") or True,
+    )
+    reply = service.handle("risk.admin.status", context=operator_ctx(),
+                           arguments={"order_cut_admission": True})
+    assert reply["summary"]["order_cut_admission"] == {"checked": True, "ready": False}
+    assert calls == ["called"]
+
+
+def test_admin_status_missing_observer_does_not_call_write_callback():
+    write_calls = []
+    service = _admin_status_service(
+        lambda: write_calls.append("write") or True,
+        order_cut_required=True,
+    )
+    reply = service.handle("risk.admin.status", context=operator_ctx(),
+                           arguments={"order_cut_admission": True})
+    assert reply["summary"]["order_cut_admission"] == {"checked": False, "ready": False}
+    assert write_calls == []
+
+
+@pytest.mark.parametrize("arguments", [
+    {"extra": 1},
+    {"order_cut_admission": 1},
+    {"order_cut_admission": "true"},
+])
+def test_admin_status_rejects_malformed_order_cut_admission_without_check(arguments):
+    calls = []
+    service = _admin_status_service(lambda: calls.append("called") or True,
+                                    order_cut_required=True)
+    reply = service.handle("risk.admin.status", context=operator_ctx(), arguments=arguments)
+    assert reply == {"status": "REQUEST_REJECTED", "code": "risk_request_invalid"}
+    assert calls == []
+
+
 def payload(key="k1", quantity="1", **changes):
     values = {"symbol": "rb", "side": Side.BUY, "order_type": OrderType.LIMIT,
               "quantity": Decimal(quantity), "price": Decimal("10"), "account_id": ACCOUNT,

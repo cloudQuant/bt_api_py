@@ -31,6 +31,7 @@ import json
 import logging
 import math
 import os
+import re
 import signal
 import sqlite3
 import stat
@@ -1151,13 +1152,25 @@ def _r05_cut_has_current_coverage(progress: Any, cut: Any, coverage_verified: An
     cursor = progress.get("cursor")
     acknowledged = progress.get("ack_observed")
     watermark = cut.get("fact_watermark")
+    sequence = cut.get("seq")
+    observed_at_ns = cut.get("observed_at_ns")
+    max_age_ns = cut.get("max_age_ns")
+    trading_day = cut.get("current_session_trading_day")
     return (
         progress.get("pending") is None
+        and type(sequence) is int
+        and sequence > 0
         and type(cursor) is int
         and type(acknowledged) is int
         and cursor == acknowledged
         and type(watermark) is int
         and watermark >= 0
+        and type(observed_at_ns) is int
+        and observed_at_ns > 0
+        and type(max_age_ns) is int
+        and max_age_ns > 0
+        and type(trading_day) is str
+        and re.fullmatch(r"\d{8}", trading_day) is not None
         and cursor >= watermark
         and acknowledged >= watermark
         and type(progress.get("epoch")) is str
@@ -1168,6 +1181,7 @@ def _r05_cut_has_current_coverage(progress: Any, cut: Any, coverage_verified: An
         and progress.get("gateway_journal_id") == cut.get("journal_id")
         and cut.get("query_complete") is True
         and cut.get("receipt_complete") is True
+        and cut.get("query_scope") == "ctp.futures.account_orders.v1"
         and cut.get("source_history_has_gap") is False
         and type(cut.get("owner_generation")) is str
         and bool(cut.get("owner_generation"))
@@ -1220,16 +1234,35 @@ def _r05_cut_matches_current_gateway(
     ):
         return False
     return (
-        current_page.get("registration_id") == registration_id
+        current_page.get("schema") == "sdk.gateway.order_cut.current/1"
+        and current_page.get("registration_id") == registration_id
         and current_page.get("service_epoch") == service_epoch
         and current_page.get("cut_ref") == cut.get("cut_ref")
         and current_page.get("query_manifest_digest") == cut.get("query_manifest_digest")
-        and header.get("journal_id") == cut.get("journal_id")
-        and header.get("owner_generation") == cut.get("owner_generation")
-        and header.get("fact_epoch") == cut.get("fact_epoch")
-        and header.get("fact_watermark") == cut.get("fact_watermark")
-        and header.get("source_binding_ref") == cut.get("source_binding_ref")
+        # Compare every Gateway-header field also stored in the local Risk cut.
+        # Risk seq is a local ledger sequence, not a Gateway owner generation.
+        and all(
+            header.get(name) == cut.get(name)
+            for name in (
+                "journal_id",
+                "owner_generation",
+                "fact_epoch",
+                "fact_watermark",
+                "current_session_trading_day",
+                "base_sequence",
+                "begin_sequence",
+                "end_sequence",
+                "source_prefix",
+                "query_digest",
+                "query_scope",
+                "query_row_count",
+                "cut_record_digest",
+                "query_fact_digests_digest",
+                "source_binding_ref",
+            )
+        )
         and header.get("source_history_has_gap") is False
+        and cut.get("source_history_has_gap") is False
         and progress.get("gateway_journal_id") == header.get("journal_id")
         and progress.get("epoch") == header.get("fact_epoch")
         and progress.get("cursor") >= header.get("fact_watermark")
@@ -2349,13 +2382,24 @@ class RiskServiceHost:
         return self._call_lifecycle(read_state)
 
     def _order_cut_admission_ready(self) -> bool:
-        """Check current applied/ACKed R-05 coverage for the three gated writes."""
+        """Recheck current R-05 admission for one write; never reuse a prior status sample."""
+        return self._check_order_cut_admission(degrade_on_failure=True)
+
+    def _observe_order_cut_admission(self) -> bool:
+        """Return a read-only, sample-time R-05 status observation.
+
+        This does not authorize a later write and must not change Host status.
+        Each gated write separately invokes ``_order_cut_admission_ready``.
+        """
+        return self._check_order_cut_admission(degrade_on_failure=False)
+
+    def _check_order_cut_admission(self, *, degrade_on_failure: bool) -> bool:
         settings = getattr(self.config, "account_facts_observation", None)
         if settings is None or getattr(settings, "order_cut_enabled", False) is not True:
             return True
 
         def unavailable() -> bool:
-            if self.order_cut_status == "CUT_APPLIED":
+            if degrade_on_failure and self.order_cut_status == "CUT_APPLIED":
                 self.order_cut_status = "UNKNOWN"
             return False
 
@@ -2407,11 +2451,11 @@ class RiskServiceHost:
 
             runtime_snapshot = self._call_lifecycle(self._account_facts_runtime.status)
             remaining = getattr(runtime_snapshot, "min_socket_message_ids_remaining", None)
-            # current() makes one call and validate_copy_issued() performs two
-            # independent authenticated rechecks; preserve unregister headroom.
+            # current() is the only wire call here. validate_copy_issued() does
+            # two local token/binding/copy checks and consumes no socket IDs.
             if (
                 type(remaining) is not int
-                or remaining < self._ACCOUNT_FACTS_MIN_UNREGISTER_HEADROOM + 3
+                or remaining < self._ACCOUNT_FACTS_MIN_UNREGISTER_HEADROOM + 1
             ):
                 return unavailable()
 
@@ -2478,7 +2522,7 @@ class RiskServiceHost:
             )
             return matches if matches else unavailable()
         except Exception:
-            if getattr(self.ledger, "_r05_uncertain", False):
+            if degrade_on_failure and getattr(self.ledger, "_r05_uncertain", False):
                 self._record_cleanup_uncertain(self.ledger, "ACCOUNT_FACTS_STORAGE_UNKNOWN")
             return unavailable()
 
@@ -3288,6 +3332,7 @@ class RiskServiceHost:
                 getattr(getattr(config, "account_facts_observation", None), "order_cut_enabled", False)
             ),
             order_cut_admission_ready=self._order_cut_admission_ready,
+            order_cut_admission_observe=self._observe_order_cut_admission,
         )
         self._check_cleanup_ready()
         component = self.component

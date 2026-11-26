@@ -255,6 +255,11 @@ class GatewayOrderCutClient(GatewayAccountObserverClient):
         )
 
     def validate_copy_issued(self, result, *, timeout_seconds=5.0):
+        """Validate a locally issued token, live binding, and immutable response copy.
+
+        The runtime's order-cut validate-only path is local: it does not send a
+        second Gateway CURRENT request or consume another socket message ID.
+        """
         try:
             self._check_owner()
             if not self._lock.acquire(blocking=False):

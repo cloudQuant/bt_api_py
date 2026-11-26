@@ -171,6 +171,7 @@ class RiskOrderService:
         parent_v2_execution_enabled: bool = False,
         order_cut_required: bool = False,
         order_cut_admission_ready: Callable[[], bool] | None = None,
+        order_cut_admission_observe: Callable[[], bool] | None = None,
     ) -> None:
         if not all(_ref(x) for x in (account_scope, route, execution_domain_ref)):
             raise ValueError("RISK_ORDER_SERVICE_INVALID")
@@ -181,6 +182,7 @@ class RiskOrderService:
             or type(parent_v2_execution_enabled) is not bool
             or type(order_cut_required) is not bool
             or (order_cut_admission_ready is not None and not callable(order_cut_admission_ready))
+            or (order_cut_admission_observe is not None and not callable(order_cut_admission_observe))
             or (order_cut_required and not callable(order_cut_admission_ready))
         ):
             raise ValueError("RISK_ORDER_SERVICE_INVALID")
@@ -200,6 +202,7 @@ class RiskOrderService:
         # Selected R-05 order-cut mode gates only newly admitted parent/v2 writes.
         self._order_cut_required = order_cut_required
         self._order_cut_admission_ready = order_cut_admission_ready
+        self._order_cut_admission_observe = order_cut_admission_observe
         # Refusal counts since this process started, per represented strategy (risk.status).
         self._refusals: dict[str, Counter] = {}
         # Admin/operator refusals since this process started, per finite code.
@@ -923,7 +926,12 @@ class RiskOrderService:
             "risk.cancel.request": {"operation_id", "scope_kind", "scope_value"},
             "risk.cancel.status": {"operation_id"},
         }[operation]
-        if operation == "risk.cancel.status":
+        if operation == "risk.admin.status":
+            fields = set(arguments)
+            fields_valid = fields in (set(), {"order_cut_admission"})
+            if fields_valid and "order_cut_admission" in fields:
+                fields_valid = type(arguments["order_cut_admission"]) is bool
+        elif operation == "risk.cancel.status":
             fields_valid = expected <= set(arguments) <= expected | {"after", "limit"}
         else:
             fields_valid = set(arguments) == expected
@@ -934,6 +942,24 @@ class RiskOrderService:
             if operation == "risk.admin.status":
                 summary = engine.status_summary()
                 summary = dict(summary) if isinstance(summary, Mapping) else {}
+                if "order_cut_admission" in arguments:
+                    checked = False
+                    admission_ready = False
+                    if arguments["order_cut_admission"] is True:
+                        callback = self._order_cut_admission_observe
+                        if callable(callback):
+                            checked = True
+                            try:
+                                # This is a sample-time read only. A disabled
+                                # write gate is not an admission proof.
+                                callback_ready = callback() is True
+                                admission_ready = self._order_cut_required is True and callback_ready
+                            except Exception:
+                                admission_ready = False
+                    summary["order_cut_admission"] = {
+                        "checked": checked,
+                        "ready": admission_ready,
+                    }
                 # Process-local operator refusal counts; never order data.
                 summary["operator_refusal_counts"] = {
                     code: int(count) for code, count in sorted(self._operator_refusals.items())
