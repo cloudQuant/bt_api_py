@@ -40,13 +40,15 @@ def make_config(tmp_path, unit):
         (OperatorConfig('alice', OperatorRole.OPERATOR, ('*',)),), MonitorEventsConfig(False), (unit,))
 
 
-def setup_host(tmp_path, monkeypatch, *, gateway=False, monitor=False):
+def setup_host(tmp_path, monkeypatch, *, gateway=False, monitor=False,
+               recover_runs=True, recover_in_flight=True, viewer=False):
     unit = make_unit(tmp_path, name='alpha', access=AccessMode.GATEWAY if gateway else AccessMode.DIRECT)
     config = make_config(tmp_path, unit)
     config = replace(config, api=replace(config.api, port=free_port()),
                      monitor_events=MonitorEventsConfig(enabled=monitor))
     store = EventStore(config.home, SystemClock())
-    auth = SingleOperatorAuthenticator(OperatorIdentity('alice', OperatorRole.OPERATOR, ('*',)))
+    role = OperatorRole.VIEWER if viewer else OperatorRole.OPERATOR
+    auth = SingleOperatorAuthenticator(OperatorIdentity('alice', role, ('*',)))
 
     class Gateway:
         def __init__(self):
@@ -90,8 +92,77 @@ def setup_host(tmp_path, monkeypatch, *, gateway=False, monitor=False):
     gw, mon = (Gateway() if gateway else None), (Monitor() if monitor else None)
     host = module.RuntimeServiceHost(config, authenticator=auth, gateway_bridge=gw,
         monitor_bridge=mon, event_store=store, unit_strategies={'alpha': 'one'} if gateway else {},
-        close_timeout=0.2, poll_interval=0.01)
+        close_timeout=0.2, poll_interval=0.01, recover_runs=recover_runs,
+        recover_in_flight=recover_in_flight)
     return host, store, unit, gw, mon
+
+
+def test_preserve_history_disables_both_startup_recovery_paths(tmp_path, monkeypatch):
+    observed = {}
+    original = module.build_control_service
+
+    def capture(*args, **kwargs):
+        observed.update(kwargs)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(module, 'build_control_service', capture)
+    host, store, _, _, _ = setup_host(
+        tmp_path,
+        monkeypatch,
+        recover_runs=False,
+        recover_in_flight=False,
+    )
+    try:
+        host.start()
+        assert observed['recover_runs'] is False
+        assert observed['recover_in_flight'] is False
+    finally:
+        host.close()
+        store.close()
+
+
+def test_default_host_keeps_both_startup_recovery_paths_enabled(tmp_path, monkeypatch):
+    observed = {}
+    original = module.build_control_service
+
+    def capture(*args, **kwargs):
+        observed.update(kwargs)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(module, 'build_control_service', capture)
+    host, store, _, _, _ = setup_host(tmp_path, monkeypatch)
+    try:
+        host.start()
+        assert observed['recover_runs'] is True
+        assert observed['recover_in_flight'] is True
+    finally:
+        host.close()
+        store.close()
+
+
+def test_observe_only_viewer_cannot_start_a_unit_or_create_run_state(tmp_path, monkeypatch):
+    host, store, unit, _, _ = setup_host(
+        tmp_path,
+        monkeypatch,
+        recover_runs=False,
+        recover_in_flight=False,
+        viewer=True,
+    )
+    try:
+        host.start()
+        listed = host._service.dispatch('runtime.units.list')
+        denied = host._service.dispatch(
+            'runtime.unit.start',
+            unit_name=unit.name,
+            command_id='observe-only-start-denied',
+        )
+        assert listed.status == 'OK'
+        assert denied.status == 'REJECTED'
+        assert denied.code == 'not_authorized'
+        assert host._supervisor.store.load_run(unit.name) is None
+    finally:
+        host.close()
+        store.close()
 
 
 def test_mux_checks_declaration_and_current_supervisor_identity(tmp_path, monkeypatch):

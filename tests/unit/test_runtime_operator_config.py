@@ -39,6 +39,61 @@ def test_validate_never_reads_secrets_or_creates_home(tmp_path, capsys):
     assert repr(load_config(path)).find(envelope['subject_token_file']) < 0
 
 
+def test_observe_only_cli_disables_recovery_and_stop_file(tmp_path, monkeypatch):
+    path, _ = _deployment(tmp_path)
+    observed = {}
+
+    def run(config, **kwargs):
+        observed.update(kwargs)
+        return 0
+
+    monkeypatch.setattr(cli, '_run', run)
+    assert cli.main(['run', '--config', str(path), '--observe-only']) == 0
+    assert observed == {
+        'enable_stop_file': False,
+        'enable_owner_stop_file': False,
+        'observe_only': True,
+    }
+
+
+def test_observe_only_downgrades_authenticated_subject_to_viewer():
+    source = cli.OperatorIdentity('alice', cli.OperatorRole.ADMIN, ('*',))
+
+    class Authenticator:
+        def authenticate(self, credential):
+            assert credential == 'token'
+            return cli.AuthResult(source, 'authenticated')
+
+    result = cli._ViewerOnlyAuthenticator(Authenticator()).authenticate('token')
+    assert result.authenticated
+    assert result.identity.name == 'alice'
+    assert result.identity.units == ('*',)
+    assert result.identity.role is cli.OperatorRole.VIEWER
+    assert result.detail == {'identity_mode': 'trusted_mapping_viewer_only'}
+
+
+def test_observe_only_rejects_strategy_stop_file_channel(tmp_path):
+    path, _ = _deployment(tmp_path)
+    with pytest.raises(SystemExit) as caught:
+        cli.main([
+            'run', '--config', str(path), '--observe-only', '--enable-stop-file',
+        ])
+    assert caught.value.code == 2
+
+
+def test_observe_only_direct_run_rejects_strategy_stop_file_channel(tmp_path):
+    path, _ = _deployment(tmp_path)
+    with pytest.raises(ValueError, match='INVALID_RUNTIME_CLI_MODE'):
+        cli._run(load_config(path), observe_only=True, enable_stop_file=True)
+
+
+def test_observe_only_requires_run_action(tmp_path):
+    path, _ = _deployment(tmp_path)
+    with pytest.raises(SystemExit) as caught:
+        cli.main(['validate', '--config', str(path), '--observe-only'])
+    assert caught.value.code == 2
+
+
 @pytest.mark.parametrize('code', ['listener_bind_failed', 'non_loopback_bind', 'invalid_port'])
 def test_start_failure_reports_only_exact_transport_allowlist(code, capsys):
     cli._emit_start_failure(cli.ControlTransportError(code))

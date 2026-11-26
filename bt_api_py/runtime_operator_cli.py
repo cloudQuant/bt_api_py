@@ -1,7 +1,9 @@
 """Explicit local Runtime operator service entry point.
 
 ``validate`` is offline and does not read credentials. ``run`` starts a
-control listener only; it never starts a managed strategy automatically.
+control listener and performs the existing startup recovery unless explicit
+``--observe-only`` mode is selected. Observe-only mode skips both recovery
+paths and downgrades every authenticated subject to read-only access.
 """
 from __future__ import annotations
 
@@ -11,6 +13,8 @@ import sys
 import threading
 from pathlib import Path
 
+from bt_api_run_contract import OperatorRole
+from bt_api_runtime.control_auth import AuthResult, OperatorIdentity
 from bt_api_runtime.control_http import ControlTransportError
 from bt_api_runtime.events import EventStore
 from bt_api_runtime.supervision import SystemClock
@@ -23,6 +27,26 @@ _CLEANUP_COMPONENTS = frozenset({
     'http_dispatch', 'http_listener', 'telemetry_owner', 'service', 'database',
     'supervisor', 'relay', 'monitor', 'gateway',
 })
+
+
+class _ViewerOnlyAuthenticator:
+    """Preserve authentication while removing every write-capable role."""
+
+    mode = 'trusted_mapping_viewer_only'
+
+    def __init__(self, delegate):
+        self._delegate = delegate
+
+    def authenticate(self, credential):
+        result = self._delegate.authenticate(credential)
+        if not result.authenticated:
+            return result
+        identity = result.identity
+        return AuthResult(
+            OperatorIdentity(identity.name, OperatorRole.VIEWER, tuple(identity.units)),
+            'authenticated',
+            {'identity_mode': self.mode},
+        )
 
 
 def _emit(message, *, error=False):
@@ -92,7 +116,13 @@ def _close_store(store, requested, stop_directory):
         _wait_for_stop_request(requested, stop_directory)
 
 
-def _run(config, *, enable_stop_file=False, enable_owner_stop_file=False):
+def _run(config, *, enable_stop_file=False, enable_owner_stop_file=False,
+         observe_only=False):
+    if (type(enable_stop_file) is not bool
+            or type(enable_owner_stop_file) is not bool
+            or type(observe_only) is not bool
+            or (observe_only and enable_stop_file)):
+        raise ValueError('INVALID_RUNTIME_CLI_MODE')
     requested = threading.Event()
     stop_directory = Path(config.runtime.home) if enable_owner_stop_file else None
     previous = {}
@@ -103,13 +133,17 @@ def _run(config, *, enable_stop_file=False, enable_owner_stop_file=False):
     startup_failed = False
     try:
         auth = load_authenticator(config)
+        if observe_only:
+            auth = _ViewerOnlyAuthenticator(auth)
         store = EventStore(config.runtime.home, SystemClock())
         if not store.available:
             raise RuntimeError('EVENT_STORE_UNAVAILABLE')
         gateway, monitor = build_bridges(config, store)
         host = RuntimeServiceHost(config.runtime, authenticator=auth, gateway_bridge=gateway,
             event_store=store, monitor_bridge=monitor, unit_strategies=config.unit_strategies,
-            enable_stop_file=enable_stop_file)
+            enable_stop_file=enable_stop_file,
+            recover_runs=not observe_only,
+            recover_in_flight=not observe_only)
         try:
             host.start()
         except Exception as error:
@@ -130,6 +164,8 @@ def _run(config, *, enable_stop_file=False, enable_owner_stop_file=False):
             _emit_cleanup_uncertain(host)
         if not startup_failed:
             address, port = host.bound_address
+            if observe_only:
+                _emit('runtime_control_mode observe_only')
             _emit(f'runtime_control_listening {address} {port}')
         _wait_close(host, requested, stop_directory)
         return 1 if startup_failed else 0
@@ -165,7 +201,13 @@ def main(argv=None):
                         help='opt in to the stop-request file channel for supervised strategy units')
     parser.add_argument('--enable-owner-stop-file', action='store_true',
                         help='allow local cooperative shutdown of this CLI with a protected empty marker')
+    parser.add_argument('--observe-only', action='store_true',
+                        help='skip startup recovery and expose authenticated read-only control')
     args = parser.parse_args(argv)
+    if args.action != 'run' and args.observe_only:
+        parser.error('--observe-only requires the run action')
+    if args.observe_only and args.enable_stop_file:
+        parser.error('--observe-only cannot be combined with --enable-stop-file')
     try:
         config = load_config(args.config)
     except Exception:
@@ -175,7 +217,8 @@ def main(argv=None):
         _emit('runtime_configuration_valid')
         return 0
     return _run(config, enable_stop_file=args.enable_stop_file,
-                enable_owner_stop_file=args.enable_owner_stop_file)
+                enable_owner_stop_file=args.enable_owner_stop_file,
+                observe_only=args.observe_only)
 
 
 if __name__ == '__main__':

@@ -121,7 +121,8 @@ class RuntimeServiceHost:
     """
     def __init__(self, config, *, authenticator, gateway_bridge, event_store,
                  monitor_bridge, unit_strategies: Mapping[str, str],
-                 poll_interval=0.05, close_timeout=5.0, enable_stop_file=False):
+                 poll_interval=0.05, close_timeout=5.0, enable_stop_file=False,
+                 recover_runs=True, recover_in_flight=True):
         if (type(config) is not ValidatedRuntimeConfig or config.api.transport != 'http_json'
                 or not authenticator or not callable(getattr(authenticator, 'authenticate', None))
                 or type(event_store) is not EventStore or not event_store.available
@@ -143,9 +144,13 @@ class RuntimeServiceHost:
                  or (monitor_bridge is not None and (not isinstance(monitor_bridge, RuntimeMonitorBridge)
                                                   or monitor_bridge._store is not event_store
                                                   or monitor_bridge.state != 'new'))
-                or type(enable_stop_file) is not bool):
+                or type(enable_stop_file) is not bool
+                or type(recover_runs) is not bool
+                or type(recover_in_flight) is not bool):
             raise ValueError('INVALID_RUNTIME_HOST_BINDINGS')
         self._enable_stop_file = enable_stop_file
+        self._recover_runs = recover_runs
+        self._recover_in_flight = recover_in_flight
         self.config, self.authenticator, self.event_store = config, authenticator, event_store
         self.gateway_bridge, self.monitor_bridge = gateway_bridge, monitor_bridge
         self._mux = _ControlMux(config, MappingProxyType(bindings), gateway_bridge)
@@ -224,7 +229,8 @@ class RuntimeServiceHost:
                 self._service = build_control_service(self.config, supervisor=self._supervisor,
                     database=self._database, authenticator=self.authenticator, gateway_control=self._mux,
                     drain_port=self._mux, events=self.event_store, telemetry=self._relay,
-                    clock=clock, transport='http_json')
+                    clock=clock, transport='http_json', recover_runs=self._recover_runs,
+                    recover_in_flight=self._recover_in_flight)
                 self._gate = _HttpDispatchGate(self._service)
                 self._http = build_control_http_server(self._gate, bind=self.config.api.bind,
                                                        port=self.config.api.port, clock=clock)

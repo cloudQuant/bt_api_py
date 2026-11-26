@@ -30,8 +30,12 @@ from bt_api_run_contract import (
     StopConfig,
     UnitConfig,
     UnitKind,
+    UnitState,
     ValidatedRuntimeConfig,
 )
+from bt_api_runtime.control_ledger import ControlDatabase
+from bt_api_runtime.supervision import SystemClock
+from bt_api_runtime.supervision.store import RUN_SCHEMA, RunRecord
 
 from bt_api_py import _win32_security
 from bt_api_py.gateway_direct_owner import GatewayDirectOwner, GatewayDirectOwnerResources
@@ -115,6 +119,166 @@ def request(port, payload, *, token):
         return response.status, json.loads(response.read())
     finally:
         connection.close()
+
+
+def test_observe_only_preserves_existing_run_and_in_flight_command(tmp_path):
+    unit = make_unit(tmp_path, name='alpha')
+    second_unit = make_unit(tmp_path, name='beta')
+    runtime_home = tmp_path / 'runtime-home'
+    run_path = runtime_home / 'runs' / 'alpha.json'
+    run_path.parent.mkdir(parents=True)
+    historical_record = RunRecord(
+        schema=RUN_SCHEMA,
+        unit_name='alpha',
+        strategy_uuid='11111111-1111-4111-8111-111111111111',
+        run_id='33333333-3333-4333-8333-333333333333',
+        process=None,
+        spawned=False,
+        adopted=False,
+        started_at_utc='2026-11-26T05:00:00+00:00',
+        started_monotonic=1.0,
+        os_boot_id=None,
+        stdout_path=str(runtime_home / 'logs' / 'alpha.stdout.log'),
+        stderr_path=str(runtime_home / 'logs' / 'alpha.stderr.log'),
+        state=UnitState.STARTING,
+        updated_at_utc='2026-11-26T05:00:00+00:00',
+    )
+    historical_run = json.dumps(
+        historical_record.to_mapping(), sort_keys=True, separators=(',', ':')
+    ).encode('utf-8')
+    run_path.write_bytes(historical_run)
+
+    pending_command = str(uuid.uuid4())
+    claimed_command = str(uuid.uuid4())
+    database = ControlDatabase(runtime_home, SystemClock())
+    try:
+        for command_id, historical_unit, unit_uuid in (
+            (pending_command, unit, '11111111-1111-4111-8111-111111111111'),
+            (claimed_command, second_unit, '22222222-2222-4222-8222-222222222222'),
+        ):
+            assert database.ledger.begin(
+                command_id,
+                operator='alice',
+                client='cli',
+                action='start',
+                unit_name=historical_unit.name,
+                unit_uuid=unit_uuid,
+                unit_dir=historical_unit.strategy_dir,
+                parameters={},
+                reason='historical in-flight command',
+                confirmation_required=False,
+                confirmation_consumed=False,
+            ).kind == 'new'
+        assert database.ledger.claim(claimed_command)
+    finally:
+        database.close()
+
+    port = free_port()
+    runtime_path = tmp_path / 'runtime.json'
+    runtime_path.write_text(json.dumps({
+        'schema': 'bt_api_runtime/v1',
+        'home': str(runtime_home),
+        'api': {
+            'transport': 'http_json',
+            'bind': '127.0.0.1',
+            'port': port,
+            'identity_mechanism': 'subject_token',
+        },
+        'operators': [{'name': 'alice', 'role': 'operator', 'units': ['alpha']}],
+        'monitor_events': {'enabled': False},
+        'units': [
+            {
+                'name': configured.name,
+                'kind': 'strategy',
+                'dir': configured.strategy_dir,
+                'entry': 'run.py',
+                'python': sys.executable,
+                'access': 'direct',
+                'heartbeat_interval_s': 1,
+                'start_timeout_s': 10,
+                'stop': {'graceful_timeout_s': 2, 'kill_timeout_s': 1},
+            }
+            for configured in (unit, second_unit)
+        ],
+    }))
+    token = 'synthetic-token-' + 'o' * 32
+    token_path = tmp_path / 'tokens.json'
+    token_path.write_text(json.dumps({
+        'schema': 'bt_api_py.runtime_subject_tokens.v1',
+        'tokens': [{'token': token, 'operator': 'alice'}],
+    }))
+    set_owner_only(token_path)
+    config_path = tmp_path / 'operator.json'
+    config_path.write_text(json.dumps({
+        'schema': 'bt_api_py.runtime_operator.v1',
+        'runtime_config_file': str(runtime_path),
+        'subject_token_file': str(token_path),
+        'gateway': None,
+        'monitor': None,
+    }))
+
+    denied_command = str(uuid.uuid4())
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            '-u',
+            '-m',
+            'bt_api_py.runtime_operator_cli',
+            'run',
+            '--config',
+            str(config_path),
+            '--observe-only',
+            '--enable-owner-stop-file',
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert _wait_startup_line(process) == 'runtime_control_mode observe_only'
+        assert _wait_startup_line(process) == f'runtime_control_listening 127.0.0.1 {port}'
+        marker_line = _wait_startup_line(process)
+        prefix = 'runtime_control_stop_file '
+        assert marker_line.startswith(prefix)
+        marker_name = marker_line[len(prefix):]
+        assert '/' not in marker_name and '\\' not in marker_name
+
+        _, listed = request(port, control_payload('runtime.units.list'), token=token)
+        assert listed['status'] == 'OK'
+        _, denied = request(
+            port,
+            control_payload(
+                'runtime.unit.start',
+                unit='alpha',
+                command_id=denied_command,
+                reason='must remain read only',
+            ),
+            token=token,
+        )
+        assert denied['status'] == 'REJECTED'
+        assert denied['code'] == 'not_authorized'
+        assert run_path.read_bytes() == historical_run
+
+        marker = runtime_home / marker_name
+        marker.write_bytes(b'')
+        set_owner_only(marker)
+        out, err = process.communicate(timeout=15)
+        assert process.returncode == 0, (out, err)
+        assert 'runtime_control_closed' in out
+        assert token not in out + err
+    finally:
+        if process.poll() is None:
+            process.send_signal(signal.SIGTERM)
+            process.wait(timeout=15)
+
+    assert run_path.read_bytes() == historical_run
+    database = ControlDatabase(runtime_home, SystemClock())
+    try:
+        assert database.ledger.get(pending_command).state == 'PENDING'
+        assert database.ledger.get(claimed_command).state == 'CLAIMED'
+        assert database.ledger.get(denied_command) is None
+    finally:
+        database.close()
 
 
 OPS = frozenset({'direct.control.apply', 'direct.control.status', 'direct.control.resume'})
