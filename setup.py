@@ -20,7 +20,10 @@ class BuildPyWithoutBytecode(build_py):
 
 
 setup(
-    packages=find_packages(include=["bt_api_py", "bt_api_py.*"], exclude=["tests"]),
+    packages=find_packages(
+        include=["bt_api_py", "bt_api_py.*", "bt_api_risk_observer", "bt_api_risk_observer.*"],
+        exclude=["tests"],
+    ),
     cmdclass={"build_py": BuildPyWithoutBytecode},
     package_data={
         "bt_api_py": [
