@@ -65,6 +65,10 @@ CONTROL_OPERATIONS = frozenset(
         "direct.control.cancel_scope_status",
     }
 )
+CONTROL_INTENT_APPLY_OPERATION = "direct.control.intent.apply"
+CONTROL_INTENT_OPERATIONS = CONTROL_OPERATIONS | frozenset(
+    {CONTROL_INTENT_APPLY_OPERATION}
+)
 _CONTROL_BINDING_CAPACITY = 8192
 _CANCEL_SCOPE_LIMIT = 256
 _OBSERVER_LIMIT = 256
@@ -1031,13 +1035,17 @@ class GatewayControlAdapter:
         timeout_seconds: float,
         route: BoundCallRoute | None = None,
         server_key_fingerprint: str | None = None,
+        control_intent_enabled: bool = False,
     ) -> None:
+        if type(control_intent_enabled) is not bool:
+            raise ValueError("RISK_CONTROL_INTENT_CONFIG_INVALID")
         self._runtime = runtime
         self._mount, self._service_id = mount, service_id
         self._instance_id, self._scope_ref, self._account = instance_id, scope_ref, account_ref
         self._timeout = float(timeout_seconds)
         self._route = None if route is None else BoundCallRoute(**vars(route))
         self._server_key_fingerprint = server_key_fingerprint
+        self._control_intent_enabled = control_intent_enabled
         self._cause_bindings: dict[str, _ControlBindingProof] = {}
         self._operation_bindings: dict[str, _ControlBindingProof] = {}
         self.last_cancel_status: dict[str, Mapping] = {}
@@ -1082,7 +1090,9 @@ class GatewayControlAdapter:
             raw = _detach_wire(result.result)
             if (type(raw) is not dict or set(raw) != {
                     "status", "schema_version", "account_scope", "journal_id", "journal_generation"}
-                    or raw["status"] != "OBSERVED" or raw["schema_version"] != 1
+                    or raw["status"] != "OBSERVED"
+                    or type(raw["schema_version"]) is not int
+                    or raw["schema_version"] != 1
                     or raw["account_scope"] != self._account or not _ref(raw["journal_id"])
                     or not _ref(raw["journal_generation"])):
                 raise ValueError
@@ -1129,7 +1139,13 @@ class GatewayControlAdapter:
         return proof, None
 
     def _call(
-        self, operation: str, arguments: dict, proof: _ControlBindingProof
+        self,
+        operation: str,
+        arguments: dict,
+        proof: _ControlBindingProof,
+        *,
+        rejection_codes: frozenset[str] | None = None,
+        expected_unknown: Mapping[str, object] | None = None,
     ) -> tuple[Mapping | None, Any]:
         from bt_api_risk.pretrade import ControlReply
 
@@ -1161,10 +1177,18 @@ class GatewayControlAdapter:
         if type(raw) is not dict:
             return None, ControlReply("UNKNOWN", code="INVALID_OR_UNAVAILABLE_REPLY")
         if raw.get("status") == "REQUEST_REJECTED":
-            if set(raw) != {"status", "code"} or not _ref(raw["code"]):
+            if (
+                set(raw) != {"status", "code"}
+                or not _ref(raw["code"])
+                or (rejection_codes is not None and raw["code"] not in rejection_codes)
+            ):
                 return None, ControlReply("UNKNOWN", code="INVALID_OR_UNAVAILABLE_REPLY")
             return None, ControlReply("REQUEST_DENIED", code=raw["code"])
-        if raw == {"status": "UNKNOWN"} or raw.get("status") == "UNKNOWN":
+        if raw.get("status") == "UNKNOWN":
+            if expected_unknown is not None and raw != dict(expected_unknown):
+                return None, ControlReply(
+                    "UNKNOWN", code="INVALID_OR_UNAVAILABLE_REPLY"
+                )
             return None, ControlReply("UNKNOWN")
         return raw, None
 
@@ -1172,6 +1196,140 @@ class GatewayControlAdapter:
         if scope_kind == "account" and scope_value == "":
             return {}
         return None
+
+    def apply_intent(
+        self,
+        *,
+        binding: Any,
+        request_digest: str,
+        cause_id: str,
+        mode: str,
+        scope_kind: str,
+        scope_value: str,
+        latch_id: str | None,
+    ) -> Any:
+        """Send one persisted control intent through a fresh same-owner proof.
+
+        The explicit adapter gate is default-off. A fresh identity observation
+        must equal the persisted binding byte-for-byte before the request is
+        handed to the transport. Neither this method nor the binding grants an
+        automatic or cross-generation retry.
+        """
+        from bt_api_risk.pretrade import ControlIntentBinding, ControlReply
+
+        if not self._control_intent_enabled:
+            return ControlReply(
+                "TRANSPORT_NOT_STARTED", code="CONTROL_INTENT_UNAVAILABLE"
+            )
+        if (
+            type(binding) is not ControlIntentBinding
+            or type(request_digest) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", request_digest) is None
+            or not _ref(cause_id)
+            or type(mode) is not str
+            or scope_kind != "account"
+            or scope_value != ""
+            or (latch_id is not None and not _ref(latch_id))
+        ):
+            return ControlReply("REQUEST_DENIED", code="INVALID_REQUEST")
+        route = self._route
+        if (
+            type(route) is not BoundCallRoute
+            or binding.account_scope != self._account
+            or binding.mount != self._mount
+            or binding.service_id != self._service_id
+            or binding.instance_id != self._instance_id
+            or binding.scope_ref != self._scope_ref
+            or binding.peer_principal_ref != route.peer.principal_ref
+            or binding.peer_actor_ref != route.peer.actor_ref
+            or binding.server_key_fingerprint != self._server_key_fingerprint
+        ):
+            return ControlReply(
+                "REQUEST_DENIED", code="CONTROL_INTENT_BINDING_MISMATCH"
+            )
+        if CONTROL_INTENT_APPLY_OPERATION not in binding.operations:
+            return ControlReply(
+                "TRANSPORT_NOT_STARTED", code="CONTROL_INTENT_UNAVAILABLE"
+            )
+        try:
+            from bt_api_gateway.control_intent_wire import (
+                CONTROL_INTENT_REJECTION_CODES,
+                CONTROL_INTENT_WIRE_SCHEMA_VERSION,
+            )
+            from bt_api_risk.pretrade.account_bound_intents import (
+                request_digest_for_control,
+            )
+            from bt_api_risk.risk_order_journal_contracts import (
+                RiskOrderJournalError,
+            )
+        except Exception:
+            return ControlReply("UNKNOWN", code="INVALID_OR_UNAVAILABLE_REPLY")
+
+        try:
+            computed_digest = request_digest_for_control(
+                cause_id=cause_id,
+                mode=mode,
+                scope_kind=scope_kind,
+                scope_value=scope_value,
+                latch_id=latch_id,
+            )
+        except RiskOrderJournalError:
+            return ControlReply("REQUEST_DENIED", code="INVALID_REQUEST")
+        except Exception:
+            return ControlReply("UNKNOWN", code="INVALID_OR_UNAVAILABLE_REPLY")
+        if request_digest != computed_digest:
+            return ControlReply(
+                "REQUEST_DENIED",
+                code="CONTROL_INTENT_REQUEST_DIGEST_MISMATCH",
+            )
+        proof, error = self._capture_binding()
+        if proof is None:
+            return error
+        if proof.binding != binding:
+            return ControlReply(
+                "TRANSPORT_NOT_STARTED", code="CONTROL_INTENT_BINDING_MISMATCH"
+            )
+        if CONTROL_INTENT_APPLY_OPERATION not in proof.observation.operations:
+            return ControlReply(
+                "TRANSPORT_NOT_STARTED", code="CONTROL_INTENT_UNAVAILABLE"
+            )
+        raw, error = self._call(
+            CONTROL_INTENT_APPLY_OPERATION,
+            {
+                "schema_version": CONTROL_INTENT_WIRE_SCHEMA_VERSION,
+                "cause_id": cause_id,
+                "mode": mode,
+                "scope_kind": scope_kind,
+                "scope_value": scope_value,
+                "latch_id": latch_id,
+                "request_digest": request_digest,
+                "binding_digest": binding.digest,
+            },
+            proof,
+            rejection_codes=CONTROL_INTENT_REJECTION_CODES,
+            expected_unknown={"status": "UNKNOWN", "cause_id": cause_id},
+        )
+        if error is not None:
+            return error
+        try:
+            if (
+                set(raw) != {"status", "cause_id", "version", "active"}
+                or raw.get("status") != "OBSERVED"
+                or type(raw.get("cause_id")) is not str
+                or raw["cause_id"] != cause_id
+                or type(raw.get("active")) is not bool
+                or type(raw.get("version")) is not int
+                or raw["version"] != (1 if raw["active"] else 2)
+            ):
+                raise ValueError
+            return ControlReply(
+                "OBSERVED",
+                cause_id=cause_id,
+                active=raw["active"],
+                version=raw["version"],
+            )
+        except Exception:
+            return ControlReply("UNKNOWN", code="INVALID_OR_UNAVAILABLE_REPLY")
 
     def apply(self, *, cause_id: str, mode: str, scope_kind: str, scope_value: str) -> Any:
         from bt_api_risk.pretrade import ControlReply

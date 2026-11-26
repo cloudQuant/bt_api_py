@@ -15,6 +15,7 @@ from bt_api_base.gateway_execution_stream_protocol import (
 )
 from bt_api_base.market_protocol import MarketInstrumentKey, MarketSubscriptionKey
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
+from bt_api_gateway.control_intent_wire import CONTROL_INTENT_REJECTION_CODES
 
 from bt_api_py.gateway_account_observer_client import GatewayAccountObservedEvent
 from bt_api_py.risk_service_config import RiskInstrumentBinding
@@ -49,6 +50,8 @@ CONTROL_OPERATIONS = frozenset(
         "direct.control.cancel_scope_status",
     }
 )
+CONTROL_INTENT_OPERATION = "direct.control.intent.apply"
+CONTROL_INTENT_OPERATIONS = CONTROL_OPERATIONS | frozenset({CONTROL_INTENT_OPERATION})
 CONTROL_ROUTE = BoundCallRoute(
     WireIdentity(WireRole.APPLICATION_CLIENT, "risk-control", "risk-control-actor"),
     WireScope("test-domain", account_ref=ACCOUNT),
@@ -353,8 +356,11 @@ def test_release_returns_the_verified_terminal_observation_only():
 
 
 class Runtime:
-    def __init__(self, replies, registered=True):
+    def __init__(self, replies, registered=True, *, operations=CONTROL_OPERATIONS):
         self.replies, self.calls, self.registered = list(replies), [], registered
+        self.operations = operations
+        self.generation = "generation-a"
+        self.identity_schema_version = 1
         self.token = object()
 
     def call_bound(self, mount, operation, arguments, **kw):
@@ -375,7 +381,7 @@ class Runtime:
             route.service_id,
             route.instance_id,
             route.scope_ref,
-            CONTROL_OPERATIONS,
+            self.operations,
             route.peer,
             CONTROL_FINGERPRINT,
             100.0,
@@ -386,10 +392,10 @@ class Runtime:
         if operation == "direct.control.identity":
             reply = {
                 "status": "OBSERVED",
-                "schema_version": 1,
+                "schema_version": self.identity_schema_version,
                 "account_scope": ACCOUNT,
                 "journal_id": "journal-a",
-                "journal_generation": "generation-a",
+                "journal_generation": self.generation,
             }
         else:
             assert kw["expected_binding"] == replace(observation, operation="direct.control.identity")
@@ -401,12 +407,33 @@ class Runtime:
         return BoundCallResult(reply, observation, observation, self.token)
 
 
-def control(replies, registered=True):
-    runtime = Runtime(replies, registered)
+def control(
+    replies,
+    registered=True,
+    *,
+    operations=CONTROL_OPERATIONS,
+    control_intent_enabled=False,
+):
+    runtime = Runtime(replies, registered, operations=operations)
     return GatewayControlAdapter(runtime, mount="application.direct_write", service_id="gateway",
                                  instance_id="gateway-a", scope_ref="scope-a",
                                  account_ref=ACCOUNT, timeout_seconds=5, route=CONTROL_ROUTE,
-                                 server_key_fingerprint=CONTROL_FINGERPRINT), runtime
+                                 server_key_fingerprint=CONTROL_FINGERPRINT,
+                                 control_intent_enabled=control_intent_enabled), runtime
+
+
+def control_request_digest(
+    *, cause_id="c1", mode="STOP_NEW", scope_kind="account", scope_value="", latch_id="latch-a"
+):
+    from bt_api_risk.pretrade.account_bound_intents import request_digest_for_control
+
+    return request_digest_for_control(
+        cause_id=cause_id,
+        mode=mode,
+        scope_kind=scope_kind,
+        scope_value=scope_value,
+        latch_id=latch_id,
+    )
 
 
 def test_control_binding_capture_is_owner_bound_and_observational():
@@ -421,6 +448,326 @@ def test_control_binding_capture_is_owner_bound_and_observational():
         binding.service_epoch,
     ) == (ACCOUNT, "journal-a", "generation-a", "registration-a", "service-epoch-a")
     assert [call[0] for call in runtime.calls] == ["direct.control.identity"]
+
+
+def test_control_intent_apply_is_default_off_after_a_valid_binding_capture():
+    adapter, runtime = control([], operations=CONTROL_INTENT_OPERATIONS)
+    binding = adapter.capture_intent_binding()
+    assert binding is not None
+    reply = adapter.apply_intent(
+        binding=binding,
+        request_digest=control_request_digest(),
+        cause_id="c1",
+        mode="STOP_NEW",
+        scope_kind="account",
+        scope_value="",
+        latch_id="latch-a",
+    )
+    assert (reply.outcome, reply.code) == (
+        "TRANSPORT_NOT_STARTED",
+        "CONTROL_INTENT_UNAVAILABLE",
+    )
+    assert [call[0] for call in runtime.calls] == ["direct.control.identity"]
+
+
+def test_control_intent_enable_flag_requires_an_exact_bool():
+    with pytest.raises(ValueError, match="RISK_CONTROL_INTENT_CONFIG_INVALID"):
+        control([], control_intent_enabled=1)
+
+
+def test_control_intent_binding_rejects_boolean_identity_schema_version():
+    adapter, runtime = control([], operations=CONTROL_INTENT_OPERATIONS)
+    runtime.identity_schema_version = True
+    assert adapter.capture_intent_binding() is None
+    assert [call[0] for call in runtime.calls] == ["direct.control.identity"]
+
+
+def test_control_intent_apply_uses_fresh_exact_binding_and_wire_fields():
+    adapter, runtime = control(
+        [
+            {"status": "OBSERVED", "cause_id": "c1", "version": 1, "active": True},
+        ],
+        operations=CONTROL_INTENT_OPERATIONS,
+        control_intent_enabled=True,
+    )
+    binding = adapter.capture_intent_binding()
+    assert binding is not None
+    request_digest = control_request_digest()
+    reply = adapter.apply_intent(
+        binding=binding,
+        request_digest=request_digest,
+        cause_id="c1",
+        mode="STOP_NEW",
+        scope_kind="account",
+        scope_value="",
+        latch_id="latch-a",
+    )
+    assert (reply.outcome, reply.cause_id, reply.active, reply.version) == (
+        "OBSERVED",
+        "c1",
+        True,
+        1,
+    )
+    unbound_status = adapter.status(cause_id="c1")
+    assert (unbound_status.outcome, unbound_status.code) == (
+        "UNKNOWN",
+        "CONTROL_INTENT_BINDING_REQUIRED",
+    )
+    assert [call[0] for call in runtime.calls] == [
+        "direct.control.identity",
+        "direct.control.identity",
+        CONTROL_INTENT_OPERATION,
+    ]
+    arguments = runtime.calls[2][1]
+    assert set(arguments) == {
+        "schema_version",
+        "cause_id",
+        "mode",
+        "scope_kind",
+        "scope_value",
+        "latch_id",
+        "request_digest",
+        "binding_digest",
+        "expected_journal_id",
+        "expected_generation",
+    }
+    assert arguments == {
+        "schema_version": 1,
+        "cause_id": "c1",
+        "mode": "STOP_NEW",
+        "scope_kind": "account",
+        "scope_value": "",
+        "latch_id": "latch-a",
+        "request_digest": request_digest,
+        "binding_digest": binding.digest,
+        "expected_journal_id": "journal-a",
+        "expected_generation": "generation-a",
+    }
+
+
+def test_control_intent_apply_rejects_stale_binding_before_the_intent_call():
+    adapter, runtime = control(
+        [],
+        operations=CONTROL_INTENT_OPERATIONS,
+        control_intent_enabled=True,
+    )
+    binding = adapter.capture_intent_binding()
+    assert binding is not None
+    runtime.generation = "generation-b"
+    reply = adapter.apply_intent(
+        binding=binding,
+        request_digest=control_request_digest(),
+        cause_id="c1",
+        mode="STOP_NEW",
+        scope_kind="account",
+        scope_value="",
+        latch_id="latch-a",
+    )
+    assert (reply.outcome, reply.code) == (
+        "TRANSPORT_NOT_STARTED",
+        "CONTROL_INTENT_BINDING_MISMATCH",
+    )
+    assert [call[0] for call in runtime.calls] == [
+        "direct.control.identity",
+        "direct.control.identity",
+    ]
+
+
+def test_control_intent_apply_rejects_unpersisted_request_or_missing_operation():
+    adapter, runtime = control(
+        [],
+        operations=CONTROL_INTENT_OPERATIONS,
+        control_intent_enabled=True,
+    )
+    binding = adapter.capture_intent_binding()
+    assert binding is not None
+    mismatch = adapter.apply_intent(
+        binding=binding,
+        request_digest="0" * 64,
+        cause_id="c1",
+        mode="STOP_NEW",
+        scope_kind="account",
+        scope_value="",
+        latch_id="latch-a",
+    )
+    assert (mismatch.outcome, mismatch.code) == (
+        "REQUEST_DENIED",
+        "CONTROL_INTENT_REQUEST_DIGEST_MISMATCH",
+    )
+    assert [call[0] for call in runtime.calls] == ["direct.control.identity"]
+
+    old_adapter, old_runtime = control(
+        [], operations=CONTROL_OPERATIONS, control_intent_enabled=True
+    )
+    old_binding = old_adapter.capture_intent_binding()
+    unavailable = old_adapter.apply_intent(
+        binding=old_binding,
+        request_digest=control_request_digest(),
+        cause_id="c1",
+        mode="STOP_NEW",
+        scope_kind="account",
+        scope_value="",
+        latch_id="latch-a",
+    )
+    assert (unavailable.outcome, unavailable.code) == (
+        "TRANSPORT_NOT_STARTED",
+        "CONTROL_INTENT_UNAVAILABLE",
+    )
+    assert [call[0] for call in old_runtime.calls] == ["direct.control.identity"]
+
+
+def test_control_intent_apply_rejects_invalid_digest_shape_without_a_fresh_call():
+    adapter, runtime = control(
+        [],
+        operations=CONTROL_INTENT_OPERATIONS,
+        control_intent_enabled=True,
+    )
+    binding = adapter.capture_intent_binding()
+    reply = adapter.apply_intent(
+        binding=binding,
+        request_digest=True,
+        cause_id="c1",
+        mode="STOP_NEW",
+        scope_kind="account",
+        scope_value="",
+        latch_id="latch-a",
+    )
+    assert (reply.outcome, reply.code) == ("REQUEST_DENIED", "INVALID_REQUEST")
+    assert [call[0] for call in runtime.calls] == ["direct.control.identity"]
+
+
+def test_control_intent_apply_maps_unexpected_digest_failure_to_unknown(monkeypatch):
+    from bt_api_risk.pretrade import account_bound_intents
+
+    adapter, runtime = control(
+        [],
+        operations=CONTROL_INTENT_OPERATIONS,
+        control_intent_enabled=True,
+    )
+    binding = adapter.capture_intent_binding()
+
+    def fail_unexpectedly(**_kwargs):
+        raise RuntimeError("unexpected digest implementation failure")
+
+    monkeypatch.setattr(
+        account_bound_intents,
+        "request_digest_for_control",
+        fail_unexpectedly,
+    )
+    reply = adapter.apply_intent(
+        binding=binding,
+        request_digest="0" * 64,
+        cause_id="c1",
+        mode="STOP_NEW",
+        scope_kind="account",
+        scope_value="",
+        latch_id="latch-a",
+    )
+    assert (reply.outcome, reply.code) == (
+        "UNKNOWN",
+        "INVALID_OR_UNAVAILABLE_REPLY",
+    )
+    assert [call[0] for call in runtime.calls] == ["direct.control.identity"]
+
+
+@pytest.mark.parametrize("wire_code", sorted(CONTROL_INTENT_REJECTION_CODES))
+def test_control_intent_apply_maps_every_declared_rejection(wire_code):
+    adapter, _runtime = control(
+        [{"status": "REQUEST_REJECTED", "code": wire_code}],
+        operations=CONTROL_INTENT_OPERATIONS,
+        control_intent_enabled=True,
+    )
+    binding = adapter.capture_intent_binding()
+    reply = adapter.apply_intent(
+        binding=binding,
+        request_digest=control_request_digest(),
+        cause_id="c1",
+        mode="STOP_NEW",
+        scope_kind="account",
+        scope_value="",
+        latch_id="latch-a",
+    )
+    assert (reply.outcome, reply.code) == ("REQUEST_DENIED", wire_code)
+
+
+@pytest.mark.parametrize(
+    "wire_reply",
+    [
+        {"status": "UNKNOWN", "cause_id": "c1"},
+        RuntimeError("uncertain transport result"),
+    ],
+)
+def test_control_intent_apply_keeps_unknown_unknown_without_retry(wire_reply):
+    adapter, runtime = control(
+        [wire_reply],
+        operations=CONTROL_INTENT_OPERATIONS,
+        control_intent_enabled=True,
+    )
+    binding = adapter.capture_intent_binding()
+    reply = adapter.apply_intent(
+        binding=binding,
+        request_digest=control_request_digest(),
+        cause_id="c1",
+        mode="STOP_NEW",
+        scope_kind="account",
+        scope_value="",
+        latch_id="latch-a",
+    )
+    assert reply.outcome == "UNKNOWN"
+    assert [call[0] for call in runtime.calls] == [
+        "direct.control.identity",
+        "direct.control.identity",
+        CONTROL_INTENT_OPERATION,
+    ]
+
+
+@pytest.mark.parametrize(
+    "wire_reply,outcome,code",
+    [
+        (
+            {"status": "REQUEST_REJECTED", "code": "CONTROL_INTENT_HISTORY_GAP"},
+            "REQUEST_DENIED",
+            "CONTROL_INTENT_HISTORY_GAP",
+        ),
+        (
+            {"status": "REQUEST_REJECTED", "code": "UNDECLARED_ERROR"},
+            "UNKNOWN",
+            "INVALID_OR_UNAVAILABLE_REPLY",
+        ),
+        (
+            {"status": "OBSERVED", "cause_id": "c1", "version": True, "active": True},
+            "UNKNOWN",
+            "INVALID_OR_UNAVAILABLE_REPLY",
+        ),
+        (
+            {"status": "UNKNOWN"},
+            "UNKNOWN",
+            "INVALID_OR_UNAVAILABLE_REPLY",
+        ),
+        (
+            {"status": "UNKNOWN", "cause_id": "other"},
+            "UNKNOWN",
+            "INVALID_OR_UNAVAILABLE_REPLY",
+        ),
+    ],
+)
+def test_control_intent_apply_maps_only_declared_finite_replies(wire_reply, outcome, code):
+    adapter, _runtime = control(
+        [wire_reply],
+        operations=CONTROL_INTENT_OPERATIONS,
+        control_intent_enabled=True,
+    )
+    binding = adapter.capture_intent_binding()
+    reply = adapter.apply_intent(
+        binding=binding,
+        request_digest=control_request_digest(),
+        cause_id="c1",
+        mode="STOP_NEW",
+        scope_kind="account",
+        scope_value="",
+        latch_id="latch-a",
+    )
+    assert (reply.outcome, reply.code) == (outcome, code)
 
 
 def test_control_apply_and_status_reuse_the_original_owner_binding():
