@@ -1261,6 +1261,206 @@ def _r05_observation_reference(
     return "sha256:" + hashlib.sha256(payload).hexdigest()
 
 
+def _format_portfolio_decimal(value: Any, *, ratio: bool = False) -> str | None:
+    """Format an exact finite Decimal as a canonical string without floats or -0."""
+    from decimal import Decimal, ROUND_HALF_UP
+
+    if value is None or type(value) is not Decimal or not value.is_finite():
+        return None
+    if ratio:
+        value = value.quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+    if value == 0:
+        return "0"
+    text = format(value, "f")
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return "0" if text in {"", "-0"} else text
+
+
+def build_risk_portfolio_summary(
+    facts: Any,
+    *,
+    instruments: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Build a bounded, exact-Decimal read-only portfolio exposure summary from Risk facts.
+
+    Uses the exact same AccountSnapshot, InstrumentFacts (multiplier), and PriceFact
+    objects consumed by pre-trade controls. Any missing multiplier, missing/unverified
+    price, incomplete snapshot, or non-positive equity fails closed to ``None`` with
+    explicit ``missing_reasons`` rather than guessing zero.
+    """
+    from decimal import Decimal
+
+    unavailable = {
+        "valuation_status": "UNAVAILABLE",
+        "snapshot_complete": False,
+        "currency": None,
+        "as_of_ns": None,
+        "equity": None,
+        "balance": None,
+        "available": None,
+        "margin": None,
+        "margin_ratio": None,
+        "gross_notional": None,
+        "priced_gross_notional": None,
+        "net_notional": None,
+        "long_notional": None,
+        "short_notional": None,
+        "gross_leverage": None,
+        "net_leverage": None,
+        "missing_reasons": ["ACCOUNT_SNAPSHOT_UNAVAILABLE"],
+        "positions": [],
+    }
+    if facts is None or not callable(getattr(facts, "account_snapshot", None)):
+        return unavailable
+    snapshot = facts.account_snapshot()
+    if snapshot is None:
+        return unavailable
+
+    reasons: list[str] = []
+
+    def add_reason(code: str) -> None:
+        if code not in reasons:
+            reasons.append(code)
+
+    snapshot_complete = bool(getattr(snapshot, "complete", False))
+    if not snapshot_complete:
+        add_reason("ACCOUNT_SNAPSHOT_INCOMPLETE")
+
+    raw_positions = getattr(snapshot, "positions", None) or {}
+    positions_out: list[dict[str, Any]] = []
+    priced_gross = Decimal(0)
+    priced_long = Decimal(0)
+    priced_short = Decimal(0)
+    all_priced = True
+
+    for (instrument_id, side), (today_qty, yesterday_qty) in sorted(raw_positions.items()):
+        if len(positions_out) >= 256:
+            add_reason("POSITIONS_TRUNCATED")
+            all_priced = False
+            break
+        total_qty = today_qty + yesterday_qty
+        if total_qty == 0:
+            continue
+        binding = instruments.get(instrument_id)
+        inst_key = getattr(binding, "key", None) if binding is not None else None
+        inst_facts = (
+            facts.instrument_facts(inst_key)
+            if inst_key is not None and callable(getattr(facts, "instrument_facts", None))
+            else None
+        )
+        multiplier = (
+            getattr(inst_facts, "multiplier", None)
+            if inst_facts is not None
+            else (getattr(binding, "multiplier", None) if binding is not None else None)
+        )
+        price_fact = (
+            facts.reference_price(inst_key)
+            if inst_key is not None and callable(getattr(facts, "reference_price", None))
+            else None
+        )
+        last_price = getattr(price_fact, "last_price", None) if price_fact is not None else None
+        price_quality_ok = (
+            getattr(price_fact, "quality_ok", None) if price_fact is not None else None
+        )
+
+        notional: Decimal | None = None
+        if type(multiplier) is not Decimal or not multiplier.is_finite() or multiplier <= 0:
+            pos_status = "NO_MULTIPLIER"
+            multiplier = None
+            all_priced = False
+            add_reason("MULTIPLIER_MISSING")
+        elif type(last_price) is not Decimal or not last_price.is_finite() or last_price <= 0:
+            pos_status = "NO_PRICE"
+            last_price = None
+            all_priced = False
+            add_reason("PRICE_MISSING")
+        elif price_quality_ok is not True:
+            pos_status = "STALE_OR_BAD_PRICE"
+            all_priced = False
+            add_reason("PRICE_QUALITY_UNVERIFIED")
+        else:
+            pos_status = "PRICED"
+            notional = abs(total_qty) * multiplier * last_price
+            priced_gross += notional
+            if side == "LONG":
+                priced_long += notional
+            else:
+                priced_short += notional
+
+        positions_out.append(
+            {
+                "instrument_id": instrument_id,
+                "side": side,
+                "quantity": _format_portfolio_decimal(total_qty) or "0",
+                "today_quantity": _format_portfolio_decimal(today_qty) or "0",
+                "yesterday_quantity": _format_portfolio_decimal(yesterday_qty) or "0",
+                "multiplier": _format_portfolio_decimal(multiplier),
+                "last_price": _format_portfolio_decimal(last_price),
+                "price_quality_ok": price_quality_ok if type(price_quality_ok) is bool else None,
+                "notional": _format_portfolio_decimal(notional),
+                "valuation_status": pos_status,
+            }
+        )
+
+    gross_notional: Decimal | None = priced_gross if all_priced else None
+    long_notional: Decimal | None = priced_long if all_priced else None
+    short_notional: Decimal | None = priced_short if all_priced else None
+    net_notional: Decimal | None = (priced_long - priced_short) if all_priced else None
+
+    equity = getattr(snapshot, "equity", None)
+    balance = getattr(snapshot, "balance", None)
+    available = getattr(snapshot, "available", None)
+    margin = getattr(snapshot, "margin", None)
+    currency = getattr(snapshot, "currency", None)
+    as_of_ns = getattr(snapshot, "as_of_ns", None)
+
+    equity_positive = type(equity) is Decimal and equity.is_finite() and equity > 0
+    if not equity_positive:
+        add_reason("EQUITY_UNAVAILABLE")
+
+    gross_leverage: Decimal | None = None
+    net_leverage: Decimal | None = None
+    margin_ratio: Decimal | None = None
+    if equity_positive:
+        if gross_notional is not None:
+            gross_leverage = gross_notional / equity
+        if net_notional is not None:
+            net_leverage = net_notional / equity
+        if type(margin) is Decimal and margin.is_finite() and margin >= 0:
+            margin_ratio = margin / equity
+        else:
+            add_reason("MARGIN_UNAVAILABLE")
+    elif margin is None:
+        add_reason("MARGIN_UNAVAILABLE")
+
+    valuation_status = (
+        "COMPLETE"
+        if (snapshot_complete and equity_positive and all_priced)
+        else "PARTIAL"
+    )
+    return {
+        "valuation_status": valuation_status,
+        "snapshot_complete": snapshot_complete,
+        "currency": currency if type(currency) is str and currency else None,
+        "as_of_ns": as_of_ns if type(as_of_ns) is int and as_of_ns >= 0 else None,
+        "equity": _format_portfolio_decimal(equity),
+        "balance": _format_portfolio_decimal(balance),
+        "available": _format_portfolio_decimal(available),
+        "margin": _format_portfolio_decimal(margin),
+        "margin_ratio": _format_portfolio_decimal(margin_ratio, ratio=True),
+        "gross_notional": _format_portfolio_decimal(gross_notional),
+        "priced_gross_notional": _format_portfolio_decimal(priced_gross),
+        "net_notional": _format_portfolio_decimal(net_notional),
+        "long_notional": _format_portfolio_decimal(long_notional),
+        "short_notional": _format_portfolio_decimal(short_notional),
+        "gross_leverage": _format_portfolio_decimal(gross_leverage, ratio=True),
+        "net_leverage": _format_portfolio_decimal(net_leverage, ratio=True),
+        "missing_reasons": reasons[:32],
+        "positions": positions_out,
+    }
+
+
 def _r05_cut_matches_current_gateway(
     progress: Any,
     cut: Any,
@@ -2475,6 +2675,11 @@ class RiskServiceHost:
         """Return ``(ready, gateway_reference, observation_reference)`` from one verified check."""
         return self._check_order_cut_admission_with_proof(degrade_on_failure=False)
 
+    def _observe_portfolio_summary(self) -> dict[str, Any]:
+        """Return a read-only, exact-Decimal exposure & leverage snapshot from Risk facts."""
+        instruments = getattr(self.config, "instruments", None) or {}
+        return build_risk_portfolio_summary(self.facts, instruments=instruments)
+
     def _check_order_cut_admission(self, *, degrade_on_failure: bool) -> bool:
         settings = getattr(self.config, "account_facts_observation", None)
         if settings is None or getattr(settings, "order_cut_enabled", False) is not True:
@@ -3576,6 +3781,7 @@ class RiskServiceHost:
             order_cut_admission_ready=self._order_cut_admission_ready,
             order_cut_admission_observe=self._observe_order_cut_admission,
             order_cut_admission_proof=self._observe_order_cut_admission_proof,
+            portfolio_summary_observe=self._observe_portfolio_summary,
         )
         self._check_cleanup_ready()
         component = self.component

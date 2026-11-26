@@ -179,6 +179,7 @@ class RiskOrderService:
         order_cut_admission_ready: Callable[[], bool] | None = None,
         order_cut_admission_observe: Callable[[], bool] | None = None,
         order_cut_admission_proof: Callable[[], tuple[bool, str | None, str | None]] | None = None,
+        portfolio_summary_observe: Callable[[], Mapping[str, Any]] | None = None,
     ) -> None:
         if not all(_ref(x) for x in (account_scope, route, execution_domain_ref)):
             raise ValueError("RISK_ORDER_SERVICE_INVALID")
@@ -191,6 +192,7 @@ class RiskOrderService:
             or (order_cut_admission_ready is not None and not callable(order_cut_admission_ready))
             or (order_cut_admission_observe is not None and not callable(order_cut_admission_observe))
             or (order_cut_admission_proof is not None and not callable(order_cut_admission_proof))
+            or (portfolio_summary_observe is not None and not callable(portfolio_summary_observe))
             or (order_cut_required and not callable(order_cut_admission_ready))
         ):
             raise ValueError("RISK_ORDER_SERVICE_INVALID")
@@ -212,6 +214,7 @@ class RiskOrderService:
         self._order_cut_admission_ready = order_cut_admission_ready
         self._order_cut_admission_observe = order_cut_admission_observe
         self._order_cut_admission_proof = order_cut_admission_proof
+        self._portfolio_summary_observe = portfolio_summary_observe
         # Refusal counts since this process started, per represented strategy (risk.status).
         self._refusals: dict[str, Counter] = {}
         # Admin/operator refusals since this process started, per finite code.
@@ -937,14 +940,17 @@ class RiskOrderService:
         }[operation]
         if operation == "risk.admin.status":
             fields = set(arguments)
-            fields_valid = fields in (set(), {"order_cut_admission"}, {"order_cut_admission", "order_cut_proof"})
+            allowed_status_fields = {"order_cut_admission", "order_cut_proof", "portfolio_summary"}
+            fields_valid = fields <= allowed_status_fields
             if fields_valid and "order_cut_admission" in fields:
                 fields_valid = type(arguments["order_cut_admission"]) is bool
             if fields_valid and "order_cut_proof" in fields:
                 fields_valid = (
                     type(arguments["order_cut_proof"]) is bool
-                    and arguments["order_cut_admission"] is True
+                    and arguments.get("order_cut_admission") is True
                 )
+            if fields_valid and "portfolio_summary" in fields:
+                fields_valid = type(arguments["portfolio_summary"]) is bool
         elif operation == "risk.cancel.status":
             fields_valid = expected <= set(arguments) <= expected | {"after", "limit"}
         else:
@@ -1010,6 +1016,36 @@ class RiskOrderService:
                             "checked": checked,
                             "ready": admission_ready,
                         }
+                if arguments.get("portfolio_summary") is True:
+                    portfolio_payload: dict[str, Any] = {
+                        "valuation_status": "UNAVAILABLE",
+                        "snapshot_complete": False,
+                        "currency": None,
+                        "as_of_ns": None,
+                        "equity": None,
+                        "balance": None,
+                        "available": None,
+                        "margin": None,
+                        "margin_ratio": None,
+                        "gross_notional": None,
+                        "priced_gross_notional": None,
+                        "net_notional": None,
+                        "long_notional": None,
+                        "short_notional": None,
+                        "gross_leverage": None,
+                        "net_leverage": None,
+                        "missing_reasons": ["PORTFOLIO_SUMMARY_UNAVAILABLE"],
+                        "positions": [],
+                    }
+                    portfolio_callback = self._portfolio_summary_observe
+                    if callable(portfolio_callback):
+                        try:
+                            observed_portfolio = portfolio_callback()
+                            if isinstance(observed_portfolio, Mapping):
+                                portfolio_payload = dict(observed_portfolio)
+                        except Exception:
+                            pass
+                    summary["portfolio_summary"] = portfolio_payload
                 # Process-local operator refusal counts; never order data.
                 summary["operator_refusal_counts"] = {
                     code: int(count) for code, count in sorted(self._operator_refusals.items())
