@@ -18,23 +18,49 @@ import json
 import logging
 import math
 import os
+import re
 import stat
 import time
-from dataclasses import fields
+from collections.abc import Mapping
+from dataclasses import dataclass, fields
+from dataclasses import field as dataclass_field
 from pathlib import Path
+from types import MappingProxyType
 
 from bt_api_base.account_protocol import AccountKey
 from bt_api_base.market_protocol import MarketSubscriptionKey
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
-from bt_api_py.ctp_gateway_operator_profile import CtpGatewayTrustedResources, create_ctp_gateway_profile_factory
+
+from bt_api_py.ctp_gateway_operator_profile import (
+    CtpGatewayTrustedResources,
+    GatewayOperatorProfileFactory,
+    create_ctp_gateway_profile_factory,
+)
 from bt_api_py.ctp_gateway_trading import CtpGatewayMarketSettings, CtpGatewayTradingSettings
 from bt_api_py.gateway_direct_service import GatewayDirectGrant
+from bt_api_py.gateway_operator import GatewayOperatorDeployment, GatewayOperatorDeploymentError
 from bt_api_py.service_host import TrustedServiceAuthority
 from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
 
 _LOG = logging.getLogger(__name__)
 _RESOURCE_ENV = "BT_API_CTP_GATEWAY_RESOURCES_FILE"
 _MAX_BYTES = 262_144
+_SIMNOW_MARKET_OBSERVE_CTP_PROFILE = "set1_group1_vpn"
+_SIMNOW_MARKET_OBSERVE_FRONT_PAIR = (
+    "tcp://182.254.243.31:30001",
+    "tcp://182.254.243.31:30011",
+)
+_SIMNOW_MARKET_OBSERVE_SOURCE_REF = "ctp-simnow-profile-set1-group1-vpn-market-v1"
+_SIMNOW_MARKET_OBSERVE_ENTITLEMENT_REF = "ctp-simnow-profile-set1-group1-vpn-tick-v1"
+_SIMNOW_MARKET_OPERATIONS = frozenset({
+    "market.subscribe",
+    "market.unsubscribe",
+    "market.snapshot",
+    "market.head",
+    "market.read_after",
+})
+_SIMNOW_MARKET_VENUES = frozenset({"SHFE", "DCE", "CZCE", "CFFEX", "INE", "GFEX"})
+_SIMNOW_NATIVE_SYMBOL = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 class CtpLocalProfileError(ValueError):
@@ -43,6 +69,43 @@ class CtpLocalProfileError(ValueError):
 
 def _invalid():
     raise CtpLocalProfileError("CTP_LOCAL_RESOURCES_INVALID") from None
+
+
+@dataclass(frozen=True, slots=True)
+class CtpSimNowMarketObserveResources:
+    """The small protected resource projection needed by the market-only role."""
+
+    authority: TrustedServiceAuthority = dataclass_field(repr=False)
+    registry_path: str = dataclass_field(repr=False)
+    broker_id: str = dataclass_field(repr=False)
+    user_id: str = dataclass_field(repr=False)
+    password: str = dataclass_field(repr=False)
+    key_universe: tuple[MarketSubscriptionKey, ...] = dataclass_field(repr=False)
+    principal_allowed_keys: Mapping[str, frozenset[MarketSubscriptionKey]] = dataclass_field(repr=False)
+
+    def __post_init__(self) -> None:
+        if (type(self.authority) is not TrustedServiceAuthority
+                or type(self.registry_path) is not str or not self.registry_path
+                or any(type(value) is not str or not value
+                       for value in (self.broker_id, self.user_id, self.password))
+                or type(self.key_universe) is not tuple or not self.key_universe
+                or len(self.key_universe) > 1_024
+                or any(type(key) is not MarketSubscriptionKey for key in self.key_universe)
+                or len(set(self.key_universe)) != len(self.key_universe)
+                or not isinstance(self.principal_allowed_keys, Mapping)):
+            _invalid()
+        allowed = dict(self.principal_allowed_keys)
+        if set(allowed) != set(self.authority.principals.values()):
+            _invalid()
+        universe = frozenset(self.key_universe)
+        if any(type(principal) is not str or not keys or not frozenset(keys) <= universe
+               for principal, keys in allowed.items()):
+            _invalid()
+        object.__setattr__(
+            self,
+            "principal_allowed_keys",
+            MappingProxyType({principal: frozenset(keys) for principal, keys in allowed.items()}),
+        )
 
 
 def _mapping(value, keys):
@@ -185,6 +248,245 @@ def load_local_ctp_resources(config):
 def load_simnow_trading_resources(config):
     """Resolve the same protected resources with SimNow-only native writes."""
     return _load_resources(config, trading=True)
+
+
+def _require_simnow_market_observe_config(config) -> None:
+    """Accept only the standalone Gateway market-hub service role."""
+    from bt_api_py.service_config import ServiceConfig
+
+    if (type(config) is not ServiceConfig or set(config.components) != {"gateway"}
+            or config.clients):
+        _invalid()
+    gateway = config.components.get("gateway")
+    if not isinstance(gateway, Mapping):
+        _invalid()
+    settings = gateway.get("settings")
+    if not isinstance(settings, Mapping):
+        _invalid()
+    options = settings.get("options")
+    ports = settings.get("bind_ports")
+    if (not isinstance(options, Mapping) or set(options) != {"role"}
+            or options.get("role") != "market_hub"
+            or type(ports) not in (tuple, list)
+            or tuple(ports) != ("service.market_source",)):
+        _invalid()
+    if type(settings.get("instance_id")) is not str or not settings["instance_id"]:
+        _invalid()
+
+
+def _simnow_market_observe_key(key) -> bool:
+    if type(key) is not MarketSubscriptionKey:
+        return False
+    instrument = key.instrument
+    return (
+        key.source_ref == _SIMNOW_MARKET_OBSERVE_SOURCE_REF
+        and key.entitlement_ref == _SIMNOW_MARKET_OBSERVE_ENTITLEMENT_REF
+        and key.channel == "tick"
+        and key.depth is None
+        and key.timeframe is None
+        and instrument.provider == "ctp"
+        and instrument.environment == "demo"
+        and instrument.product_type == "future"
+        and instrument.venue in _SIMNOW_MARKET_VENUES
+        and instrument.instrument_id == instrument.native_symbol
+        and _SIMNOW_NATIVE_SYMBOL.fullmatch(instrument.native_symbol) is not None
+    )
+
+
+def load_simnow_market_observe_resources(config) -> CtpSimNowMarketObserveResources:
+    """Load only the protected authority, finite market ACL and three MD credentials."""
+    try:
+        _require_simnow_market_observe_config(config)
+        raw = _protected_json(os.environ.get(_RESOURCE_ENV))
+        if (type(raw) is not dict or type(raw.get("schema_version")) is not int
+                or raw["schema_version"] != 1
+                or type(raw.get("clients")) is not list or not 1 <= len(raw["clients"]) <= 1_024
+                or type(raw.get("credentials")) is not dict):
+            _invalid()
+
+        # This entrypoint intentionally consumes only these three fields from
+        # the shared protected credential object. TD/Auth/front settings in
+        # that object never select the market front or construct a TD path.
+        credentials = raw["credentials"]
+        broker_id = _string(credentials.get("broker_id"))
+        user_id = _string(credentials.get("user_id"))
+        password = _string(credentials.get("password"))
+        registry_path = _string(raw.get("registry_path"))
+
+        authority_raw = _mapping(raw.get("authority"), (
+            "identity", "scope", "scope_ref", "scope_version", "security_ref", "security_version",
+            "registration_policy_ref", "registration_policy_version", "service_requirements_ref",
+            "service_requirements_version", "curve_public_key", "curve_secret_key",
+        ))
+        authority_identity = _identity(authority_raw["identity"])
+        authority_scope = _scope(authority_raw["scope"])
+        if (authority_identity.role is not WireRole.SERVICE or authority_identity.delegate_ref is not None
+                or authority_scope.account_ref is not None or authority_scope.account_refs
+                or authority_scope.strategy_ref is not None or authority_scope.run_id is not None
+                or authority_scope.manual_book_ref is not None or authority_scope.portfolio_ref is not None
+                or authority_scope.group_id is not None or authority_scope.leg_id is not None):
+            _invalid()
+        public_key = _curve(authority_raw["curve_public_key"])
+        secret_key = _curve(authority_raw["curve_secret_key"])
+        import zmq
+
+        if zmq.curve_public(secret_key) != public_key:
+            _invalid()
+
+        service_settings = config.components["gateway"]["settings"]
+        principal_keys = {}
+        grants = {}
+        market_client_principals = set()
+        for client in raw["clients"]:
+            if type(client) is not dict or frozenset(client) not in {
+                frozenset({"identity", "curve_public_key", "resources"}),
+                frozenset({"identity", "curve_public_key", "resources", "symbols"}),
+            }:
+                _invalid()
+            identity = _identity(client["identity"])
+            client_public = _curve(client["curve_public_key"])
+            if (identity.role is not WireRole.STRATEGY_CLIENT or identity.delegate_ref is not None
+                    or identity.principal_ref in grants or client_public in principal_keys
+                    or type(client["resources"]) is not list or len(client["resources"]) != 1):
+                _invalid()
+            resource = _mapping(client["resources"][0],
+                                ("instance_id", "port", "scope_ref", "scope", "operations"))
+            scope = _scope(resource["scope"])
+            operations = _string_set(resource["operations"])
+            if (resource["instance_id"] != service_settings["instance_id"]
+                    or resource["port"] != "service.market_source"
+                    or resource["scope_ref"] != config.scope_ref
+                    or operations != _SIMNOW_MARKET_OPERATIONS
+                    or scope.execution_domain_ref != authority_scope.execution_domain_ref
+                    or scope.account_ref is None or scope.account_refs or scope.strategy_ref is None
+                    or scope.run_id is not None or scope.manual_book_ref is not None
+                    or scope.portfolio_ref is not None or scope.group_id is not None
+                    or scope.leg_id is not None):
+                _invalid()
+            grant = ResourceGrant(resource["instance_id"], resource["port"], resource["scope_ref"],
+                                  scope, operations)
+            principal_keys[client_public] = identity.principal_ref
+            grants[identity.principal_ref] = (PrincipalGrant(identity, (grant,)),)
+            market_client_principals.add(identity.principal_ref)
+        if (not principal_keys or len(principal_keys) != len(raw["clients"])
+                or len(grants) != len(raw["clients"])):
+            _invalid()
+
+        authority = TrustedServiceAuthority(
+            identity=authority_identity,
+            scope=authority_scope,
+            scope_ref=_string(authority_raw["scope_ref"]),
+            scope_version=_string(authority_raw["scope_version"]),
+            security_ref=_string(authority_raw["security_ref"]),
+            security_version=_string(authority_raw["security_version"]),
+            registration_policy_ref=_string(authority_raw["registration_policy_ref"]),
+            registration_policy_version=_string(authority_raw["registration_policy_version"]),
+            service_requirements_ref=_string(authority_raw["service_requirements_ref"]),
+            service_requirements_version=_string(authority_raw["service_requirements_version"]),
+            curve_public_key=public_key,
+            curve_secret_key=secret_key,
+            principals=principal_keys,
+            grants=grants,
+        )
+        market = _mapping(raw.get("market"), ("subscriptions", "principal_allowed_indices"))
+        if (type(market["subscriptions"]) is not list
+                or not 1 <= len(market["subscriptions"]) <= 1_024
+                or type(market["principal_allowed_indices"]) is not dict):
+            _invalid()
+        keys = tuple(MarketSubscriptionKey.from_dict(item) for item in market["subscriptions"])
+        if (len(set(keys)) != len(keys) or any(not _simnow_market_observe_key(key) for key in keys)):
+            _invalid()
+        allowed_indices = market["principal_allowed_indices"]
+        if set(allowed_indices) != market_client_principals:
+            _invalid()
+        allowed = {}
+        for principal, indices in allowed_indices.items():
+            if (type(indices) is not list or not indices or len(set(indices)) != len(indices)
+                    or any(type(index) is not int or not 0 <= index < len(keys) for index in indices)):
+                _invalid()
+            allowed[principal] = frozenset(keys[index] for index in indices)
+
+        return CtpSimNowMarketObserveResources(
+            authority=authority,
+            registry_path=registry_path,
+            broker_id=broker_id,
+            user_id=user_id,
+            password=password,
+            key_universe=keys,
+            principal_allowed_keys=allowed,
+        )
+    except CtpLocalProfileError:
+        raise
+    except Exception:
+        _invalid()
+
+
+def _reject_market_observe_component(component, _instance_id, _options, _scope):
+    del component, _instance_id, _options, _scope
+    raise GatewayOperatorDeploymentError("INVALID_DEPLOYMENT_CONFIG")
+
+
+def _simnow_market_observe_provider_factory(resources: CtpSimNowMarketObserveResources):
+    def create_provider():
+        from bt_api_ctp.ctp_env_selector import official_simnow_fronts
+        from bt_api_ctp.feeds.live_ctp_feed import CtpMarketStream
+        from bt_api_ctp.market_provider import CtpQuoteV2MarketProvider
+
+        try:
+            fronts = official_simnow_fronts(_SIMNOW_MARKET_OBSERVE_CTP_PROFILE)
+        except Exception:
+            _invalid()
+        if type(fronts) is not tuple or fronts != _SIMNOW_MARKET_OBSERVE_FRONT_PAIR:
+            _invalid()
+        td_front, md_front = fronts
+
+        def stream_factory(key, quote_queue):
+            if type(key) is not MarketSubscriptionKey or key not in resources.key_universe:
+                _invalid()
+            return CtpMarketStream(
+                data_queue=quote_queue,
+                broker_id=resources.broker_id,
+                user_id=resources.user_id,
+                password=resources.password,
+                td_front=td_front,
+                md_front=md_front,
+                ctp_env_profile=_SIMNOW_MARKET_OBSERVE_CTP_PROFILE,
+                require_ctp_profile=_SIMNOW_MARKET_OBSERVE_CTP_PROFILE,
+                auto_detect_fronts=False,
+                asset_type=key.instrument.product_type.upper(),
+                allow_zero_md_login_response=True,
+            )
+
+        return CtpQuoteV2MarketProvider(
+            stream_factory=stream_factory,
+            source_ref=_SIMNOW_MARKET_OBSERVE_SOURCE_REF,
+            entitlement_ref=_SIMNOW_MARKET_OBSERVE_ENTITLEMENT_REF,
+            queue_capacity=4_096,
+            connect_timeout_seconds=30.0,
+            stop_timeout_seconds=5.0,
+        )
+
+    return create_provider
+
+
+def create_simnow_market_observe_deployment(config):
+    """Compose only the market-hub role from the protected market resources."""
+    resources = load_simnow_market_observe_resources(config)
+    from bt_api_py.gateway_operator_market import GatewayMarketBinding
+
+    binding = GatewayMarketBinding(
+        key_universe=resources.key_universe,
+        principal_allowed_keys=resources.principal_allowed_keys,
+        provider_factory=_simnow_market_observe_provider_factory(resources),
+        max_provider_events_per_maintain=32,
+    )
+    return GatewayOperatorDeployment(
+        config,
+        resources.authority,
+        resources.registry_path,
+        resource_provider=_reject_market_observe_component,
+        market_binding=binding,
+    )
 
 
 def _return_settings(value):
@@ -1212,3 +1514,8 @@ def _load_resources(config, *, trading):
 profile_factory = create_ctp_gateway_profile_factory("ctp-local-readonly", resource_loader=load_local_ctp_resources)
 simnow_trading_profile_factory = create_ctp_gateway_profile_factory(
     "ctp-simnow-trading", resource_loader=load_simnow_trading_resources)
+simnow_market_observe_profile_factory = GatewayOperatorProfileFactory(
+    "ctp-simnow-market-observe",
+    "market_hub",
+    create_simnow_market_observe_deployment,
+)
