@@ -76,6 +76,55 @@ def _binding(tmp_path):
     )
 
 
+class _RoleDeployment(GatewayOperatorDeployment):
+    def __init__(self, role, *, initial_state="new"):
+        self._gateway_role = role
+        self._state = initial_state
+        self.started = False
+        self.closed = False
+
+    @property
+    def state(self):
+        return self._state
+
+    @property
+    def healthy(self):
+        return True
+
+    @property
+    def readiness_diagnostics(self):
+        return {"state": "not_observed", "reason": None, "last_failure": None}
+
+    @property
+    def cleanup_status(self):
+        return {"unclaimed_provider_count": 0, "last_cleanup_code": None}
+
+    @property
+    def account_session_status(self):
+        return {
+            "state": "ready",
+            "session_generation": "g1",
+            "ready": True,
+            "fresh_for_seconds": 0.0,
+        }
+
+    @property
+    def cancel_only_status(self):
+        return None
+
+    def start(self):
+        self.started = True
+        self._state = "started"
+        return self
+
+    def serve_once(self, timeout_ms=0):
+        return False
+
+    def close(self):
+        self.closed = True
+        self._state = "closed"
+
+
 def test_trading_owner_is_a_registered_profile_role():
     profile = GatewayOperatorProfile("trading-profile", "trading_owner", lambda: None)
     assert GatewayOperatorProfileRegistry((profile,)).resolve("trading-profile") is profile
@@ -200,26 +249,46 @@ def test_partial_construction_exception_keeps_exact_resource(tmp_path):
 
 @pytest.mark.parametrize(
     "profile_role,candidate_role",
-    [("trading_owner", "market_hub"), ("market_hub", "trading_owner")],
+    [
+        ("market_hub", "account_session_worker"),
+        ("market_hub", "trading_owner"),
+        ("account_session_worker", "market_hub"),
+        ("account_session_worker", "trading_owner"),
+        ("trading_owner", "market_hub"),
+        ("trading_owner", "account_session_worker"),
+    ],
 )
 def test_profile_role_mismatch_rejected_before_start(profile_role, candidate_role):
-    class WrongRole(GatewayOperatorDeployment):
-        def __init__(self):
-            self._gateway_role = candidate_role
-            self.started = False
-
-        @property
-        def state(self):
-            return "new"
-
-        def start(self):
-            self.started = True
-
-    candidate = WrongRole()
+    candidate = _RoleDeployment(candidate_role)
     app = GatewayOperatorApplication(GatewayOperatorProfile("p", profile_role, lambda: candidate))
     with pytest.raises(GatewayOperatorApplicationError, match="APPLICATION_PROFILE_ROLE_MISMATCH"):
         app.start(timeout_seconds=5)
     assert candidate.started is False
+    assert candidate.closed is False
+
+
+@pytest.mark.parametrize("role", ["market_hub", "account_session_worker", "trading_owner"])
+def test_matching_profile_role_starts_and_stops(role):
+    candidate = _RoleDeployment(role)
+    app = GatewayOperatorApplication(GatewayOperatorProfile("p", role, lambda: candidate))
+
+    assert app.start(timeout_seconds=5)["state"] == "running"
+    assert candidate.started is True
+    assert app.stop(timeout_seconds=5)["state"] == "closed"
+    assert candidate.closed is True
+
+
+def test_profile_role_mismatch_closes_candidate_with_existing_resources():
+    candidate = _RoleDeployment("account_session_worker", initial_state="started")
+    app = GatewayOperatorApplication(
+        GatewayOperatorProfile("p", "market_hub", lambda: candidate)
+    )
+
+    with pytest.raises(GatewayOperatorApplicationError, match="APPLICATION_PROFILE_ROLE_MISMATCH"):
+        app.start(timeout_seconds=5)
+
+    assert candidate.started is False
+    assert candidate.closed is True
 
 
 @pytest.mark.parametrize("health", [None, "error"])

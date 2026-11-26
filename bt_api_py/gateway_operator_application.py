@@ -562,9 +562,7 @@ class GatewayOperatorApplication:
             deployment = candidate
             self._deployment = deployment
             candidate_role = getattr(candidate, "gateway_role", None)
-            if (self._profile.role == "trading_owner" or candidate_role == "trading_owner") and (
-                candidate_role != self._profile.role
-            ):
+            if candidate_role != self._profile.role:
                 # A fresh Host has acquired no resources and has no owner yet;
                 # started or partially started candidates must be closed here.
                 if candidate.state == "new":
