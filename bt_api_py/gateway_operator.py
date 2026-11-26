@@ -542,6 +542,12 @@ class GatewayOperatorDeployment:
         self._check_owner_thread()
         return self._host.serve_once(timeout_ms)
 
+    def serve_burst(self, timeout_ms: int = 0, *, max_requests: int = 16) -> int:
+        """Serve up to ``max_requests`` ready requests in one bounded maintenance cycle."""
+
+        self._check_owner_thread()
+        return self._host.serve_burst(timeout_ms, max_requests=max_requests)
+
     def close(self) -> None:
         """Close the Host on its owner thread, retaining normal Host uncertainty."""
 

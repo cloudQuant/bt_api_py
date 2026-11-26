@@ -613,7 +613,10 @@ class GatewayOperatorApplication:
                 if self._control_only:
                     continue
                 try:
-                    deployment.serve_once(self._poll_interval_ms)
+                    if type(deployment) is GatewayOperatorDeployment:
+                        deployment.serve_burst(self._poll_interval_ms, max_requests=16)
+                    else:
+                        deployment.serve_once(self._poll_interval_ms)
                     self._refresh_deployment_status(state="running")
                 except BaseException as exc:
                     error_code = _typed_error_code(exc, "APPLICATION_SERVE_FAILED")

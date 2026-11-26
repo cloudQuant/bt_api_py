@@ -1759,6 +1759,96 @@ class ServiceHost:
         except Exception:
             raise ServiceHostError("SERVE_FAILED") from None
 
+    def serve_burst(
+        self,
+        timeout_ms: int = 0,
+        *,
+        max_requests: int = 16,
+        max_burst_seconds: float = 0.05,
+    ) -> int:
+        """Serve up to ``max_requests`` ready authenticated requests on the owner thread.
+
+        Runs the full pre-poll and post-poll readiness/maintenance cycle around a
+        bounded nonblocking drain so busy multi-client hosts (e.g. Gateway with
+        dozens of active sessions) do not repeat full maintenance sweeps between
+        every queued RPC while keeping every per-request Registry authorization,
+        epoch, and lease check intact.
+        """
+
+        self._check_owner_thread()
+        self._require_no_execution_submission()
+        if self._state != "started" or self._server is None:
+            raise ServiceHostError("HOST_NOT_STARTED")
+        if type(timeout_ms) is not int or timeout_ms < 0:
+            raise ServiceHostError("INVALID_TIMEOUT")
+        if type(max_requests) is not int or not 1 <= max_requests <= 256:
+            raise ServiceHostError("INVALID_TIMEOUT")
+        if (
+            type(max_burst_seconds) not in (int, float)
+            or not isfinite(max_burst_seconds)
+            or not 0 < float(max_burst_seconds) <= 1.0
+        ):
+            raise ServiceHostError("INVALID_TIMEOUT")
+        try:
+            if self._upstream is not None:
+                try:
+                    self.maintain()
+                except ServiceHostError as exc:
+                    if exc.code != "UPSTREAM_MAINTENANCE_FAILED":
+                        raise
+            self._refresh_registry_readiness()
+            try:
+                delay = self.next_maintenance_delay()
+            except Exception:
+                self._host_delay_faulted = True
+                self._refresh_registry_readiness()
+                raise
+            bounded_timeout = timeout_ms
+            if delay is not None:
+                if type(delay) not in (int, float) or not isfinite(delay) or delay < 0:
+                    self._host_delay_faulted = True
+                    self._refresh_registry_readiness()
+                    bounded_timeout = 0
+                else:
+                    self._host_delay_faulted = False
+                    delay_ms = delay * 1000
+                    if isfinite(delay_ms):
+                        bounded_timeout = min(timeout_ms, max(0, floor(delay_ms)))
+            else:
+                self._host_delay_faulted = False
+            maintained = self._maintain_components()
+            self._maintain_atomic_monitors()
+            if maintained or self._trusted_atomic_monitors:
+                self._refresh_registry_readiness()
+            if self._trusted_atomic_monitors:
+                bounded_timeout = min(bounded_timeout, 1000)
+            served = 0
+            if self._server.serve_once(bounded_timeout):
+                served = 1
+                if max_requests > 1:
+                    burst_budget = float(max_burst_seconds)
+                    if delay is not None and type(delay) in (int, float) and isfinite(delay) and delay >= 0:
+                        burst_budget = min(burst_budget, float(delay))
+                    burst_deadline = time.monotonic() + burst_budget
+                    while (
+                        served < max_requests
+                        and self._state == "started"
+                        and self._server is not None
+                        and time.monotonic() < burst_deadline
+                    ):
+                        if not self._server.serve_once(0):
+                            break
+                        served += 1
+            single_market_hub = self._is_single_market_hub_host()
+            if not (single_market_hub and (served > 0 or timeout_ms == 0)):
+                self._maintain_components()
+            self._refresh_registry_readiness()
+            return served
+        except ServiceHostError:
+            raise
+        except Exception:
+            raise ServiceHostError("SERVE_FAILED") from None
+
     def _is_single_market_hub_host(self) -> bool:
         """Return true only for the validated, market-only built-in composition."""
 

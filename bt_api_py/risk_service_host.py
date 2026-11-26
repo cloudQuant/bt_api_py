@@ -3422,21 +3422,35 @@ class RiskServiceHost:
 
     # ------------------------------------------------------------------ loop
 
+    def _drain_service_requests(self, timeout_ms: int = 0, *, max_requests: int = 16) -> None:
+        """Serve up to ``max_requests`` ready inbound Risk RPCs on the owner thread."""
+        if self.stop_event.is_set() or self.service_host is None:
+            return
+        from bt_api_py.service_host import ServiceHost
+
+        if type(self.service_host) is ServiceHost:
+            self._call_lifecycle(
+                self.service_host.serve_burst, timeout_ms, max_requests=max_requests
+            )
+            self._check_cleanup_ready()
+            return
+        served = self._call_lifecycle(self.service_host.serve_once, timeout_ms)
+        self._check_cleanup_ready()
+        if served is True:
+            for _ in range(max_requests - 1):
+                if self.stop_event.is_set():
+                    break
+                if not self._call_lifecycle(self.service_host.serve_once, 0):
+                    break
+                self._check_cleanup_ready()
+
     def run_once(self) -> None:
         _require_supported_r04(self.config)
         self._check_owner()
         if self._lifecycle_in_progress:
             _fail("RISK_SERVICE_HOST_LIFECYCLE_IN_PROGRESS")
         config = self.config
-        served = self._call_lifecycle(self.service_host.serve_once, config.loop_timeout_ms)
-        self._check_cleanup_ready()
-        if served is True:
-            for _ in range(15):
-                if self.stop_event.is_set():
-                    break
-                if not self._call_lifecycle(self.service_host.serve_once, 0):
-                    break
-                self._check_cleanup_ready()
+        self._drain_service_requests(config.loop_timeout_ms, max_requests=16)
         try:
             _ = self._call_lifecycle(getattr, self.ledger, "fence")
         except Exception:
@@ -3478,6 +3492,14 @@ class RiskServiceHost:
                 deadlines[name] = deadline
         except (ArithmeticError, KeyError, TypeError, ValueError):
             _fail("RISK_SERVICE_POLL_DEADLINE_INVALID")
+        remaining_phases = len(deadlines)
+
+        def _interleave_after_phase() -> None:
+            nonlocal remaining_phases
+            remaining_phases -= 1
+            if remaining_phases > 0 and not self.stop_event.is_set():
+                self._drain_service_requests(0, max_requests=16)
+
         if "observation" in deadlines:
             self._reconnect_observer()
             self._check_cleanup_ready()
@@ -3486,18 +3508,22 @@ class RiskServiceHost:
             self._maintain_account_facts_runtime(now)
             self._check_cleanup_ready()
             self._next["observation"] = deadlines["observation"]
+            _interleave_after_phase()
         if "market" in deadlines:
             self._call_lifecycle(self.market.poll)
             self._check_cleanup_ready()
             self._next["market"] = deadlines["market"]
+            _interleave_after_phase()
         if "account" in deadlines:
             self._call_lifecycle(self.account.refresh)
             self._check_cleanup_ready()
             self._next["account"] = deadlines["account"]
+            _interleave_after_phase()
         if "financial" in deadlines:
             self._call_lifecycle(self.financial.refresh)
             self._check_cleanup_ready()
             self._next["financial"] = deadlines["financial"]
+            _interleave_after_phase()
         if 'account_facts' in deadlines:
             self._maintain_account_facts_runtime(now, allow_failure_replace=False)
             self._check_cleanup_ready()
@@ -3505,10 +3531,12 @@ class RiskServiceHost:
                 self._call_lifecycle(self._poll_account_facts)
                 self._check_cleanup_ready()
             self._next['account_facts'] = deadlines['account_facts']
+            _interleave_after_phase()
         if "maintain" in deadlines:
             self._call_lifecycle(self.engine.maintain)
             self._check_cleanup_ready()
             self._next["maintain"] = deadlines["maintain"]
+            _interleave_after_phase()
 
     def run(self, *, stop_file: Path | None = None) -> None:
         _require_supported_r04(self.config)
