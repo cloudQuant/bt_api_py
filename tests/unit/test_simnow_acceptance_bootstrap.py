@@ -34,6 +34,35 @@ def test_new_private_files_preserve_real_journal_and_issuer(tmp_path):
         sample(root)
 
 
+def test_risk_control_bundle_grants_identity_binding_read():
+    assert set(bootstrap._RISK_CONTROL_OPERATIONS) == {
+        "direct.control.identity",
+        "direct.control.apply",
+        "direct.control.status",
+        "direct.control.list",
+        "direct.control.cancel_scope",
+        "direct.control.cancel_scope_status",
+    }
+
+
+@pytest.mark.skipif(os.name != "posix", reason="bootstrap requires POSIX directory handles")
+def test_generated_risk_control_resource_uses_exact_binding_operations(tmp_path):
+    root = tmp_path.resolve() / "private"
+    root.mkdir(mode=0o700)
+    result = sample(root)
+    bundle = json.loads(result.gateway_resources.read_text())
+    risk_operators = [
+        operator
+        for operator in bundle["controls"]["operators"]
+        if operator["identity"]["actor_ref"] == "risk-control-actor"
+    ]
+    assert len(risk_operators) == 1
+    assert len(risk_operators[0]["resources"]) == 1
+    operations = risk_operators[0]["resources"][0]["operations"]
+    assert len(operations) == len(set(operations))
+    assert set(operations) == set(bootstrap._RISK_CONTROL_OPERATIONS)
+
+
 def test_existing_file_and_symlink_directory_rejected(tmp_path):
     root = tmp_path.resolve() / "private"
     root.mkdir(mode=0o700)

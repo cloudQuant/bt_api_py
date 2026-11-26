@@ -15,6 +15,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+_RISK_CONTROL_OPERATIONS = (
+    "direct.control.identity",
+    "direct.control.apply",
+    "direct.control.status",
+    "direct.control.list",
+    "direct.control.cancel_scope",
+    "direct.control.cancel_scope_status",
+)
+
+
 class SimnowBootstrapError(RuntimeError):
     """A finite, value-free failure; underlying errors are deliberately suppressed."""
 
@@ -158,8 +168,7 @@ def bootstrap_simnow_acceptance(*, root: str | os.PathLike, credentials: Mapping
             return {"instance_id": "gateway-a", "port": port, "scope_ref": "scope-a",
                     "scope": wire(strategy), "operations": operations}
         account_ops = ["account.events.ack", "account.events.progress", "account.events.read_after"]
-        controls = ["direct.control.apply", "direct.control.status", "direct.control.list",
-                    "direct.control.cancel_scope", "direct.control.cancel_scope_status"]
+        controls = list(_RISK_CONTROL_OPERATIONS)
         client_ops = ["direct.command_status"]
         delegate_ops = ["direct.delegated_reserve", "direct.delegated_dispatch", "direct.delegate_actor_status",
                         "direct.delegate_actor_cancel", "direct.delegate_actor_cancel_status",
