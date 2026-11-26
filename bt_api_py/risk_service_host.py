@@ -1397,6 +1397,8 @@ class RiskServiceHost:
         self._observer_runtime: Any = None
         self._observer_route: Any = None
         self._observer_retry_at = 0.0
+        self._market_runtime: Any = None
+        self._market_retry_at = 0.0
         self._account_facts_runtime: Any = None
         self._account_facts_coordinator: Any = None
         self._account_facts_retry_at = 0.0
@@ -1533,6 +1535,7 @@ class RiskServiceHost:
             and type(self._stack) is ExitStack and not self._stack._exit_callbacks
             and not self._runtimes and not self._delegate_cleanup_unresolved
             and self._observer_runtime is None and self._observer_route is None
+            and self._market_runtime is None
             and all(value is None for value in (
                 self.engine, self.ledger, self.service_host, self.order_port,
                 self.control, self.facts, self.pump, self.market, self.account,
@@ -2105,6 +2108,7 @@ class RiskServiceHost:
     _ACCOUNT_FACTS_ROTATION_HEADROOM = 64
     _ACCOUNT_FACTS_MIN_UNREGISTER_HEADROOM = 8
     _OBSERVER_ROTATION_HEADROOM = 64
+    _MARKET_ROTATION_HEADROOM = 64
 
     def _verified_observer_stream_epoch(self) -> str | None:
         """Return only the verified account.events cursor epoch from ObservationPump."""
@@ -3261,6 +3265,7 @@ class RiskServiceHost:
             ),
         )
         self._runtimes.append(runtime)
+        self._market_runtime = runtime
         self._check_cleanup_ready()
         try:
             snapshot = self._call_lifecycle(runtime.start, timeout_seconds=config.call_timeout_seconds)
@@ -3287,6 +3292,111 @@ class RiskServiceHost:
         except Exception:
             _fail("RISK_SERVICE_GATEWAY_MARKET_UNAVAILABLE")
         self._check_cleanup_ready()
+
+    def _maintain_market_runtime(self, now: float) -> None:
+        """Proactively rotate or safely reconnect the upstream.market runtime before 4096-msg cap.
+
+        ``RiskMarketFeed`` calls ``market.clock_observation`` on every polled instrument tick;
+        rotating the CURVE socket with headroom remaining allows clean strict unregister and
+        re-registration before the 4096-message socket limit causes ``BUSINESS_OUTCOME_UNKNOWN``.
+        On any replacement, cached market facts are cleared fail-closed first.
+        """
+        gateway = getattr(self.config, "gateway", None)
+        if gateway is None or getattr(gateway, "market", None) is None:
+            return
+        from bt_api_py.service_runtime_thread import BindingSnapshot, ThreadedServiceClientRuntime
+
+        runtime = getattr(self, "_market_runtime", None)
+        self._check_global_cleanup_ready(runtime if runtime is not None else self)
+        if now < getattr(self, "_market_retry_at", 0.0):
+            return
+        proactive_rotate = False
+        binding_auth_lost = False
+        if runtime is None:
+            needs_replace = self.market is None
+        else:
+            try:
+                snap = self._call_lifecycle(runtime.status)
+                self._check_global_cleanup_ready(runtime)
+            except Exception:
+                self._retain_if_global_unknown(runtime)
+                return
+            state = getattr(snap, "state", None)
+            bindings = getattr(snap, "bindings", None)
+            remaining = getattr(snap, "min_socket_message_ids_remaining", None)
+            stopped_or_failed = state in ("failed", "closed", "close_failed", "stopping")
+            unhealthy_running = state == "running" and getattr(snap, "healthy", True) is False
+            low_budget = (
+                state == "running"
+                and type(remaining) is int
+                and remaining <= self._MARKET_ROTATION_HEADROOM
+            )
+            market_bindings = (
+                [
+                    b for b in bindings
+                    if type(b) is BindingSnapshot
+                    and b.mount == "upstream.market"
+                    and b.active is True
+                ]
+                if isinstance(bindings, (tuple, list)) else []
+            )
+            binding_auth_lost = (
+                state == "running"
+                and type(remaining) is int
+                and bool(market_bindings)
+                and any(
+                    b.authenticated_peer is None or b.server_key_fingerprint is None
+                    for b in market_bindings
+                )
+            )
+            needs_replace = stopped_or_failed or unhealthy_running or low_budget or binding_auth_lost
+            proactive_rotate = (
+                low_budget
+                and not stopped_or_failed
+                and not unhealthy_running
+                and not binding_auth_lost
+            )
+        if not needs_replace:
+            return
+        self._market_retry_at = now + max(1.0, self.config.maintain_seconds)
+        if self.facts is not None:
+            self._call_lifecycle(self.facts.forget_market)
+            self._check_global_cleanup_ready(runtime if runtime is not None else self)
+        if runtime is not None:
+            if type(runtime) is ThreadedServiceClientRuntime and not self._gateway_endpoint_listening():
+                return
+            if not self._close_runtime_once(runtime, self.config.call_timeout_seconds):
+                return
+            if runtime in self._runtimes:
+                self._runtimes.remove(runtime)
+            self._market_runtime = None
+            self.market = None
+        try:
+            self._start_market()
+            self._check_global_cleanup_ready(self._market_runtime or self)
+        except RiskServiceStartError as error:
+            failed_rt = self._market_runtime
+            if failed_rt is not None:
+                if self._cleanup_uncertain:
+                    self._cleanup_uncertain_resources.append(failed_rt)
+                elif self._close_runtime_once(failed_rt, self.config.call_timeout_seconds):
+                    if failed_rt in self._runtimes:
+                        self._runtimes.remove(failed_rt)
+                    self._market_runtime = None
+            self.market = None
+            _LOG.warning(
+                "Risk market runtime %s deferred: %s",
+                "rotation" if proactive_rotate else "reconnect",
+                error.code,
+            )
+            return
+        self._market_retry_at = 0.0
+        _LOG.info(
+            "Risk market runtime %s succeeded",
+            "proactive rotation" if proactive_rotate
+            else "binding-loss reconnect" if binding_auth_lost
+            else "reconnect",
+        )
 
     def ready(self) -> bool:
         try:
@@ -3462,9 +3572,10 @@ class RiskServiceHost:
         # interval smaller than the clock's float precision can cause a busy
         # loop after the source has already been polled.
         deadlines: dict[str, float] = {}
+        market_configured = getattr(getattr(config, "gateway", None), "market", None) is not None
         schedules = (
             ("observation", True, config.observation_poll_seconds),
-            ("market", self.market is not None, config.market_poll_seconds),
+            ("market", self.market is not None or market_configured, config.market_poll_seconds),
             ("account", self.account is not None, config.account_snapshot_seconds),
             ("financial", self.financial is not None, config.strategy_financial_seconds),
             ('account_facts', self._account_facts_coordinator is not None
@@ -3497,7 +3608,11 @@ class RiskServiceHost:
         def _interleave_after_phase() -> None:
             nonlocal remaining_phases
             remaining_phases -= 1
-            if remaining_phases > 0 and not self.stop_event.is_set():
+            if (
+                remaining_phases > 0
+                and not self.stop_event.is_set()
+                and callable(getattr(self.service_host, "serve_burst", None))
+            ):
                 self._drain_service_requests(0, max_requests=16)
 
         if "observation" in deadlines:
@@ -3510,8 +3625,11 @@ class RiskServiceHost:
             self._next["observation"] = deadlines["observation"]
             _interleave_after_phase()
         if "market" in deadlines:
-            self._call_lifecycle(self.market.poll)
+            self._maintain_market_runtime(now)
             self._check_cleanup_ready()
+            if self.market is not None:
+                self._call_lifecycle(self.market.poll)
+                self._check_cleanup_ready()
             self._next["market"] = deadlines["market"]
             _interleave_after_phase()
         if "account" in deadlines:

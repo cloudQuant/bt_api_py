@@ -213,3 +213,71 @@ def test_late_query_completion_refreshes_local_deadline_without_false_gap(real_o
     assert source.current() is not None
     assert maintenance.observed_order_source_status().status != "GAP"
     assert source.close()
+
+
+def test_proactive_staging_refresh_eliminates_blackout_window_and_stays_fail_closed(
+    real_owner, monkeypatch
+):
+    """While an unexpired CANDIDATE is live (pin already released), due() starts a staging
+    coordinator and promotes it atomically on completion with zero current() is None gap.
+    Expiry of the live candidate before staging finishes still fails closed immediately."""
+    source, maintenance, session, native, _ = source_for(real_owner)
+    assert source.due(1000000000.0) and source.begin()
+    _finish(source._coordinator)
+    first_coord = source._coordinator
+    first_cut = source.current()
+    assert first_cut is not None
+    assert first_coord.status().pin_retained is False
+    assert session._order_query_cut is None
+
+    # Before refresh_interval_seconds elapses, due() is False.
+    assert source.due(0.0) is False
+
+    # Once refresh_interval_seconds elapses while first_coord is still live & unexpired:
+    assert source.due(1000000000.0) is True
+    assert source.begin() is True
+    assert source._coordinator is first_coord
+    assert source._staging is not None
+    assert source.pending() is True
+
+    # Throughout staging steps, current() continues serving the still-live unexpired first cut!
+    steps = 0
+    while source.pending():
+        assert source.current() is not None
+        assert source.current_binding() is not None
+        source.advance()
+        steps += 1
+        assert steps < 64
+
+    # Staging promoted atomically; old coordinator closed; zero blackout; native queried twice.
+    assert source._staging is None
+    assert source._coordinator is not first_coord
+    assert first_coord.status().state == "CLOSED"
+    assert source.current() is not None
+    assert native.calls.count("orders") == 2
+
+    # Fail-closed check: if the live candidate expires while a staged query is still in flight,
+    # current() MUST return None immediately (never serve an expired cut) and recover once staging completes.
+    sent = []
+    orig_req = native.ReqQryOrder
+
+    def hold_third(field, rid):
+        sent.append(rid)
+        return 0
+
+    monkeypatch.setattr(native, "ReqQryOrder", hold_third)
+    assert source.due(1000000000.0) and source.begin()
+    assert source.advance() is True and len(sent) == 1
+    assert source.current() is not None
+    # Expire live candidate mid-staging -> fail closed immediately!
+    source._coordinator._deadline = 0.0
+    assert source.current() is None
+    assert source.pending() is True
+    # Reconnect while staging holds native pin -> pin must remain fenced until terminal callback!
+    assert source.pause_for_reconnect() is False
+    assert session._order_query_cut is not None
+    native.client._spi.OnRspQryOrder(None, None, sent[0], True)
+    assert source.pause_for_reconnect() is True
+    assert session._order_query_cut is None
+    assert source.close()
+    monkeypatch.setattr(native, "ReqQryOrder", orig_req)

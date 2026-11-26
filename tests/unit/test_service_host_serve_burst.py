@@ -136,6 +136,9 @@ def test_risk_service_host_run_once_interleaves_inbound_drains_between_due_phase
             events.append(f"serve:{timeout_ms}")
             return False
 
+        def serve_burst(self, timeout_ms: int = 0, *, max_requests: int = 16) -> int:
+            return 1 if self.serve_once(timeout_ms) else 0
+
     class FakePoll:
         def __init__(self, name: str):
             self.name = name
