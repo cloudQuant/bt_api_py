@@ -92,6 +92,8 @@ class _SyntheticMdClient:
         self.unsubscribed: list[str] = []
         self.stop_calls = 0
         self.stop_wait_calls = 0
+        self.native_stop_requests = 0
+        self.native_stop_requested = False
         self.__class__.instances.append(self)
 
     def subscribe(self, instruments: list[str]) -> None:
@@ -182,10 +184,17 @@ class _SyntheticMdClient:
 
     def stop(self) -> None:
         self.stop_calls += 1
+        if not self.native_stop_requested:
+            self.native_stop_requested = True
+            self.native_stop_requests += 1
 
     def stop_and_wait(self, *, timeout: float) -> CtpNativeStopReceipt:
         assert timeout >= 0
         self.stop_wait_calls += 1
+        if not self.native_stop_requested:
+            # MdClient.stop_and_wait combines the native stop and its receipt.
+            self.native_stop_requested = True
+            self.native_stop_requests += 1
         return CtpNativeStopReceipt(
             connection_generation=self.connection_generation,
             join_required=False,
@@ -475,7 +484,7 @@ def test_ctp_quote_v2_callback_publishes_through_operator_host_and_service_marke
 
         market.close()
         market = None
-        assert reconnected_client.stop_calls == 0
+        assert reconnected_client.native_stop_requests == 0
         # The first consumer's symbol stays natively subscribed while the second
         # keeps the MD session alive (bt_api_ctp parks a released symbol so that
         # its consumer can come back on the same session).
@@ -483,7 +492,7 @@ def test_ctp_quote_v2_callback_publishes_through_operator_host_and_service_marke
         assert market_second.healthy is True
         market_second.close()
         market_second = None
-        assert reconnected_client.stop_calls == 1
+        assert reconnected_client.native_stop_requests == 1
         assert reconnected_client.stop_wait_calls == 1
         runtime.close()
         runtime = None
@@ -509,5 +518,5 @@ def test_ctp_quote_v2_callback_publishes_through_operator_host_and_service_marke
         assert not owner.is_alive(), "operator Host owner thread did not close"
 
     assert deployment.state == "closed"
-    assert _SyntheticMdClient.instances[-1].stop_calls == 1
+    assert _SyntheticMdClient.instances[-1].native_stop_requests == 1
     assert _SyntheticMdClient.instances[-1].stop_wait_calls == 1
