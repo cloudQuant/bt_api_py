@@ -1773,6 +1773,13 @@ class RiskServiceHost:
                             if error.code == 'R05_OBSERVATION_COMMIT_UNCERTAIN':
                                 raise
                             _fail('RISK_SERVICE_R04_COVERAGE_REQUIRED')
+                    if getattr(config, 'bound_control_intents_enabled', False):
+                        try:
+                            self.ledger.attach_existing_bound_intents()
+                        except RiskOrderJournalError as error:
+                            if error.code == 'R05_OBSERVATION_COMMIT_UNCERTAIN':
+                                raise
+                            _fail('RISK_SERVICE_BOUND_INTENTS_REQUIRED')
             except RiskOrderJournalError as error:
                 if error.code in ("PRETRADE_INIT_COMMIT_UNCERTAIN", "PRETRADE_MIGRATION_COMMIT_UNCERTAIN",
                                   'R05_OBSERVATION_COMMIT_UNCERTAIN'):
@@ -2825,6 +2832,7 @@ class RiskServiceHost:
             timeout_seconds=config.call_timeout_seconds,
             route=control_route,
             server_key_fingerprint=hashlib.sha256(gateway.server_public_key).hexdigest(),
+            control_intent_enabled=getattr(config, "bound_control_intents_enabled", False),
         )
         self._check_cleanup_ready()
         try:
@@ -2890,11 +2898,19 @@ class RiskServiceHost:
 
     def _control_runtime(self) -> Any:
         _require_supported_r04(self.config)
+        from bt_api_py.risk_service_gateway import (
+            CONTROL_INTENT_OPERATIONS as CONTROL_INTENT_OPERATIONS_FOR_RISK,
+        )
         from bt_api_py.risk_service_gateway import CONTROL_OPERATIONS as CONTROL_OPERATIONS_FOR_RISK
 
         config, gateway = self.config, self.config.gateway
         mounts = ["application.direct_write"]
-        requested = {"application.direct_write": CONTROL_OPERATIONS_FOR_RISK}
+        control_ops = (
+            CONTROL_INTENT_OPERATIONS_FOR_RISK
+            if getattr(config, "bound_control_intents_enabled", False)
+            else CONTROL_OPERATIONS_FOR_RISK
+        )
+        requested = {"application.direct_write": control_ops}
         extension = None
         if gateway.account_snapshot is not None:
             from bt_api_base.account_protocol import AccountResourceKey
@@ -2931,6 +2947,9 @@ class RiskServiceHost:
         from bt_api_py.gateway_account_observer_client import (
             GatewayAccountObserverClient,
             GatewayAccountObserverRoute,
+        )
+        from bt_api_py.risk_service_gateway import (
+            CONTROL_INTENT_OPERATIONS as CONTROL_INTENT_OPERATIONS_FOR_RISK,
         )
         from bt_api_py.risk_service_gateway import CONTROL_OPERATIONS as CONTROL_OPERATIONS_FOR_RISK
         from bt_api_py.risk_service_gateway import ObservationPump, payload_reader
@@ -2973,7 +2992,12 @@ class RiskServiceHost:
         except Exception:
             _fail("RISK_SERVICE_GATEWAY_CONTROL_UNAVAILABLE")
         self._check_cleanup_ready()
-        granted = self._call_lifecycle(_granted, snapshot, "application.direct_write", CONTROL_OPERATIONS_FOR_RISK)
+        required_control_ops = (
+            CONTROL_INTENT_OPERATIONS_FOR_RISK
+            if getattr(config, "bound_control_intents_enabled", False)
+            else CONTROL_OPERATIONS_FOR_RISK
+        )
+        granted = self._call_lifecycle(_granted, snapshot, "application.direct_write", required_control_ops)
         self._check_cleanup_ready()
         if not granted:
             _fail("RISK_SERVICE_GATEWAY_CONTROL_UNAVAILABLE")

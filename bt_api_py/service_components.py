@@ -665,7 +665,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                          "direct.delegate_events.read_after", "direct.delegate_events.progress", "direct.delegate_events.ack",
                          "direct.parent.register", "direct.parent.query", "direct.parent.cancel", "direct.parent.operation", "direct.parent.source", "direct.parent.register_v2", "direct.parent.operation_v2", "direct.parent.cancel_v2", "direct.parent.fault", "direct.parent.recover",
                          "direct.parent.acceptance_order",
-                         "direct.control.apply", "direct.control.resume", "direct.control.identity", "direct.control.status", "direct.control.targets", "direct.control.list", "direct.control.drain_target", "direct.control.reconcile",
+                         "direct.control.apply", "direct.control.intent.apply", "direct.control.resume", "direct.control.identity", "direct.control.status", "direct.control.targets", "direct.control.list", "direct.control.drain_target", "direct.control.reconcile",
                          "direct.control.resume_status", "direct.control.target_status",
                          "direct.control.cancel_scope", "direct.control.cancel_scope_status",
                          "direct.events.read_after", "direct.events.progress", "direct.events.ack"}
@@ -702,7 +702,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                 {
                     "service.direct_write": frozenset(
                         {"direct.reserve", "direct.release", "direct.dispatch", "direct.cancel", "direct.delegated_cancel", "direct.delegated_reserve", "direct.delegated_dispatch", "direct.risk_first_reserve.v2",
-                         "direct.control.apply", "direct.control.resume", "direct.control.drain_target", "direct.control.reconcile",
+                         "direct.control.apply", "direct.control.intent.apply", "direct.control.resume", "direct.control.drain_target", "direct.control.reconcile",
                          "direct.control.cancel_scope",
                          "direct.parent.register", "direct.parent.cancel", "direct.parent.register_v2", "direct.parent.cancel_v2", "direct.delegate_actor_cancel", "direct.delegate_actor_release"}
                     )
@@ -1449,6 +1449,8 @@ def validate_components(specs: Sequence[ComponentSpec]) -> tuple[PreparedCompone
                 operations = operations - {"direct.delegate_events.read_after", "direct.delegate_events.progress", "direct.delegate_events.ack"}
             if normalized.get("bounded_read_after") is not True:
                 operations = operations - {"market.read_after_bounded"}
+            if normalized.get("control_intent_enabled") is True:
+                operations = operations | module.CONTROL_INTENT_OPERATIONS
         if spec.component == "gateway" and spec.options.get("role") == "trading_owner" and "service.calendar_read" in spec.bind_ports:
             operations = operations | {"calendar.query.v1", "calendar.windows.v1", "calendar.monitor.windows.v1"}
         if spec.component == "gateway" and spec.options.get("role") == "trading_owner" and "service.instrument_product_read" in spec.bind_ports:
@@ -3267,6 +3269,7 @@ def build_component(
                     configured = configured | prepared.module.DELEGATE_ACTOR_STREAM_OPERATIONS
                 optional_operations = (
                     (prepared.module.CONTROL_OPERATIONS if prepared.options.get("control_enabled") is True else frozenset())
+                    | (prepared.module.CONTROL_INTENT_OPERATIONS if prepared.options.get("control_intent_enabled") is True else frozenset())
                     | (prepared.module.INSTRUMENT_STATUS_OPERATIONS if getattr(adapter, '_instrument_status_service', None) is not None else frozenset())
                     | (prepared.module.STRATEGY_POSITION_OPERATIONS if prepared.options.get("strategy_ledger_enabled") is True else frozenset())
                     | (prepared.module.STRATEGY_FINANCIAL_OPERATIONS if prepared.options.get("account_facts_financial_enabled") is True else frozenset())
@@ -3545,6 +3548,7 @@ def build_component(
                         | prepared.module.DELEGATED_STRATEGY_READ_OPERATIONS
                         | prepared.module.DELEGATED_STRATEGY_CANCEL_OPERATIONS
                         | prepared.module.CONTROL_OPERATIONS
+                        | prepared.module.CONTROL_INTENT_OPERATIONS
                     ):
                         return _adapter.handle(_operation, context=context, arguments=arguments)
                     _adapter = (

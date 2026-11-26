@@ -391,11 +391,13 @@ def validate_service_options(
     options: Mapping[str, object], bind_ports: tuple[str, ...]
 ) -> Mapping[str, object]:
     if (
-        set(options) - {"role", "dispatch_enabled", "cancel_enabled", "bounded_read_after", "control_enabled", "strategy_ledger_enabled", "account_extensions_enabled", "delegation_enabled", "parent_authority_enabled", "parent_acceptance_order_enabled", "parent_original_runs_enabled", "account_facts_financial_enabled", "actor_stream_enabled", "actor_source_v2_enabled", "strategy_origin_enabled", "control_cancel_enabled", "account_fact_recovery_enabled", "account_event_recovery_enabled", "cancel_attempt_stream_enabled", "cancel_attempt_stream_qualified"}
+        set(options) - {"role", "dispatch_enabled", "cancel_enabled", "bounded_read_after", "control_enabled", "control_intent_enabled", "strategy_ledger_enabled", "account_extensions_enabled", "delegation_enabled", "parent_authority_enabled", "parent_acceptance_order_enabled", "parent_original_runs_enabled", "account_facts_financial_enabled", "actor_stream_enabled", "actor_source_v2_enabled", "strategy_origin_enabled", "control_cancel_enabled", "account_fact_recovery_enabled", "account_event_recovery_enabled", "cancel_attempt_stream_enabled", "cancel_attempt_stream_qualified"}
         or options.get("role") != "trading_owner"
         or type(options.get("dispatch_enabled", False)) is not bool
         or type(options.get("cancel_enabled", False)) is not bool
         or type(options.get("control_enabled", False)) is not bool
+        or type(options.get("control_intent_enabled", False)) is not bool
+        or (options.get("control_intent_enabled", False) and not options.get("control_enabled", False))
         or type(options.get("strategy_ledger_enabled", False)) is not bool
         or type(options.get("account_extensions_enabled", False)) is not bool
         or type(options.get("delegation_enabled", False)) is not bool
@@ -444,6 +446,8 @@ def validate_service_options(
     }
     if "control_enabled" in options:
         result["control_enabled"] = options["control_enabled"]
+    if "control_intent_enabled" in options:
+        result["control_intent_enabled"] = options["control_intent_enabled"]
     if "strategy_ledger_enabled" in options:
         result["strategy_ledger_enabled"] = options["strategy_ledger_enabled"]
     if "account_extensions_enabled" in options:
@@ -1093,7 +1097,11 @@ class GatewayDirectServiceBinding:
                     or observed.principal_ref != context.principal_ref
                     or observed.identity != identity
                     or observed.scope != scope
-                    or observed.write_operations != CONTROL_INTENT_WRITE_OPERATIONS
+                    or not CONTROL_INTENT_WRITE_OPERATIONS.issubset(observed.write_operations)
+                    or not observed.write_operations.issubset(
+                        CONTROL_INTENT_WRITE_OPERATIONS
+                        | frozenset({"direct.control.apply", "direct.control.cancel_scope"})
+                    )
                     or not (
                         _CONTROL_INTENT_REQUIRED_LEGACY_OPERATIONS
                         | CONTROL_INTENT_OPERATIONS

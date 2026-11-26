@@ -595,6 +595,7 @@ class RiskServiceConfig:
     pretrade_upgrade_from_v3: RiskPretradeUpgrade | None = None
     account_facts_observation: RiskAccountFactsObservation | None = None
     parent_contract_enabled: bool = False
+    bound_control_intents_enabled: bool = False
 
     def __repr__(self) -> str:
         return f"RiskServiceConfig(service_id={self.service_id!r})"
@@ -913,7 +914,13 @@ def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceCon
             "deadlines",
             "refresh",
         ),
-        optional=("rules", "pretrade", "account_facts_observation", "parent_contract_enabled"),
+        optional=(
+            "rules",
+            "pretrade",
+            "account_facts_observation",
+            "parent_contract_enabled",
+            "bound_control_intents_enabled",
+        ),
     )
     if top["schema"] != RISK_SERVICE_CONFIG_SCHEMA:
         _fail("RISK_SERVICE_CONFIG_SCHEMA_UNSUPPORTED")
@@ -922,6 +929,9 @@ def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceCon
     parent_contract_enabled = top.get("parent_contract_enabled", False)
     if type(parent_contract_enabled) is not bool:
         _fail("RISK_SERVICE_CONFIG_PARENT_CONTRACT_INVALID")
+    bound_control_intents_enabled = top.get("bound_control_intents_enabled", False)
+    if type(bound_control_intents_enabled) is not bool:
+        _fail("RISK_SERVICE_CONFIG_BOUND_CONTROL_INTENTS_INVALID")
     facts_observation = None
     if "account_facts_observation" in top:
         item = _mapping(
@@ -1004,6 +1014,13 @@ def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceCon
             cancel_attempts_timeout_seconds=cancel_timeout,
             cancel_attempts_page_size=cancel_page_size,
         )
+    if bound_control_intents_enabled and (
+        pretrade_version != 4
+        or pretrade_upgrade is not None
+        or facts_observation is None
+        or not facts_observation.order_cut_enabled
+    ):
+        _fail("RISK_SERVICE_CONFIG_BOUND_CONTROL_INTENTS_INVALID")
     service = _mapping(
         top["service"],
         required=(
@@ -1155,6 +1172,7 @@ def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceCon
         pretrade_upgrade_from_v3=pretrade_upgrade,
         account_facts_observation=facts_observation,
         parent_contract_enabled=parent_contract_enabled,
+        bound_control_intents_enabled=bound_control_intents_enabled,
     )
 
 

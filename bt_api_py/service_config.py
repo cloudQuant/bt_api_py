@@ -1309,7 +1309,7 @@ def _validate_component_options(
         elif role == "market_hub":
             fields = {"role", "bounded_read_after"}
         elif role == "trading_owner":
-            fields = {"role", "dispatch_enabled", "cancel_enabled", "bounded_read_after", "control_enabled", "strategy_ledger_enabled", "account_extensions_enabled", "delegation_enabled", "parent_authority_enabled", "parent_acceptance_order_enabled", "parent_original_runs_enabled", "account_facts_financial_enabled", "actor_stream_enabled", "actor_source_v2_enabled", "strategy_origin_enabled", "control_cancel_enabled", "account_fact_recovery_enabled", "account_event_recovery_enabled", "cancel_attempt_stream_enabled", "cancel_attempt_stream_qualified"}
+            fields = {"role", "dispatch_enabled", "cancel_enabled", "bounded_read_after", "control_enabled", "control_intent_enabled", "strategy_ledger_enabled", "account_extensions_enabled", "delegation_enabled", "parent_authority_enabled", "parent_acceptance_order_enabled", "parent_original_runs_enabled", "account_facts_financial_enabled", "actor_stream_enabled", "actor_source_v2_enabled", "strategy_origin_enabled", "control_cancel_enabled", "account_fact_recovery_enabled", "account_event_recovery_enabled", "cancel_attempt_stream_enabled", "cancel_attempt_stream_qualified"}
         else:
             fields = {"role"}
         _check_keys(raw, fields, options_path)
@@ -1338,6 +1338,13 @@ def _validate_component_options(
             if type(control_enabled) is not bool or (control_enabled and raw.get("dispatch_enabled", False) is not True):
                 _fail("INVALID_VALUE", f"{options_path}.control_enabled")
             result["control_enabled"] = control_enabled
+        if role == "trading_owner" and "control_intent_enabled" in raw:
+            control_intent_enabled = raw["control_intent_enabled"]
+            if type(control_intent_enabled) is not bool or (
+                control_intent_enabled and raw.get("control_enabled", False) is not True
+            ):
+                _fail("INVALID_VALUE", f"{options_path}.control_intent_enabled")
+            result["control_intent_enabled"] = control_intent_enabled
         if role == "trading_owner" and "strategy_ledger_enabled" in raw:
             enabled = raw["strategy_ledger_enabled"]
             if type(enabled) is not bool or (enabled and raw.get("control_enabled", False) is not True):

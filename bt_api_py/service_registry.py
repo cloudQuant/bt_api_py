@@ -1595,6 +1595,9 @@ class ServiceDispatchAdmission:
                 operation,
             }
         )
+        allowed_write_operations = frozenset(
+            {operation, "direct.control.apply", "direct.control.cancel_scope"}
+        )
         binding, registry = self._binding, self._registry
         with self._state_lock:
             if (
@@ -1643,7 +1646,8 @@ class ServiceDispatchAdmission:
                 or registry._stored_identity(row["identity_json"]) != binding.identity
                 or registry._stored_scope(row["scope_json"]) != binding.scope
                 or not required_operations.issubset(operations)
-                or write_operations != frozenset({operation})
+                or operation not in write_operations
+                or not write_operations.issubset(allowed_write_operations)
                 or not registry._current_resource_allows_all(
                     binding.principal,
                     binding.identity,
