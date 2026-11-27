@@ -3903,6 +3903,11 @@ class ServiceHost:
             return {"ok": False, "code": "UNAVAILABLE", "result": {}}
         try:
             self._refresh_registry_readiness()
+            if self._atomic_intake_services and registry._parent_retry_unready:
+                deadline = time.monotonic() + 0.25
+                while registry._parent_retry_unready and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                    self._refresh_registry_readiness()
         except ServiceHostError:
             # If readiness cannot be persisted, fail this request closed. In
             # particular, do not fall through to a registry still marked ready.

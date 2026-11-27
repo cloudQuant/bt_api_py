@@ -254,3 +254,55 @@ def test_renew_during_transient_lock_contention_returns_unavailable_and_recovers
     assert recovered['ok'], recovered
     assert registry.ready and not registry._parent_retry_unready
     assert registration['registration_id'] in registry._execution_parent_monotonic_leases
+
+
+def test_dispatch_waits_out_brief_transient_lock_contention_on_register(running_parent):
+    from tests.unit.test_service_registry import _next_request
+
+    parent, registry, existing = running_parent
+    journal = parent.journal
+    identity = WireIdentity(WireRole.STRATEGY_CLIENT, 'strategy-principal', 'strategy-a')
+    scope = WireScope('paper', account_ref='account-a', strategy_ref='strategy-a', run_id='run-a')
+
+    # Unregister the fixture's initial registration so this test exercises a fresh service.register.
+    unreg = parent.host._dispatch_request(
+        identity.principal_ref,
+        _next_request(
+            'service.unregister',
+            {
+                'registration_id': existing['registration_id'],
+                'service_epoch': existing['service_epoch'],
+            },
+            identity=identity,
+            scope=scope,
+        ),
+    )
+    assert unreg['ok'], unreg
+
+    holder, release = hold_lock(journal._lock)
+    timer = threading.Timer(0.04, release.set)
+    timer.start()
+    try:
+        reply = parent.host._dispatch_request(
+            identity.principal_ref,
+            _next_request(
+                'service.register',
+                {
+                    'registration_key': 'brief-contention-register',
+                    'client_session_id': 'client-brief-1',
+                    'instance_id': 'exec-a',
+                    'port': PORT,
+                    'scope_ref': 'scope-a',
+                    'operations': (SUBMIT,),
+                },
+                identity=identity,
+                scope=scope,
+            ),
+        )
+        assert reply['ok'], reply
+        assert registry.ready and not registry._parent_retry_unready
+    finally:
+        timer.cancel()
+        release.set()
+        holder.join(2)
+    assert not holder.is_alive()
