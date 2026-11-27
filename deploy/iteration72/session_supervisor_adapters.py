@@ -443,6 +443,7 @@ class RuntimeHttpPort:
         "_client",
         "_step_result",
         "_group_result",
+        "_preflight_units_provider",
         "_lock",
         "_planned_units",
         "_session_id",
@@ -456,6 +457,7 @@ class RuntimeHttpPort:
         *,
         step_result_factory: Callable[..., object],
         group_result_factory: Callable[..., object],
+        preflight_units_provider: Callable[[], Sequence[str]] | None = None,
     ) -> None:
         if not callable(getattr(client, "list_units", None)) or not callable(
             getattr(client, "unit_action", None)
@@ -463,9 +465,12 @@ class RuntimeHttpPort:
             raise TypeError("client must implement the Runtime control surface")
         if not callable(step_result_factory) or not callable(group_result_factory):
             raise TypeError("result factories must be callable")
+        if preflight_units_provider is not None and not callable(preflight_units_provider):
+            raise TypeError("preflight_units_provider must be callable")
         self._client = client
         self._step_result = step_result_factory
         self._group_result = group_result_factory
+        self._preflight_units_provider = preflight_units_provider
         self._lock = Lock()
         self._planned_units: tuple[str, ...] | None = None
         self._session_id: str | None = None
@@ -485,6 +490,7 @@ class RuntimeHttpPort:
         step_result_factory: Callable[..., object],
         group_result_factory: Callable[..., object],
         timeout: float = 5.0,
+        preflight_units_provider: Callable[[], Sequence[str]] | None = None,
     ) -> RuntimeHttpPort:
         """Build from the reviewed loopback-only Runtime HTTP client."""
 
@@ -502,6 +508,7 @@ class RuntimeHttpPort:
             ControlClientAdapter(client),
             step_result_factory=step_result_factory,
             group_result_factory=group_result_factory,
+            preflight_units_provider=preflight_units_provider,
         )
 
     def _step(
@@ -582,6 +589,23 @@ class RuntimeHttpPort:
         except Exception:
             return self._step("UNKNOWN", "runtime_target_invalid")
         with self._lock:
+            if self._preflight_units_provider is not None:
+                try:
+                    configured = _normalise_units(self._preflight_units_provider())
+                except Exception:
+                    return self._step("UNKNOWN", "runtime_status_unknown")
+                if configured != expected:
+                    return self._step("BLOCKED", "runtime_target_mismatch")
+                if self._planned_units is not None and self._planned_units != expected:
+                    return self._step("UNKNOWN", "runtime_target_changed")
+                self._planned_units = expected
+                reference = _reference(
+                    {
+                        "kind": "runtime-config-preflight",
+                        "units": list(expected),
+                    }
+                )
+                return self._step("APPLIED", "ready", reference=reference)
             outcome, rows, reference = self._read_rows(expected)
             if outcome == "BLOCKED":
                 return self._step("BLOCKED", "runtime_target_mismatch")
@@ -1083,8 +1107,8 @@ class RiskWebHttpPort:
         self,
         *,
         origin: str,
-        session_token: str,
-        gateway_reference: str,
+        session_token: str | Callable[[], str],
+        gateway_reference: str | None = None,
         observation_factory: Callable[..., object],
         timeout: float = 5.0,
         include_proof: bool = False,
@@ -1108,10 +1132,14 @@ class RiskWebHttpPort:
             or origin.rstrip("/") != f"http://127.0.0.1:{port}"
         ):
             raise ValueError("Risk origin must be loopback HTTP")
-        if (
-            type(session_token) is not str
-            or _RISK_SESSION_TOKEN.fullmatch(session_token) is None
+        if callable(session_token):
+            token_value: str | Callable[[], str] = session_token
+        elif (
+            type(session_token) is str
+            and _RISK_SESSION_TOKEN.fullmatch(session_token) is not None
         ):
+            token_value = session_token
+        else:
             raise ValueError("Risk session token is invalid")
         if type(timeout) not in {int, float} or type(timeout) is bool:
             raise ValueError("Risk timeout is invalid")
@@ -1125,8 +1153,10 @@ class RiskWebHttpPort:
         self._origin = origin.rstrip("/")
         self._host = "127.0.0.1"
         self._port = port
-        self._session_token = session_token
-        self._gateway_reference = _safe_reference(gateway_reference)
+        self._session_token = token_value
+        self._gateway_reference = (
+            None if gateway_reference is None else _safe_reference(gateway_reference)
+        )
         self._observation_factory = observation_factory
         self._timeout = timeout_value
         self._include_proof = include_proof
@@ -1159,7 +1189,27 @@ class RiskWebHttpPort:
 
     def observe_r05(self, expected_gateway_reference: str) -> object:
         with self._lock:
-            if expected_gateway_reference != self._gateway_reference:
+            if (
+                type(expected_gateway_reference) is not str
+                or _SHA256_REFERENCE.fullmatch(expected_gateway_reference) is None
+            ):
+                return self._unknown()
+            if (
+                self._gateway_reference is not None
+                and expected_gateway_reference != self._gateway_reference
+            ):
+                return self._unknown()
+            if callable(self._session_token):
+                try:
+                    resolved_token = self._session_token()
+                except Exception:
+                    return self._unknown()
+            else:
+                resolved_token = self._session_token
+            if (
+                type(resolved_token) is not str
+                or _RISK_SESSION_TOKEN.fullmatch(resolved_token) is None
+            ):
                 return self._unknown()
             path = (
                 RISK_STATUS_PROOF_PATH if self._include_proof else RISK_STATUS_PATH
@@ -1174,7 +1224,7 @@ class RiskWebHttpPort:
                     headers={
                         "Accept": "application/json",
                         "Host": f"127.0.0.1:{self._port}",
-                        "x-risk-session": self._session_token,
+                        "x-risk-session": resolved_token,
                         "Connection": "close",
                     },
                 )
@@ -1301,7 +1351,7 @@ class ComponentSpec:
     """Explicit single-attempt launch & cooperative-stop contract for one component."""
 
     argv: tuple[str, ...]
-    stop_file: Path
+    stop_file: Path | Callable[[], Path | None]
     ready_check: Callable[[], str | bool | None]
     cwd: Path | None = None
     env: Mapping[str, str] | None = None
@@ -1322,7 +1372,10 @@ class ComponentSpec:
         ):
             raise ValueError("argv must contain non-empty strings without NUL")
         object.__setattr__(self, "argv", argv_tuple)
-        object.__setattr__(self, "stop_file", _validate_stop_file_path(self.stop_file))
+        if not callable(self.stop_file):
+            object.__setattr__(
+                self, "stop_file", _validate_stop_file_path(self.stop_file)
+            )
         if not callable(self.ready_check):
             raise TypeError("ready_check must be callable")
         if self.cwd is not None:
@@ -1381,11 +1434,41 @@ class ComponentSpec:
                 object.__setattr__(self, attr, path_val)
 
     def __repr__(self) -> str:
+        stop_desc = (
+            "<dynamic>" if callable(self.stop_file) else repr(self.stop_file.name)
+        )
         return (
-            f"ComponentSpec(stop_file_name={self.stop_file.name!r}, "
+            f"ComponentSpec(stop_file_name={stop_desc}, "
             f"start_timeout_seconds={self.start_timeout_seconds!r}, "
             f"stop_timeout_seconds={self.stop_timeout_seconds!r})"
         )
+
+
+@dataclass(frozen=True, slots=True)
+class ComponentGroupSpec:
+    """Ordered multi-process group for one logical supervisor component (e.g. 11 execution hosts)."""
+
+    members: tuple[ComponentSpec, ...]
+
+    def __post_init__(self) -> None:
+        if isinstance(self.members, (str, bytes)) or not isinstance(
+            self.members, Sequence
+        ):
+            raise ValueError("members must be a non-empty sequence of ComponentSpec")
+        items = tuple(self.members)
+        if not 1 <= len(items) <= 64 or any(
+            not isinstance(item, ComponentSpec) for item in items
+        ):
+            raise ValueError("members must contain 1..64 ComponentSpec instances")
+        static_stops = [
+            item.stop_file for item in items if not callable(item.stop_file)
+        ]
+        if len(static_stops) != len(set(static_stops)):
+            raise ValueError("group members must use distinct stop files")
+        object.__setattr__(self, "members", items)
+
+    def __repr__(self) -> str:
+        return f"ComponentGroupSpec(count={len(self.members)!r})"
 
 
 class LocalComponentProcessPort:
@@ -1405,6 +1488,7 @@ class LocalComponentProcessPort:
         "_sleep",
         "_lock",
         "_processes",
+        "_group_processes",
         "_log_handles",
         "_start_attempted",
         "_stop_attempted",
@@ -1412,7 +1496,7 @@ class LocalComponentProcessPort:
 
     def __init__(
         self,
-        specs: Mapping[str, ComponentSpec],
+        specs: Mapping[str, ComponentSpec | ComponentGroupSpec],
         *,
         step_factory: Callable[..., object],
         monotonic: Callable[[], float] = time.monotonic,
@@ -1424,12 +1508,16 @@ class LocalComponentProcessPort:
             raise TypeError("step_factory must be callable")
         if not callable(monotonic) or not callable(sleep):
             raise TypeError("monotonic and sleep must be callable")
-        validated: dict[str, ComponentSpec] = {}
+        validated: dict[str, ComponentSpec | ComponentGroupSpec] = {}
         for name, spec in specs.items():
             if type(name) is not str or name not in COMPONENT_NAMES:
                 raise ValueError(f"unsupported component name: {name!r}")
-            if not isinstance(spec, ComponentSpec):
-                raise TypeError("each component spec must be a ComponentSpec")
+            if not isinstance(spec, (ComponentSpec, ComponentGroupSpec)):
+                raise TypeError(
+                    "each component spec must be a ComponentSpec or ComponentGroupSpec"
+                )
+            if name == "gateway" and isinstance(spec, ComponentGroupSpec):
+                raise ValueError("gateway component must be a single ComponentSpec")
             validated[name] = spec
         self._specs = validated
         self._step_factory = step_factory
@@ -1437,6 +1525,9 @@ class LocalComponentProcessPort:
         self._sleep = sleep
         self._lock = Lock()
         self._processes: dict[str, subprocess.Popen[bytes]] = {}
+        self._group_processes: dict[
+            str, list[tuple[ComponentSpec, subprocess.Popen[bytes], list[Any]]]
+        ] = {}
         self._log_handles: dict[str, list[Any]] = {}
         self._start_attempted: set[str] = set()
         self._stop_attempted: set[str] = set()
@@ -1468,6 +1559,15 @@ class LocalComponentProcessPort:
                 pass
 
     @staticmethod
+    def _close_handle_list(handles: list[Any]) -> None:
+        for handle in handles:
+            try:
+                handle.close()
+            except Exception:
+                pass
+        handles.clear()
+
+    @staticmethod
     def _stop_file_absent(stop_file: Path) -> bool:
         try:
             os.lstat(stop_file)
@@ -1477,10 +1577,30 @@ class LocalComponentProcessPort:
         except OSError:
             return False
 
+    @staticmethod
+    def _resolve_stop_file(
+        spec: ComponentSpec, *, allow_none: bool
+    ) -> tuple[Path | None, bool]:
+        if callable(spec.stop_file):
+            try:
+                resolved = spec.stop_file()
+            except Exception:
+                return None, False
+            if resolved is None:
+                return (None, True) if allow_none else (None, False)
+            try:
+                return _validate_stop_file_path(resolved), True
+            except Exception:
+                return None, False
+        return spec.stop_file, True
+
     def _create_zero_byte_stop_file(self, spec: ComponentSpec) -> bool:
-        if not _validate_non_symlink_parent(spec.stop_file):
+        stop_file, ok = self._resolve_stop_file(spec, allow_none=False)
+        if not ok or stop_file is None:
             return False
-        if not self._stop_file_absent(spec.stop_file):
+        if not _validate_non_symlink_parent(stop_file):
+            return False
+        if not self._stop_file_absent(stop_file):
             return False
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
         if hasattr(os, "O_BINARY"):
@@ -1489,7 +1609,7 @@ class LocalComponentProcessPort:
             flags |= os.O_NOFOLLOW
         descriptor: int | None = None
         try:
-            descriptor = os.open(spec.stop_file, flags, 0o600)
+            descriptor = os.open(stop_file, flags, 0o600)
         except OSError:
             return False
         finally:
@@ -1499,7 +1619,7 @@ class LocalComponentProcessPort:
                 except OSError:
                     pass
         try:
-            meta = os.lstat(spec.stop_file)
+            meta = os.lstat(stop_file)
             if (
                 stat.S_ISLNK(meta.st_mode)
                 or not stat.S_ISREG(meta.st_mode)
@@ -1507,47 +1627,59 @@ class LocalComponentProcessPort:
             ):
                 return False
             if spec.protect_stop_file is not None:
-                spec.protect_stop_file(spec.stop_file)
+                spec.protect_stop_file(stop_file)
         except Exception:
             return False
         return True
+
+    def _preflight_spec(self, spec: ComponentSpec) -> object | None:
+        stop_file, ok = self._resolve_stop_file(spec, allow_none=True)
+        if not ok:
+            return self._step("BLOCKED", "stop_dir_invalid")
+        if stop_file is not None:
+            if not _validate_non_symlink_parent(stop_file):
+                return self._step("BLOCKED", "stop_dir_invalid")
+            if not self._stop_file_absent(stop_file):
+                return self._step("BLOCKED", "stop_marker_present")
+        if spec.cwd is not None:
+            try:
+                if (
+                    not spec.cwd.exists()
+                    or not spec.cwd.is_dir()
+                    or spec.cwd.is_symlink()
+                ):
+                    return self._step("BLOCKED", "cwd_invalid")
+            except OSError:
+                return self._step("BLOCKED", "cwd_invalid")
+        exe_path = Path(spec.argv[0])
+        if exe_path.is_absolute():
+            try:
+                if not exe_path.exists() or not exe_path.is_file():
+                    return self._step("BLOCKED", "executable_missing")
+            except OSError:
+                return self._step("BLOCKED", "executable_missing")
+        for log_path in (spec.stdout_path, spec.stderr_path):
+            if log_path is not None and not _validate_non_symlink_parent(log_path):
+                return self._step("BLOCKED", "log_dir_invalid")
+        if spec.preflight_check is not None:
+            try:
+                ok_check = spec.preflight_check() is True
+            except Exception:
+                return self._step("UNKNOWN", "preflight_check_unknown")
+            if not ok_check:
+                return self._step("BLOCKED", "preflight_check_blocked")
+        return None
 
     def preflight(self, component: str) -> object:
         with self._lock:
             spec = self._specs.get(component)
             if spec is None:
                 return self._step("UNKNOWN", "component_not_configured")
-            if not _validate_non_symlink_parent(spec.stop_file):
-                return self._step("BLOCKED", "stop_dir_invalid")
-            if not self._stop_file_absent(spec.stop_file):
-                return self._step("BLOCKED", "stop_marker_present")
-            if spec.cwd is not None:
-                try:
-                    if (
-                        not spec.cwd.exists()
-                        or not spec.cwd.is_dir()
-                        or spec.cwd.is_symlink()
-                    ):
-                        return self._step("BLOCKED", "cwd_invalid")
-                except OSError:
-                    return self._step("BLOCKED", "cwd_invalid")
-            exe_path = Path(spec.argv[0])
-            if exe_path.is_absolute():
-                try:
-                    if not exe_path.exists() or not exe_path.is_file():
-                        return self._step("BLOCKED", "executable_missing")
-                except OSError:
-                    return self._step("BLOCKED", "executable_missing")
-            for log_path in (spec.stdout_path, spec.stderr_path):
-                if log_path is not None and not _validate_non_symlink_parent(log_path):
-                    return self._step("BLOCKED", "log_dir_invalid")
-            if spec.preflight_check is not None:
-                try:
-                    ok = spec.preflight_check() is True
-                except Exception:
-                    return self._step("UNKNOWN", "preflight_check_unknown")
-                if not ok:
-                    return self._step("BLOCKED", "preflight_check_blocked")
+            members = spec.members if isinstance(spec, ComponentGroupSpec) else (spec,)
+            for member in members:
+                failure = self._preflight_spec(member)
+                if failure is not None:
+                    return failure
             return self._step(
                 "APPLIED",
                 "ready",
@@ -1555,6 +1687,90 @@ class LocalComponentProcessPort:
                     {"kind": "component-preflight", "component": component}
                 ),
             )
+
+    def _spawn_and_wait_spec(
+        self, component: str, spec: ComponentSpec
+    ) -> tuple[subprocess.Popen[bytes] | None, list[Any], str | None, object | None]:
+        stop_file, ok = self._resolve_stop_file(spec, allow_none=True)
+        if not ok:
+            return None, [], None, self._step("BLOCKED", "stop_dir_invalid")
+        if stop_file is not None:
+            if not _validate_non_symlink_parent(stop_file):
+                return None, [], None, self._step("BLOCKED", "stop_dir_invalid")
+            if not self._stop_file_absent(stop_file):
+                return None, [], None, self._step("BLOCKED", "stop_marker_present")
+        handles: list[Any] = []
+        stdout_target: Any = subprocess.DEVNULL
+        stderr_target: Any = subprocess.DEVNULL
+        try:
+            if spec.stdout_path is not None:
+                stdout_handle = open(spec.stdout_path, "ab")
+                handles.append(stdout_handle)
+                stdout_target = stdout_handle
+            if spec.stderr_path is not None:
+                stderr_handle = open(spec.stderr_path, "ab")
+                handles.append(stderr_handle)
+                stderr_target = stderr_handle
+            proc = subprocess.Popen(
+                list(spec.argv),
+                shell=False,
+                cwd=str(spec.cwd) if spec.cwd is not None else None,
+                env=dict(spec.env) if spec.env is not None else None,
+                stdin=subprocess.DEVNULL,
+                stdout=stdout_target,
+                stderr=stderr_target,
+            )
+        except Exception:
+            self._close_handle_list(handles)
+            return None, [], None, self._step("UNKNOWN", "component_spawn_unknown")
+
+        deadline = self._monotonic() + spec.start_timeout_seconds
+        while True:
+            exited = proc.poll()
+            if exited is not None:
+                self._close_handle_list(handles)
+                return (
+                    proc,
+                    [],
+                    None,
+                    self._step(
+                        "UNKNOWN",
+                        "component_exited_early",
+                        exit_code=int(exited),
+                    ),
+                )
+            try:
+                ready = spec.ready_check()
+            except Exception:
+                return (
+                    proc,
+                    handles,
+                    None,
+                    self._step("UNKNOWN", "component_ready_check_unknown"),
+                )
+            if component == "gateway":
+                if (
+                    type(ready) is str
+                    and _SHA256_REFERENCE.fullmatch(ready) is not None
+                ):
+                    return proc, handles, ready, None
+            else:
+                if (
+                    type(ready) is str
+                    and _SHA256_REFERENCE.fullmatch(ready) is not None
+                ):
+                    return proc, handles, ready, None
+                if ready is True:
+                    return proc, handles, None, None
+            remaining = deadline - self._monotonic()
+            if remaining <= 0.0:
+                return (
+                    proc,
+                    handles,
+                    None,
+                    self._step("UNKNOWN", "component_start_timeout"),
+                )
+            self._sleep(min(spec.poll_interval_seconds, remaining))
 
     def start(self, component: str) -> object:
         with self._lock:
@@ -1564,83 +1780,73 @@ class LocalComponentProcessPort:
             if component in self._start_attempted:
                 return self._step("UNKNOWN", "component_start_already_attempted")
             self._start_attempted.add(component)
-            if not _validate_non_symlink_parent(spec.stop_file):
-                return self._step("BLOCKED", "stop_dir_invalid")
-            if not self._stop_file_absent(spec.stop_file):
-                return self._step("BLOCKED", "stop_marker_present")
-            handles: list[Any] = []
-            stdout_target: Any = subprocess.DEVNULL
-            stderr_target: Any = subprocess.DEVNULL
-            try:
-                if spec.stdout_path is not None:
-                    stdout_handle = open(spec.stdout_path, "ab")
-                    handles.append(stdout_handle)
-                    stdout_target = stdout_handle
-                if spec.stderr_path is not None:
-                    stderr_handle = open(spec.stderr_path, "ab")
-                    handles.append(stderr_handle)
-                    stderr_target = stderr_handle
-                proc = subprocess.Popen(
-                    list(spec.argv),
-                    shell=False,
-                    cwd=str(spec.cwd) if spec.cwd is not None else None,
-                    env=dict(spec.env) if spec.env is not None else None,
-                    stdin=subprocess.DEVNULL,
-                    stdout=stdout_target,
-                    stderr=stderr_target,
-                )
-            except Exception:
-                for handle in handles:
-                    try:
-                        handle.close()
-                    except Exception:
-                        pass
-                return self._step("UNKNOWN", "component_spawn_unknown")
-            self._processes[component] = proc
-            self._log_handles[component] = handles
-
-            deadline = self._monotonic() + spec.start_timeout_seconds
-            while True:
-                exited = proc.poll()
-                if exited is not None:
-                    self._close_handles(component)
-                    return self._step(
-                        "UNKNOWN",
-                        "component_exited_early",
-                        exit_code=int(exited),
+            if isinstance(spec, ComponentGroupSpec):
+                started_members: list[
+                    tuple[ComponentSpec, subprocess.Popen[bytes], list[Any]]
+                ] = []
+                self._group_processes[component] = started_members
+                pids: list[int] = []
+                for member in spec.members:
+                    proc, handles, _ref, error = self._spawn_and_wait_spec(
+                        component, member
                     )
-                try:
-                    ready = spec.ready_check()
-                except Exception:
-                    return self._step("UNKNOWN", "component_ready_check_unknown")
-                if component == "gateway":
-                    if (
-                        type(ready) is str
-                        and _SHA256_REFERENCE.fullmatch(ready) is not None
-                    ):
-                        return self._step("APPLIED", "started", reference=ready)
-                else:
-                    if (
-                        type(ready) is str
-                        and _SHA256_REFERENCE.fullmatch(ready) is not None
-                    ):
-                        return self._step("APPLIED", "started", reference=ready)
-                    if ready is True:
-                        return self._step(
-                            "APPLIED",
-                            "started",
-                            reference=_reference(
-                                {
-                                    "kind": "component-start",
-                                    "component": component,
-                                    "pid": proc.pid,
-                                }
-                            ),
-                        )
-                remaining = deadline - self._monotonic()
-                if remaining <= 0.0:
-                    return self._step("UNKNOWN", "component_start_timeout")
-                self._sleep(min(spec.poll_interval_seconds, remaining))
+                    if proc is not None:
+                        started_members.append((member, proc, handles))
+                        pids.append(proc.pid)
+                    if error is not None:
+                        return error
+                return self._step(
+                    "APPLIED",
+                    "started",
+                    reference=_reference(
+                        {
+                            "kind": "component-group-start",
+                            "component": component,
+                            "pids": pids,
+                        }
+                    ),
+                )
+            proc, handles, ready_ref, error = self._spawn_and_wait_spec(component, spec)
+            if proc is not None:
+                self._processes[component] = proc
+                self._log_handles[component] = handles
+            if error is not None:
+                return error
+            assert proc is not None
+            return self._step(
+                "APPLIED",
+                "started",
+                reference=ready_ref
+                or _reference(
+                    {
+                        "kind": "component-start",
+                        "component": component,
+                        "pid": proc.pid,
+                    }
+                ),
+            )
+
+    def _stop_one_proc(
+        self, spec: ComponentSpec, proc: subprocess.Popen[bytes], handles: list[Any]
+    ) -> tuple[str, int | None]:
+        observed = proc.poll()
+        if observed is not None:
+            self._close_handle_list(handles)
+            if observed == 0:
+                return "stopped", 0
+            return "component_already_exited_nonzero", int(observed)
+        if not self._create_zero_byte_stop_file(spec):
+            return "stop_marker_write_failed", None
+        try:
+            exit_code = int(proc.wait(timeout=spec.stop_timeout_seconds))
+        except subprocess.TimeoutExpired:
+            return "component_stop_timeout", None
+        except Exception:
+            return "component_stop_unknown", None
+        self._close_handle_list(handles)
+        if exit_code == 0:
+            return "stopped", 0
+        return "component_stop_nonzero_exit", exit_code
 
     def stop_cooperatively(self, component: str) -> object:
         with self._lock:
@@ -1650,40 +1856,39 @@ class LocalComponentProcessPort:
             if component in self._stop_attempted:
                 return self._step("UNKNOWN", "component_stop_already_attempted")
             self._stop_attempted.add(component)
+            if isinstance(spec, ComponentGroupSpec):
+                started_members = self._group_processes.get(component)
+                if not started_members:
+                    return self._step("UNKNOWN", "component_not_started")
+                first_error: tuple[str, int | None] | None = None
+                for member_spec, proc, handles in reversed(started_members):
+                    code, exit_code = self._stop_one_proc(member_spec, proc, handles)
+                    if code != "stopped" and first_error is None:
+                        first_error = (code, exit_code)
+                if first_error is not None:
+                    return self._step(
+                        "UNKNOWN", first_error[0], exit_code=first_error[1]
+                    )
+                return self._step(
+                    "APPLIED",
+                    "stopped",
+                    reference=_reference(
+                        {
+                            "kind": "component-group-stop",
+                            "component": component,
+                            "count": len(started_members),
+                            "exit_code": 0,
+                        }
+                    ),
+                    exit_code=0,
+                )
             proc = self._processes.get(component)
             if proc is None:
                 return self._step("UNKNOWN", "component_not_started")
-            observed = proc.poll()
-            if observed is not None:
-                self._close_handles(component)
-                if observed == 0:
-                    return self._step(
-                        "APPLIED",
-                        "stopped",
-                        reference=_reference(
-                            {
-                                "kind": "component-stop",
-                                "component": component,
-                                "exit_code": 0,
-                            }
-                        ),
-                        exit_code=0,
-                    )
-                return self._step(
-                    "UNKNOWN",
-                    "component_already_exited_nonzero",
-                    exit_code=int(observed),
-                )
-            if not self._create_zero_byte_stop_file(spec):
-                return self._step("UNKNOWN", "stop_marker_write_failed")
-            try:
-                exit_code = int(proc.wait(timeout=spec.stop_timeout_seconds))
-            except subprocess.TimeoutExpired:
-                return self._step("UNKNOWN", "component_stop_timeout")
-            except Exception:
-                return self._step("UNKNOWN", "component_stop_unknown")
-            self._close_handles(component)
-            if exit_code == 0:
+            handles = self._log_handles.get(component, [])
+            code, exit_code = self._stop_one_proc(spec, proc, handles)
+            self._log_handles.pop(component, None)
+            if code == "stopped":
                 return self._step(
                     "APPLIED",
                     "stopped",
@@ -1696,8 +1901,4 @@ class LocalComponentProcessPort:
                     ),
                     exit_code=0,
                 )
-            return self._step(
-                "UNKNOWN",
-                "component_stop_nonzero_exit",
-                exit_code=exit_code,
-            )
+            return self._step("UNKNOWN", code, exit_code=exit_code)

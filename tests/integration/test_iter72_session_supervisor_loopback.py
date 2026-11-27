@@ -73,6 +73,7 @@ SessionPlan = supervisor_module.SessionPlan
 SessionSupervisor = supervisor_module.SessionSupervisor
 StepResult = supervisor_module.StepResult
 
+ComponentGroupSpec = adapters_module.ComponentGroupSpec
 ComponentSpec = adapters_module.ComponentSpec
 LocalComponentProcessPort = adapters_module.LocalComponentProcessPort
 RiskWebHttpPort = adapters_module.RiskWebHttpPort
@@ -825,3 +826,104 @@ def test_local_component_port_fail_closed_stale_marker_nonzero_exit_and_timeout_
         # Test harness cleanup only.
         proc.terminate()
         proc.wait(timeout=5.0)
+
+
+def test_session_supervisor_supports_multiprocess_execution_group_and_dynamic_cold_start(
+    tmp_path: Path,
+) -> None:
+    """Exercise cold-start SessionSupervisor with:
+    - ComponentGroupSpec for multi-process 'execution' (3 members, reverse cooperative stop);
+    - Dynamic stop_file resolver resolved after start;
+    - Dynamic RiskWebHttpPort(session_token=callable, gateway_reference=None, include_proof=True);
+    - RuntimeHttpPort offline preflight_units_provider before Runtime starts, then live HTTP checks.
+    """
+    gw_ref = gateway_generation_reference(
+        journal_id="gw-journal-cold",
+        owner_generation="gen-cold-01",
+        service_id="gateway-simnow",
+        instance_id="gw-inst-01",
+        server_key_fingerprint=gateway_server_key_fingerprint(b"m" * 40),
+    )
+    obs_ref = "sha256:" + hashlib.sha256(b"r05-cold-verified").hexdigest()
+    risk_server = _LoopbackRiskWebServer(lambda: (True, gw_ref, obs_ref))
+    runtime_server = _LoopbackRuntimeServer(UNITS)
+    risk_server.start()
+    runtime_server.start()
+    try:
+        specs: dict[str, Any] = _build_component_specs(tmp_path, gateway_reference=gw_ref)
+        # Replace execution with a 3-process ComponentGroupSpec using dynamic stop_file callables.
+        exec_members = []
+        exec_stop_files: list[Path] = []
+        for idx in range(3):
+            ready_file = tmp_path / f"exec_{idx}.ready"
+            stop_file = tmp_path / f"exec_{idx}.stop"
+            exec_stop_files.append(stop_file)
+            resolved_stop: list[Path | None] = [None]
+
+            def _ready(rf=ready_file, sf=stop_file, holder=resolved_stop):
+                if rf.exists():
+                    holder[0] = sf
+                    return True
+                return False
+
+            exec_members.append(
+                ComponentSpec(
+                    argv=(
+                        sys.executable,
+                        "-c",
+                        _WORKER_SCRIPT,
+                        str(ready_file),
+                        str(stop_file),
+                        "0",
+                        "normal",
+                    ),
+                    stop_file=lambda holder=resolved_stop: holder[0],
+                    ready_check=_ready,
+                    cwd=tmp_path,
+                    start_timeout_seconds=10.0,
+                    stop_timeout_seconds=5.0,
+                    poll_interval_seconds=0.02,
+                )
+            )
+        specs["execution"] = ComponentGroupSpec(tuple(exec_members))
+        components = LocalComponentProcessPort(specs, step_factory=StepResult)
+        runtime_port = RuntimeHttpPort.from_http(
+            host="127.0.0.1",
+            port=runtime_server.port,
+            token=RUNTIME_TOKEN,
+            step_result_factory=StepResult,
+            group_result_factory=GroupResult,
+            timeout=5.0,
+            preflight_units_provider=lambda: UNITS,
+        )
+        risk_port = RiskWebHttpPort(
+            origin=risk_server.origin,
+            session_token=lambda: RISK_SESSION,
+            gateway_reference=None,
+            observation_factory=RiskGateObservation,
+            timeout=5.0,
+            include_proof=True,
+        )
+        receipt_path = tmp_path / "cold_start_receipt.jsonl"
+        with JsonlReceipt(receipt_path, SESSION_ID) as receipt:
+            supervisor = SessionSupervisor(
+                SessionPlan(SESSION_ID, UNITS),
+                components=components,
+                runtime=runtime_port,
+                risk=risk_port,
+                receipt=receipt,
+            )
+            assert supervisor.preflight().exit_code == 0
+            assert supervisor.start_session().exit_code == 0
+            assert len(components._group_processes["execution"]) == 3
+            assert supervisor.status().exit_code == 0
+            stopped = supervisor.stop_session()
+            assert (stopped.status, stopped.code, stopped.exit_code) == (
+                "APPLIED",
+                "session_stopped",
+                0,
+            )
+        assert all(sf.exists() and sf.stat().st_size == 0 for sf in exec_stop_files)
+    finally:
+        risk_server.close()
+        runtime_server.close()
