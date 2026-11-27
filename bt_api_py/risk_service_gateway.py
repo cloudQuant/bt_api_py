@@ -69,6 +69,14 @@ CONTROL_INTENT_APPLY_OPERATION = "direct.control.intent.apply"
 CONTROL_INTENT_OPERATIONS = CONTROL_OPERATIONS | frozenset(
     {CONTROL_INTENT_APPLY_OPERATION}
 )
+CONTROL_INTENT_CONTINUITY_CLAIM_OPERATION = "direct.control.intent.continuity_claim"
+CONTROL_INTENT_CONTINUITY_APPLY_OPERATION = "direct.control.intent.continuity_apply"
+CONTROL_INTENT_CONTINUITY_OPERATIONS = CONTROL_INTENT_OPERATIONS | frozenset(
+    {
+        CONTROL_INTENT_CONTINUITY_CLAIM_OPERATION,
+        CONTROL_INTENT_CONTINUITY_APPLY_OPERATION,
+    }
+)
 _CONTROL_BINDING_CAPACITY = 8192
 _CANCEL_SCOPE_LIMIT = 256
 _OBSERVER_LIMIT = 256
@@ -1036,8 +1044,13 @@ class GatewayControlAdapter:
         route: BoundCallRoute | None = None,
         server_key_fingerprint: str | None = None,
         control_intent_enabled: bool = False,
+        control_intent_continuity_enabled: bool = False,
     ) -> None:
-        if type(control_intent_enabled) is not bool:
+        if (
+            type(control_intent_enabled) is not bool
+            or type(control_intent_continuity_enabled) is not bool
+            or (control_intent_continuity_enabled and not control_intent_enabled)
+        ):
             raise ValueError("RISK_CONTROL_INTENT_CONFIG_INVALID")
         self._runtime = runtime
         self._mount, self._service_id = mount, service_id
@@ -1046,6 +1059,7 @@ class GatewayControlAdapter:
         self._route = None if route is None else BoundCallRoute(**vars(route))
         self._server_key_fingerprint = server_key_fingerprint
         self._control_intent_enabled = control_intent_enabled
+        self._control_intent_continuity_enabled = control_intent_continuity_enabled
         self._cause_bindings: dict[str, _ControlBindingProof] = {}
         self._operation_bindings: dict[str, _ControlBindingProof] = {}
         self.last_cancel_status: dict[str, Mapping] = {}
@@ -1307,6 +1321,295 @@ class GatewayControlAdapter:
             },
             proof,
             rejection_codes=CONTROL_INTENT_REJECTION_CODES,
+            expected_unknown={"status": "UNKNOWN", "cause_id": cause_id},
+        )
+        if error is not None:
+            return error
+        try:
+            if (
+                set(raw) != {"status", "cause_id", "version", "active"}
+                or raw.get("status") != "OBSERVED"
+                or type(raw.get("cause_id")) is not str
+                or raw["cause_id"] != cause_id
+                or type(raw.get("active")) is not bool
+                or type(raw.get("version")) is not int
+                or raw["version"] != (1 if raw["active"] else 2)
+            ):
+                raise ValueError
+            return ControlReply(
+                "OBSERVED",
+                cause_id=cause_id,
+                active=raw["active"],
+                version=raw["version"],
+            )
+        except Exception:
+            return ControlReply("UNKNOWN", code="INVALID_OR_UNAVAILABLE_REPLY")
+
+    @staticmethod
+    def _serialize_binding_for_wire(binding: Any) -> dict[str, Any]:
+        return {
+            "schema_version": binding.schema_version,
+            "account_scope": binding.account_scope,
+            "journal_id": binding.journal_id,
+            "owner_generation": binding.owner_generation,
+            "mount": binding.mount,
+            "service_id": binding.service_id,
+            "instance_id": binding.instance_id,
+            "scope_ref": binding.scope_ref,
+            "registration_id": binding.registration_id,
+            "service_epoch": binding.service_epoch,
+            "peer_principal_ref": binding.peer_principal_ref,
+            "peer_actor_ref": binding.peer_actor_ref,
+            "server_key_fingerprint": binding.server_key_fingerprint,
+            "operations": sorted(binding.operations),
+        }
+
+    def claim_control_intent_continuity(
+        self,
+        *,
+        original_binding: Any,
+        request_digest: str,
+        cause_id: str,
+        mode: str,
+        scope_kind: str,
+        scope_value: str,
+        latch_id: str | None,
+    ) -> Any:
+        """Request an authoritative cross-generation continuity proof/claim from Gateway."""
+        from bt_api_risk.pretrade import ControlIntentBinding, ControlIntentContinuityClaim
+
+        if not self._control_intent_continuity_enabled:
+            return ControlIntentContinuityClaim(
+                "TRANSPORT_NOT_STARTED", code="CONTROL_INTENT_CONTINUITY_UNAVAILABLE"
+            )
+        if (
+            type(original_binding) is not ControlIntentBinding
+            or type(request_digest) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", request_digest) is None
+            or not _ref(cause_id)
+            or type(mode) is not str
+            or scope_kind != "account"
+            or scope_value != ""
+            or (latch_id is not None and not _ref(latch_id))
+        ):
+            return ControlIntentContinuityClaim("REQUEST_DENIED", code="INVALID_REQUEST")
+        route = self._route
+        if (
+            type(route) is not BoundCallRoute
+            or original_binding.account_scope != self._account
+            or original_binding.mount != self._mount
+            or original_binding.service_id != self._service_id
+            or original_binding.instance_id != self._instance_id
+            or original_binding.scope_ref != self._scope_ref
+            or original_binding.peer_principal_ref != route.peer.principal_ref
+            or original_binding.peer_actor_ref != route.peer.actor_ref
+            or original_binding.server_key_fingerprint != self._server_key_fingerprint
+        ):
+            return ControlIntentContinuityClaim(
+                "REQUEST_DENIED", code="CONTROL_INTENT_BINDING_MISMATCH"
+            )
+        try:
+            from bt_api_gateway.control_intent_continuity_wire import (
+                CONTROL_INTENT_CONTINUITY_REJECTION_CODES,
+                CONTROL_INTENT_CONTINUITY_WIRE_SCHEMA_VERSION,
+            )
+            from bt_api_risk.pretrade.account_bound_intents import request_digest_for_control
+            from bt_api_risk.risk_order_journal_contracts import RiskOrderJournalError
+        except Exception:
+            return ControlIntentContinuityClaim("UNKNOWN", code="INVALID_OR_UNAVAILABLE_REPLY")
+        try:
+            computed_digest = request_digest_for_control(
+                cause_id=cause_id,
+                mode=mode,
+                scope_kind=scope_kind,
+                scope_value=scope_value,
+                latch_id=latch_id,
+            )
+        except RiskOrderJournalError:
+            return ControlIntentContinuityClaim("REQUEST_DENIED", code="INVALID_REQUEST")
+        except Exception:
+            return ControlIntentContinuityClaim("UNKNOWN", code="INVALID_OR_UNAVAILABLE_REPLY")
+        if request_digest != computed_digest:
+            return ControlIntentContinuityClaim(
+                "REQUEST_DENIED", code="CONTROL_INTENT_REQUEST_DIGEST_MISMATCH"
+            )
+        proof, error = self._capture_binding()
+        if proof is None:
+            return ControlIntentContinuityClaim(error.outcome, code=error.code)
+        if (
+            proof.binding.journal_id != original_binding.journal_id
+            or proof.binding.owner_generation == original_binding.owner_generation
+        ):
+            return ControlIntentContinuityClaim(
+                "TRANSPORT_NOT_STARTED", code="CONTROL_INTENT_BINDING_MISMATCH"
+            )
+        if CONTROL_INTENT_CONTINUITY_CLAIM_OPERATION not in proof.observation.operations:
+            return ControlIntentContinuityClaim(
+                "TRANSPORT_NOT_STARTED", code="CONTROL_INTENT_CONTINUITY_UNAVAILABLE"
+            )
+        raw, error = self._call(
+            CONTROL_INTENT_CONTINUITY_CLAIM_OPERATION,
+            {
+                "schema_version": CONTROL_INTENT_CONTINUITY_WIRE_SCHEMA_VERSION,
+                "cause_id": cause_id,
+                "mode": mode,
+                "scope_kind": scope_kind,
+                "scope_value": scope_value,
+                "latch_id": latch_id,
+                "request_digest": request_digest,
+                "original_binding": self._serialize_binding_for_wire(original_binding),
+                "current_binding_digest": proof.binding.digest,
+            },
+            proof,
+            rejection_codes=CONTROL_INTENT_CONTINUITY_REJECTION_CODES,
+            expected_unknown={"status": "UNKNOWN", "cause_id": cause_id},
+        )
+        if error is not None:
+            return ControlIntentContinuityClaim(error.outcome, code=error.code)
+        try:
+            status = raw.get("status")
+            if status == "ALREADY_CONSUMED":
+                if (
+                    set(raw)
+                    != {
+                        "status",
+                        "proof_status",
+                        "claim_id",
+                        "continuity_chain_digest",
+                        "cause_id",
+                        "version",
+                        "active",
+                        "consumed_effect_digest",
+                    }
+                    or raw["proof_status"] != "ALREADY_CONSUMED"
+                    or raw["cause_id"] != cause_id
+                    or type(raw["active"]) is not bool
+                    or type(raw["version"]) is not int
+                    or raw["version"] != (1 if raw["active"] else 2)
+                ):
+                    raise ValueError
+                return ControlIntentContinuityClaim(
+                    "ALREADY_CONSUMED",
+                    proof_status="ALREADY_CONSUMED",
+                    claim_id=raw["claim_id"],
+                    continuity_chain_digest=raw["continuity_chain_digest"],
+                    current_binding=proof.binding,
+                    cause_id=cause_id,
+                    active=raw["active"],
+                    version=raw["version"],
+                    consumed_effect_digest=raw["consumed_effect_digest"],
+                )
+            if status == "CLAIMED":
+                if (
+                    set(raw)
+                    != {
+                        "status",
+                        "proof_status",
+                        "claim_id",
+                        "continuity_chain_digest",
+                        "cause_id",
+                    }
+                    or raw["proof_status"] != "NOT_APPLIED_SEALED"
+                    or raw["cause_id"] != cause_id
+                ):
+                    raise ValueError
+                return ControlIntentContinuityClaim(
+                    "CLAIMED",
+                    proof_status="NOT_APPLIED_SEALED",
+                    claim_id=raw["claim_id"],
+                    continuity_chain_digest=raw["continuity_chain_digest"],
+                    current_binding=proof.binding,
+                    cause_id=cause_id,
+                )
+            raise ValueError
+        except Exception:
+            return ControlIntentContinuityClaim("UNKNOWN", code="INVALID_OR_UNAVAILABLE_REPLY")
+
+    def apply_claimed_control_intent(
+        self,
+        *,
+        original_binding: Any,
+        current_binding: Any,
+        claim_id: str,
+        continuity_chain_digest: str,
+        request_digest: str,
+        cause_id: str,
+        mode: str,
+        scope_kind: str,
+        scope_value: str,
+        latch_id: str | None,
+    ) -> Any:
+        """Consume one verified cross-generation continuity claim on the current Gateway owner."""
+        from bt_api_risk.pretrade import ControlIntentBinding, ControlReply
+
+        if not self._control_intent_continuity_enabled:
+            return ControlReply(
+                "TRANSPORT_NOT_STARTED", code="CONTROL_INTENT_CONTINUITY_UNAVAILABLE"
+            )
+        if (
+            type(original_binding) is not ControlIntentBinding
+            or type(current_binding) is not ControlIntentBinding
+            or not _ref(claim_id)
+            or type(continuity_chain_digest) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", continuity_chain_digest) is None
+            or type(request_digest) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", request_digest) is None
+            or not _ref(cause_id)
+            or type(mode) is not str
+            or scope_kind != "account"
+            or scope_value != ""
+            or (latch_id is not None and not _ref(latch_id))
+        ):
+            return ControlReply("REQUEST_DENIED", code="INVALID_REQUEST")
+        try:
+            from bt_api_gateway.control_intent_continuity_wire import (
+                CONTROL_INTENT_CONTINUITY_REJECTION_CODES,
+                CONTROL_INTENT_CONTINUITY_WIRE_SCHEMA_VERSION,
+            )
+            from bt_api_risk.pretrade.account_bound_intents import request_digest_for_control
+            from bt_api_risk.risk_order_journal_contracts import RiskOrderJournalError
+        except Exception:
+            return ControlReply("UNKNOWN", code="INVALID_OR_UNAVAILABLE_REPLY")
+        try:
+            computed_digest = request_digest_for_control(
+                cause_id=cause_id,
+                mode=mode,
+                scope_kind=scope_kind,
+                scope_value=scope_value,
+                latch_id=latch_id,
+            )
+        except RiskOrderJournalError:
+            return ControlReply("REQUEST_DENIED", code="INVALID_REQUEST")
+        except Exception:
+            return ControlReply("UNKNOWN", code="INVALID_OR_UNAVAILABLE_REPLY")
+        if request_digest != computed_digest:
+            return ControlReply("REQUEST_DENIED", code="CONTROL_INTENT_REQUEST_DIGEST_MISMATCH")
+        proof, error = self._capture_binding()
+        if proof is None:
+            return error
+        if proof.binding != current_binding:
+            return ControlReply("TRANSPORT_NOT_STARTED", code="CONTROL_INTENT_BINDING_MISMATCH")
+        if CONTROL_INTENT_CONTINUITY_APPLY_OPERATION not in proof.observation.operations:
+            return ControlReply(
+                "TRANSPORT_NOT_STARTED", code="CONTROL_INTENT_CONTINUITY_UNAVAILABLE"
+            )
+        raw, error = self._call(
+            CONTROL_INTENT_CONTINUITY_APPLY_OPERATION,
+            {
+                "schema_version": CONTROL_INTENT_CONTINUITY_WIRE_SCHEMA_VERSION,
+                "cause_id": cause_id,
+                "mode": mode,
+                "scope_kind": scope_kind,
+                "scope_value": scope_value,
+                "latch_id": latch_id,
+                "request_digest": request_digest,
+                "original_binding": self._serialize_binding_for_wire(original_binding),
+                "current_binding_digest": current_binding.digest,
+                "claim_id": claim_id,
+                "continuity_chain_digest": continuity_chain_digest,
+            },
+            proof,
+            rejection_codes=CONTROL_INTENT_CONTINUITY_REJECTION_CODES,
             expected_unknown={"status": "UNKNOWN", "cause_id": cause_id},
         )
         if error is not None:

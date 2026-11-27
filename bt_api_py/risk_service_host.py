@@ -3170,6 +3170,9 @@ class RiskServiceHost:
             route=control_route,
             server_key_fingerprint=hashlib.sha256(gateway.server_public_key).hexdigest(),
             control_intent_enabled=getattr(config, "bound_control_intents_enabled", False),
+            control_intent_continuity_enabled=getattr(
+                config, "control_intent_continuity_enabled", False
+            ),
         )
         self._check_cleanup_ready()
         try:
@@ -3236,6 +3239,7 @@ class RiskServiceHost:
     def _control_runtime(self) -> Any:
         _require_supported_r04(self.config)
         from bt_api_py.risk_service_gateway import (
+            CONTROL_INTENT_CONTINUITY_OPERATIONS as CONTROL_INTENT_CONTINUITY_OPERATIONS_FOR_RISK,
             CONTROL_INTENT_OPERATIONS as CONTROL_INTENT_OPERATIONS_FOR_RISK,
         )
         from bt_api_py.risk_service_gateway import CONTROL_OPERATIONS as CONTROL_OPERATIONS_FOR_RISK
@@ -3243,9 +3247,13 @@ class RiskServiceHost:
         config, gateway = self.config, self.config.gateway
         mounts = ["application.direct_write"]
         control_ops = (
-            CONTROL_INTENT_OPERATIONS_FOR_RISK
-            if getattr(config, "bound_control_intents_enabled", False)
-            else CONTROL_OPERATIONS_FOR_RISK
+            CONTROL_INTENT_CONTINUITY_OPERATIONS_FOR_RISK
+            if getattr(config, "control_intent_continuity_enabled", False)
+            else (
+                CONTROL_INTENT_OPERATIONS_FOR_RISK
+                if getattr(config, "bound_control_intents_enabled", False)
+                else CONTROL_OPERATIONS_FOR_RISK
+            )
         )
         requested = {"application.direct_write": control_ops}
         extension = None
@@ -3286,6 +3294,7 @@ class RiskServiceHost:
             GatewayAccountObserverRoute,
         )
         from bt_api_py.risk_service_gateway import (
+            CONTROL_INTENT_CONTINUITY_OPERATIONS as CONTROL_INTENT_CONTINUITY_OPERATIONS_FOR_RISK,
             CONTROL_INTENT_OPERATIONS as CONTROL_INTENT_OPERATIONS_FOR_RISK,
         )
         from bt_api_py.risk_service_gateway import CONTROL_OPERATIONS as CONTROL_OPERATIONS_FOR_RISK
@@ -3330,9 +3339,13 @@ class RiskServiceHost:
             _fail("RISK_SERVICE_GATEWAY_CONTROL_UNAVAILABLE")
         self._check_cleanup_ready()
         required_control_ops = (
-            CONTROL_INTENT_OPERATIONS_FOR_RISK
-            if getattr(config, "bound_control_intents_enabled", False)
-            else CONTROL_OPERATIONS_FOR_RISK
+            CONTROL_INTENT_CONTINUITY_OPERATIONS_FOR_RISK
+            if getattr(config, "control_intent_continuity_enabled", False)
+            else (
+                CONTROL_INTENT_OPERATIONS_FOR_RISK
+                if getattr(config, "bound_control_intents_enabled", False)
+                else CONTROL_OPERATIONS_FOR_RISK
+            )
         )
         granted = self._call_lifecycle(_granted, snapshot, "application.direct_write", required_control_ops)
         self._check_cleanup_ready()

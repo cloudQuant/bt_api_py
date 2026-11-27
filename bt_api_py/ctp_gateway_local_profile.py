@@ -715,15 +715,26 @@ def _controls(value, principals, grants):
         release_audit = release_audit["upgrade_journal"]
         value = {name: item for name, item in value.items() if name != "release_audit"}
     control_intent_history = None
+    control_intent_continuity = None
     if type(value) is dict and "control_intent_history" in value:
-        # Optional {"upgrade_journal": bool}: installs/opens the same-generation
-        # Risk bound control-intent history extension on the journal. Requires
+        # Optional {"upgrade_journal": bool, "upgrade_continuity"?: bool}:
+        # installs/opens the Risk bound control-intent history (and optional
+        # cross-generation continuity) extension on the journal. Requires
         # ``control_intent_enabled: true`` in Gateway service options; an existing
         # journal without it is upgraded only with upgrade_journal true.
-        control_intent_history = _mapping(value["control_intent_history"], ("upgrade_journal",))
-        if type(control_intent_history["upgrade_journal"]) is not bool:
+        declared = value["control_intent_history"]
+        optional_hist = (
+            ("upgrade_continuity",)
+            if type(declared) is dict and "upgrade_continuity" in declared
+            else ()
+        )
+        parsed = _mapping(declared, ("upgrade_journal",) + optional_hist)
+        if type(parsed["upgrade_journal"]) is not bool:
             _invalid()
-        control_intent_history = control_intent_history["upgrade_journal"]
+        if "upgrade_continuity" in parsed and type(parsed["upgrade_continuity"]) is not bool:
+            _invalid()
+        control_intent_history = parsed["upgrade_journal"]
+        control_intent_continuity = parsed.get("upgrade_continuity", False)
         value = {name: item for name, item in value.items() if name != "control_intent_history"}
     lease_drain = None
     if type(value) is dict and "lease_drain" in value:
@@ -809,8 +820,10 @@ def _controls(value, principals, grants):
             except ValueError:
                 _invalid()
         entries, operations = [], set()
+        from bt_api_py.gateway_direct_service import CONTROL_INTENT_CONTINUITY_OPERATIONS
+
         allowed_item_operations = (
-            CONTROL_OPERATIONS | CONTROL_INTENT_OPERATIONS
+            CONTROL_OPERATIONS | CONTROL_INTENT_OPERATIONS | CONTROL_INTENT_CONTINUITY_OPERATIONS
             if kind == "risk" and operator["account_scope_allowed"]
             else CONTROL_OPERATIONS
         )
@@ -820,12 +833,12 @@ def _controls(value, principals, grants):
             item_scope = _scope(item["scope"])
             if (item["port"] != "service.direct_write"
                     or not item_operations <= allowed_item_operations
-                    or (bool(item_operations & CONTROL_INTENT_OPERATIONS)
+                    or (bool(item_operations & (CONTROL_INTENT_OPERATIONS | CONTROL_INTENT_CONTINUITY_OPERATIONS))
                         and item_scope.strategy_ref is not None)):
                 _invalid()  # an operator never receives trading operations here
             entries.append(ResourceGrant(item["instance_id"], item["port"], item["scope_ref"],
                                          item_scope, item_operations))
-            operations |= item_operations - CONTROL_INTENT_OPERATIONS
+            operations |= item_operations - (CONTROL_INTENT_OPERATIONS | CONTROL_INTENT_CONTINUITY_OPERATIONS)
         principals[public] = identity.principal_ref
         grants[identity.principal_ref] = (PrincipalGrant(identity, tuple(entries)),)
         pending_control.append(
@@ -854,6 +867,7 @@ def _controls(value, principals, grants):
         lease_drain,
         release_audit,
         control_intent_history,
+        control_intent_continuity,
     )
 
 
@@ -1374,7 +1388,7 @@ def _load_resources(config, *, trading):
                     monitor_identities.append(identity)
                 calendar_principals.add(identity.principal_ref)
                 calendar_keys.add(public)
-        control_grants, upgrade_controls, drain_upgrade, lease_drain, release_audit, control_intent_history = None, False, None, None, None, None
+        control_grants, upgrade_controls, drain_upgrade, lease_drain, release_audit, control_intent_history, control_intent_continuity = None, False, None, None, None, None, None
         if trading and raw.get("controls") is not None:
             (
                 control_grants,
@@ -1383,6 +1397,7 @@ def _load_resources(config, *, trading):
                 lease_drain,
                 release_audit,
                 control_intent_history,
+                control_intent_continuity,
             ) = _controls(raw["controls"], principals, grants)
         delegation, parent_settings, upgrade_parents = None, None, False
         if trading and raw.get("delegation") is not None:
@@ -1585,6 +1600,7 @@ def _load_resources(config, *, trading):
                 control_release_audit_enabled=release_audit is not None,
                 upgrade_control_release_audit=release_audit is True,
                 upgrade_control_intent_history=control_intent_history is True,
+                upgrade_control_intent_continuity=control_intent_continuity is True,
                 **drain_options,
             )
         return CtpGatewayTrustedResources(

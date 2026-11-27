@@ -596,6 +596,7 @@ class RiskServiceConfig:
     account_facts_observation: RiskAccountFactsObservation | None = None
     parent_contract_enabled: bool = False
     bound_control_intents_enabled: bool = False
+    control_intent_continuity_enabled: bool = False
 
     def __repr__(self) -> str:
         return f"RiskServiceConfig(service_id={self.service_id!r})"
@@ -920,6 +921,7 @@ def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceCon
             "account_facts_observation",
             "parent_contract_enabled",
             "bound_control_intents_enabled",
+            "control_intent_continuity_enabled",
         ),
     )
     if top["schema"] != RISK_SERVICE_CONFIG_SCHEMA:
@@ -931,6 +933,11 @@ def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceCon
         _fail("RISK_SERVICE_CONFIG_PARENT_CONTRACT_INVALID")
     bound_control_intents_enabled = top.get("bound_control_intents_enabled", False)
     if type(bound_control_intents_enabled) is not bool:
+        _fail("RISK_SERVICE_CONFIG_BOUND_CONTROL_INTENTS_INVALID")
+    control_intent_continuity_enabled = top.get("control_intent_continuity_enabled", False)
+    if type(control_intent_continuity_enabled) is not bool or (
+        control_intent_continuity_enabled and not bound_control_intents_enabled
+    ):
         _fail("RISK_SERVICE_CONFIG_BOUND_CONTROL_INTENTS_INVALID")
     facts_observation = None
     if "account_facts_observation" in top:
@@ -1173,6 +1180,7 @@ def parse_risk_service_config(document: object, *, path: Path) -> RiskServiceCon
         account_facts_observation=facts_observation,
         parent_contract_enabled=parent_contract_enabled,
         bound_control_intents_enabled=bound_control_intents_enabled,
+        control_intent_continuity_enabled=control_intent_continuity_enabled,
     )
 
 
