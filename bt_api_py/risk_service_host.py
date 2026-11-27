@@ -2553,6 +2553,8 @@ class RiskServiceHost:
                     self.account_facts_status = 'UNKNOWN'
                     if getattr(settings, 'order_cut_enabled', False):
                         self.order_cut_status = 'UNKNOWN'
+                    if getattr(settings, 'cancel_attempts_enabled', False):
+                        self.cancel_attempts_status = 'UNKNOWN'
                 if not allow_failure_replace or observer_service_epoch is None or now < self._account_facts_retry_at:
                     return
                 needs_replace = True
@@ -2599,6 +2601,8 @@ class RiskServiceHost:
                     self.account_facts_status = 'RECOVERY_REQUIRED'
                     if getattr(settings, 'order_cut_enabled', False):
                         self.order_cut_status = 'RECOVERY_REQUIRED'
+                    if getattr(settings, 'cancel_attempts_enabled', False):
+                        self.cancel_attempts_status = 'RECOVERY_REQUIRED'
                     return
                 needs_replace = True
             elif (

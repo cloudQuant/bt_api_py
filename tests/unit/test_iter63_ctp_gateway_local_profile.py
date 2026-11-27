@@ -1307,3 +1307,57 @@ def test_simnow_control_intent_history_bundle_composes_and_fails_closed(tmp_path
     file.write_text(json.dumps(doc), encoding="utf-8")
     with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
         load_simnow_trading_resources(config_enabled)
+
+
+def test_simnow_cancel_attempt_stream_upgrade_bundle_composes_and_fails_closed(tmp_path, monkeypatch):
+    from bt_api_py.ctp_gateway_local_profile import (
+        CtpLocalProfileError,
+        load_simnow_trading_resources,
+    )
+    from bt_api_py.ctp_gateway_trading import CtpGatewayTradingError
+    from bt_api_py.service_config import parse_service_config
+
+    doc, file, config = _fixture(tmp_path, monkeypatch)
+    _composing_doc(doc)
+    doc["controls"]["cancel_attempt_stream"] = {"upgrade_journal": True}
+    file.write_text(json.dumps(doc), encoding="utf-8")
+
+    raw = config.to_public_dict()
+    raw["components"]["gateway"]["settings"]["options"].update(
+        control_enabled=True,
+        strategy_ledger_enabled=True,
+        account_extensions_enabled=True,
+        cancel_enabled=True,
+        cancel_attempt_stream_enabled=True,
+        cancel_attempt_stream_qualified=True,
+    )
+    resources = load_simnow_trading_resources(parse_service_config(raw))
+    assert resources.upgrade_cancel_attempt_stream is True
+
+    # Non-bool upgrade_journal fails closed.
+    doc["controls"]["cancel_attempt_stream"] = {"upgrade_journal": "yes"}
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
+        load_simnow_trading_resources(parse_service_config(raw))
+
+    # Unknown extra key fails closed.
+    doc["controls"]["cancel_attempt_stream"] = {"upgrade_journal": True, "extra": 1}
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
+        load_simnow_trading_resources(parse_service_config(raw))
+
+    # upgrade_journal=True while cancel_attempt_stream_enabled is False fails closed at deployment validation.
+    doc["controls"]["cancel_attempt_stream"] = {"upgrade_journal": True}
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    raw_disabled = config.to_public_dict()
+    raw_disabled["components"]["gateway"]["settings"]["options"].update(
+        control_enabled=True,
+        strategy_ledger_enabled=True,
+        account_extensions_enabled=True,
+        cancel_enabled=True,
+    )
+    from bt_api_py.ctp_gateway_local_profile import simnow_trading_profile_factory
+
+    with pytest.raises(CtpGatewayTradingError, match="^INVALID_CANCEL_STREAM_CONFIGURATION$"):
+        simnow_trading_profile_factory.create_deployment(parse_service_config(raw_disabled))
+

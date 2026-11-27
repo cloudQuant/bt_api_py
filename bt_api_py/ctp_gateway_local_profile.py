@@ -736,6 +736,16 @@ def _controls(value, principals, grants):
         control_intent_history = parsed["upgrade_journal"]
         control_intent_continuity = parsed.get("upgrade_continuity", False)
         value = {name: item for name, item in value.items() if name != "control_intent_history"}
+    cancel_attempt_stream = None
+    if type(value) is dict and "cancel_attempt_stream" in value:
+        # Optional {"upgrade_journal": bool}: upgrades an existing journal to
+        # install the R-04 cancel-attempt stream tables when
+        # ``cancel_attempt_stream_enabled: true`` is configured on Gateway.
+        parsed_cancel = _mapping(value["cancel_attempt_stream"], ("upgrade_journal",))
+        if type(parsed_cancel["upgrade_journal"]) is not bool:
+            _invalid()
+        cancel_attempt_stream = parsed_cancel["upgrade_journal"]
+        value = {name: item for name, item in value.items() if name != "cancel_attempt_stream"}
     lease_drain = None
     if type(value) is dict and "lease_drain" in value:
         # Optional (D63-28, off unless present): {"strategies": [strategy refs],
@@ -868,6 +878,7 @@ def _controls(value, principals, grants):
         release_audit,
         control_intent_history,
         control_intent_continuity,
+        cancel_attempt_stream,
     )
 
 
@@ -1388,7 +1399,7 @@ def _load_resources(config, *, trading):
                     monitor_identities.append(identity)
                 calendar_principals.add(identity.principal_ref)
                 calendar_keys.add(public)
-        control_grants, upgrade_controls, drain_upgrade, lease_drain, release_audit, control_intent_history, control_intent_continuity = None, False, None, None, None, None, None
+        control_grants, upgrade_controls, drain_upgrade, lease_drain, release_audit, control_intent_history, control_intent_continuity, cancel_attempt_stream = None, False, None, None, None, None, None, None
         if trading and raw.get("controls") is not None:
             (
                 control_grants,
@@ -1398,6 +1409,7 @@ def _load_resources(config, *, trading):
                 release_audit,
                 control_intent_history,
                 control_intent_continuity,
+                cancel_attempt_stream,
             ) = _controls(raw["controls"], principals, grants)
         delegation, parent_settings, upgrade_parents = None, None, False
         if trading and raw.get("delegation") is not None:
@@ -1424,8 +1436,10 @@ def _load_resources(config, *, trading):
                 for delegate in (raw.get("delegation") or {}).get("delegates", [])
                 if any(
                     resource.get("port") == "service.account_read"
-                    and any(str(operation).startswith(("account.facts.", "account.order_cut."))
-                            for operation in resource.get("operations", []))
+                    and any(
+                        str(operation).startswith(("account.facts.", "account.order_cut.", "account.cancel_attempts."))
+                        for operation in resource.get("operations", [])
+                    )
                     for resource in delegate.get("resources", [])
                 )
             )
@@ -1601,6 +1615,7 @@ def _load_resources(config, *, trading):
                 upgrade_control_release_audit=release_audit is True,
                 upgrade_control_intent_history=control_intent_history is True,
                 upgrade_control_intent_continuity=control_intent_continuity is True,
+                upgrade_cancel_attempt_stream=cancel_attempt_stream is True,
                 **drain_options,
             )
         return CtpGatewayTrustedResources(

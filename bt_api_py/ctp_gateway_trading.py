@@ -1761,10 +1761,6 @@ def build_ctp_gateway_trading_profile(
                 )
                 if settings.risk_v2_binding_enabled:
                     journal_options["risk_v2_binding_enabled"] = True
-                if cancel_attempt_stream_enabled and not upgrade_cancel_attempt_stream:
-                    journal_options['cancel_attempt_stream_enabled'] = True
-                    if cancel_attempt_stream_qualified:
-                        journal_options['cancel_attempt_stream_qualified'] = True
                 target_version = 19 if account_event_recovery_enabled else 18 if account_fact_recovery_enabled else 17 if control_cancel_enabled else 16 if strategy_origin_enabled else 15 if actor_stream_enabled else 14 if facts_financial_enabled else 13 if parent_enabled else 12 if extensions_enabled else 11 if ledger_enabled else 10 if control_enabled else 9
                 candidates = [target_version]
                 if target_version == 19 and upgrade_account_event_recovery_from_v18:
@@ -1813,14 +1809,20 @@ def build_ctp_gateway_trading_profile(
                         open_release_audit = control_release_audit_enabled and version >= 10
                         open_intent_history = control_intent_enabled and version >= 10
                         open_intent_continuity = control_intent_continuity_enabled and version >= 10
+                        open_cancel_stream = cancel_attempt_stream_enabled
                         while True:
+                            attempt_journal_options = dict(journal_options)
+                            if open_cancel_stream:
+                                attempt_journal_options['cancel_attempt_stream_enabled'] = True
+                                if cancel_attempt_stream_qualified:
+                                    attempt_journal_options['cancel_attempt_stream_qualified'] = True
                             try:
                                 journal = _open_parent_acceptance_journal(
                                     settings.journal_path,
                                     settings.account_scope,
                                     guard,
                                     schema_options=schema_options,
-                                    journal_options=journal_options,
+                                    journal_options=attempt_journal_options,
                                     release_audit=open_release_audit,
                                     upgrade_acceptance=upgrade_parent_acceptance_order,
                                     control_intent_history=open_intent_history,
@@ -1855,6 +1857,13 @@ def build_ctp_gateway_trading_profile(
                                     and upgrade_control_intent_continuity
                                 ):
                                     open_intent_continuity = False
+                                    continue
+                                if (
+                                    error.code == "INVALID_DATABASE"
+                                    and open_cancel_stream
+                                    and upgrade_cancel_attempt_stream
+                                ):
+                                    open_cancel_stream = False
                                     continue
                                 raise
                         break
@@ -1893,7 +1902,7 @@ def build_ctp_gateway_trading_profile(
                     journal.enable_account_fact_recovery(guard)
                 if journal._schema_version == 18 and target_version >= 19:
                     journal.enable_account_event_recovery(guard)
-                if upgrade_cancel_attempt_stream:
+                if upgrade_cancel_attempt_stream and not journal._cancel_attempt_stream_enabled:
                     journal.enable_cancel_attempt_stream(guard)
                     if cancel_attempt_stream_qualified:
                         journal._cancel_attempt_stream_qualified = True
