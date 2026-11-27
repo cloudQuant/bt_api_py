@@ -54,6 +54,7 @@ from bt_api_py.gateway_direct_service import (
     INSTRUMENT_STATUS_OPERATIONS,
     ACCOUNT_COMPARISON_OPERATIONS,
     ACCOUNT_STRATEGY_READ_OPERATIONS,
+    ACCOUNT_EXECUTION_HISTORY_OPERATIONS,
     ACCOUNT_OBSERVER_OPERATIONS,
     ACCOUNT_CANCEL_ATTEMPT_OPERATIONS,
     ACCOUNT_FACTS_OPERATIONS,
@@ -88,7 +89,7 @@ _OPERATIONS = (
     frozenset({"direct.reserve", "direct.release", "direct.command_status", "direct.dispatch"})
     | EVENT_OPERATIONS
 )
-_READ_OPERATIONS = ACCOUNT_READ_OPERATIONS | INSTRUMENT_OPERATIONS | ACCOUNT_COMPARISON_OPERATIONS | ACCOUNT_STRATEGY_READ_OPERATIONS | ACCOUNT_OBSERVER_OPERATIONS | ACCOUNT_FACTS_OPERATIONS | ACCOUNT_CANCEL_ATTEMPT_OPERATIONS | ACCOUNT_ORDER_CUT_OPERATIONS
+_READ_OPERATIONS = ACCOUNT_READ_OPERATIONS | INSTRUMENT_OPERATIONS | ACCOUNT_COMPARISON_OPERATIONS | ACCOUNT_STRATEGY_READ_OPERATIONS | ACCOUNT_EXECUTION_HISTORY_OPERATIONS | ACCOUNT_OBSERVER_OPERATIONS | ACCOUNT_FACTS_OPERATIONS | ACCOUNT_CANCEL_ATTEMPT_OPERATIONS | ACCOUNT_ORDER_CUT_OPERATIONS
 _MARKET_OPERATIONS = MARKET_OPERATIONS - {"market.history"}
 
 
@@ -684,6 +685,9 @@ def _validate_config(
                             and (not extensions_enabled or entry.identity.role is not WireRole.APPLICATION_CLIENT))
                         # G64-06: every strategy's funds and book, for an account-wide control principal only.
                         or (bool(resource.operations & ACCOUNT_STRATEGY_READ_OPERATIONS)
+                            and (not extensions_enabled or entry.identity.role is not WireRole.APPLICATION_CLIENT
+                                 or control_grant is None or not control_grant.account_scope_allowed))
+                        or (bool(resource.operations & ACCOUNT_EXECUTION_HISTORY_OPERATIONS)
                             and (not extensions_enabled or entry.identity.role is not WireRole.APPLICATION_CLIENT
                                  or control_grant is None or not control_grant.account_scope_allowed))
                         or (bool(resource.operations & INSTRUMENT_OPERATIONS)
@@ -3034,6 +3038,25 @@ def build_ctp_gateway_trading_profile(
                         strategies=frozenset(grant.strategy_ref for grant in static_grants.values()),
                         instruments=frozenset(account_read_settings.observation_instruments),
                         resolve_binding=None if ledger is None else ledger.resolve_binding)
+                    recent_execution_principals = frozenset(
+                        principal for principal in account_read_principals
+                        if authority.grants[principal][0].identity.role is WireRole.APPLICATION_CLIENT
+                        and principal in static_control_grants
+                        and static_control_grants[principal].account_scope_allowed
+                        and any(resource.operations & ACCOUNT_EXECUTION_HISTORY_OPERATIONS
+                                for entry in authority.grants[principal] for resource in entry.resources
+                                if resource.port == "service.account_read"))
+                    if recent_execution_principals:
+                        if holder.get("returns") is None:
+                            raise CtpGatewayTradingError("ACCOUNT_RECENT_EXECUTIONS_UNAVAILABLE")
+                        from bt_api_py.gateway_account_recent_executions import (
+                            GatewayAccountRecentExecutions,
+                        )
+                        values["account_recent_executions"] = GatewayAccountRecentExecutions(
+                            owner, journal, holder["returns"]._ledger,
+                            account_scope=settings.account_scope,
+                            principals=recent_execution_principals,
+                        )
                     observer_principals = frozenset(
                         principal for principal in account_read_principals
                         if any(resource.operations & ACCOUNT_OBSERVER_OPERATIONS

@@ -222,8 +222,12 @@ _GATEWAY_PARENT_READ_OPERATIONS = frozenset({'direct.parent.query', 'direct.pare
 _GATEWAY_ACCEPTANCE_OPERATION = 'direct.parent.acceptance_order'
 _GATEWAY_PARENT_WRITE_OPERATIONS = _GATEWAY_PARENT_OPERATIONS - _GATEWAY_PARENT_READ_OPERATIONS
 _GATEWAY_STRATEGY_FINANCIAL_OPERATIONS = frozenset({'direct.strategy_financial'})
-# Account-wide reads of every strategy's funds and book, for an account operator only (G64-06).
-_GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS = frozenset({'account.strategy_financial', 'account.strategy_book'})
+# Account-wide reads of every strategy's funds, book, and recent executions for an account operator only (G64-06, Iter 74.02).
+_GATEWAY_ACCOUNT_STRATEGY_READ_OPERATIONS = frozenset({
+    'account.strategy_financial',
+    'account.strategy_book',
+    'account.executions.recent',
+})
 _RISK_V2_RESERVE = "risk.order.reserve.v2"
 _RISK_V2_DISPATCH = "risk.order.dispatch.v2"
 _RISK_V2_ADMISSION_OPERATIONS = frozenset({_RISK_V2_RESERVE, _RISK_V2_DISPATCH})

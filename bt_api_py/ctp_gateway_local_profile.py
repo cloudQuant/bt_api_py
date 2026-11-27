@@ -981,7 +981,7 @@ _ACCOUNT_READ_TIMEOUT_DEFAULT = 6.0
 # An account-wide operator's reads: the account view, and every strategy's funds and book
 # (account.strategy_financial, account.strategy_book; G64-06).
 _OPERATOR_READ_OPERATIONS = frozenset({"account.snapshot.typed", "account.strategy_financial",
-                                       "account.strategy_book"})
+                                       "account.strategy_book", "account.executions.recent"})
 
 
 def _account_observation(value, principals, grants, *, instruments, account_operators=frozenset(),

@@ -35,7 +35,7 @@ _OPERATIONS = frozenset({
 })
 # Optional second registration of an account-scope operator, on the Gateway's account read
 # port: the account view of the snapshot route (it reads what the read model holds).
-_ACCOUNT_OPERATIONS = frozenset({'account.snapshot.typed'})
+_ACCOUNT_OPERATIONS = frozenset({'account.snapshot.typed', 'account.executions.recent'})
 _OPERATOR_FIELDS = ('principal_ref', 'actor_ref', 'login_token_sha256', 'scope_id', 'scope_ref',
                     'execution_domain_ref', 'account_ref', 'strategy_ref', 'service_id', 'service_principal_ref',
                     'instance_id', 'endpoint', 'server_public_key', 'client_public_key', 'client_secret_key',

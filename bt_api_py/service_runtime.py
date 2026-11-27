@@ -209,6 +209,7 @@ PORT_OPERATIONS = MappingProxyType(
                 "account.strategy_net_comparison",
                 "account.strategy_financial",
                 "account.strategy_book",
+                "account.executions.recent",
                 "account.events.read_after",
                 "account.events.progress",
                 "account.events.ack",

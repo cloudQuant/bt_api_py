@@ -648,7 +648,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             module_name="bt_api_py.gateway_direct_service",
             operations_attribute=("TRADING_OPERATIONS",),
             resource_keys=frozenset({"binding"}),
-            optional_resource_keys=frozenset({"owner_guard_binding", "lease_drain", "cancel_only", "instrument_block", "account_comparison", "account_strategy_reads", "account_observer", "account_facts", "account_cancel_attempts", "order_cut_source", "delegation_service", "delegate_actor_service", "delegate_actor_stream", "parent_service", "parent_acceptance_service", "claim_coordinator", "claim_sealer", "claim_wired", "execution_subject_binding", "calendar_service"}),
+            optional_resource_keys=frozenset({"owner_guard_binding", "lease_drain", "cancel_only", "instrument_block", "account_comparison", "account_strategy_reads", "account_recent_executions", "account_observer", "account_facts", "account_cancel_attempts", "order_cut_source", "delegation_service", "delegate_actor_service", "delegate_actor_stream", "parent_service", "parent_acceptance_service", "claim_coordinator", "claim_sealer", "claim_wired", "execution_subject_binding", "calendar_service"}),
             public_ports=MappingProxyType(
                 {
                     "service.calendar_read": frozenset({"calendar.query.v1", "calendar.windows.v1", "calendar.monitor.windows.v1"}),
@@ -678,6 +678,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                             "account.instrument_spec.cancel",
                             "account.strategy_net_comparison",
                             "account.strategy_financial", "account.strategy_book",
+                            "account.executions.recent",
                             "account.events.read_after", "account.events.progress", "account.events.ack",
                             "account.facts.read_after", "account.facts.read_after.v2", "account.facts.progress", "account.facts.ack", "account.facts.status",
                             "account.facts.snapshot_info", "account.facts.snapshot_read", "account.facts.snapshot_confirm",
@@ -2390,6 +2391,7 @@ def build_component(
         trading_calendar_adapter: object | None = None
         trading_account_comparison: object | None = None
         trading_account_strategy_reads: object | None = None
+        trading_account_recent_executions: object | None = None
         trading_account_observer: object | None = None
         trading_account_facts: object | None = None
         trading_order_cut: object | None = None
@@ -2658,6 +2660,17 @@ def build_component(
                                     or trading_account_strategy_reads.account_scope != adapter.account_scope
                                     or not trading_account_strategy_reads.principals <= frozenset(trading_read_adapter._principals)):
                                 raise ServiceComponentError("INVALID_ACCOUNT_STRATEGY_READS_BINDING")
+                        if "account_recent_executions" in values:
+                            from bt_api_py.gateway_account_recent_executions import (
+                                GatewayAccountRecentExecutions,
+                            )
+                            trading_account_recent_executions = values["account_recent_executions"]
+                            if (type(trading_account_recent_executions) is not GatewayAccountRecentExecutions
+                                    or trading_account_recent_executions.owner is not adapter._owner
+                                    or trading_account_recent_executions.journal is not adapter._journal
+                                    or trading_account_recent_executions.account_scope != adapter.account_scope
+                                    or not trading_account_recent_executions.principals <= frozenset(trading_read_adapter._principals)):
+                                raise ServiceComponentError("INVALID_ACCOUNT_RECENT_EXECUTIONS_BINDING")
                         if "account_observer" in values:
                             from bt_api_py.gateway_account_observer import GatewayAccountObserver
                             trading_account_observer = values["account_observer"]
@@ -3520,6 +3533,10 @@ def build_component(
                         if trading_account_strategy_reads is None:
                             return {"status": "REQUEST_REJECTED", "code": "STRATEGY_LEDGER_UNAVAILABLE"}
                         return trading_account_strategy_reads.handle(_operation, context, arguments)
+                    if _operation in prepared.module.ACCOUNT_EXECUTION_HISTORY_OPERATIONS:
+                        if trading_account_recent_executions is None:
+                            return {"status": "REQUEST_REJECTED", "code": "EXECUTIONS_UNAVAILABLE"}
+                        return trading_account_recent_executions.handle(_operation, context, arguments)
                     if _operation in prepared.module.ACCOUNT_COMPARISON_OPERATIONS:
                         assert trading_account_comparison is not None
                         return trading_account_comparison.handle(context, arguments)
