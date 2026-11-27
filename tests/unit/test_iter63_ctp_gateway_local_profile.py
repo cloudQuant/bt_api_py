@@ -1220,3 +1220,90 @@ print('VALIDATION_INERT')
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == 'VALIDATION_INERT'
+
+
+def test_simnow_control_intent_history_bundle_composes_and_fails_closed(tmp_path, monkeypatch):
+    import zmq
+    from bt_api_gateway.control_intent_wire import CONTROL_INTENT_APPLY_OPERATION
+    from bt_api_py.ctp_gateway_local_profile import (
+        load_simnow_trading_resources,
+        simnow_trading_profile_factory,
+    )
+    from bt_api_py.ctp_gateway_trading import CtpGatewayTradingError
+    from bt_api_py.service_config import parse_service_config
+
+    doc, file, config = _fixture(tmp_path, monkeypatch)
+    raw, config_enabled = _composing_config(config, control_intent_enabled=True)
+    _composing_doc(doc)
+    resource = doc["clients"][0]["resources"][0]
+    risk_pub, _ = zmq.curve_keypair()
+    risk_ops = [
+        "direct.control.identity",
+        "direct.control.apply",
+        "direct.control.status",
+        "direct.control.cancel_scope",
+        "direct.control.cancel_scope_status",
+        CONTROL_INTENT_APPLY_OPERATION,
+    ]
+    risk_operator = {
+        "identity": {
+            "role": "application_client",
+            "principal_ref": "principal-risk-ctrl",
+            "actor_ref": "risk-ctrl-actor",
+            "delegate_ref": None,
+        },
+        "curve_public_key": risk_pub.decode("ascii"),
+        "kind": "risk",
+        "modes": ["STOP_NEW", "FREEZE"],
+        "account_scope_allowed": True,
+        "strategies": [],
+        "resources": [
+            {
+                "instance_id": resource["instance_id"],
+                "port": "service.direct_write",
+                "scope_ref": resource["scope_ref"],
+                "scope": dict(resource["scope"], strategy_ref=None, run_id=None),
+                "operations": list(risk_ops),
+            }
+        ],
+    }
+    doc["controls"]["operators"].append(risk_operator)
+    doc["controls"]["control_intent_history"] = {"upgrade_journal": True}
+    file.write_text(json.dumps(doc), encoding="utf-8")
+
+    resources = load_simnow_trading_resources(config_enabled)
+    assert resources.upgrade_control_intent_history is True
+    assert CONTROL_INTENT_APPLY_OPERATION in (
+        resources.authority.grants["principal-risk-ctrl"][0].resources[0].operations
+    )
+    assert CONTROL_INTENT_APPLY_OPERATION not in resources.control_grants["principal-risk-ctrl"].operations
+    assert simnow_trading_profile_factory.create_deployment(config_enabled).state == "new"
+
+    # Granting CONTROL_INTENT_APPLY_OPERATION while control_intent_enabled is off fails closed.
+    raw_disabled = config.to_public_dict()
+    raw_disabled["components"]["gateway"]["settings"]["options"].update(
+        control_enabled=True, strategy_ledger_enabled=True, account_extensions_enabled=True
+    )
+    with pytest.raises(CtpGatewayTradingError, match="^INVALID_TRADING_CONFIGURATION$"):
+        simnow_trading_profile_factory.create_deployment(parse_service_config(raw_disabled))
+
+    # upgrade_journal=True without control_intent_enabled (even with legacy ops only) fails closed.
+    risk_operator["resources"][0]["operations"] = [
+        op for op in risk_ops if op != CONTROL_INTENT_APPLY_OPERATION
+    ]
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    with pytest.raises(CtpGatewayTradingError, match="^INVALID_CONTROL_INTENT_CONFIGURATION$"):
+        simnow_trading_profile_factory.create_deployment(parse_service_config(raw_disabled))
+
+    # control_intent_enabled=True without intent operation granted to risk fails closed.
+    with pytest.raises(CtpGatewayTradingError, match="^INVALID_TRADING_CONFIGURATION$"):
+        simnow_trading_profile_factory.create_deployment(config_enabled)
+
+    # Non-risk operator may never hold CONTROL_INTENT_APPLY_OPERATION.
+    risk_operator["resources"][0]["operations"] = list(risk_ops)
+    doc["controls"]["operators"][0]["resources"][0]["operations"].append(
+        CONTROL_INTENT_APPLY_OPERATION
+    )
+    file.write_text(json.dumps(doc), encoding="utf-8")
+    with pytest.raises(CtpLocalProfileError, match="^CTP_LOCAL_RESOURCES_INVALID$"):
+        load_simnow_trading_resources(config_enabled)

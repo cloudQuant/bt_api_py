@@ -757,19 +757,21 @@ class GatewayDirectServiceBinding:
             getattr(journal, "_control_intent_history_enabled", False)
         )
         if control_intent_route is not None:
+            risk_control_grants = [
+                grant for grant in (control_grants or {}).values() if grant.kind == "risk"
+            ]
             if (
                 type(control_intent_route) is not GatewayControlIntentRoute
                 or control is None
                 or owner is None
                 or not intent_history_enabled
-                or not control_grants
+                or not risk_control_grants
                 or any(
-                    grant.kind != "risk"
-                    or not grant.account_scope_allowed
+                    not grant.account_scope_allowed
                     or not _CONTROL_INTENT_REQUIRED_LEGACY_OPERATIONS.issubset(
                         grant.operations
                     )
-                    for grant in control_grants.values()
+                    for grant in risk_control_grants
                 )
             ):
                 raise ValueError("INVALID_CONTROL_INTENT_BINDING")
@@ -1242,6 +1244,12 @@ class GatewayDirectServiceBinding:
         if ((strategy is None and not grant.account_scope_allowed and not strategy_argument)
                 or (strategy is not None and strategy not in grant.strategies)):
             return _reject("SCOPE_DENIED")
+        if (
+            self._control_intent_route is not None
+            and grant.kind == "risk"
+            and operation == "direct.control.apply"
+        ):
+            return _reject("CONTROL_INTENT_UNAVAILABLE")
         if grant.kind == "runtime":
             # D66-08: a Runtime acts only as a limited proxy under an explicit,
             # server-installed proof. Anything unproven is refused before any

@@ -8,6 +8,7 @@ local guard is not a cross-host fence or proof of external account state.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import math
 import os
@@ -49,7 +50,9 @@ from bt_api_py.gateway_direct_service import (
     ACCOUNT_READ_OPERATIONS,
     INSTRUMENT_OPERATIONS,
     CANCEL_OPERATIONS,
+    CONTROL_INTENT_OPERATIONS,
     CONTROL_OPERATIONS,
+    _CONTROL_INTENT_REQUIRED_LEGACY_OPERATIONS,
     STRATEGY_POSITION_OPERATIONS,
     INSTRUMENT_STATUS_OPERATIONS,
     ACCOUNT_COMPARISON_OPERATIONS,
@@ -64,6 +67,7 @@ from bt_api_py.gateway_direct_service import (
     DELEGATED_STRATEGY_READ_OPERATIONS,
     DELEGATED_STRATEGY_CANCEL_OPERATIONS,
     GatewayControlGrant,
+    GatewayControlIntentRoute,
     EVENT_OPERATIONS,
     MARKET_OPERATIONS,
     GatewayDirectGrant,
@@ -394,11 +398,16 @@ def _distinct_journals(left: str | Path, right: str | Path) -> bool:
 
 
 def _open_parent_acceptance_journal(path, account, guard, *, schema_options, journal_options,
-                                    release_audit, upgrade_acceptance):
+                                    release_audit, upgrade_acceptance,
+                                    control_intent_history=False):
     """Open only the requested exact schema; no automatic FIFO migration."""
     if upgrade_acceptance:
         raise CtpGatewayTradingError('PARENT_ACCEPTANCE_MIGRATION_PROOF_REQUIRED')
-    options = dict(schema_options, control_release_audit_enabled=release_audit)
+    options = dict(
+        schema_options,
+        control_release_audit_enabled=release_audit,
+        control_intent_history_enabled=control_intent_history,
+    )
     journal = GatewayDirectCommandJournal(path, account, **options, **journal_options)
     journal._assert_account_guard(guard)
     return journal
@@ -437,6 +446,7 @@ def _validate_config(
         cancel_enabled = normalized_options.get("cancel_enabled")
         bounded = normalized_options.get("bounded_read_after", False)
         control_enabled = normalized_options.get("control_enabled", False)
+        control_intent_enabled = normalized_options.get("control_intent_enabled", False)
         ledger_enabled = normalized_options.get("strategy_ledger_enabled", False)
         extensions_enabled = normalized_options.get("account_extensions_enabled", False)
         delegation_enabled = normalized_options.get("delegation_enabled", False)
@@ -459,6 +469,8 @@ def _validate_config(
         }
         if "control_enabled" in normalized_options:
             expected_options["control_enabled"] = control_enabled
+        if "control_intent_enabled" in normalized_options:
+            expected_options["control_intent_enabled"] = control_intent_enabled
         if "strategy_ledger_enabled" in normalized_options:
             expected_options["strategy_ledger_enabled"] = ledger_enabled
         if "account_extensions_enabled" in normalized_options:
@@ -521,6 +533,8 @@ def _validate_config(
             or type(cancel_enabled) is not bool
             or type(control_enabled) is not bool
             or control_enabled != bool(control_grants)
+            or type(control_intent_enabled) is not bool
+            or (control_intent_enabled and not control_enabled)
             or type(ledger_enabled) is not bool or (ledger_enabled and not control_enabled)
             or type(extensions_enabled) is not bool or (extensions_enabled and not ledger_enabled)
             or type(delegation_enabled) is not bool or delegation_enabled != bool(delegates)
@@ -644,9 +658,18 @@ def _validate_config(
                             if scope.run_id is not None or not all(operation_granted(op) for op in resource.operations):
                                 raise ValueError
                         elif entry.identity.role is WireRole.APPLICATION_CLIENT:
+                            allowed_control_ops = control_grant.operations & CONTROL_OPERATIONS if control_grant is not None else frozenset()
+                            if (
+                                control_intent_enabled
+                                and control_grant is not None
+                                and control_grant.kind == "risk"
+                                and control_grant.account_scope_allowed
+                                and scope.strategy_ref is None
+                            ):
+                                allowed_control_ops = allowed_control_ops | CONTROL_INTENT_OPERATIONS
                             if (not control_enabled or control_grant is None
                                     or entry.identity.actor_ref != control_grant.actor_ref
-                                    or not resource.operations <= (control_grant.operations & CONTROL_OPERATIONS)
+                                    or not resource.operations <= allowed_control_ops
                                     or (scope.strategy_ref is None and not control_grant.account_scope_allowed)
                                     or (scope.strategy_ref is not None and scope.strategy_ref not in control_grant.strategies)):
                                 raise ValueError
@@ -744,6 +767,34 @@ def _validate_config(
                 and resource.operations == frozenset({'direct.parent.acceptance_order'})
                 for resource in entry.resources) for entry in authority.grants[grant.identity.principal_ref]):
                 raise ValueError
+        if control_intent_enabled:
+            risk_principals = [
+                principal
+                for principal, control_grant in control_grants.items()
+                if control_grant.kind == "risk"
+            ]
+            if not risk_principals:
+                raise ValueError
+            for principal in risk_principals:
+                control_grant = control_grants[principal]
+                if (
+                    not control_grant.account_scope_allowed
+                    or not _CONTROL_INTENT_REQUIRED_LEGACY_OPERATIONS.issubset(
+                        control_grant.operations
+                    )
+                ):
+                    raise ValueError
+                has_intent_grant = any(
+                    resource.port == "service.direct_write"
+                    and resource.instance_id == instance
+                    and resource.scope_ref == config.scope_ref
+                    and resource.scope.strategy_ref is None
+                    and CONTROL_INTENT_OPERATIONS.issubset(resource.operations)
+                    for entry in authority.grants[principal]
+                    for resource in entry.resources
+                )
+                if not has_intent_grant:
+                    raise ValueError
         return instance
     except CtpGatewayTradingError:
         raise
@@ -764,7 +815,12 @@ _SURFACED_GUARD_CODES = ("SESSION_RECONCILIATION_REQUIRED", "SESSION_ALREADY_OWN
 # Journal refusals at start the operator must act on in the resource bundle
 # (``controls.release_audit``): the journal has the release audit and the bundle does
 # not name it, or the bundle names it and the journal's upgrade is not permitted.
-_SURFACED_JOURNAL_CODES = ("CONTROL_RELEASE_AUDIT_MISMATCH", "CONTROL_RELEASE_AUDIT_UPGRADE_REQUIRED")
+_SURFACED_JOURNAL_CODES = (
+    "CONTROL_RELEASE_AUDIT_MISMATCH",
+    "CONTROL_RELEASE_AUDIT_UPGRADE_REQUIRED",
+    "CONTROL_INTENT_HISTORY_MISMATCH",
+    "CONTROL_INTENT_HISTORY_UPGRADE_REQUIRED",
+)
 _SURFACED_CTP_SESSION_CODES = (
     "CTP_SESSION_CONSTRUCT_FAILED", "CTP_SESSION_CONNECT_FAILED", "CTP_SESSION_CONNECT_TIMEOUT",
 )
@@ -1022,6 +1078,7 @@ def build_ctp_gateway_trading_profile(
     strategy_ledger_comparison_refresh_seconds: float | None = None,
     control_release_audit_enabled: bool = False,
     upgrade_control_release_audit: bool = False,
+    upgrade_control_intent_history: bool = False,
     upgrade_cancel_attempt_stream: bool = False,
 ) -> GatewayOperatorProfile:
     """Build a trusted profile; no guard, provider, native session or owner is started.
@@ -1045,6 +1102,7 @@ def build_ctp_gateway_trading_profile(
             or type(upgrade_account_event_recovery_from_v18) is not bool
             or type(control_release_audit_enabled) is not bool
             or type(upgrade_control_release_audit) is not bool
+            or type(upgrade_control_intent_history) is not bool
             or type(upgrade_cancel_attempt_stream) is not bool
             or (control_grants is not None and not isinstance(control_grants, Mapping))):
         raise CtpGatewayTradingError("INVALID_CONTROL_CONFIGURATION")
@@ -1317,6 +1375,7 @@ def build_ctp_gateway_trading_profile(
         "cancel_enabled", False
     )
     control_enabled = config.components["gateway"]["settings"]["options"].get("control_enabled", False)
+    control_intent_enabled = config.components["gateway"]["settings"]["options"].get("control_intent_enabled", False)
     ledger_enabled = config.components["gateway"]["settings"]["options"].get("strategy_ledger_enabled", False)
     extensions_enabled = config.components["gateway"]["settings"]["options"].get("account_extensions_enabled", False)
     delegation_enabled = config.components["gateway"]["settings"]["options"].get("delegation_enabled", False)
@@ -1350,10 +1409,13 @@ def build_ctp_gateway_trading_profile(
             upgrade_account_fact_recovery_from_v17,
             upgrade_account_event_recovery_from_v18,
             upgrade_control_release_audit,
+            upgrade_control_intent_history,
             upgrade_cancel_attempt_stream,
         ))
     ):
         raise CtpGatewayTradingError("INVALID_RISK_V2_BINDING_CONFIGURATION")
+    if upgrade_control_intent_history and not control_intent_enabled:
+        raise CtpGatewayTradingError("INVALID_CONTROL_INTENT_CONFIGURATION")
     gate_latency = _market_gate_latency(settings, market_settings)
     gate_allow_stale_quote = _market_gate_allow_stale_quote(settings, market_settings)
     if upgrade_account_event_recovery_from_v18 and not account_event_recovery_enabled:
@@ -1457,6 +1519,8 @@ def build_ctp_gateway_trading_profile(
         }
         if "control_enabled" in normalized_options:
             expected_options["control_enabled"] = control_enabled
+        if "control_intent_enabled" in normalized_options:
+            expected_options["control_intent_enabled"] = control_intent_enabled
         if "strategy_ledger_enabled" in normalized_options:
             expected_options["strategy_ledger_enabled"] = ledger_enabled
         if "account_extensions_enabled" in normalized_options:
@@ -1714,21 +1778,41 @@ def build_ctp_gateway_trading_profile(
                             "control_cancel_enabled": version >= 17,
                             "account_fact_recovery_enabled": version >= 18,
                             "account_event_recovery_enabled": version >= 19}
-                        try:
-                            journal = _open_parent_acceptance_journal(settings.journal_path, settings.account_scope,
-                                guard, schema_options=schema_options, journal_options=journal_options,
-                                release_audit=control_release_audit_enabled and version >= 10,
-                                upgrade_acceptance=upgrade_parent_acceptance_order)
-                        except DirectCommandJournalError as error:
-                            # Not upgraded yet: opened as it is; refused or upgraded below.
-                            if (settings.risk_v2_binding_enabled
-                                    or original_runs_enabled
-                                    or error.code != "CONTROL_RELEASE_AUDIT_UPGRADE_REQUIRED"
-                                    or (control_release_audit_enabled and not upgrade_control_release_audit)):
+                        open_release_audit = control_release_audit_enabled and version >= 10
+                        open_intent_history = control_intent_enabled and version >= 10
+                        while True:
+                            try:
+                                journal = _open_parent_acceptance_journal(
+                                    settings.journal_path,
+                                    settings.account_scope,
+                                    guard,
+                                    schema_options=schema_options,
+                                    journal_options=journal_options,
+                                    release_audit=open_release_audit,
+                                    upgrade_acceptance=upgrade_parent_acceptance_order,
+                                    control_intent_history=open_intent_history,
+                                )
+                                break
+                            except DirectCommandJournalError as error:
+                                if (
+                                    not settings.risk_v2_binding_enabled
+                                    and not original_runs_enabled
+                                    and error.code == "CONTROL_RELEASE_AUDIT_UPGRADE_REQUIRED"
+                                    and open_release_audit
+                                    and upgrade_control_release_audit
+                                ):
+                                    open_release_audit = False
+                                    continue
+                                if (
+                                    not settings.risk_v2_binding_enabled
+                                    and not original_runs_enabled
+                                    and error.code == "CONTROL_INTENT_HISTORY_UPGRADE_REQUIRED"
+                                    and open_intent_history
+                                    and upgrade_control_intent_history
+                                ):
+                                    open_intent_history = False
+                                    continue
                                 raise
-                            journal = _open_parent_acceptance_journal(settings.journal_path, settings.account_scope,
-                                guard, schema_options=schema_options, journal_options=journal_options,
-                                release_audit=False, upgrade_acceptance=upgrade_parent_acceptance_order)
                         break
                     except DirectCommandJournalError as error:
                         if error.code in _SURFACED_JOURNAL_CODES:
@@ -1777,6 +1861,15 @@ def build_ctp_gateway_trading_profile(
                     # Who releases a control cause is stored from here on. One-way; it leaves
                     # the schema version and the features of later schemas as they are.
                     journal.enable_control_release_audit(guard)
+                if control_intent_enabled and not journal._control_intent_history_enabled:
+                    if (
+                        not upgrade_control_intent_history
+                        or original_runs_enabled
+                        or settings.risk_v2_binding_enabled
+                    ):
+                        holder['startup_code'] = "CONTROL_INTENT_HISTORY_UPGRADE_REQUIRED"
+                        raise DirectCommandJournalError("CONTROL_INTENT_HISTORY_UPGRADE_REQUIRED")
+                    journal.enable_control_intent_history(guard)
                 # I63-E135: the journal's whole-table integrity checks cost time in
                 # proportion to its history and ran in every transaction. From schema
                 # 14 on that made the owner too slow to dispatch on a journal with a
@@ -2811,6 +2904,16 @@ def build_ctp_gateway_trading_profile(
                     owner, status_session, status_provider, journal, instrument_status_read,
                     session_is_original=lambda: (holder.get('session') is status_session
                         and holder.get('instrument_status_provider') is status_provider))
+            control_intent_route = None
+            if control_intent_enabled:
+                control_intent_route = GatewayControlIntentRoute(
+                    "application.direct_write",
+                    config.service_id,
+                    instance,
+                    config.scope_ref,
+                    authority.identity,
+                    hashlib.sha256(authority.curve_public_key).hexdigest(),
+                )
             binding = GatewayDirectServiceBinding(
                 journal,
                 static_grants,
@@ -2825,6 +2928,7 @@ def build_ctp_gateway_trading_profile(
                 cancel_enabled=cancel_enabled,
                 control=holder.get("control"),
                 control_grants=static_control_grants if control_enabled else None,
+                control_intent_route=control_intent_route,
                 market_gate_required=True,
                 strategy_financial_enabled=facts_financial_enabled,
                 strategy_origin_source=holder.get('strategy_origin_source'),

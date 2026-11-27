@@ -44,6 +44,7 @@ _CTP_CONFIGURATION_ERROR_CODES = frozenset({
     "INVALID_CLOCK_CONFIGURATION",
     "INVALID_CONTROL_CANCEL_CONFIGURATION",
     "INVALID_CONTROL_CONFIGURATION",
+    "INVALID_CONTROL_INTENT_CONFIGURATION",
     "INVALID_CONTROL_RELEASE_AUDIT_CONFIGURATION",
     "INVALID_EXECUTION_SUBJECT_SCOPES",
     "INVALID_EXTERNAL_CLASSIFIER",
@@ -120,6 +121,7 @@ class CtpGatewayTrustedResources:
     strategy_ledger_source_cut_mode: str = "none"
     control_release_audit_enabled: bool = False
     upgrade_control_release_audit: bool = False
+    upgrade_control_intent_history: bool = False
     calendar_settings: object | None = field(default=None, repr=False)
     instrument_product_grants: frozenset = field(default_factory=frozenset, repr=False)
     recovery_observation_settings: object | None = field(default=None, repr=False)
@@ -205,6 +207,7 @@ def create_ctp_gateway_profile_factory(
             strategy_ledger_source_cut_mode=resources.strategy_ledger_source_cut_mode,
             control_release_audit_enabled=resources.control_release_audit_enabled,
             upgrade_control_release_audit=resources.upgrade_control_release_audit,
+            upgrade_control_intent_history=resources.upgrade_control_intent_history,
             calendar_settings=resources.calendar_settings,
             instrument_product_grants=resources.instrument_product_grants,
             recovery_observation_settings=resources.recovery_observation_settings,

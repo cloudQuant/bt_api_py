@@ -685,6 +685,7 @@ def _strategy_ledger_external_baseline(value):
 def _controls(value, principals, grants):
     """Operator emergency-stop grants: application clients with control operations only."""
     from bt_api_py.gateway_direct_service import (
+        CONTROL_INTENT_OPERATIONS,
         CONTROL_OPERATIONS,
         GatewayControlGrant,
         GatewayRuntimeControlProof,
@@ -713,6 +714,17 @@ def _controls(value, principals, grants):
             _invalid()
         release_audit = release_audit["upgrade_journal"]
         value = {name: item for name, item in value.items() if name != "release_audit"}
+    control_intent_history = None
+    if type(value) is dict and "control_intent_history" in value:
+        # Optional {"upgrade_journal": bool}: installs/opens the same-generation
+        # Risk bound control-intent history extension on the journal. Requires
+        # ``control_intent_enabled: true`` in Gateway service options; an existing
+        # journal without it is upgraded only with upgrade_journal true.
+        control_intent_history = _mapping(value["control_intent_history"], ("upgrade_journal",))
+        if type(control_intent_history["upgrade_journal"]) is not bool:
+            _invalid()
+        control_intent_history = control_intent_history["upgrade_journal"]
+        value = {name: item for name, item in value.items() if name != "control_intent_history"}
     lease_drain = None
     if type(value) is dict and "lease_drain" in value:
         # Optional (D63-28, off unless present): {"strategies": [strategy refs],
@@ -797,14 +809,23 @@ def _controls(value, principals, grants):
             except ValueError:
                 _invalid()
         entries, operations = [], set()
+        allowed_item_operations = (
+            CONTROL_OPERATIONS | CONTROL_INTENT_OPERATIONS
+            if kind == "risk" and operator["account_scope_allowed"]
+            else CONTROL_OPERATIONS
+        )
         for item in operator["resources"]:
             item = _mapping(item, ("instance_id", "port", "scope_ref", "scope", "operations"))
             item_operations = _string_set(item["operations"])
-            if item["port"] != "service.direct_write" or not item_operations <= CONTROL_OPERATIONS:
+            item_scope = _scope(item["scope"])
+            if (item["port"] != "service.direct_write"
+                    or not item_operations <= allowed_item_operations
+                    or (bool(item_operations & CONTROL_INTENT_OPERATIONS)
+                        and item_scope.strategy_ref is not None)):
                 _invalid()  # an operator never receives trading operations here
             entries.append(ResourceGrant(item["instance_id"], item["port"], item["scope_ref"],
-                                         _scope(item["scope"]), item_operations))
-            operations |= item_operations
+                                         item_scope, item_operations))
+            operations |= item_operations - CONTROL_INTENT_OPERATIONS
         principals[public] = identity.principal_ref
         grants[identity.principal_ref] = (PrincipalGrant(identity, tuple(entries)),)
         pending_control.append(
@@ -826,7 +847,14 @@ def _controls(value, principals, grants):
                 **({} if runtime_proof is None else {"runtime_proof": runtime_proof}))
         except ValueError:
             _invalid()
-    return control, value["upgrade_controls_from_v9"], drain, lease_drain, release_audit
+    return (
+        control,
+        value["upgrade_controls_from_v9"],
+        drain,
+        lease_drain,
+        release_audit,
+        control_intent_history,
+    )
 
 
 def _delegation(value, principals, grants, direct, *, account_scope, execution_domain_ref, instruments):
@@ -1346,10 +1374,16 @@ def _load_resources(config, *, trading):
                     monitor_identities.append(identity)
                 calendar_principals.add(identity.principal_ref)
                 calendar_keys.add(public)
-        control_grants, upgrade_controls, drain_upgrade, lease_drain, release_audit = None, False, None, None, None
+        control_grants, upgrade_controls, drain_upgrade, lease_drain, release_audit, control_intent_history = None, False, None, None, None, None
         if trading and raw.get("controls") is not None:
-            control_grants, upgrade_controls, drain_upgrade, lease_drain, release_audit = _controls(
-                raw["controls"], principals, grants)
+            (
+                control_grants,
+                upgrade_controls,
+                drain_upgrade,
+                lease_drain,
+                release_audit,
+                control_intent_history,
+            ) = _controls(raw["controls"], principals, grants)
         delegation, parent_settings, upgrade_parents = None, None, False
         if trading and raw.get("delegation") is not None:
             delegation, parent_settings, upgrade_parents = _delegation(
@@ -1550,6 +1584,7 @@ def _load_resources(config, *, trading):
                 recovery_monitor_relay=recovery_monitor_relay,
                 control_release_audit_enabled=release_audit is not None,
                 upgrade_control_release_audit=release_audit is True,
+                upgrade_control_intent_history=control_intent_history is True,
                 **drain_options,
             )
         return CtpGatewayTrustedResources(

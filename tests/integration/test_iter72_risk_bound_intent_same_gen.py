@@ -660,3 +660,242 @@ def test_risk_service_config_and_host_bound_control_intents_gate(tmp_path) -> No
         assert host_ok.ledger._bound_intents_enabled is True
     finally:
         assert host_ok.close() is True
+
+
+def test_mixed_operator_and_risk_control_intent_gateway_blocks_risk_legacy_apply(
+    tmp_path,
+) -> None:
+    """Production profile mixes operator + risk control principals on one Gateway.
+
+    Verify that Risk is blocked from legacy direct.control.apply while operator
+    and Gateway-internal system origins still coexist safely alongside Risk's
+    bound direct.control.intent.apply path.
+    """
+    from bt_api_py.gateway_direct_service import CONTROL_OPERATIONS
+
+    server_public, server_secret = zmq.curve_keypair()
+    risk_public, risk_secret = zmq.curve_keypair()
+    op_public, op_secret = zmq.curve_keypair()
+    endpoint = _free_endpoint()
+    fingerprint = hashlib.sha256(server_public).hexdigest()
+    op_identity = WireIdentity(
+        WireRole.APPLICATION_CLIENT, "operator-alice-principal", "operator-alice"
+    )
+    risk_grant = PrincipalGrant(
+        RISK_CTRL_IDENTITY,
+        (
+            ResourceGrant(
+                "gateway-a",
+                "service.direct_write",
+                "scope-a",
+                ACCOUNT_SCOPE,
+                CONTROL_INTENT_OPERATIONS,
+            ),
+        ),
+    )
+    op_grant = PrincipalGrant(
+        op_identity,
+        (
+            ResourceGrant(
+                "gateway-a",
+                "service.direct_write",
+                "scope-a",
+                ACCOUNT_SCOPE,
+                CONTROL_OPERATIONS,
+            ),
+        ),
+    )
+    authority = TrustedServiceAuthority(
+        identity=SERVICE,
+        scope=WireScope(DOMAIN),
+        scope_ref="scope-a",
+        scope_version="scope-v1",
+        security_ref="security-a",
+        security_version="security-v1",
+        registration_policy_ref="direct-policy-v1",
+        registration_policy_version="direct-policy-v1",
+        service_requirements_ref="direct-requirements-v1",
+        service_requirements_version="direct-requirements-v1",
+        curve_public_key=server_public,
+        curve_secret_key=server_secret,
+        principals={
+            risk_public: RISK_CTRL_IDENTITY.principal_ref,
+            op_public: op_identity.principal_ref,
+        },
+        grants={
+            RISK_CTRL_IDENTITY.principal_ref: (risk_grant,),
+            op_identity.principal_ref: (op_grant,),
+        },
+    )
+    ready, stop = queue.Queue(), threading.Event()
+    guard_dir = tmp_path / "guard"
+    guard_dir.mkdir()
+    db_path = tmp_path / "gateway.sqlite"
+    registry_path = tmp_path / "registry.sqlite"
+
+    def serve():
+        owner = host = None
+        try:
+            state = {}
+
+            def factory():
+                guard = LocalAccountSessionGuard(guard_dir, ACCOUNT, "owner")
+                generation = guard.acquire()
+                journal = GatewayDirectCommandJournal.create(
+                    db_path, ACCOUNT, generation=generation
+                )
+                control = journal.enable_controls(guard)
+                journal.enable_control_intent_history(guard)
+                dispatcher = GatewayDirectDispatcher(
+                    journal, "CTP", guard, lambda *_: None, lambda _: (), lambda _: True
+                )
+                cancel = GatewayDirectCancelDispatcher(
+                    GatewayDirectCancelJournal(journal),
+                    dispatcher,
+                    guard,
+                    "CTP",
+                    lambda *_: None,
+                    lambda _: True,
+                )
+                state.update(journal=journal, control=control, generation=generation)
+                return GatewayDirectOwnerResources(
+                    dispatcher, journal, guard.release, cancel_dispatcher=cancel
+                )
+
+            owner = GatewayDirectOwner(
+                factory, queue_size=8, max_queue_wait_seconds=5, busy_timeout_seconds=5
+            )
+            assert owner.start(10)
+            route = GatewayControlIntentRoute(
+                "application.direct_write",
+                "gateway-service",
+                "gateway-a",
+                "scope-a",
+                SERVICE,
+                fingerprint,
+            )
+            binding = GatewayDirectServiceBinding(
+                state["journal"],
+                {CLIENT_A.principal_ref: GatewayDirectGrant(CLIENT_A.actor_ref, frozenset({"rb"}))},
+                owner=owner,
+                cancel_enabled=True,
+                control=state["control"],
+                control_grants={
+                    RISK_CTRL_IDENTITY.principal_ref: GatewayControlGrant(
+                        RISK_CTRL_IDENTITY.actor_ref,
+                        True,
+                        frozenset(),
+                        CONTROL_INTENT_OPERATIONS - {CONTROL_INTENT_APPLY_OPERATION},
+                        kind="risk",
+                        modes=frozenset({"STOP_NEW", "FREEZE"}),
+                    ),
+                    op_identity.principal_ref: GatewayControlGrant(
+                        op_identity.actor_ref,
+                        True,
+                        frozenset(),
+                        CONTROL_OPERATIONS,
+                        kind="operator",
+                    ),
+                },
+                control_intent_route=route,
+            )
+            config = _dual_config(endpoint).to_public_dict()
+            config["components"]["gateway"]["settings"]["options"].update(
+                dispatch_enabled=True,
+                cancel_enabled=True,
+                control_enabled=True,
+                control_intent_enabled=True,
+            )
+            host = ServiceHost(
+                parse_service_config(config),
+                authority=authority,
+                registry_path=registry_path,
+                resource_provider=lambda *_: ComponentResources.owned(
+                    {"binding": binding, "read_service": _read_service(tmp_path, {CLIENT_A.principal_ref})},
+                    ready=lambda: True,
+                    close=lambda: None,
+                ),
+            )
+            host.start()
+            ready.put(("ok", state["journal"].journal_id, state["generation"], owner, state["control"]))
+            while not stop.is_set():
+                host.serve_burst(20, max_requests=16)
+        except Exception:
+            ready.put(("error", traceback.format_exc()))
+        finally:
+            if host is not None:
+                host.close()
+            if owner is not None:
+                owner.close(5)
+
+    thread = threading.Thread(target=serve, daemon=True)
+    thread.start()
+    res = ready.get(timeout=15)
+    assert res[0] == "ok", res[1]
+    _, journal_id, gen1, owner, control = res
+    risk_rt = _build_control_client_runtime(
+        endpoint,
+        server_public=server_public,
+        client_public=risk_public,
+        client_secret=risk_secret,
+    )
+    try:
+        route = BoundCallRoute(
+            RISK_CTRL_IDENTITY, ACCOUNT_SCOPE, "scope-a", "gateway-service", "gateway-a", SERVICE
+        )
+        adapter = GatewayControlAdapter(
+            risk_rt,
+            mount="application.direct_write",
+            service_id="gateway-service",
+            instance_id="gateway-a",
+            scope_ref="scope-a",
+            account_ref=ACCOUNT,
+            timeout_seconds=5.0,
+            route=route,
+            server_key_fingerprint=fingerprint,
+            control_intent_enabled=True,
+        )
+        # 1. Risk calling legacy direct.control.apply is strictly rejected.
+        legacy_reply = adapter.apply(
+            cause_id="legacy-risk-cause",
+            mode="STOP_NEW",
+            scope_kind="account",
+            scope_value="",
+        )
+        assert legacy_reply.outcome == "REQUEST_DENIED"
+        assert legacy_reply.code == "CONTROL_INTENT_UNAVAILABLE"
+
+        # 2. Risk calling bound apply_intent succeeds atomically.
+        binding_obs = adapter.capture_intent_binding()
+        assert binding_obs is not None
+        digest = request_digest_for_control(
+            cause_id="bound-risk-cause",
+            mode="STOP_NEW",
+            scope_kind="account",
+            scope_value="",
+            latch_id=None,
+        )
+        bound_reply = adapter.apply_intent(
+            binding=binding_obs,
+            request_digest=digest,
+            cause_id="bound-risk-cause",
+            mode="STOP_NEW",
+            scope_kind="account",
+            scope_value="",
+            latch_id=None,
+        )
+        assert bound_reply.outcome == "OBSERVED" and bound_reply.active is True
+
+        # 3. Gateway-internal system unresolved-return freeze coexists cleanly.
+        sys_origin = "system:unresolved_return:" + "b" * 64
+        sys_cause = owner.submit_service_call(
+            lambda: control.apply(
+                "sys-freeze-1", "FREEZE", scope_kind="account", origin=sys_origin
+            )
+        ).result(timeout_seconds=5)
+        assert sys_cause["cause_id"] == "sys-freeze-1"
+    finally:
+        risk_rt.close(timeout_seconds=5.0)
+        stop.set()
+        thread.join(timeout=10)
+        assert not thread.is_alive()
