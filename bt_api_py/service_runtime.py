@@ -2783,24 +2783,32 @@ class ServiceClientRuntime:
                         and (
                             isinstance(error, TimeoutError)
                             or (
-                                isinstance(error, ServiceRuntimeRequestNotSentError)
-                                and self.identity.role is WireRole.STRATEGY_CLIENT
+                                self.identity.role is WireRole.STRATEGY_CLIENT
+                                and (
+                                    isinstance(error, ServiceRuntimeRequestNotSentError)
+                                    or (
+                                        isinstance(error, ServiceRuntimeError)
+                                        and error.code == "UNAVAILABLE"
+                                    )
+                                )
                             )
                         )
                         and self._monotonic_now() < binding.lease_deadline
                     ):
                         # The renewal outcome is indeterminate (the transport
-                        # timed out) while the current lease is still
-                        # unexpired. Keep the binding due and retry on the
-                        # next maintenance pass instead of failing the whole
-                        # session; the lease deadline stays the hard boundary
-                        # (a lease that never renews still fails with
+                        # timed out) or transiently blocked by hub contention
+                        # (UNAVAILABLE on a strategy client) while the current
+                        # lease is still unexpired. Keep the binding due and
+                        # retry on the next maintenance pass instead of failing
+                        # the whole session; the lease deadline stays the hard
+                        # boundary (a lease that never renews still fails with
                         # REQUIRED_LEASE_EXPIRED). A strategy client also
                         # waits out a renewal the transport proved it never
                         # sent (a paused or restarting Gateway, I63-E112); a
                         # service with a required upstream keeps failing fast
-                        # so it never serves without it. Explicit hub
-                        # rejections and forced renewals keep failing fast.
+                        # so it never serves without it. Explicit policy/epoch/
+                        # registration rejections and forced renewals keep
+                        # failing fast.
                         break
                     failure_code = (
                         error.code if isinstance(error, ServiceRuntimeError)

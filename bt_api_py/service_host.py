@@ -1742,6 +1742,8 @@ class ServiceHost:
                 self._refresh_registry_readiness()
             if self._trusted_atomic_monitors:
                 bounded_timeout = min(bounded_timeout, 1000)
+            if self._registry is not None and self._registry._parent_retry_unready:
+                bounded_timeout = min(bounded_timeout, 10)
             handled = self._server.serve_once(bounded_timeout)
             # The validated single market-hub Host can defer the second sweep
             # after a request, or after an idle nonblocking poll. Its next
@@ -1822,6 +1824,8 @@ class ServiceHost:
                 self._refresh_registry_readiness()
             if self._trusted_atomic_monitors:
                 bounded_timeout = min(bounded_timeout, 1000)
+            if self._registry is not None and self._registry._parent_retry_unready:
+                bounded_timeout = min(bounded_timeout, 10)
             served = 0
             if self._server.serve_once(bounded_timeout):
                 served = 1

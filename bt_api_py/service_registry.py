@@ -7210,6 +7210,8 @@ class ServiceRegistry:
                     identity=stored_identity,
                     scope=stored_scope,
                 ):
+                    if self._parent_retry_unready:
+                        return self._failure("UNAVAILABLE")
                     return self._failure("POLICY_REQUIREMENT_UNMET")
                 expires_at = now + self.lease_seconds
                 self._db.execute(

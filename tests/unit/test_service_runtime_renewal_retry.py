@@ -454,3 +454,99 @@ def test_unsent_forced_renewal_still_fails_fast(tmp_path):
         with suppress(ServiceRuntimeError):
             runtime.close()
         registry.close()
+
+
+def test_transient_unavailable_renewal_is_retried_while_lease_valid(tmp_path):
+    calls = []
+    registry_clock = ManualClock(800)
+    registry = _registry(tmp_path / "unavail.sqlite", calls, clock=registry_clock)
+    monotonic = ManualClock(2500)
+
+    class BusyParentTransport(LocalTransport):
+        def __init__(self, registry):
+            super().__init__(registry)
+            self.renew_attempts = 0
+
+        def request(self, request, *, timeout):
+            reply = super().request(request, timeout=timeout)
+            if request.header.operation == "service.renew":
+                self.renew_attempts += 1
+                if self.renew_attempts <= 2:
+                    return WireEnvelope(reply.header, {"ok": False, "code": "UNAVAILABLE"})
+            return reply
+
+    transport = BusyParentTransport(registry)
+    runtime = _runtime(_config(), transport, monotonic_clock=monotonic)
+    try:
+        original_deadline = runtime.start().bindings[0].lease_deadline
+        registry_clock.advance(10)
+        monotonic.advance(10.05)
+        for attempt in (1, 2):
+            deferred = runtime.maintain()
+            assert transport.renew_attempts == attempt
+            assert deferred.degraded_count == 0
+            assert deferred.bindings[0].lease_deadline == original_deadline
+            assert runtime.state == "registered"
+            assert runtime.healthy is True
+            assert runtime.next_maintenance_delay() == 0.0
+            monotonic.advance(1.0)
+            registry_clock.advance(1.0)
+        renewed = runtime.maintain().bindings[0]
+        assert transport.renew_attempts == 3
+        assert renewed.lease_deadline > original_deadline
+        assert runtime.state == "registered" and runtime.healthy is True
+    finally:
+        runtime.close()
+        registry.close()
+
+
+def test_transient_unavailable_until_lease_expiry_still_fails(tmp_path):
+    calls = []
+    registry = _registry(tmp_path / "unavail-expiry.sqlite", calls)
+    monotonic = ManualClock(5500)
+
+    class AlwaysBusyTransport(LocalTransport):
+        def request(self, request, *, timeout):
+            reply = super().request(request, timeout=timeout)
+            if request.header.operation == "service.renew":
+                return WireEnvelope(reply.header, {"ok": False, "code": "UNAVAILABLE"})
+            return reply
+
+    runtime = _runtime(_config(), AlwaysBusyTransport(registry), monotonic_clock=monotonic)
+    try:
+        runtime.start()
+        monotonic.advance(29.0)
+        runtime.maintain()
+        assert runtime.state == "registered"
+        monotonic.advance(1.05)
+        with pytest.raises(ServiceRuntimeError, match="REQUIRED_LEASE_EXPIRED"):
+            runtime.maintain()
+        assert runtime.state == "failed" and runtime.healthy is False
+    finally:
+        with suppress(ServiceRuntimeError):
+            runtime.close()
+        registry.close()
+
+
+def test_transient_unavailable_forced_renewal_still_fails_fast(tmp_path):
+    calls = []
+    registry = _registry(tmp_path / "unavail-forced.sqlite", calls)
+    monotonic = ManualClock(6500)
+
+    class AlwaysBusyTransport(LocalTransport):
+        def request(self, request, *, timeout):
+            reply = super().request(request, timeout=timeout)
+            if request.header.operation == "service.renew":
+                return WireEnvelope(reply.header, {"ok": False, "code": "UNAVAILABLE"})
+            return reply
+
+    runtime = _runtime(_config(), AlwaysBusyTransport(registry), monotonic_clock=monotonic)
+    try:
+        runtime.start()
+        with pytest.raises(ServiceRuntimeError, match="UNAVAILABLE"):
+            runtime.renew()
+        assert runtime.state == "failed"
+    finally:
+        with suppress(ServiceRuntimeError):
+            runtime.close()
+        registry.close()

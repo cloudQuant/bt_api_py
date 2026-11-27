@@ -208,3 +208,49 @@ def test_lease_watchdog_still_fails_closed_on_persistent_host_lock_hold(running_
     # Fault is sticky: releasing the lock never revives readiness.
     parent.host._refresh_registry_readiness()
     assert not service.lease_ready and not parent.host.healthy and not registry.ready
+
+
+def test_renew_during_transient_lock_contention_returns_unavailable_and_recovers(running_parent):
+    from tests.unit.test_service_registry import _next_request
+
+    parent, registry, registration = running_parent
+    journal = parent.journal
+    identity = WireIdentity(WireRole.STRATEGY_CLIENT, 'strategy-principal', 'strategy-a')
+    scope = WireScope('paper', account_ref='account-a', strategy_ref='strategy-a', run_id='run-a')
+    token = registry._execution_parent_monotonic_leases[registration['registration_id']]
+
+    def renew_once():
+        return parent.host._dispatch_request(
+            identity.principal_ref,
+            _next_request(
+                'service.renew',
+                {
+                    'registration_id': registration['registration_id'],
+                    'service_epoch': registration['service_epoch'],
+                },
+                identity=identity,
+                scope=scope,
+            ),
+        )
+
+    holder, release = hold_lock(journal._lock)
+    try:
+        # During transient lock contention, service.renew returns transient
+        # UNAVAILABLE without revoking the live lease token, while submit stays
+        # refused.
+        reply = renew_once()
+        assert not reply['ok']
+        assert reply['code'] == 'UNAVAILABLE'
+        assert not registry.ready and registry._parent_retry_unready
+        assert registry._execution_parent_monotonic_leases[registration['registration_id']] is token
+    finally:
+        release.set()
+        holder.join(2)
+    assert not holder.is_alive()
+
+    # Once contention clears, the very next dispatch refreshes readiness and
+    # renews the registration cleanly.
+    recovered = renew_once()
+    assert recovered['ok'], recovered
+    assert registry.ready and not registry._parent_retry_unready
+    assert registration['registration_id'] in registry._execution_parent_monotonic_leases
