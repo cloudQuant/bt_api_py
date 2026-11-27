@@ -1621,6 +1621,22 @@ class RiskFactsCache:
             return None
         return price
 
+    def has_attested_market_ref(self, instrument: Any) -> bool:
+        """Read-only check whether the latest tick has a Gateway-attested market_ref (no RPC)."""
+        if type(instrument) is not MarketInstrumentKey:
+            return False
+        value = self._market_refs.get(instrument.instrument_id)
+        if value is None:
+            return False
+        snapshot = _market_ref_snapshot(value)
+        if snapshot is None:
+            return False
+        try:
+            key = MarketSubscriptionKey.from_dict(snapshot["key"])
+        except Exception:
+            return False
+        return key.instrument == instrument
+
     def market_ref(self, instrument: Any) -> dict | None:
         if type(instrument) is not MarketInstrumentKey:
             return None

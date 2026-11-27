@@ -1332,12 +1332,14 @@ def build_risk_portfolio_summary(
     priced_gross = Decimal(0)
     priced_long = Decimal(0)
     priced_short = Decimal(0)
-    all_priced = True
+    all_valued = True
+    all_fully_priced = True
 
     for (instrument_id, side), (today_qty, yesterday_qty) in sorted(raw_positions.items()):
         if len(positions_out) >= 256:
             add_reason("POSITIONS_TRUNCATED")
-            all_priced = False
+            all_valued = False
+            all_fully_priced = False
             break
         total_qty = today_qty + yesterday_qty
         if total_qty == 0:
@@ -1363,22 +1365,44 @@ def build_risk_portfolio_summary(
         price_quality_ok = (
             getattr(price_fact, "quality_ok", None) if price_fact is not None else None
         )
+        has_attested_ref_fn = getattr(facts, "has_attested_market_ref", None)
+        has_attested_ref = bool(
+            inst_key is not None
+            and callable(has_attested_ref_fn)
+            and has_attested_ref_fn(inst_key) is True
+        )
 
         notional: Decimal | None = None
         if type(multiplier) is not Decimal or not multiplier.is_finite() or multiplier <= 0:
             pos_status = "NO_MULTIPLIER"
             multiplier = None
-            all_priced = False
+            all_valued = False
+            all_fully_priced = False
             add_reason("MULTIPLIER_MISSING")
         elif type(last_price) is not Decimal or not last_price.is_finite() or last_price <= 0:
             pos_status = "NO_PRICE"
             last_price = None
-            all_priced = False
+            all_valued = False
+            all_fully_priced = False
             add_reason("PRICE_MISSING")
         elif price_quality_ok is not True:
-            pos_status = "STALE_OR_BAD_PRICE"
-            all_priced = False
+            all_fully_priced = False
             add_reason("PRICE_QUALITY_UNVERIFIED")
+            if price_quality_ok is False and has_attested_ref:
+                # Gateway attested this live PUB tick on Risk's own subscription
+                # (e.g. CTP native MD lacks quality_contract_ref); expose exact
+                # indicative mark-to-market while keeping valuation_status=PARTIAL
+                # and pre-trade PriceFact.quality_ok strictly False.
+                pos_status = "INDICATIVE"
+                notional = abs(total_qty) * multiplier * last_price
+                priced_gross += notional
+                if side == "LONG":
+                    priced_long += notional
+                else:
+                    priced_short += notional
+            else:
+                pos_status = "STALE_OR_BAD_PRICE"
+                all_valued = False
         else:
             pos_status = "PRICED"
             notional = abs(total_qty) * multiplier * last_price
@@ -1403,10 +1427,10 @@ def build_risk_portfolio_summary(
             }
         )
 
-    gross_notional: Decimal | None = priced_gross if all_priced else None
-    long_notional: Decimal | None = priced_long if all_priced else None
-    short_notional: Decimal | None = priced_short if all_priced else None
-    net_notional: Decimal | None = (priced_long - priced_short) if all_priced else None
+    gross_notional: Decimal | None = priced_gross if all_valued else None
+    long_notional: Decimal | None = priced_long if all_valued else None
+    short_notional: Decimal | None = priced_short if all_valued else None
+    net_notional: Decimal | None = (priced_long - priced_short) if all_valued else None
 
     equity = getattr(snapshot, "equity", None)
     balance = getattr(snapshot, "balance", None)
@@ -1436,7 +1460,7 @@ def build_risk_portfolio_summary(
 
     valuation_status = (
         "COMPLETE"
-        if (snapshot_complete and equity_positive and all_priced)
+        if (snapshot_complete and equity_positive and all_fully_priced)
         else "PARTIAL"
     )
     return {

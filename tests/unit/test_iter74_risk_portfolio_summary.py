@@ -18,10 +18,11 @@ HC = MarketInstrumentKey("ctp", "SHFE", "simnow", "futures", "hc2701", "hc2701")
 
 
 class _FakeFacts:
-    def __init__(self, snapshot, prices, facts):
+    def __init__(self, snapshot, prices, facts, *, attested=()):
         self._snapshot = snapshot
         self._prices = prices
         self._facts = facts
+        self._attested = frozenset(attested)
 
     def account_snapshot(self):
         return self._snapshot
@@ -31,6 +32,9 @@ class _FakeFacts:
 
     def instrument_facts(self, instrument):
         return self._facts.get(instrument)
+
+    def has_attested_market_ref(self, instrument):
+        return instrument in self._attested
 
 
 def _bindings():
@@ -141,6 +145,70 @@ def test_build_risk_portfolio_summary_fails_closed_on_missing_price_or_multiplie
     none_summary = build_risk_portfolio_summary(_FakeFacts(None, {}, {}), instruments=_bindings())
     assert none_summary["valuation_status"] == "UNAVAILABLE"
     assert none_summary["missing_reasons"] == ["ACCOUNT_SNAPSHOT_UNAVAILABLE"]
+
+
+def test_build_risk_portfolio_summary_computes_indicative_notional_only_for_gateway_attested_ticks():
+    snapshot = AccountSnapshot(
+        as_of_ns=1_760_000_000_000_000_000,
+        positions={
+            ("hc2701", "LONG"): (Decimal("4"), Decimal("3")),   # 7 * 10 * 3161 = 221270
+            ("rb2701", "LONG"): (Decimal("4"), Decimal("3")),   # 7 * 10 * 3067 = 214690
+            ("rb2701", "SHORT"): (Decimal("3"), Decimal("1")),  # 4 * 10 * 3067 = 122680
+        },
+        balance=Decimal("10000000"),
+        available=Decimal("9950000"),
+        equity=Decimal("10000000"),
+        currency="CNY",
+        complete=False,
+    )
+    facts = _FakeFacts(
+        snapshot,
+        prices={
+            HC: PriceFact(HC, last_price=Decimal("3161"), quality_ok=False),
+            RB: PriceFact(RB, last_price=Decimal("3067"), quality_ok=False),
+        },
+        facts={
+            HC: InstrumentFacts(HC, multiplier=Decimal("10"), tick_size=Decimal("1")),
+            RB: InstrumentFacts(RB, multiplier=Decimal("10"), tick_size=Decimal("1")),
+        },
+        attested=(HC, RB),
+    )
+    summary = build_risk_portfolio_summary(facts, instruments=_bindings())
+    # Must stay PARTIAL (NEVER COMPLETE!) and keep PRICE_QUALITY_UNVERIFIED honestly.
+    assert summary["valuation_status"] == "PARTIAL"
+    assert summary["snapshot_complete"] is False
+    assert "PRICE_QUALITY_UNVERIFIED" in summary["missing_reasons"]
+    assert "ACCOUNT_SNAPSHOT_INCOMPLETE" in summary["missing_reasons"]
+    assert "MARGIN_UNAVAILABLE" in summary["missing_reasons"]
+    assert summary["long_notional"] == "435960"
+    assert summary["short_notional"] == "122680"
+    assert summary["gross_notional"] == "558640"
+    assert summary["priced_gross_notional"] == "558640"
+    assert summary["net_notional"] == "313280"
+    assert summary["gross_leverage"] == "0.055864"
+    assert summary["net_leverage"] == "0.031328"
+    assert all(p["valuation_status"] == "INDICATIVE" and p["price_quality_ok"] is False for p in summary["positions"])
+
+    # Even with complete=True snapshot, INDICATIVE can NEVER promote valuation_status to COMPLETE.
+    complete_snap = AccountSnapshot(
+        as_of_ns=1_760_000_000_000_000_000,
+        positions={("rb2701", "LONG"): (Decimal("1"), Decimal("0"))},
+        equity=Decimal("100000"),
+        currency="CNY",
+        complete=True,
+    )
+    ind_complete = build_risk_portfolio_summary(
+        _FakeFacts(
+            complete_snap,
+            prices={RB: PriceFact(RB, last_price=Decimal("3067"), quality_ok=False)},
+            facts={RB: InstrumentFacts(RB, multiplier=Decimal("10"))},
+            attested=(RB,),
+        ),
+        instruments=_bindings(),
+    )
+    assert ind_complete["valuation_status"] == "PARTIAL"
+    assert ind_complete["gross_notional"] == "30670"
+    assert ind_complete["positions"][0]["valuation_status"] == "INDICATIVE"
 
 
 def test_risk_order_service_admin_status_portfolio_summary_opt_in_and_fail_closed():

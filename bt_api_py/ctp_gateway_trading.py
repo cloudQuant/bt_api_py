@@ -1531,10 +1531,16 @@ def build_ctp_gateway_trading_profile(
                 deadline = time.monotonic() + settings.close_timeout_seconds
                 cut_source = holder.get('order_cut_source')
                 if cut_source is not None:
-                    try:
-                        cut_closed = cut_source.close() is True
-                    except Exception:
-                        cut_closed = False
+                    cut_closed = False
+                    while True:
+                        try:
+                            cut_closed = cut_source.close() is True
+                        except Exception:
+                            cut_closed = False
+                            break
+                        if cut_closed or time.monotonic() >= deadline:
+                            break
+                        time.sleep(0.05)
                     if not cut_closed:
                         raise CtpGatewayTradingError('ORDER_CUT_CLOSE_UNCONFIRMED') from None
                 returns = holder.get("returns")

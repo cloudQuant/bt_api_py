@@ -281,3 +281,35 @@ def test_proactive_staging_refresh_eliminates_blackout_window_and_stays_fail_clo
     assert session._order_query_cut is None
     assert source.close()
     monkeypatch.setattr(native, "ReqQryOrder", orig_req)
+
+
+def test_close_while_staging_querying_retries_until_terminal_pin_release(real_owner, monkeypatch):
+    """During shutdown while a staged ReqQryOrder is in flight, close() returns False
+    while the native pin is still retained and confirms True once the terminal callback seals it."""
+    source, _maintenance, session, native, _ = source_for(real_owner)
+    assert source.due(1000000000.0) and source.begin()
+    _finish(source._coordinator)
+    assert source.current() is not None
+
+    sent = []
+    orig_req = native.ReqQryOrder
+
+    def hold_staged(field, rid):
+        sent.append(rid)
+        return 0
+
+    monkeypatch.setattr(native, "ReqQryOrder", hold_staged)
+    assert source.due(1000000000.0) and source.begin()
+    assert source.advance() is True and len(sent) == 1
+    assert source._staging is not None and session._order_query_cut is not None
+
+    # First close cancels the in-flight query but retains pin until terminal callback arrives.
+    assert source.close() is False
+    assert session._order_query_cut is not None
+
+    # Once SimNow delivers terminal callback, retrying close() confirms pin release and closes cleanly.
+    native.client._spi.OnRspQryOrder(None, None, sent[0], True)
+    assert source.close() is True
+    assert session._order_query_cut is None
+    assert source.close() is True
+    monkeypatch.setattr(native, "ReqQryOrder", orig_req)
