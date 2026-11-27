@@ -142,12 +142,18 @@ def test_same_risk_pid_recovers_account_facts_and_r05_cut_after_gateway_restart(
 
         state.ingest(first_client_id, "accepted", "1", "0")
         state.ingest(first_client_id, "filled", "1", "1")
+        pre_restart_watermark = _gateway_fact_watermark(state.gateway_root)
         fresh_first = support.until(
             lambda: _r05_cut_snapshot(state.risk_root),
-            lambda v: _cut_matches_generation(v, original_generation),
+            lambda v: _cut_matches_generation(v, original_generation)
+            and v[2][0] >= pre_restart_watermark
+            and v[2][1] >= pre_restart_watermark,
             seconds=25,
         )
-        assert fresh_first is not None, _r05_cut_snapshot(state.risk_root)
+        assert (
+            _cut_matches_generation(fresh_first, original_generation)
+            and fresh_first[2][1] >= pre_restart_watermark
+        ), (pre_restart_watermark, fresh_first)
 
         journal_id = state.journal_id
         obs_before = support.gateway_observer_snapshot_facts(

@@ -1860,6 +1860,15 @@ class RiskServiceHost:
         self._retain_if_global_unknown(resource)
         return result
 
+    def _runtime_close_timeout(self) -> float:
+        """Bound runtime.close() above one in-flight ZMQ RPC plus strict unregister."""
+        cfg = getattr(self, "config", None)
+        call_s = getattr(cfg, "call_timeout_seconds", None)
+        if type(call_s) not in (int, float) or not math.isfinite(call_s) or call_s <= 0:
+            return 5.0
+        req_s = _gateway_request_timeout_ms(cfg) / 1000.0
+        return max(5.0, float(call_s), req_s * 2.0 + 2.0)
+
     def _close_runtime_once(self, runtime: Any, timeout: float) -> bool:
         if self._retain_if_global_unknown(runtime):
             return False
@@ -2577,7 +2586,7 @@ class RiskServiceHost:
             return
         self._account_facts_retry_at = now + max(1.0, self.config.maintain_seconds)
         if runtime is not None:
-            if not self._close_runtime_once(runtime, self.config.call_timeout_seconds):
+            if not self._close_runtime_once(runtime, self._runtime_close_timeout()):
                 return
             if runtime in self._runtimes:
                 self._runtimes.remove(runtime)
@@ -2591,7 +2600,7 @@ class RiskServiceHost:
             if failed_rt is not None:
                 if self._cleanup_uncertain:
                     self._cleanup_uncertain_resources.append(failed_rt)
-                elif self._close_runtime_once(failed_rt, self.config.call_timeout_seconds):
+                elif self._close_runtime_once(failed_rt, self._runtime_close_timeout()):
                     if failed_rt in self._runtimes:
                         self._runtimes.remove(failed_rt)
                     self._account_facts_runtime = None
@@ -3077,7 +3086,7 @@ class RiskServiceHost:
         except BaseException:
             if self._cleanup_uncertain:
                 self._cleanup_uncertain_resources.append(runtime)
-            elif not self._close_runtime_once(runtime, 5.0):
+            elif not self._close_runtime_once(runtime, self._runtime_close_timeout()):
                 self._delegate_cleanup_unresolved.append(runtime)
             raise
         return _DelegateHandle(
@@ -3504,7 +3513,7 @@ class RiskServiceHost:
         if runtime is not None:
             if type(runtime) is ThreadedServiceClientRuntime and not self._gateway_endpoint_listening():
                 return
-            if not self._close_runtime_once(runtime, self.config.call_timeout_seconds):
+            if not self._close_runtime_once(runtime, self._runtime_close_timeout()):
                 return
             self._runtimes.remove(runtime)
             self._observer_runtime = None
@@ -3535,7 +3544,7 @@ class RiskServiceHost:
         except BaseException as error:
             if self._cleanup_uncertain:
                 self._cleanup_uncertain_resources.append(replacement)
-            elif self._close_runtime_once(replacement, self.config.call_timeout_seconds):
+            elif self._close_runtime_once(replacement, self._runtime_close_timeout()):
                 self._runtimes.remove(replacement)
                 self._observer_runtime = None
             if not isinstance(error, Exception):
@@ -3739,7 +3748,7 @@ class RiskServiceHost:
         if runtime is not None:
             if type(runtime) is ThreadedServiceClientRuntime and not self._gateway_endpoint_listening():
                 return
-            if not self._close_runtime_once(runtime, self.config.call_timeout_seconds):
+            if not self._close_runtime_once(runtime, self._runtime_close_timeout()):
                 return
             if runtime in self._runtimes:
                 self._runtimes.remove(runtime)
@@ -3753,7 +3762,7 @@ class RiskServiceHost:
             if failed_rt is not None:
                 if self._cleanup_uncertain:
                     self._cleanup_uncertain_resources.append(failed_rt)
-                elif self._close_runtime_once(failed_rt, self.config.call_timeout_seconds):
+                elif self._close_runtime_once(failed_rt, self._runtime_close_timeout()):
                     if failed_rt in self._runtimes:
                         self._runtimes.remove(failed_rt)
                     self._market_runtime = None
@@ -4167,7 +4176,7 @@ class RiskServiceHost:
                 current_resource = runtime
                 if self._retain_if_global_unknown(current_resource):
                     return False
-                snapshot = runtime.close(timeout_seconds=5.0)
+                snapshot = runtime.close(timeout_seconds=self._runtime_close_timeout())
                 if self._cleanup_uncertain or self._retain_if_global_unknown(current_resource):
                     return False
                 confirmed = runtime_cleanup_confirmed(_GuardedCleanupSnapshot(self, runtime, snapshot)) is True

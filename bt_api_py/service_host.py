@@ -3140,12 +3140,14 @@ class ServiceHost:
     def _components_readiness_state(self) -> str:
         # A local writer fence is independent of the component's lease.
         # Hard failures must win even when another component asks to retry.
-        try:
-            fence_state = self._atomic_intake_fence_state()
-            if fence_state == 'failed':
-                return self._record_readiness('failed', 'intake_fence')
-        except Exception:
-            return self._record_readiness('failed', 'intake_fence_exception')
+        fence_state = 'valid'
+        if not getattr(self, '_defer_atomic_fence_to_lock', False):
+            try:
+                fence_state = self._atomic_intake_fence_state()
+                if fence_state == 'failed':
+                    return self._record_readiness('failed', 'intake_fence')
+            except Exception:
+                return self._record_readiness('failed', 'intake_fence_exception')
         if (self._component_maintenance_faults or self._component_delay_faults or self._gateway_lease_faults
                 or getattr(self, '_host_delay_faulted', False)):
             return self._record_readiness('failed', self._readiness_fault_reason() or 'concurrent_fault')
@@ -3599,20 +3601,29 @@ class ServiceHost:
             if self._atomic_intake_services:
                 with registry._lock:
                     hard_generation = registry._hard_unready_generation
-                observed = self._components_readiness_state()
+                self._defer_atomic_fence_to_lock = True
+                try:
+                    observed = self._components_readiness_state()
+                finally:
+                    self._defer_atomic_fence_to_lock = False
                 with registry._lock:
                     try:
                         if hard_generation != registry._hard_unready_generation:
                             observed = 'failed'
                             self._record_readiness('failed', 'hard_unready_generation')
                         if observed != 'failed':
-                            fence_state = self._atomic_intake_fence_state()
-                            if fence_state == 'failed':
+                            try:
+                                fence_state = self._atomic_intake_fence_state()
+                            except Exception:
                                 observed = 'failed'
-                                self._record_readiness('failed', 'intake_fence')
-                            elif fence_state == 'retry':
-                                observed = 'retry'
-                                self._record_readiness('retry', 'intake_fence_retry')
+                                self._record_readiness('failed', 'intake_fence_exception')
+                            else:
+                                if fence_state == 'failed':
+                                    observed = 'failed'
+                                    self._record_readiness('failed', 'intake_fence')
+                                elif fence_state == 'retry':
+                                    observed = 'retry'
+                                    self._record_readiness('retry', 'intake_fence_retry')
                         if (self._component_maintenance_faults or self._component_delay_faults
                                 or getattr(self, '_host_delay_faulted', False)
                                 or self._gateway_lease_faults or self._paper_monitor_faults):

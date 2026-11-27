@@ -192,3 +192,23 @@ def test_hard_generation_change_overrides_stale_valid_sample(host):
     host._refresh_registry_readiness()
     assert host.readiness_diagnostics['reason'] == 'hard_unready_generation'
     assert not host._registry.ready
+
+
+def test_refresh_registry_readiness_checks_atomic_fence_once_under_lock(host):
+    fence_calls = []
+
+    class CountingIntake:
+        instance_id = 'local-component'
+
+        def local_intake_status(self):
+            fence_calls.append(1)
+            return 'valid'
+
+        def _lease_readiness_status(self):
+            return 'valid'
+
+    host._atomic_intake_services = (CountingIntake(),)
+    host._components = [component(lambda: True, kind='execution')]
+    host._refresh_registry_readiness()
+    assert host._registry.ready
+    assert len(fence_calls) == 1

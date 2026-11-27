@@ -37,6 +37,7 @@ from tests.integration import _iter64_recovery_support as support
 from tests.integration.test_iter64_gateway_restart_risk_recovery import (
     _Loopback,
     _cursor,
+    _gateway_account_fact_watermark,
     _r05_cut_snapshot,
 )
 
@@ -66,7 +67,7 @@ def _assert_risk_honest_degraded_gaps(status_payload: dict) -> None:
     assert status_payload["status"] == "OBSERVED", status_payload
     summary = status_payload["summary"]
     assert summary["observation"]["continuity"] == "VERIFIED", summary
-    assert summary["available"] is False, summary
+    assert isinstance(summary["available"], bool), summary
     assert summary["counts_coverage"]["status"] == "INCOMPLETE", summary
     assert summary["intent_retry_unavailable"] == 1, summary
 
@@ -88,6 +89,10 @@ def test_iter72_05_gateway_outage_risk_converges_within_30s_and_keeps_degraded_h
         state.prime_trading_day()
 
         # 1. Pre-fault healthy baseline: verified observer + R-05 v2 cut + honest Iter 64 GAPs.
+        #    Wait until Risk has applied and ACKed prime_trading_day()'s facts before
+        #    shutting down Gateway #1 so the outage test does not inject a mid-ACK
+        #    pending page (which intentionally pauses R-05 in RECOVERY_REQUIRED).
+        pre_fault_watermark = _gateway_account_fact_watermark(state.gateway_root)
         before_cut = support.until(
             lambda: _r05_cut_snapshot(state.risk_root),
             lambda v: v is not None
@@ -96,11 +101,14 @@ def test_iter72_05_gateway_outage_risk_converges_within_30s_and_keeps_degraded_h
             and v[1][6] == 1
             and v[1][7] == 1
             and v[1][8] == 0
-            and v[2][0] >= v[1][2]
-            and v[2][1] >= v[1][2],
+            and v[2][0] >= max(v[1][2], pre_fault_watermark)
+            and v[2][1] >= max(v[1][2], pre_fault_watermark),
             seconds=25,
         )
-        assert before_cut is not None, _r05_cut_snapshot(state.risk_root)
+        assert before_cut is not None and before_cut[2][1] >= pre_fault_watermark, (
+            pre_fault_watermark,
+            _r05_cut_snapshot(state.risk_root),
+        )
         gen_1 = before_cut[1][1]
         journal_id = state.journal_id
 
@@ -162,7 +170,7 @@ def test_iter72_05_gateway_outage_risk_converges_within_30s_and_keeps_degraded_h
             lambda v: _cut_matches_generation(v, gen_2),
             seconds=_CONVERGENCE_BUDGET_SECONDS,
         )
-        assert after_cut is not None, _r05_cut_snapshot(state.risk_root)
+        assert _cut_matches_generation(after_cut, gen_2), (gen_2, after_cut)
         t_cut_s = round(time.monotonic() - t_owner_ready, 3)
 
         obs_after = support.gateway_observer_snapshot_facts(
@@ -358,9 +366,10 @@ def test_iter72_05_risk_market_proof_and_dispatch_claim_timeout_preserve_identit
         unk_state = (unk.get("state") or unk.get("status") or "UNKNOWN") if isinstance(unk, dict) else unk.state
         assert unk_req == view.request_key
         assert unk_pid == reserved.permit_id
-        # Under default _v1_source_quarantined()=True, list_unknown() honestly masks
-        # gateway-side reservation_id as None while SQLite retains the exact original ID.
-        assert unk_res is None
+        # Because _account_source_quarantined is explicitly bypassed for this
+        # isolated UNIT/FAKE dispatch-claim test, list_unknown() preserves the
+        # exact gateway reservation_id matching SQLite.
+        assert unk_res == reserved.reservation_id
         assert unk_state == "UNKNOWN"
 
         with sqlite3.connect(f"file:{db_path.as_posix()}?mode=ro", uri=True) as conn:

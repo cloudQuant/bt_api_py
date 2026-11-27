@@ -475,7 +475,7 @@ class ParentServiceHost:
     def poll(self):
         if self.state != 'running' or self.host is None:
             raise ParentServiceError('LISTENER_UNAVAILABLE')
-        self.host.serve_once(100)
+        self.host.serve_once(200)
         if self.dispatcher is not None and self.host.healthy:
             self.dispatcher.step()
         return 'READY' if self.host.healthy else 'UNREADY'

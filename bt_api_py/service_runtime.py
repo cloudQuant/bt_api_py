@@ -4832,14 +4832,34 @@ class ServiceClientRuntime:
         if (
             getattr(client, "_strict_single_connection", False) is not True
             or getattr(client, "_strict_socket_opened", False) is not True
-            or (
-                not allow_disconnected_strict
-                and getattr(client, "_socket", None) is not None
-                and getattr(client, "remaining_socket_message_ids", 1) != 0
-            )
             or getattr(client, "_closed", True) is True
         ):
             return None
+        sock = getattr(client, "_socket", None)
+        remaining_ids = getattr(client, "remaining_socket_message_ids", 1)
+        if not allow_disconnected_strict and sock is not None and remaining_ids != 0:
+            # A strict_single_connection socket sets RECONNECT_IVL=-1 and
+            # IMMEDIATE=1, so once its peer restarts POLLOUT can never become
+            # ready again. Detect that disconnected socket within 50ms instead
+            # of blocking a full call_timeout_seconds (5-10s) before switching
+            # to the one-shot authenticated unregister transport.
+            disconnected_strict = False
+            try:
+                import zmq
+
+                if (
+                    not getattr(sock, "closed", False)
+                    and callable(getattr(sock, "getsockopt", None))
+                    and callable(getattr(sock, "poll", None))
+                    and sock.getsockopt(zmq.RECONNECT_IVL) == -1
+                    and sock.getsockopt(zmq.IMMEDIATE) == 1
+                    and sock.poll(50, zmq.POLLOUT) == 0
+                ):
+                    disconnected_strict = True
+            except Exception:
+                disconnected_strict = False
+            if not disconnected_strict:
+                return None
         if type(self._factory) is not ZmqTransportFactory:
             return None
         if self._factory._require_factory_mode() is not True:

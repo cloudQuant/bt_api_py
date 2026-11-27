@@ -346,6 +346,8 @@ def _build_host(tmp_path, gw, monkeypatch):
             pass
 
     class FakePump:
+        verified_epoch = "synthetic-stream-epoch-1"
+
         def __init__(self, *_args, **_kwargs):
             pass
 
