@@ -927,3 +927,40 @@ def test_session_supervisor_supports_multiprocess_execution_group_and_dynamic_co
     finally:
         risk_server.close()
         runtime_server.close()
+
+
+def test_local_component_port_shared_stdout_stderr_does_not_overwrite(tmp_path: Path) -> None:
+    """When stdout_path == stderr_path, stderr must share stdout (STDOUT) without clobbering."""
+    log_path = tmp_path / "shared.log"
+    stop_file = tmp_path / "shared.stop"
+    script = (
+        "import sys, time; from pathlib import Path; "
+        "print('STDOUT_READY_MARKER', flush=True); "
+        "print('STDERR_WARNING_LINE_' + 'X' * 120, file=sys.stderr, flush=True); "
+        "sf = Path(sys.argv[1]); "
+        "deadline = time.monotonic() + 10.0\n"
+        "while time.monotonic() < deadline and not sf.exists():\n"
+        "    time.sleep(0.02)\n"
+        "print('STDOUT_STOPPED_MARKER', flush=True)\n"
+    )
+    spec = ComponentSpec(
+        argv=(sys.executable, "-u", "-c", script, str(stop_file)),
+        stop_file=stop_file,
+        ready_check=lambda: log_path.is_file()
+        and "STDOUT_READY_MARKER" in log_path.read_text(encoding="utf-8", errors="replace"),
+        cwd=tmp_path,
+        start_timeout_seconds=10.0,
+        stop_timeout_seconds=5.0,
+        poll_interval_seconds=0.02,
+        stdout_path=log_path,
+        stderr_path=log_path,
+    )
+    port = LocalComponentProcessPort({"monitor": spec}, step_factory=StepResult)
+    assert port.preflight("monitor").status == "APPLIED"
+    assert port.start("monitor").status == "APPLIED"
+    stopped = port.stop_cooperatively("monitor")
+    assert stopped.status == "APPLIED" and stopped.exit_code == 0
+    text = log_path.read_text(encoding="utf-8")
+    assert "STDOUT_READY_MARKER" in text
+    assert "STDERR_WARNING_LINE_" in text
+    assert "STDOUT_STOPPED_MARKER" in text

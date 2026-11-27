@@ -1708,9 +1708,12 @@ class LocalComponentProcessPort:
                 handles.append(stdout_handle)
                 stdout_target = stdout_handle
             if spec.stderr_path is not None:
-                stderr_handle = open(spec.stderr_path, "ab")
-                handles.append(stderr_handle)
-                stderr_target = stderr_handle
+                if spec.stdout_path is not None and spec.stderr_path == spec.stdout_path:
+                    stderr_target = subprocess.STDOUT
+                else:
+                    stderr_handle = open(spec.stderr_path, "ab")
+                    handles.append(stderr_handle)
+                    stderr_target = stderr_handle
             proc = subprocess.Popen(
                 list(spec.argv),
                 shell=False,
