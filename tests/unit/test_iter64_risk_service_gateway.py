@@ -986,6 +986,36 @@ def test_account_snapshot_keeps_zero_and_never_mixes_currencies(
     assert result.equity == (None if valuation_currency is None else Decimal(120))
 
 
+def test_account_snapshot_projects_locked_margin_and_clears_on_currency_mismatch():
+    obs_ok = SimpleNamespace(
+        positions_complete=True,
+        balances_complete=True,
+        positions=(),
+        balances=(SimpleNamespace(total="1000", available="850", locked="150.25", currency="CNY"),),
+        valuation=SimpleNamespace(available_cash="850", equity="1000", currency="CNY"),
+        completed_at_utc="2030-01-01T01:00:00Z",
+    )
+    snap_ok = account_snapshot_from_observation(
+        obs_ok, instrument_ids={}, dated_venues=frozenset()
+    )
+    assert snap_ok.margin == Decimal("150.25")
+    assert snap_ok.complete is False
+
+    obs_mismatch = SimpleNamespace(
+        positions_complete=True,
+        balances_complete=True,
+        positions=(),
+        balances=(SimpleNamespace(total="1000", available="850", locked="150.25", currency="CNY"),),
+        valuation=SimpleNamespace(available_cash="850", equity="1000", currency="USD"),
+        completed_at_utc="2030-01-01T01:00:00Z",
+    )
+    snap_mismatch = account_snapshot_from_observation(
+        obs_mismatch, instrument_ids={}, dated_venues=frozenset()
+    )
+    assert snap_mismatch.margin is None
+    assert snap_mismatch.balance is None
+
+
 def test_market_event_maps_to_price_and_own_market_reference(monkeypatch):
     import bt_api_base.market_tick_protocol as ticks
 

@@ -2420,12 +2420,13 @@ def account_snapshot_from_observation(
     except (AttributeError, KeyError, TypeError, ValueError, RiskControlArithmeticError):
         raise ValueError("RISK_ACCOUNT_POSITION_UNAVAILABLE") from None
     valuation = observation.valuation
-    balance = available = equity = None
+    balance = available = equity = margin = None
     currency = None
     if len(observation.balances) == 1:
         only = observation.balances[0]
         balance = _decimal(only.total, positive=False)
         available = _decimal(only.available, positive=False)
+        margin = _decimal(getattr(only, "locked", None), positive=False)
         currency = only.currency
     if valuation is not None:
         valuation_currency = valuation.currency if _ref(valuation.currency) else None
@@ -2433,7 +2434,7 @@ def account_snapshot_from_observation(
         # A zero valuation is an observed value, not a missing one. The balance
         # fallback is usable only when its denomination matches the valuation.
         if valuation_currency is None or currency != valuation_currency:
-            balance = available = None
+            balance = available = margin = None
         if valuation_currency is not None and valuation_available is not None:
             available = valuation_available
         elif valuation.available_cash is not None:
@@ -2449,6 +2450,7 @@ def account_snapshot_from_observation(
         positions=positions,
         balance=balance,
         available=available,
+        margin=margin,
         equity=equity,
         currency=currency if _ref(currency) else None,
         complete=complete,
