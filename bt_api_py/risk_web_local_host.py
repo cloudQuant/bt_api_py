@@ -33,7 +33,12 @@ from urllib.parse import parse_qs, urlsplit
 from bt_api_base.risk_service_protocol import RISK_ADMIN_OPERATIONS
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 
-from bt_api_py.gateway_web_local_host import _protected_bytes, _unique_object
+from bt_api_py.gateway_web_local_host import (
+    _cleanup_confirmed_for_rotation,
+    _endpoint_listening,
+    _protected_bytes,
+    _unique_object,
+)
 from bt_api_py.service_config import parse_client_config
 from bt_api_py.service_runtime import (
     ClientCurveKeys,
@@ -154,6 +159,12 @@ def _risk_runtime_usable(runtime: Any) -> bool:
         return False
     active_bindings = [b for b in state.bindings if b.active]
     if not active_bindings:
+        return False
+    remote_inactive = getattr(state, "remote_inactive_registrations", None) or ()
+    if remote_inactive and any(
+        (b.registration_id, b.service_epoch) in remote_inactive
+        for b in active_bindings
+    ):
         return False
     return all(
         b.authenticated_peer is not None and b.server_key_fingerprint is not None
@@ -386,6 +397,8 @@ class LocalRiskWebHost:
                     raise ValueError("INVALID_PEER")
                 return peer
 
+            self._endpoint = item["endpoint"]
+            self._retired_bindings: tuple = ()
             self._runtime_factory = lambda: ThreadedServiceClientRuntime(
                 lambda: ServiceClientRuntime(
                     client_config,
@@ -397,6 +410,7 @@ class LocalRiskWebHost:
                     require_unregister_ack=True,
                 ),
                 require_unregister_ack=True,
+                defer_cleanup_until_close=True,
             )
             self._runtime = self._runtime_factory()
             self._identity = identity
@@ -463,13 +477,21 @@ class LocalRiskWebHost:
             # creating a fresh CURVE registration; fail closed on uncertain cleanup.
             try:
                 st = current.status()
+                if st.bindings:
+                    self._retired_bindings = st.bindings
                 if st.state == "closed" and not st.thread_alive:
                     closed = st
+                elif (
+                    st.state == "failed"
+                    and st.thread_alive
+                    and not _endpoint_listening(self._endpoint)
+                ):
+                    return current
                 else:
                     closed = current.close(timeout_seconds=10)
             except Exception:
                 return current
-            if closed.thread_alive or closed.cleanup_failures or closed.unregister_uncertainties:
+            if not _cleanup_confirmed_for_rotation(closed, retired_bindings=self._retired_bindings):
                 return current
             new_runtime = self._runtime_factory()
             try:
@@ -486,6 +508,7 @@ class LocalRiskWebHost:
                 except Exception:
                     pass
                 return current
+            self._retired_bindings = ()
             self._runtime = new_runtime
             return new_runtime
 
@@ -497,10 +520,10 @@ class LocalRiskWebHost:
             self._sessions.clear()
         with self._reconnect_lock:
             try:
+                before = self._runtime.status()
+                retired = before.bindings or self._retired_bindings
                 result = self._runtime.close(timeout_seconds=10)
-                failed = bool(
-                    result.thread_alive or result.cleanup_failures or result.unregister_uncertainties
-                )
+                failed = not _cleanup_confirmed_for_rotation(result, retired_bindings=retired)
             except Exception:
                 failed = True
         if failed:

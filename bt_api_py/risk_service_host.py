@@ -1668,6 +1668,7 @@ class RiskServiceHost:
         self._cleanup_state = "ready"
         self._cleanup_uncertain = False
         self._cleanup_in_progress = False
+        self._in_control_wait_pump = False
         self._lifecycle_in_progress = 0
         self._delegate_connect_in_progress = False
         self._cleanup_uncertain_resources: list[Any] = []
@@ -1690,6 +1691,11 @@ class RiskServiceHost:
         self._observer_retry_at = 0.0
         self._market_runtime: Any = None
         self._market_retry_at = 0.0
+        self._control_retry_at = 0.0
+        self._account_started = False
+        self._financial_runtime: Any = None
+        self._financial_retry_at = 0.0
+        self._financial_started = False
         self._account_facts_runtime: Any = None
         self._account_facts_coordinator: Any = None
         self._account_facts_retry_at = 0.0
@@ -1826,7 +1832,7 @@ class RiskServiceHost:
             and type(self._stack) is ExitStack and not self._stack._exit_callbacks
             and not self._runtimes and not self._delegate_cleanup_unresolved
             and self._observer_runtime is None and self._observer_route is None
-            and self._market_runtime is None
+            and self._market_runtime is None and self._financial_runtime is None
             and all(value is None for value in (
                 self.engine, self.ledger, self.service_host, self.order_port,
                 self.control, self.facts, self.pump, self.market, self.account,
@@ -2245,6 +2251,31 @@ class RiskServiceHost:
         gateway = self.config.gateway
         return WireIdentity(WireRole.SERVICE, gateway.principal_ref, gateway.service_id)
 
+    def _pump_control_during_wait(self) -> None:
+        """Serve only ServiceRegistry control RPCs while waiting on a Gateway runtime."""
+        if (
+            not self._started
+            or self.stop_event.is_set()
+            or self._in_control_wait_pump
+            or self._cleanup_uncertain
+            or self._cleanup_state != "ready"
+            or self.service_host is None
+            or threading.current_thread() is not self._resource_owner
+            or self._runtime_cleanup_unknown()
+        ):
+            return
+        from bt_api_py.service_host import ServiceHost
+
+        if type(self.service_host) is not ServiceHost or self.service_host.state != "started":
+            return
+        self._in_control_wait_pump = True
+        try:
+            self.service_host.serve_control_burst(0, max_requests=16)
+        except Exception:
+            pass
+        finally:
+            self._in_control_wait_pump = False
+
     def _service_runtime(self, mount: str, scope: WireScope, operations: frozenset[str], *, run_id: str | None = None, extension: Callable[[], Any] | None = None, market: bool = False, strict_connection: bool = False) -> Any:
         _require_supported_r04(self.config)
         from bt_api_py.service_runtime import ServiceClientRuntime, ZmqTransportFactory
@@ -2279,6 +2310,8 @@ class RiskServiceHost:
             cleanup_unknown=self._runtime_cleanup_unknown,
             on_cleanup_sticky=self._runtime_cleanup_sticky,
             defer_sticky_cleanup_until_close=True,
+            wait_pump=self._pump_control_during_wait,
+            wait_pump_delay_seconds=0.5,
         )
 
     def _start_account_facts(self, route: Any) -> None:
@@ -2416,6 +2449,8 @@ class RiskServiceHost:
     _ACCOUNT_FACTS_MIN_UNREGISTER_HEADROOM = 8
     _OBSERVER_ROTATION_HEADROOM = 64
     _MARKET_ROTATION_HEADROOM = 64
+    _CONTROL_ROTATION_HEADROOM = 64
+    _FINANCIAL_ROTATION_HEADROOM = 64
 
     def _verified_observer_stream_epoch(self) -> str | None:
         """Return only the verified account.events cursor epoch from ObservationPump."""
@@ -3243,6 +3278,8 @@ class RiskServiceHost:
             cleanup_unknown=self._runtime_cleanup_unknown,
             on_cleanup_sticky=self._runtime_cleanup_sticky,
             defer_sticky_cleanup_until_close=True,
+            wait_pump=self._pump_control_during_wait,
+            wait_pump_delay_seconds=0.5,
         )
 
     def _control_runtime(self) -> Any:
@@ -3379,6 +3416,7 @@ class RiskServiceHost:
                 },
                 timeout_seconds=timeout,
             )
+            self._account_started = True
             self._check_cleanup_ready()
         if config.strategy_financial_seconds is not None:
             self._start_strategy_financial()
@@ -3589,6 +3627,7 @@ class RiskServiceHost:
         operations = frozenset({STRATEGY_FINANCIAL_OPERATION})
         runtime = self._call_lifecycle(self._application_runtime, {"application.account": operations})
         self._runtimes.append(runtime)
+        self._financial_runtime = runtime
         self._check_cleanup_ready()
         try:
             snapshot = self._call_lifecycle(runtime.start, timeout_seconds=config.call_timeout_seconds)
@@ -3609,6 +3648,7 @@ class RiskServiceHost:
             account_ref=config.account_scope,
             timeout_seconds=config.call_timeout_seconds,
         )
+        self._financial_started = True
         self._check_cleanup_ready()
 
     def _start_market(self) -> None:
@@ -3695,6 +3735,11 @@ class RiskServiceHost:
             return
         proactive_rotate = False
         binding_auth_lost = False
+        epoch_mismatch = False
+        has_pump = getattr(self, "pump", None) is not None
+        observer_service_epoch = (
+            self._verified_observer_service_epoch() if has_pump else None
+        )
         if runtime is None:
             needs_replace = self.market is None
         else:
@@ -3723,6 +3768,17 @@ class RiskServiceHost:
                 ]
                 if isinstance(bindings, (tuple, list)) else []
             )
+            market_epochs = {
+                b.service_epoch
+                for b in market_bindings
+                if type(getattr(b, "service_epoch", None)) is str and b.service_epoch
+            }
+            market_service_epoch = next(iter(market_epochs)) if len(market_epochs) == 1 else None
+            epoch_mismatch = (
+                observer_service_epoch is not None
+                and market_service_epoch is not None
+                and market_service_epoch != observer_service_epoch
+            )
             binding_auth_lost = (
                 state == "running"
                 and type(remaining) is int
@@ -3732,14 +3788,28 @@ class RiskServiceHost:
                     for b in market_bindings
                 )
             )
-            needs_replace = stopped_or_failed or unhealthy_running or low_budget or binding_auth_lost
+            needs_replace = (
+                stopped_or_failed
+                or unhealthy_running
+                or low_budget
+                or binding_auth_lost
+                or epoch_mismatch
+            )
             proactive_rotate = (
                 low_budget
                 and not stopped_or_failed
                 and not unhealthy_running
                 and not binding_auth_lost
+                and not epoch_mismatch
             )
         if not needs_replace:
+            return
+        if (
+            not proactive_rotate
+            and has_pump
+            and observer_service_epoch is None
+            and (runtime is None or type(runtime) is ThreadedServiceClientRuntime)
+        ):
             return
         self._market_retry_at = now + max(1.0, self.config.maintain_seconds)
         if self.facts is not None:
@@ -3777,6 +3847,326 @@ class RiskServiceHost:
         _LOG.info(
             "Risk market runtime %s succeeded",
             "proactive rotation" if proactive_rotate
+            else "epoch-change reconnect" if epoch_mismatch
+            else "binding-loss reconnect" if binding_auth_lost
+            else "reconnect",
+        )
+
+    def _maintain_control_runtime(self, now: float) -> None:
+        """Proactively rotate or safely reconnect control_runtime (direct_write + account)."""
+        gateway = getattr(self.config, "gateway", None)
+        if gateway is None or getattr(self, "control", None) is None:
+            return
+        from bt_api_py.service_runtime_thread import BindingSnapshot, ThreadedServiceClientRuntime
+
+        runtime = getattr(self, "control_runtime", None)
+        if runtime is not None and not callable(getattr(runtime, "status", None)):
+            return
+        self._check_global_cleanup_ready(runtime if runtime is not None else self)
+        if now < getattr(self, "_control_retry_at", 0.0):
+            return
+        account_snapshot = getattr(gateway, "account_snapshot", None)
+        proactive_rotate = False
+        binding_auth_lost = False
+        epoch_mismatch = False
+        has_pump = getattr(self, "pump", None) is not None
+        observer_service_epoch = (
+            self._verified_observer_service_epoch() if has_pump else None
+        )
+        if runtime is None:
+            needs_replace = True
+        else:
+            try:
+                snap = self._call_lifecycle(runtime.status)
+                self._check_global_cleanup_ready(runtime)
+            except Exception:
+                self._retain_if_global_unknown(runtime)
+                return
+            state = getattr(snap, "state", None)
+            bindings = getattr(snap, "bindings", None)
+            remaining = getattr(snap, "min_socket_message_ids_remaining", None)
+            stopped_or_failed = state in ("failed", "closed", "close_failed", "stopping")
+            unhealthy_running = state == "running" and getattr(snap, "healthy", True) is False
+            low_budget = (
+                state == "running"
+                and type(remaining) is int
+                and remaining <= self._CONTROL_ROTATION_HEADROOM
+            )
+            control_bindings = (
+                [
+                    b for b in bindings
+                    if type(b) is BindingSnapshot
+                    and b.mount in ("application.direct_write", "application.account")
+                    and b.active is True
+                ]
+                if isinstance(bindings, (tuple, list)) else []
+            )
+            control_epochs = {
+                b.service_epoch
+                for b in control_bindings
+                if type(getattr(b, "service_epoch", None)) is str and b.service_epoch
+            }
+            control_service_epoch = (
+                next(iter(control_epochs)) if len(control_epochs) == 1 else None
+            )
+            epoch_mismatch = (
+                observer_service_epoch is not None
+                and control_service_epoch is not None
+                and control_service_epoch != observer_service_epoch
+            )
+            binding_auth_lost = (
+                state == "running"
+                and type(remaining) is int
+                and bool(control_bindings)
+                and any(
+                    b.authenticated_peer is None or b.server_key_fingerprint is None
+                    for b in control_bindings
+                )
+            )
+            needs_replace = (
+                stopped_or_failed
+                or unhealthy_running
+                or low_budget
+                or binding_auth_lost
+                or epoch_mismatch
+                or (account_snapshot is not None and self.account is None)
+            )
+            proactive_rotate = (
+                low_budget
+                and not stopped_or_failed
+                and not unhealthy_running
+                and not binding_auth_lost
+                and not epoch_mismatch
+                and (account_snapshot is None or self.account is not None)
+            )
+        if not needs_replace:
+            return
+        if (
+            not proactive_rotate
+            and has_pump
+            and observer_service_epoch is None
+            and (runtime is None or type(runtime) is ThreadedServiceClientRuntime)
+        ):
+            return
+        self._control_retry_at = now + max(1.0, self.config.maintain_seconds)
+        if self.facts is not None and account_snapshot is not None:
+            self._call_lifecycle(self.facts.forget_account)
+            self._check_global_cleanup_ready(runtime if runtime is not None else self)
+        if runtime is not None:
+            if type(runtime) is ThreadedServiceClientRuntime and not self._gateway_endpoint_listening():
+                return
+            if not self._close_runtime_once(runtime, self._runtime_close_timeout()):
+                return
+            if runtime in self._runtimes:
+                self._runtimes.remove(runtime)
+            self.control_runtime = None
+            if account_snapshot is not None:
+                self.account = None
+
+        from bt_api_py.risk_service_gateway import (
+            CONTROL_INTENT_CONTINUITY_OPERATIONS as CONTROL_INTENT_CONTINUITY_OPERATIONS_FOR_RISK,
+            CONTROL_INTENT_OPERATIONS as CONTROL_INTENT_OPERATIONS_FOR_RISK,
+            CONTROL_OPERATIONS as CONTROL_OPERATIONS_FOR_RISK,
+        )
+
+        config = self.config
+        timeout = config.call_timeout_seconds
+        replacement = self._call_lifecycle(self._control_runtime)
+        self._check_global_cleanup_ready(replacement)
+        self.control_runtime = replacement
+        self._runtimes.append(replacement)
+        try:
+            snapshot = self._call_lifecycle(replacement.start, timeout_seconds=timeout)
+            self._check_global_cleanup_ready(replacement)
+            required_control_ops = (
+                CONTROL_INTENT_CONTINUITY_OPERATIONS_FOR_RISK
+                if getattr(config, "control_intent_continuity_enabled", False)
+                else (
+                    CONTROL_INTENT_OPERATIONS_FOR_RISK
+                    if getattr(config, "bound_control_intents_enabled", False)
+                    else CONTROL_OPERATIONS_FOR_RISK
+                )
+            )
+            if not self._call_lifecycle(_granted, snapshot, "application.direct_write", required_control_ops):
+                raise RiskServiceStartError("RISK_SERVICE_GATEWAY_CONTROL_UNAVAILABLE")
+            self._check_global_cleanup_ready(replacement)
+            new_account = None
+            if account_snapshot is not None:
+                from bt_api_py.gateway_strategy_account import GatewayStrategyAccountClient
+                from bt_api_py.risk_service_gateway import RiskAccountSnapshotSource
+
+                if not self._call_lifecycle(
+                    _granted, snapshot, "application.account", frozenset({"account.snapshot.typed"})
+                ):
+                    raise RiskServiceStartError("RISK_SERVICE_GATEWAY_ACCOUNT_UNAVAILABLE")
+                self._check_global_cleanup_ready(replacement)
+                account_client = self._call_lifecycle(GatewayStrategyAccountClient, replacement)
+                self._check_global_cleanup_ready(replacement)
+                new_account = self._call_lifecycle(
+                    RiskAccountSnapshotSource,
+                    account_client,
+                    self.facts,
+                    instrument_ids={b.key: b.instrument_id for b in config.instruments.values()},
+                    timeout_seconds=timeout,
+                )
+                self._check_global_cleanup_ready(replacement)
+            self._call_lifecycle(self.control.replace_runtime, replacement)
+            self._check_global_cleanup_ready(replacement)
+            if account_snapshot is not None:
+                self.account = new_account
+        except BaseException as error:
+            if self._cleanup_uncertain:
+                self._cleanup_uncertain_resources.append(replacement)
+            elif self._close_runtime_once(replacement, self._runtime_close_timeout()):
+                if replacement in self._runtimes:
+                    self._runtimes.remove(replacement)
+                self.control_runtime = None
+            if account_snapshot is not None:
+                self.account = None
+            if not isinstance(error, Exception):
+                raise
+            _LOG.warning(
+                "Risk control runtime %s deferred: %s",
+                "rotation" if proactive_rotate else "reconnect",
+                getattr(error, "code", type(error).__name__),
+            )
+            return
+        self._control_retry_at = 0.0
+        _LOG.info(
+            "Risk control runtime %s succeeded",
+            "proactive rotation" if proactive_rotate
+            else "epoch-change reconnect" if epoch_mismatch
+            else "binding-loss reconnect" if binding_auth_lost
+            else "reconnect",
+        )
+
+    def _maintain_financial_runtime(self, now: float) -> None:
+        """Proactively rotate or safely reconnect the strategy-financial runtime."""
+        if getattr(self.config, "strategy_financial_seconds", None) is None:
+            return
+        from bt_api_py.service_runtime_thread import BindingSnapshot, ThreadedServiceClientRuntime
+
+        runtime = getattr(self, "_financial_runtime", None)
+        if runtime is not None and not callable(getattr(runtime, "status", None)):
+            return
+        self._check_global_cleanup_ready(runtime if runtime is not None else self)
+        if now < getattr(self, "_financial_retry_at", 0.0):
+            return
+        proactive_rotate = False
+        binding_auth_lost = False
+        epoch_mismatch = False
+        has_pump = getattr(self, "pump", None) is not None
+        observer_service_epoch = (
+            self._verified_observer_service_epoch() if has_pump else None
+        )
+        if runtime is None:
+            needs_replace = self.financial is None
+        else:
+            try:
+                snap = self._call_lifecycle(runtime.status)
+                self._check_global_cleanup_ready(runtime)
+            except Exception:
+                self._retain_if_global_unknown(runtime)
+                return
+            state = getattr(snap, "state", None)
+            bindings = getattr(snap, "bindings", None)
+            remaining = getattr(snap, "min_socket_message_ids_remaining", None)
+            stopped_or_failed = state in ("failed", "closed", "close_failed", "stopping")
+            unhealthy_running = state == "running" and getattr(snap, "healthy", True) is False
+            low_budget = (
+                state == "running"
+                and type(remaining) is int
+                and remaining <= self._FINANCIAL_ROTATION_HEADROOM
+            )
+            fin_bindings = (
+                [
+                    b for b in bindings
+                    if type(b) is BindingSnapshot
+                    and b.mount == "application.account"
+                    and b.active is True
+                ]
+                if isinstance(bindings, (tuple, list)) else []
+            )
+            fin_epochs = {
+                b.service_epoch
+                for b in fin_bindings
+                if type(getattr(b, "service_epoch", None)) is str and b.service_epoch
+            }
+            fin_service_epoch = next(iter(fin_epochs)) if len(fin_epochs) == 1 else None
+            epoch_mismatch = (
+                observer_service_epoch is not None
+                and fin_service_epoch is not None
+                and fin_service_epoch != observer_service_epoch
+            )
+            binding_auth_lost = (
+                state == "running"
+                and type(remaining) is int
+                and bool(fin_bindings)
+                and any(
+                    b.authenticated_peer is None or b.server_key_fingerprint is None
+                    for b in fin_bindings
+                )
+            )
+            needs_replace = (
+                stopped_or_failed
+                or unhealthy_running
+                or low_budget
+                or binding_auth_lost
+                or epoch_mismatch
+            )
+            proactive_rotate = (
+                low_budget
+                and not stopped_or_failed
+                and not unhealthy_running
+                and not binding_auth_lost
+                and not epoch_mismatch
+            )
+        if not needs_replace:
+            return
+        if (
+            not proactive_rotate
+            and has_pump
+            and observer_service_epoch is None
+            and (runtime is None or type(runtime) is ThreadedServiceClientRuntime)
+        ):
+            return
+        self._financial_retry_at = now + max(1.0, self.config.maintain_seconds)
+        if self.facts is not None:
+            self._call_lifecycle(self.facts.set_strategy_financials, {})
+            self._check_global_cleanup_ready(runtime if runtime is not None else self)
+        if runtime is not None:
+            if type(runtime) is ThreadedServiceClientRuntime and not self._gateway_endpoint_listening():
+                return
+            if not self._close_runtime_once(runtime, self._runtime_close_timeout()):
+                return
+            if runtime in self._runtimes:
+                self._runtimes.remove(runtime)
+            self._financial_runtime = None
+            self.financial = None
+        try:
+            self._start_strategy_financial()
+            self._check_global_cleanup_ready(self._financial_runtime or self)
+        except RiskServiceStartError as error:
+            failed_rt = self._financial_runtime
+            if failed_rt is not None:
+                if self._cleanup_uncertain:
+                    self._cleanup_uncertain_resources.append(failed_rt)
+                elif self._close_runtime_once(failed_rt, self._runtime_close_timeout()):
+                    if failed_rt in self._runtimes:
+                        self._runtimes.remove(failed_rt)
+                    self._financial_runtime = None
+            self.financial = None
+            _LOG.warning(
+                "Risk financial runtime %s deferred: %s",
+                "rotation" if proactive_rotate else "reconnect",
+                error.code,
+            )
+            return
+        self._financial_retry_at = 0.0
+        _LOG.info(
+            "Risk financial runtime %s succeeded",
+            "proactive rotation" if proactive_rotate
+            else "epoch-change reconnect" if epoch_mismatch
             else "binding-loss reconnect" if binding_auth_lost
             else "reconnect",
         )
@@ -3961,8 +4351,8 @@ class RiskServiceHost:
         schedules = (
             ("observation", True, config.observation_poll_seconds),
             ("market", self.market is not None or market_configured, config.market_poll_seconds),
-            ("account", self.account is not None, config.account_snapshot_seconds),
-            ("financial", self.financial is not None, config.strategy_financial_seconds),
+            ("account", self.account is not None or getattr(self, "_account_started", False), config.account_snapshot_seconds),
+            ("financial", self.financial is not None or getattr(self, "_financial_started", False), config.strategy_financial_seconds),
             ('account_facts', self._account_facts_coordinator is not None
              and self.account_facts_status in {'READY', 'APPLIED', 'EMPTY'},
              None if getattr(config, 'account_facts_observation', None) is None
@@ -4018,13 +4408,19 @@ class RiskServiceHost:
             self._next["market"] = deadlines["market"]
             _interleave_after_phase()
         if "account" in deadlines:
-            self._call_lifecycle(self.account.refresh)
+            self._maintain_control_runtime(now)
             self._check_cleanup_ready()
+            if self.account is not None:
+                self._call_lifecycle(self.account.refresh)
+                self._check_cleanup_ready()
             self._next["account"] = deadlines["account"]
             _interleave_after_phase()
         if "financial" in deadlines:
-            self._call_lifecycle(self.financial.refresh)
+            self._maintain_financial_runtime(now)
             self._check_cleanup_ready()
+            if self.financial is not None:
+                self._call_lifecycle(self.financial.refresh)
+                self._check_cleanup_ready()
             self._next["financial"] = deadlines["financial"]
             _interleave_after_phase()
         if 'account_facts' in deadlines:
@@ -4036,6 +4432,8 @@ class RiskServiceHost:
             self._next['account_facts'] = deadlines['account_facts']
             _interleave_after_phase()
         if "maintain" in deadlines:
+            self._maintain_control_runtime(now)
+            self._check_cleanup_ready()
             self._call_lifecycle(self.engine.maintain)
             self._check_cleanup_ready()
             self._next["maintain"] = deadlines["maintain"]
@@ -4272,6 +4670,8 @@ def _cleanup_wait_diagnostic(host: RiskServiceHost) -> tuple[tuple[str, ...], tu
             ("HOST", host),
             ("OBSERVER", fields.get("_observer_runtime")),
             ('ACCOUNT_FACTS', fields.get('_account_facts_runtime')),
+            ("MARKET_RUNTIME", fields.get("_market_runtime")),
+            ("FINANCIAL_RUNTIME", fields.get("_financial_runtime")),
             ("CONTROL", fields.get("control_runtime")),
             ("DELEGATE_PORT", fields.get("order_port")),
             ("MARKET", fields.get("market")),

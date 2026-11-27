@@ -57,6 +57,7 @@ from .service_migration_gate import (
     record_migration_write_attempt,
 )
 from .service_registry import (
+    _CONTROL_OPERATIONS,
     ActiveRegistrationContext,
     PrincipalGrant,
     ServiceCapability,
@@ -467,6 +468,7 @@ class ServiceHost:
     _gateway_parent_services: tuple = ()
     _gateway_lease_faults: frozenset = frozenset()
     _trusted_atomic_monitors: tuple = ()
+    _control_only_dispatch: bool = False
     _readiness_diagnostic_lock = threading.Lock()
     _readiness_diagnostic = ("unknown", None, None)
 
@@ -592,6 +594,7 @@ class ServiceHost:
         self._component_maintenance_faults: set[str] = set()
         self._component_delay_faults: set[str] = set()
         self._host_delay_faulted = False
+        self._control_only_dispatch = False
         self._readiness_diagnostic_lock = threading.Lock()
         self._readiness_diagnostic = ("unknown", None, None)
         self._endpoint: str | None = None
@@ -1737,8 +1740,8 @@ class ServiceHost:
             else:
                 self._host_delay_faulted = False
             maintained = self._maintain_components()
-            self._maintain_atomic_monitors()
-            if maintained or self._trusted_atomic_monitors:
+            atomic_maintained = self._maintain_atomic_monitors()
+            if maintained or atomic_maintained:
                 self._refresh_registry_readiness()
             if self._trusted_atomic_monitors:
                 bounded_timeout = min(bounded_timeout, 1000)
@@ -1819,8 +1822,8 @@ class ServiceHost:
             else:
                 self._host_delay_faulted = False
             maintained = self._maintain_components()
-            self._maintain_atomic_monitors()
-            if maintained or self._trusted_atomic_monitors:
+            atomic_maintained = self._maintain_atomic_monitors()
+            if maintained or atomic_maintained:
                 self._refresh_registry_readiness()
             if self._trusted_atomic_monitors:
                 bounded_timeout = min(bounded_timeout, 1000)
@@ -1852,6 +1855,62 @@ class ServiceHost:
             raise
         except Exception:
             raise ServiceHostError("SERVE_FAILED") from None
+
+    def serve_control_burst(
+        self,
+        timeout_ms: int = 0,
+        *,
+        max_requests: int = 16,
+        max_burst_seconds: float = 0.02,
+    ) -> int:
+        """Serve only ServiceRegistry control RPCs without invoking components.
+
+        Allows a single-threaded host (such as RiskServiceHost) to keep inbound
+        ``service.discover`` / ``service.register`` / ``service.renew`` /
+        ``service.unregister`` traffic responsive while waiting on an upstream
+        client runtime. Non-control business requests arriving during this
+        window fail closed immediately with ``CAPABILITY_UNAVAILABLE`` without
+        re-entering any component callback.
+        """
+
+        self._check_owner_thread()
+        self._require_no_execution_submission()
+        if self._state != "started" or self._server is None or self._registry is None:
+            raise ServiceHostError("HOST_NOT_STARTED")
+        if type(timeout_ms) is not int or timeout_ms < 0:
+            raise ServiceHostError("INVALID_TIMEOUT")
+        if type(max_requests) is not int or not 1 <= max_requests <= 256:
+            raise ServiceHostError("INVALID_TIMEOUT")
+        if (
+            type(max_burst_seconds) not in (int, float)
+            or not isfinite(max_burst_seconds)
+            or not 0 < float(max_burst_seconds) <= 1.0
+        ):
+            raise ServiceHostError("INVALID_TIMEOUT")
+        previous = self._control_only_dispatch
+        self._control_only_dispatch = True
+        try:
+            served = 0
+            if self._server.serve_once(timeout_ms):
+                served = 1
+                if max_requests > 1:
+                    burst_deadline = time.monotonic() + float(max_burst_seconds)
+                    while (
+                        served < max_requests
+                        and self._state == "started"
+                        and self._server is not None
+                        and time.monotonic() < burst_deadline
+                    ):
+                        if not self._server.serve_once(0):
+                            break
+                        served += 1
+            return served
+        except ServiceHostError:
+            raise
+        except Exception:
+            raise ServiceHostError("SERVE_FAILED") from None
+        finally:
+            self._control_only_dispatch = previous
 
     def _is_single_market_hub_host(self) -> bool:
         """Return true only for the validated, market-only built-in composition."""
@@ -3912,6 +3971,12 @@ class ServiceHost:
         registry = self._registry
         if registry is None:
             return {"ok": False, "code": "UNAVAILABLE", "result": {}}
+        if self._control_only_dispatch:
+            header = getattr(request, "header", None)
+            operation = getattr(header, "operation", None)
+            if operation not in _CONTROL_OPERATIONS:
+                return {"ok": False, "code": "CAPABILITY_UNAVAILABLE", "result": {}}
+            return registry.handle(authenticated_principal, request)
         try:
             self._refresh_registry_readiness()
             if self._atomic_intake_services and registry._parent_retry_unready:
@@ -4077,13 +4142,13 @@ class ServiceHost:
         self._atomic_monitor_faults.add(code)
         self._atomic_monitor_histories[self._atomic_monitor_indices[id(selection)]].add(code)
 
-    def _maintain_atomic_monitors(self, *, force: bool = False) -> None:
+    def _maintain_atomic_monitors(self, *, force: bool = False) -> bool:
         """Retry optional observers without adding them to execution readiness."""
         if not self._trusted_atomic_monitors:
-            return
+            return False
         now = time.monotonic()
         if not force and now < self._atomic_monitor_next_attempt:
-            return
+            return False
         self._atomic_monitor_next_attempt = now + 1.0
         from .service_atomic_monitor_assembly import AtomicMonitorAssembly
         for selection in tuple(self._atomic_monitor_pending):
@@ -4114,6 +4179,7 @@ class ServiceHost:
                 assembly.restart_if_safe()
             except Exception:
                 self._record_atomic_monitor_fault(assembly.selection, "MONITOR_START_FAILED")
+        return True
 
     def _shutdown_resources(self) -> tuple[str, ...]:
         """Close in reverse ownership order and retain every failed handle."""

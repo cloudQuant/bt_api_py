@@ -1402,3 +1402,52 @@ def test_bounded_replay_fails_closed_if_full_empty_queue_reply_is_too_large(tmp_
         if "original_rpc" in locals():
             client._rpc = original_rpc
         _close_all(client, runtime, registry)
+
+
+def test_close_clears_unsubscription_uncertainty_on_server_authenticated_stale_epoch(tmp_path):
+    """Server-authenticated STALE_EPOCH / NOT_REGISTERED proves old market subscription is gone."""
+    client, runtime, registry, _market, transport, _subscribers = _make_client(tmp_path)
+    try:
+        client.start()
+        # Simulate Gateway restart with a new Registry service_epoch before close().
+        registry._epoch = "restarted-gateway-epoch-2"
+        client.close()
+        assert client._state == "closed"
+        assert client.unsubscription_uncertain is False
+        assert (client._binding.registration_id, client._binding.service_epoch) in runtime.remote_inactive_registrations
+    finally:
+        _close_all(client, runtime, registry)
+
+
+def test_close_after_failed_maintenance_probes_unsubscribe_and_clears_on_stale_epoch(tmp_path):
+    """After maintenance fails during an outage, close() probes market.unsubscribe once Gateway returns."""
+    client, runtime, registry, _market, _transport, _subscribers = _make_client(tmp_path)
+    try:
+        client.start()
+        # Simulate local maintenance failure during a Gateway outage (no server proof yet).
+        runtime._mark_maintenance_failed("REQUIRED_RENEWAL_FAILED")
+        assert runtime.remote_inactive_registrations == ()
+        # Gateway restarts with a new service_epoch before owner cleanup runs.
+        registry._epoch = "restarted-gateway-epoch-3"
+        client.close()
+        assert client._state == "closed"
+        assert client.unsubscription_uncertain is False
+        assert (client._binding.registration_id, client._binding.service_epoch) in runtime.remote_inactive_registrations
+    finally:
+        _close_all(client, runtime, registry)
+
+
+def test_close_after_failed_maintenance_stays_uncertain_when_gateway_unreachable(tmp_path):
+    """If Gateway is still unreachable during failed-maintenance close(), fail closed."""
+    client, runtime, registry, _market, transport, _subscribers = _make_client(tmp_path)
+    try:
+        client.start()
+        runtime._mark_maintenance_failed("REQUIRED_RENEWAL_FAILED")
+        transport.fail_after_dispatch.add("market.unsubscribe")
+        with pytest.raises(ServiceMarketError) as error:
+            client.close()
+        assert error.value.code == "UNSUBSCRIPTION_UNCERTAIN"
+        assert client.unsubscription_uncertain is True
+        assert client._state == "closed"
+    finally:
+        _close_all(client, runtime, registry)

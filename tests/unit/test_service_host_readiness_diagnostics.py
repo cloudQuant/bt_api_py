@@ -212,3 +212,43 @@ def test_refresh_registry_readiness_checks_atomic_fence_once_under_lock(host):
     host._refresh_registry_readiness()
     assert host._registry.ready
     assert len(fence_calls) == 1
+
+
+def test_maintain_atomic_monitors_returns_false_before_next_attempt(host):
+    import time
+
+    host._trusted_atomic_monitors = (object(),)
+    host._atomic_monitor_pending = []
+    host._atomic_monitor_owners = []
+    host._atomic_monitor_next_attempt = time.monotonic() + 60.0
+    assert host._maintain_atomic_monitors() is False
+
+    host._atomic_monitor_next_attempt = 0.0
+    assert host._maintain_atomic_monitors() is True
+    assert host._maintain_atomic_monitors() is False
+
+
+def test_parent_service_host_poll_caches_healthy_when_dispatcher_idle():
+    from bt_api_py.execution_parent_service_host import ParentServiceHost
+
+    healthy_reads = []
+
+    class CountingHost:
+        def serve_once(self, timeout_ms):
+            return False
+
+        @property
+        def healthy(self):
+            healthy_reads.append(1)
+            return True
+
+    parent = object.__new__(ParentServiceHost)
+    parent.state = 'running'
+    parent.host = CountingHost()
+    parent.dispatcher = SimpleNamespace(step=lambda: 0)
+    assert parent.poll() == 'READY'
+    assert len(healthy_reads) == 1
+
+    parent.dispatcher = SimpleNamespace(step=lambda: 1)
+    assert parent.poll() == 'READY'
+    assert len(healthy_reads) == 3

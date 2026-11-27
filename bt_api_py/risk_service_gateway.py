@@ -1064,6 +1064,12 @@ class GatewayControlAdapter:
         self._operation_bindings: dict[str, _ControlBindingProof] = {}
         self.last_cancel_status: dict[str, Mapping] = {}
 
+    def replace_runtime(self, runtime: Any) -> None:
+        """Bind a fresh control runtime after proven close of the previous one."""
+        self._runtime = runtime
+        self._cause_bindings.clear()
+        self._operation_bindings.clear()
+
     def _capture_binding(self) -> tuple[_ControlBindingProof | None, Any]:
         from bt_api_risk.pretrade import ControlIntentBinding, ControlReply
 

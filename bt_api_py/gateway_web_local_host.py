@@ -15,12 +15,13 @@ import os
 import re
 import secrets
 import signal
+import socket
 import stat
 import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlsplit
 
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_py.service_config import parse_client_config
@@ -119,6 +120,66 @@ def _secret_key(value):
         raise ValueError('CONFIG_INVALID') from None
 
 
+def _endpoint_listening(endpoint: str, *, timeout: float = 0.25) -> bool:
+    """Non-mutating TCP reachability check before waking a parked unregister."""
+    if not isinstance(endpoint, str) or not endpoint.startswith('tcp://'):
+        return True
+    parsed = urlsplit(endpoint)
+    host = parsed.hostname
+    try:
+        port = parsed.port
+    except ValueError:
+        return True
+    if not host or port is None:
+        return True
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def _cleanup_confirmed_for_rotation(closed, *, retired_bindings=()) -> bool:
+    """Return True when a closed runtime has no unproven remote registrations.
+
+    With ``require_unregister_ack=True``, a restarted server rejects the old
+    ``(registration_id, service_epoch)`` with server-authenticated
+    ``STALE_EPOCH`` / ``NOT_REGISTERED`` rather than ``unregistered=True``.
+    Permit replacement/closure only when every unresolved registration id is
+    backed by that exact server-authenticated inactive proof (never timeouts
+    or transport errors) and zero local transports or unknown registrations
+    remain open.
+    """
+    if getattr(closed, 'thread_alive', True) is not False:
+        return False
+    if getattr(closed, 'state', None) not in ('closed', 'failed'):
+        return False
+    if getattr(closed, 'open_transport_count', 0) not in (None, 0):
+        return False
+    if getattr(closed, 'unknown_registration_count', 0) not in (None, 0):
+        return False
+    if not closed.cleanup_failures and not closed.unregister_uncertainties:
+        return True
+    unresolved = getattr(closed, 'unresolved_registration_ids', None) or ()
+    remote_inactive = dict(getattr(closed, 'remote_inactive_registrations', None) or ())
+    if not unresolved or not remote_inactive:
+        return False
+    if len(unresolved) != closed.unregister_uncertainties:
+        return False
+    if closed.cleanup_failures > len(unresolved):
+        return False
+    epoch_by_reg = {
+        b.registration_id: b.service_epoch
+        for b in retired_bindings
+        if getattr(b, 'registration_id', None) and getattr(b, 'service_epoch', None)
+    }
+    return all(
+        reg_id in remote_inactive
+        and (not epoch_by_reg or (reg_id in epoch_by_reg and remote_inactive[reg_id] == epoch_by_reg[reg_id]))
+        for reg_id in unresolved
+    )
+
+
 @dataclass
 class _Operator:
     token_hash: str = field(repr=False)
@@ -127,6 +188,8 @@ class _Operator:
     web_scope: object
     runtime: ThreadedServiceClientRuntime = field(repr=False)
     runtime_factory: object = field(repr=False)
+    endpoint: str = ''
+    retired_bindings: tuple = ()
     reconnect_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
 
@@ -143,6 +206,12 @@ def _runtime_usable(runtime: ThreadedServiceClientRuntime) -> bool:
         return False
     active_bindings = [b for b in state.bindings if b.active]
     if not active_bindings:
+        return False
+    remote_inactive = getattr(state, 'remote_inactive_registrations', None) or ()
+    if remote_inactive and any(
+        (b.registration_id, b.service_epoch) in remote_inactive
+        for b in active_bindings
+    ):
         return False
     return all(
         b.authenticated_peer is not None and b.server_key_fingerprint is not None
@@ -233,11 +302,15 @@ class LocalGatewayWebHost:
                             require_unregister_ack=True,
                         ),
                         require_unregister_ack=True,
+                        defer_cleanup_until_close=True,
                     )
                 )
                 runtime = runtime_factory()
                 self._operators.append(
-                    _Operator(item['login_token_sha256'], identity, scope, web_scope, runtime, runtime_factory)
+                    _Operator(
+                        item['login_token_sha256'], identity, scope, web_scope,
+                        runtime, runtime_factory, endpoint=item['endpoint'],
+                    )
                 )
             self.origin = config['origin']
             self.app = create_app(origin=self.origin, authenticate=self._authenticate,
@@ -285,8 +358,10 @@ class LocalGatewayWebHost:
         for operator in self._operators:
             with operator.reconnect_lock:
                 try:
+                    before = operator.runtime.status()
+                    retired = before.bindings or operator.retired_bindings
                     result = operator.runtime.close(timeout_seconds=10)
-                    if result.thread_alive or result.cleanup_failures or result.unregister_uncertainties:
+                    if not _cleanup_confirmed_for_rotation(result, retired_bindings=retired):
                         failed = True
                 except Exception:
                     failed = True
@@ -318,13 +393,21 @@ class LocalGatewayWebHost:
             # creating a fresh CURVE registration; fail closed if cleanup is uncertain.
             try:
                 st = current.status()
+                if st.bindings:
+                    operator.retired_bindings = st.bindings
                 if st.state == 'closed' and not st.thread_alive:
                     closed = st
+                elif (
+                    st.state == 'failed'
+                    and st.thread_alive
+                    and not _endpoint_listening(operator.endpoint)
+                ):
+                    return current
                 else:
                     closed = current.close(timeout_seconds=10)
             except Exception:
                 return current
-            if closed.thread_alive or closed.cleanup_failures or closed.unregister_uncertainties:
+            if not _cleanup_confirmed_for_rotation(closed, retired_bindings=operator.retired_bindings):
                 return current
             new_runtime = operator.runtime_factory()
             try:
@@ -341,6 +424,7 @@ class LocalGatewayWebHost:
                 except Exception:
                     pass
                 return current
+            operator.retired_bindings = ()
             operator.runtime = new_runtime
             return new_runtime
 

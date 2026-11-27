@@ -476,9 +476,11 @@ class ParentServiceHost:
         if self.state != 'running' or self.host is None:
             raise ParentServiceError('LISTENER_UNAVAILABLE')
         self.host.serve_once(200)
-        if self.dispatcher is not None and self.host.healthy:
-            self.dispatcher.step()
-        return 'READY' if self.host.healthy else 'UNREADY'
+        healthy = self.host.healthy
+        if self.dispatcher is not None and healthy:
+            if self.dispatcher.step():
+                healthy = self.host.healthy
+        return 'READY' if healthy else 'UNREADY'
 
     def close(self):
         if self.state == 'closed':

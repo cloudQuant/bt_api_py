@@ -66,9 +66,10 @@ class FakeRuntime:
 
     call_bound = fake_bound_call
 
-    def __init__(self, factory=None, *, require_unregister_ack=False):
+    def __init__(self, factory=None, *, require_unregister_ack=False, defer_cleanup_until_close=False):
         self.factory_result = factory() if factory is not None else None
         self.require_unregister_ack = require_unregister_ack
+        self.defer_cleanup_until_close = defer_cleanup_until_close
         self.bindings = (binding(),)
         self.identity = IDENTITY
         self.state, self.healthy, self.thread_alive = "new", True, True
@@ -439,3 +440,32 @@ def test_main_serves_on_127_0_0_1_and_closes_its_registration(tmp_path, fake_sdk
     host_module.main(["--config", str(write_config(tmp_path))])
     assert served == [{"host": "127.0.0.1", "port": 8710, "proxy_headers": False, "server_header": False}]
     assert created[0]._runtime.closed == 1 and created[0]._runtime.calls == []
+
+
+def test_risk_web_host_defers_close_during_outage_and_recovers_when_endpoint_returns(
+    tmp_path, fake_sdk, monkeypatch
+):
+    listening = [False]
+    monkeypatch.setattr(host_module, "_endpoint_listening", lambda _ep: listening[0])
+    host = LocalRiskWebHost(write_config(tmp_path)).start()
+    try:
+        first_runtime = host._runtime
+        assert first_runtime.defer_cleanup_until_close is True
+
+        # Simulate parked MAINTENANCE_FAILED worker during Risk outage.
+        first_runtime.state = "failed"
+        first_runtime.healthy = False
+        first_runtime.thread_alive = True
+
+        # While endpoint is not listening, _ensure_runtime must NOT close the parked runtime.
+        assert host._ensure_runtime() is first_runtime
+        assert first_runtime.closed == 0
+
+        # Once Risk endpoint listens again, _ensure_runtime closes old runtime and registers a fresh one.
+        listening[0] = True
+        replacement = host._ensure_runtime()
+        assert replacement is not first_runtime
+        assert first_runtime.closed == 1
+        assert replacement.state == "running" and replacement.healthy is True
+    finally:
+        host.close()

@@ -256,3 +256,156 @@ def test_fifo_config_is_rejected_without_blocking(tmp_path):
         'except ValueError: sys.exit(0)\n'
         'sys.exit(1)', str(fifo)], timeout=3, capture_output=True)
     assert result.returncode == 0
+
+
+def test_local_host_recovers_after_gateway_restart_with_outage(tmp_path):
+    with socket.socket() as probe:
+        probe.bind(('127.0.0.1', 0))
+        endpoint = f'tcp://127.0.0.1:{probe.getsockname()[1]}'
+    server_keys, client_keys = zmq.curve_keypair(), zmq.curve_keypair()
+    service = WireIdentity(WireRole.SERVICE, 'gateway-service', 'service')
+    client = WireIdentity(WireRole.APPLICATION_CLIENT, 'operator', 'app')
+    scope = WireScope('domain', account_ref='account')
+    service_config = parse_service_config({
+        'service_config_schema_version': 1, 'process_role': 'service', 'service_id': 'service',
+        'scope_ref': 'scope', 'transport_ref': 'server', 'registration_policy_ref': 'policy',
+        'service_requirements_ref': 'requirements',
+        'components': {'gateway': {'config_schema_version': 2, 'settings': {'instance_id': 'gateway',
+            'bind_ports': ['service.direct_write'], 'options': {'role': 'trading_owner',
+                'dispatch_enabled': True, 'control_enabled': True}}}},
+        'communication': {'config_schema_version': 1, 'profiles': {'server': {'backend': 'zmq',
+            'config_schema_version': 1, 'endpoints': {'rpc_bind': endpoint}, 'security_profile_ref': 'key'}}}})
+    grant = ResourceGrant('gateway', 'service.direct_write', 'scope', scope, OPS)
+    authority = TrustedServiceAuthority(identity=service, scope=WireScope('domain'), scope_ref='scope',
+        scope_version='v1', security_ref='key', security_version='v1', registration_policy_ref='policy',
+        registration_policy_version='v1', service_requirements_ref='requirements', service_requirements_version='v1',
+        curve_public_key=server_keys[0], curve_secret_key=server_keys[1],
+        principals={client_keys[0]: 'operator'}, grants={'operator': (PrincipalGrant(client, (grant,)),)})
+    (tmp_path / 'guard').mkdir()
+
+    def start_gateway(gen_name):
+        ready, stop = queue.Queue(), threading.Event()
+        def serve():
+            owner = gw_host = None
+            try:
+                state = []
+                def factory():
+                    guard = LocalAccountSessionGuard(tmp_path / 'guard', 'account', f'owner-{gen_name}')
+                    journal = GatewayDirectCommandJournal.create(
+                        tmp_path / f'journal-{gen_name}', 'account', generation=guard.acquire()
+                    )
+                    dispatcher = GatewayDirectDispatcher(
+                        journal, 'TEST', guard, lambda *_: None, lambda _: (), lambda _: True
+                    )
+                    state.append((journal, guard))
+                    return GatewayDirectOwnerResources(dispatcher, journal, guard.release)
+                owner = GatewayDirectOwner(factory, queue_size=4, max_queue_wait_seconds=10, busy_timeout_seconds=10)
+                assert owner.start(10)
+                journal, guard = state[0]
+                control = owner.submit_service_call(lambda: journal.enable_controls(guard)).result(timeout_seconds=5)
+                binding = GatewayDirectServiceBinding(
+                    journal, {'strategy': GatewayDirectGrant('s', frozenset({'X'}))},
+                    owner=owner, control=control,
+                    control_grants={'operator': GatewayControlGrant('app', True, frozenset(), OPS)},
+                )
+                gw_host = ServiceHost(
+                    service_config, authority, tmp_path / f'registry-{gen_name}',
+                    lambda *_: ComponentResources.borrowed({'binding': binding}, ready=lambda: True),
+                )
+                gw_host.start()
+                ready.put('ready')
+                while not stop.is_set():
+                    gw_host.serve_once(10)
+            except BaseException as exc:
+                ready.put(('error', type(exc).__name__))
+            finally:
+                if gw_host is not None and gw_host.state == 'started':
+                    gw_host.close()
+                if owner is not None:
+                    owner.close(10)
+        server = threading.Thread(target=serve, daemon=True)
+        server.start()
+        assert ready.get(timeout=20) == 'ready'
+        return stop, server
+
+    stop1, server1 = start_gateway('g1')
+    stop2 = server2 = host = None
+    try:
+        token = 'c' * 64
+        config = {'schema_version': 1, 'origin': 'http://127.0.0.1:8000',
+            'receipt_key_base64': base64.b64encode(os.urandom(32)).decode(), 'receipt_key_id': 'v1',
+            'operators': [{'principal_ref': 'operator', 'actor_ref': 'app',
+                'login_token_sha256': hashlib.sha256(token.encode()).hexdigest(), 'scope_id': 'desk',
+                'scope_ref': 'scope', 'execution_domain_ref': 'domain', 'account_ref': 'account',
+                'strategy_ref': None, 'service_id': 'service', 'service_principal_ref': 'gateway-service',
+                'instance_id': 'gateway', 'endpoint': endpoint, 'server_public_key': server_keys[0].decode(),
+                'client_public_key': client_keys[0].decode(), 'client_secret_key': client_keys[1].decode(),
+                'operations': sorted(OPS)}]}
+        config_path = (tmp_path / 'host-restart.json').resolve()
+        config_path.write_text(json.dumps(config), encoding='utf-8')
+        _set_owner_only(config_path)
+        host = LocalGatewayWebHost(config_path).start()
+        op = host._operators[0]
+        first_runtime = op.runtime
+        first_epoch = first_runtime.status().bindings[0].service_epoch
+
+        async def login_and_read(browser):
+            headers = {'Origin': 'http://127.0.0.1:8000'}
+            login = await browser.post('/login', data={'token': token}, headers=headers)
+            assert login.status_code == 200
+            headers['X-Gateway-Session'] = login.json()['session']
+            res = await browser.get('/api/v1/scopes/desk/causes', headers=headers)
+            assert res.status_code == 200 and res.json().get('status') == 'OBSERVED'
+            return headers
+
+        headers_box = []
+        _run(host.app, lambda b: asyncio.sleep(0))
+        async def step1(browser):
+            headers_box.append(await login_and_read(browser))
+        _run(host.app, step1)
+        headers = headers_box[0]
+
+        # Stop Gateway #1 completely (true TCP outage).
+        stop1.set()
+        server1.join(15)
+        assert not server1.is_alive()
+
+        # Trigger request during outage: must fail closed and keep parked runtime clean.
+        async def during_outage(browser):
+            res = await browser.get('/api/v1/scopes/desk/causes', headers=headers)
+            assert res.status_code in (200, 403)
+            if res.status_code == 200:
+                assert res.json().get('status') != 'OBSERVED'
+        _run(host.app, during_outage)
+
+        # Wait until runtime observes outage or hits parked MAINTENANCE_FAILED.
+        # Even if renewal hasn't fired yet, force a brief outage then bring up Gateway #2.
+        stop2, server2 = start_gateway('g2')
+
+        # First call against Gateway #2 may record remote_inactive_registrations on old runtime
+        # and then immediately reconnect on the next call (or reconnect immediately if already parked).
+        recovered = False
+        for _ in range(6):
+            box = []
+            async def probe_after_restart(browser):
+                r = await browser.get('/api/v1/scopes/desk/causes', headers=headers)
+                box.append((r.status_code, r.json()))
+            _run(host.app, probe_after_restart)
+            status_code, payload = box[0]
+            if status_code == 200 and payload.get('status') == 'OBSERVED':
+                recovered = True
+                break
+            time.sleep(0.2)
+        assert recovered, f'LocalGatewayWebHost did not recover after Gateway restart: {box}'
+        assert op.runtime is not first_runtime
+        new_epoch = op.runtime.status().bindings[0].service_epoch
+        assert new_epoch != first_epoch
+    finally:
+        if host is not None:
+            host.close()
+        if stop2 is not None:
+            stop2.set()
+            server2.join(15)
+            assert not server2.is_alive()
+        stop1.set()
+        server1.join(15)

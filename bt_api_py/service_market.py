@@ -1389,7 +1389,23 @@ class ServiceMarketClient:
             and not same_registration
             and (self._remote_active or self._remote_unknown)
         ):
-            self._set_unsubscription_uncertain(previous.registration_id)
+            if self._registration_confirmed_inactive(
+                previous.registration_id, previous.service_epoch
+            ):
+                self._mark_unsubscription_confirmed(previous.registration_id)
+            elif (
+                binding is None
+                and callable(
+                    getattr(
+                        self._runtime,
+                        "unsubscribe_market_after_maintenance_failure",
+                        None,
+                    )
+                )
+            ):
+                self._try_unsubscribe_after_maintenance_failure(previous)
+            else:
+                self._set_unsubscription_uncertain(previous.registration_id)
         if same_registration and (self._remote_active or self._remote_unknown):
             self._try_unsubscribe(binding, preserve_uncertainty=False)
         try:
@@ -2274,13 +2290,65 @@ class ServiceMarketClient:
         if type(reply["upstream_released"]) is not bool:
             raise ServiceMarketError("INVALID_UNSUBSCRIBE_REPLY")
 
+    def _registration_confirmed_inactive(
+        self, registration_id: str, service_epoch: str
+    ) -> bool:
+        """Return True only when the runtime recorded a server-authenticated inactivity proof."""
+        pairs = getattr(self._runtime, "remote_inactive_registrations", None)
+        if type(pairs) is not tuple:
+            return False
+        return (registration_id, service_epoch) in pairs
+
+    def _mark_unsubscription_confirmed(self, registration_id: str) -> None:
+        self._remote_active = False
+        self._remote_unknown = False
+        if self._uncertain_registration_id in (None, registration_id):
+            self._unsubscription_uncertain = False
+            self._uncertain_registration_id = None
+
+    def _try_unsubscribe_after_maintenance_failure(
+        self, previous: ServiceMarketBindingView
+    ) -> bool:
+        _reject_strict_market_clients((self,))
+        try:
+            reply = self._runtime.unsubscribe_market_after_maintenance_failure(
+                self.mount,
+                self.key.to_dict(),
+                registration_id=previous.registration_id,
+                service_epoch=previous.service_epoch,
+            )
+            if reply is True:
+                if self._registration_confirmed_inactive(
+                    previous.registration_id, previous.service_epoch
+                ):
+                    self._mark_unsubscription_confirmed(previous.registration_id)
+                    return True
+            elif isinstance(reply, Mapping):
+                self._validate_unsubscribe_reply(reply)
+                self._mark_unsubscription_confirmed(previous.registration_id)
+                return True
+        except Exception:
+            pass
+        self._set_unsubscription_uncertain(previous.registration_id)
+        return False
+
     def _try_unsubscribe(
         self, binding: ServiceMarketBindingView, *, preserve_uncertainty: bool
     ) -> bool:
         _reject_strict_market_clients((self,))
         try:
             self._rpc("market.unsubscribe", {"key": self.key.to_dict()})
-        except ServiceMarketError:
+        except ServiceMarketError as error:
+            if (
+                not preserve_uncertainty
+                and error.code == "CONTROL_CALL_FAILED"
+                and error.cause_code in {"NOT_REGISTERED", "STALE_EPOCH"}
+                and self._registration_confirmed_inactive(
+                    binding.registration_id, binding.service_epoch
+                )
+            ):
+                self._mark_unsubscription_confirmed(binding.registration_id)
+                return True
             self._set_unsubscription_uncertain(binding.registration_id)
             return False
         if preserve_uncertainty:

@@ -676,6 +676,7 @@ class OwnerCallHandle:
         runtime, call = self._runtime, self._call
         runtime._check_reentry()
         deadline = _deadline(timeout_seconds)
+        wait_started = _DEADLINE_CLOCK()
         with runtime._condition:
             while call.state in ("queued", "running"):
                 remaining = deadline - _DEADLINE_CLOCK()
@@ -683,7 +684,28 @@ class OwnerCallHandle:
                     raise ThreadedRuntimeError(
                         "OWNER_TIMEOUT_QUEUED" if call.state == "queued" else "OWNER_TIMEOUT_RUNNING"
                     )
-                runtime._condition.wait(min(remaining, threading.TIMEOUT_MAX))
+                wait_pump = runtime._wait_pump
+                if wait_pump is not None:
+                    pump_at = wait_started + runtime._wait_pump_delay_seconds
+                    until_pump = pump_at - _DEADLINE_CLOCK()
+                    wait_slice = (
+                        min(remaining, max(0.005, until_pump))
+                        if until_pump > 0
+                        else min(remaining, 0.025)
+                    )
+                else:
+                    wait_slice = min(remaining, threading.TIMEOUT_MAX)
+                runtime._condition.wait(wait_slice)
+                if (
+                    wait_pump is not None
+                    and call.state in ("queued", "running")
+                    and _DEADLINE_CLOCK() >= wait_started + runtime._wait_pump_delay_seconds
+                ):
+                    runtime._condition.release()
+                    try:
+                        wait_pump()
+                    finally:
+                        runtime._condition.acquire()
             if call.error is not None:
                 if type(call.error) is OwnerOperationError:
                     raise OwnerOperationError(
@@ -819,6 +841,9 @@ class ThreadedServiceClientRuntime:
         cleanup_unknown: Callable[[], bool] | None = None,
         on_cleanup_sticky: Callable[[ThreadedServiceClientRuntime], None] | None = None,
         defer_sticky_cleanup_until_close: bool = False,
+        defer_cleanup_until_close: bool = False,
+        wait_pump: Callable[[], None] | None = None,
+        wait_pump_delay_seconds: float = 0.0,
     ):
         if not callable(factory):
             raise TypeError("factory must be callable")
@@ -846,10 +871,25 @@ class ThreadedServiceClientRuntime:
             and (cleanup_unknown is None or not require_unregister_ack)
         ):
             raise ValueError("invalid deferred sticky cleanup policy")
+        if type(defer_cleanup_until_close) is not bool or (
+            defer_cleanup_until_close and not require_unregister_ack
+        ):
+            raise ValueError("invalid deferred cleanup policy")
+        if wait_pump is not None and not callable(wait_pump):
+            raise TypeError("wait_pump must be callable")
+        if (
+            type(wait_pump_delay_seconds) not in (int, float)
+            or not math.isfinite(wait_pump_delay_seconds)
+            or wait_pump_delay_seconds < 0
+        ):
+            raise ValueError("invalid wait_pump_delay_seconds")
         self._factory = factory
+        self._wait_pump = wait_pump
+        self._wait_pump_delay_seconds = float(wait_pump_delay_seconds)
         self._cleanup_unknown = cleanup_unknown
         self._on_cleanup_sticky = on_cleanup_sticky
         self._defer_sticky_cleanup_until_close = defer_sticky_cleanup_until_close
+        self._defer_cleanup_until_close = defer_cleanup_until_close
         self._close_requested = False
         self._cleanup_sticky = False
         self._sticky_resources: tuple[Any, Any] | None = None
@@ -989,6 +1029,7 @@ class ThreadedServiceClientRuntime:
                 target=self._run, name="service-client-owner", daemon=True
             )
             self._thread.start()
+            wait_started = _DEADLINE_CLOCK()
             while self._state == "starting":
                 remaining = deadline - _DEADLINE_CLOCK()
                 if remaining <= 0:
@@ -998,7 +1039,26 @@ class ThreadedServiceClientRuntime:
                     self._error = "START_TIMEOUT_CLEANUP_PENDING"
                     self._condition.notify_all()
                     raise ThreadedRuntimeError(self._error)
-                self._condition.wait(min(remaining, threading.TIMEOUT_MAX))
+                if self._wait_pump is not None:
+                    until_pump = (wait_started + self._wait_pump_delay_seconds) - _DEADLINE_CLOCK()
+                    wait_slice = (
+                        min(remaining, max(0.005, until_pump))
+                        if until_pump > 0
+                        else min(remaining, 0.025)
+                    )
+                else:
+                    wait_slice = min(remaining, threading.TIMEOUT_MAX)
+                self._condition.wait(wait_slice)
+                if (
+                    self._wait_pump is not None
+                    and self._state == "starting"
+                    and _DEADLINE_CLOCK() >= wait_started + self._wait_pump_delay_seconds
+                ):
+                    self._condition.release()
+                    try:
+                        self._wait_pump()
+                    finally:
+                        self._condition.acquire()
             if self._state != "running":
                 raise ThreadedRuntimeError(self._error or "START_FAILED")
         return self.status()
@@ -1095,6 +1155,7 @@ class ThreadedServiceClientRuntime:
             self._revoke_issued_parent_capabilities()
             self._queue.append(call)
             self._condition.notify_all()
+            wait_started = _DEADLINE_CLOCK()
             while call.state in ("queued", "running"):
                 remaining = deadline - _DEADLINE_CLOCK()
                 if remaining <= 0:
@@ -1104,7 +1165,26 @@ class ThreadedServiceClientRuntime:
                         call.state = "cancelled"
                         raise ThreadedRuntimeError("TIMEOUT_BEFORE_START")
                     raise ThreadedRuntimeError("TIMEOUT_AFTER_START")
-                self._condition.wait(min(remaining, threading.TIMEOUT_MAX))
+                if self._wait_pump is not None:
+                    until_pump = (wait_started + self._wait_pump_delay_seconds) - _DEADLINE_CLOCK()
+                    wait_slice = (
+                        min(remaining, max(0.005, until_pump))
+                        if until_pump > 0
+                        else min(remaining, 0.025)
+                    )
+                else:
+                    wait_slice = min(remaining, threading.TIMEOUT_MAX)
+                self._condition.wait(wait_slice)
+                if (
+                    self._wait_pump is not None
+                    and call.state in ("queued", "running")
+                    and _DEADLINE_CLOCK() >= wait_started + self._wait_pump_delay_seconds
+                ):
+                    self._condition.release()
+                    try:
+                        self._wait_pump()
+                    finally:
+                        self._condition.acquire()
             if call.error is not None:
                 raise call.error
             return call.result
@@ -1472,12 +1552,33 @@ class ThreadedServiceClientRuntime:
             self._reject_pending("CLOSED_BEFORE_START")
             self._condition.notify_all()
             thread = self._thread
+        wait_started = _DEADLINE_CLOCK()
         with self._condition:
             while thread is not None and thread.is_alive() and self._state != "close_failed":
                 remaining = deadline - _DEADLINE_CLOCK()
                 if remaining <= 0:
                     raise ThreadedRuntimeError("CLOSE_TIMEOUT_WORKER_ALIVE")
-                self._condition.wait(min(remaining, 0.05))
+                if self._wait_pump is not None:
+                    until_pump = (wait_started + self._wait_pump_delay_seconds) - _DEADLINE_CLOCK()
+                    wait_slice = (
+                        min(remaining, max(0.005, until_pump))
+                        if until_pump > 0
+                        else min(remaining, 0.025)
+                    )
+                else:
+                    wait_slice = min(remaining, 0.05)
+                self._condition.wait(wait_slice)
+                if (
+                    self._wait_pump is not None
+                    and thread.is_alive()
+                    and self._state != "close_failed"
+                    and _DEADLINE_CLOCK() >= wait_started + self._wait_pump_delay_seconds
+                ):
+                    self._condition.release()
+                    try:
+                        self._wait_pump()
+                    finally:
+                        self._condition.acquire()
             if self._state == "close_failed":
                 raise ThreadedRuntimeError("CLEANUP_FAILED")
         snapshot = self.status()
@@ -2594,7 +2695,7 @@ class ThreadedServiceClientRuntime:
                                          runtime.call(call.mount, call.operation, call.arguments, **call.kwargs)),
                             )
                         finally:
-                            if self._cleanup_unknown is not None:
+                            if self._cleanup_unknown is not None or self._defer_cleanup_until_close:
                                 self._checked_action(runtime, extension, lambda: self._capture(runtime))
                         if type(call) is _BoundCall:
                             result = _finish_bound_call(runtime, call, result)
@@ -2710,8 +2811,10 @@ class ThreadedServiceClientRuntime:
                 if self._cleanup_sticky:
                     return
             if (
-                self._cleanup_unknown is not None
-                and self._defer_sticky_cleanup_until_close
+                (
+                    (self._cleanup_unknown is not None and self._defer_sticky_cleanup_until_close)
+                    or self._defer_cleanup_until_close
+                )
                 and failed
                 and runtime is not None
                 and not creating_extension

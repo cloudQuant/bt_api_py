@@ -1934,17 +1934,108 @@ class ServiceClientRuntime:
                 mount, operation, account_ref, portfolio_ref, scope_ref,
                 checked_at, binding.lease_deadline, _require_strict_facts,
             )
-        return self._rpc(
-            binding.service_id,
-            binding.transport_ref,
-            binding.scope,
-            operation,
-            payload,
-            control=False,
-            timeout=min(binding.timeout, remaining * 0.8),
-            include_receive_receipt=include_receive_receipt,
-            **bound_kwargs,
-        )
+        timing: dict[str, Any] | None = {} if _expected_binding is None else None
+        rpc_kwargs = dict(bound_kwargs)
+        if timing is not None:
+            rpc_kwargs["timing"] = timing
+        try:
+            return self._rpc(
+                binding.service_id,
+                binding.transport_ref,
+                binding.scope,
+                operation,
+                payload,
+                control=False,
+                timeout=min(binding.timeout, remaining * 0.8),
+                include_receive_receipt=include_receive_receipt,
+                **rpc_kwargs,
+            )
+        except ServiceRuntimeError as error:
+            if (
+                timing is not None
+                and timing.get("server_rejected") is True
+                and error.code in {"NOT_REGISTERED", "STALE_EPOCH"}
+            ):
+                self._remote_inactive_registrations[
+                    binding.registration_id
+                ] = binding.service_epoch
+            raise
+
+    def unsubscribe_market_after_maintenance_failure(
+        self,
+        mount: str,
+        key_payload: Mapping[str, Any],
+        *,
+        registration_id: str,
+        service_epoch: str,
+    ) -> Mapping[str, Any] | bool:
+        """Issue one revocative market.unsubscribe for a failed-maintenance binding.
+
+        When a Gateway restart or transient outage causes maintenance to fail
+        before owner cleanup runs, the binding is no longer ``active`` so
+        normal ``call()`` refuses it. Sending one bounded ``market.unsubscribe``
+        before ``runtime.close()`` either unsubscribes on the original Gateway
+        or records an authenticated server ``NOT_REGISTERED`` / ``STALE_EPOCH``
+        proof in ``remote_inactive_registrations`` without relaxing fail-closed
+        handling for timeouts, transport failures, or unconfirmed outcomes.
+        """
+        self._assert_owner_thread()
+        self._strict_business_entry()
+        if self._state != "failed":
+            raise ServiceRuntimeError("SESSION_NOT_FAILED")
+        if (
+            type(mount) is not str
+            or not mount
+            or not isinstance(key_payload, Mapping)
+            or type(registration_id) is not str
+            or not registration_id
+            or type(service_epoch) is not str
+            or not service_epoch
+        ):
+            raise ServiceRuntimeError("INVALID_UNSUBSCRIBE_ARGUMENTS")
+        if self._remote_inactive_registrations.get(registration_id) == service_epoch:
+            return True
+        matches = [
+            b
+            for b in self._bindings
+            if b.mount == mount
+            and b.registration_id == registration_id
+            and b.service_epoch == service_epoch
+            and "market.unsubscribe" in b.operations
+        ]
+        if len(matches) != 1:
+            raise ServiceRuntimeError("AMBIGUOUS_OR_MISSING_ROUTE")
+        binding = matches[0]
+        if (binding.service_id, binding.transport_ref) not in self._transports:
+            raise ServiceRuntimeError("TRANSPORT_UNAVAILABLE")
+        payload = {
+            "registration_id": binding.registration_id,
+            "service_epoch": binding.service_epoch,
+            "instance_id": binding.instance_id,
+            "arguments": {"key": dict(key_payload)},
+        }
+        timing: dict[str, Any] = {}
+        try:
+            return self._rpc(
+                binding.service_id,
+                binding.transport_ref,
+                binding.scope,
+                "market.unsubscribe",
+                payload,
+                control=False,
+                timeout=binding.timeout,
+                timing=timing,
+            )
+        except ServiceRuntimeError as error:
+            if (
+                timing.get("server_rejected") is True
+                and error.code in {"NOT_REGISTERED", "STALE_EPOCH"}
+            ):
+                self._remote_inactive_registrations[
+                    binding.registration_id
+                ] = binding.service_epoch
+                return True
+            raise
 
     def call_bound(
         self,
@@ -4927,12 +5018,14 @@ class ServiceClientRuntime:
         except ServiceRuntimeError as error:
             if self.sticky_cleanup_enabled:
                 raise
-            if not self._require_unregister_ack and timing.get("server_rejected") is True and error.code in {
+            if timing.get("server_rejected") is True and error.code in {
                 "NOT_REGISTERED",
                 "STALE_EPOCH",
             }:
-                self._unregister_uncertainties.pop(registration_id, None)
-                return True
+                if not self._require_unregister_ack:
+                    self._unregister_uncertainties.pop(registration_id, None)
+                    return True
+                self._remote_inactive_registrations[registration_id] = epoch
             self._cleanup_failures += 1
             self._unregister_uncertainties[registration_id] = None
             return False
